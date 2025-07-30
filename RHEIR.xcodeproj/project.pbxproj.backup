@@ -7,7 +7,6 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		614DE1CD44BF4DFA96D40946 /* PaymentMethodManagementService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 614DE1CD44BF4DFA96D40947 /* PaymentMethodManagementService.swift */; };
 		D4424E47087ACEFD /* ReceiptPhoto.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4421223AC6AA9FB /* ReceiptPhoto.swift */; };
 		D4426DB2A442CE58 /* SimpleCloudKitSharingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4425A3CEB2E308E /* SimpleCloudKitSharingService.swift */; };
 		D44279F52DE090A300E70B1E /* MainTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D44279F22DE090A300E70B1E /* MainTabView.swift */; };
@@ -107,7 +106,6 @@
 		D4635E302DF230EE00A936E0 /* AuthViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4427ACB2DE26D7B00E70B1E /* AuthViewModel.swift */; };
 		D4AF9CE82DF37CA700D3169F /* CloudKitAuthService+User.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4AF9CE72DF37CA700D3169F /* CloudKitAuthService+User.swift */; };
 		D4AF9CEA2DF37CBC00D3169F /* CloudKitAuthService+Organization.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4AF9CE92DF37CBC00D3169F /* CloudKitAuthService+Organization.swift */; };
-		D4D087998CBC43C585EE6394 /* VendorManagementService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4D087998CBC43C585EE6395 /* VendorManagementService.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -128,7 +126,6 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		614DE1CD44BF4DFA96D40947 /* PaymentMethodManagementService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaymentMethodManagementService.swift; sourceTree = "<group>"; };
 		D442117C9B4CDC28 /* ProgressPhoto.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgressPhoto.swift; sourceTree = "<group>"; };
 		D4421223AC6AA9FB /* ReceiptPhoto.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReceiptPhoto.swift; sourceTree = "<group>"; };
 		D4425A3CEB2E308E /* SimpleCloudKitSharingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SimpleCloudKitSharingService.swift; sourceTree = "<group>"; };
@@ -233,7 +230,6 @@
 		D4AF9CE62DF2642A00D3169F /* RHEIR.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = RHEIR.entitlements; sourceTree = "<group>"; };
 		D4AF9CE72DF37CA700D3169F /* CloudKitAuthService+User.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CloudKitAuthService+User.swift"; sourceTree = "<group>"; };
 		D4AF9CE92DF37CBC00D3169F /* CloudKitAuthService+Organization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CloudKitAuthService+Organization.swift"; sourceTree = "<group>"; };
-		D4D087998CBC43C585EE6395 /* VendorManagementService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VendorManagementService.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -501,8 +497,6 @@
 				D4427C042DE3E66600E70B1E /* RemoteAuthService.swift */,
 				D442E530D0DFA1BA /* OfflineDataManager.swift */,
 				D4425A3CEB2E308E /* SimpleCloudKitSharingService.swift */,
-				D4D087998CBC43C585EE6395 /* VendorManagementService.swift */,
-				614DE1CD44BF4DFA96D40947 /* PaymentMethodManagementService.swift */,
 				D442C31F915A5121 /* CloudKitPhotoService.swift */,
 				D442891E7068E040 /* PhotoDataMigrationService.swift */,
 			);
@@ -814,8 +808,6 @@
 				D4427AA12DE090C600E70B1E /* ChangeOrder.swift in Sources */,
 				D4427AA22DE090C600E70B1E /* FAB.swift in Sources */,
 				D4427AB52DE26CAA00E70B1E /* AuthService.swift in Sources */,
-				D4D087998CBC43C585EE6394 /* VendorManagementService.swift in Sources */,
-				614DE1CD44BF4DFA96D40946 /* PaymentMethodManagementService.swift in Sources */,
 				D4427AA32DE090C600E70B1E /* ImagePicker.swift in Sources */,
 				D4424E47087ACEFD /* ReceiptPhoto.swift in Sources */,
 				D442FE828A30247D /* ProgressPhoto.swift in Sources */,
