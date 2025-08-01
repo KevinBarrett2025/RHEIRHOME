@@ -32,12 +32,22 @@ struct AuthRouterView: View {
                 .onAppear {
                     print("🏢 User has \(authViewModel.organizations.count) organizations - showing selection")
                 }
-        } else {
+        } else if authViewModel.needsOrganizationSetup || authViewModel.showOrganizationSetup {
             // User has no organizations - show setup
             OrganizationSetupView()
                 .environmentObject(authViewModel)
                 .onAppear {
                     print("🏢 No organizations found - showing setup")
+                    // Ensure we're not showing duplicate setup views
+                    authViewModel.showOrganizationSetup = false
+                }
+        } else {
+            // Fallback - show organization setup
+            OrganizationSetupView()
+                .environmentObject(authViewModel)
+                .onAppear {
+                    print("🏢 Fallback - showing organization setup")
+                    authViewModel.showOrganizationSetup = false
                 }
         }
     }
@@ -67,11 +77,34 @@ struct AuthRouterView: View {
             }
             
             if let errorMessage = authViewModel.errorMessage {
-                Text(errorMessage)
-                    .font(.caption)
-                    .foregroundColor(.red)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal)
+                VStack(spacing: 12) {
+                    Text(errorMessage)
+                        .font(.caption)
+                        .foregroundColor(.red)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
+                    
+                    HStack(spacing: 16) {
+                        Button("Cancel") {
+                            authViewModel.clearPendingInvite()
+                        }
+                        .buttonStyle(.bordered)
+                        
+                        Button("Retry") {
+                            authViewModel.retryPendingInvite()
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                }
+            } else {
+                // Show cancel button after 10 seconds
+                Button("Taking too long? Cancel") {
+                    authViewModel.clearPendingInvite()
+                }
+                .buttonStyle(.borderless)
+                .foregroundColor(.secondary)
+                .font(.caption)
+                .opacity(0.7)
             }
         }
         .padding()

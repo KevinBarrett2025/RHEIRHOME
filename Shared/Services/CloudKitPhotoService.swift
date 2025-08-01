@@ -244,7 +244,7 @@ public class CloudKitPhotoService: ObservableObject {
                     promise(.success(data ?? Data()))
                 } catch {
                     if let self = self {
-                        await MainActor.run {
+                        Task { @MainActor in
                             self.downloadProgress.removeValue(forKey: photoID)
                         }
                     }
@@ -386,7 +386,7 @@ public class CloudKitPhotoService: ObservableObject {
             // Clean up temporary file on error
             try? FileManager.default.removeItem(at: tempURL)
             
-            await MainActor.run {
+            Task { @MainActor in
                 self.uploadProgress.removeValue(forKey: photoID)
             }
             

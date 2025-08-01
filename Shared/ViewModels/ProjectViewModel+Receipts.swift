@@ -10,7 +10,7 @@ extension ProjectViewModel {
     /// Append a new receipt to the current project.
     func addReceipt(_ receipt: Receipt) {
         guard let sel = selectedProject,
-              let idx = projects.firstIndex(where: { $0.id == sel.id })
+              let idx = organizationProjects.firstIndex(where: { $0.id == sel.id })
         else { return }
         
         // Create or find vendor
@@ -36,10 +36,14 @@ extension ProjectViewModel {
         paymentMethodService.updatePaymentMethodSpending(paymentMethodID: paymentMethod.id, amount: amount)
         
         // Add receipt to project
-        projects[idx].receipts.append(updatedReceipt)
-        selectedProject = projects[idx]
+        organizationProjects[idx].receipts.append(updatedReceipt)
+        selectedProject = organizationProjects[idx]
         invalidateReceiptCache() // Invalidate cache when receipts change
-        saveAllProjects()
+        
+        // Save to CloudKit
+        Task {
+            await saveAllProjectsToCloudKit()
+        }
         
         print("📝 Added receipt: \(receipt.vendor) - \(receipt.amount.formatAsCurrency()) (\(paymentMethod.displayName))")
     }
@@ -47,12 +51,12 @@ extension ProjectViewModel {
     /// Update an existing receipt in the current project.
     func updateReceipt(_ receipt: Receipt) {
         guard let sel  = selectedProject,
-              let pIdx = projects.firstIndex(where: { $0.id == sel.id }),
-              let rIdx = projects[pIdx].receipts.firstIndex(where: { $0.id == receipt.id })
+              let pIdx = organizationProjects.firstIndex(where: { $0.id == sel.id }),
+              let rIdx = organizationProjects[pIdx].receipts.firstIndex(where: { $0.id == receipt.id })
         else { return }
         
         // Get old receipt for spending adjustment
-        let oldReceipt = projects[pIdx].receipts[rIdx]
+        let oldReceipt = organizationProjects[pIdx].receipts[rIdx]
         
         // Create or find vendor
         let vendor = vendorService.findOrCreateVendor(
@@ -87,10 +91,14 @@ extension ProjectViewModel {
         paymentMethodService.updatePaymentMethodSpending(paymentMethodID: paymentMethod.id, amount: newAmount)
         
         // Update receipt in project
-        projects[pIdx].receipts[rIdx] = updatedReceipt
-        selectedProject = projects[pIdx]
+        organizationProjects[pIdx].receipts[rIdx] = updatedReceipt
+        selectedProject = organizationProjects[pIdx]
         invalidateReceiptCache() // Invalidate cache when receipts change
-        saveAllProjects()
+        
+        // Save to CloudKit
+        Task {
+            await saveAllProjectsToCloudKit()
+        }
         
         print("✏️ Updated receipt: \(receipt.vendor) - \(receipt.amount.formatAsCurrency()) (\(paymentMethod.displayName))")
     }

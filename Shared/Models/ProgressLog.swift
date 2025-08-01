@@ -7,7 +7,7 @@ public struct ProgressLog: Identifiable, Codable, Hashable, Sendable {
     public var notes: String
     public var employeeIDs: [UUID]
     public var category: String
-    public var photoIDs: [UUID]                 // Links to ProgressPhoto records
+    public var photoIDs: [UUID]                 // CloudKit ProgressPhoto references
     public var hasPhotos: Bool { !photoIDs.isEmpty }
     // Link back to original task (if created from task completion)
     public var taskID: UUID?
@@ -40,15 +40,19 @@ public struct ProgressLog: Identifiable, Codable, Hashable, Sendable {
         lhs.id == rhs.id
     }
     
-    // MARK: - Backward Compatibility
+    // MARK: - Photo Management
     
-    /// Legacy property for backward compatibility during migration
-    @available(*, deprecated, message: "Use photoIDs instead")
-    public var imageDatas: [Data] {
-        get { [] } // Return empty array for legacy access  
-        set { 
-            // Convert legacy imageDatas to photoIDs if needed during migration
-            // This is handled by migration service
+    public mutating func addPhoto(_ photoID: UUID) {
+        if !photoIDs.contains(photoID) {
+            photoIDs.append(photoID)
         }
+    }
+    
+    public mutating func removePhoto(_ photoID: UUID) {
+        photoIDs.removeAll { $0 == photoID }
+    }
+    
+    public var photoCount: Int {
+        photoIDs.count
     }
 }

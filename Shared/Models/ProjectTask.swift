@@ -14,7 +14,7 @@ public struct ProjectTask: Identifiable, Codable, Sendable {
     public var actualHours: Double
     public var projectID: UUID
     
-    // Visual documentation - migrated to photo system
+    // Visual documentation - CloudKit photo system
     public var photoIDs: [UUID]
     
     // Completion tracking
@@ -62,18 +62,6 @@ public struct ProjectTask: Identifiable, Codable, Sendable {
         self.completionNotes = completionNotes
         self.createdAt = createdAt
         self.updatedAt = updatedAt
-    }
-    
-    // MARK: - Backward Compatibility
-    
-    /// Legacy property for backward compatibility during migration
-    @available(*, deprecated, message: "Use photoIDs instead")
-    public var imageDatas: [Data] {
-        get { [] } // Return empty array for legacy access
-        set { 
-            // Convert legacy imageDatas to photoIDs if needed during migration
-            // This is handled by migration service
-        }
     }
     
     public var isOverdue: Bool {

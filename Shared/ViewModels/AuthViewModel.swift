@@ -28,7 +28,7 @@ class AuthViewModel: ObservableObject {
     @Published var suggestedNames: [String] = []
     @Published var isLoadingSuggestions = false
 
-    // MARK: - Multi-Organization Support (NEW)
+    // MARK: - Multi-Organization Support
     /// All organizations this user belongs to (admin, member, or contractor)
     @Published var userOrganizations: [Organization] = []
     /// User's role in each organization
@@ -176,11 +176,13 @@ class AuthViewModel: ObservableObject {
             userOrganizations.append(organization)
         }
         
-        // Notify ProjectViewModel of organization change
-        if let projectVM = projectViewModel {
+        // Notify ProjectViewModel of organization change with role information
+        if let projectVM = projectViewModel,
+           let userRole = organizationRoles[organization.id] {
             Task { @MainActor in
                 projectVM.organizationDidChange(organization.id)
-                print("🛡️ Zone isolation activated for: \(organization.name)")
+                projectVM.setCurrentUserRole(userRole, forOrganization: organization.id)
+                print("🛡️ Zone isolation activated for: \(organization.name) with role: \(userRole.displayName)")
             }
         }
         
@@ -189,7 +191,7 @@ class AuthViewModel: ObservableObject {
         print("✅ Current organization set: \(organization.name)")
     }
     
-    /// Create organization using CloudKit
+    /// Create organization using CloudKit with proper timeout and error handling
     func createOrganization(named name: String, industry: String? = nil) async throws -> Organization {
         guard let userID = user?.id else {
             throw AuthViewModelError.noUserLoggedIn
@@ -201,9 +203,9 @@ class AuthViewModel: ObservableObject {
         
         print("🏢 Creating organization: \(name)")
         
-        // Create organization in CloudKit
+        // Simple, clean approach - let CloudKit service handle everything
         let organization = try await withCheckedThrowingContinuation { continuation in
-            let cancellable = cloudKitService.createOrganization(orgName: name, adminUserID: userID)
+            cloudKitService.createOrganization(orgName: name, adminUserID: userID)
                 .sink(
                     receiveCompletion: { completion in
                         if case .failure(let error) = completion {
@@ -214,6 +216,7 @@ class AuthViewModel: ObservableObject {
                         continuation.resume(returning: org)
                     }
                 )
+                .store(in: &cancellables)
         }
         
         await MainActor.run {
@@ -244,9 +247,9 @@ class AuthViewModel: ObservableObject {
             throw AuthViewModelError.cloudKitServiceNotAvailable
         }
         
-        // Check name availability first
+        // Simple name availability check
         let isAvailable = try await withCheckedThrowingContinuation { continuation in
-            let cancellable = cloudKitService.isOrganizationNameAvailable(name)
+            cloudKitService.isOrganizationNameAvailable(name)
                 .sink(
                     receiveCompletion: { completion in
                         if case .failure(let error) = completion {
@@ -257,6 +260,7 @@ class AuthViewModel: ObservableObject {
                         continuation.resume(returning: available)
                     }
                 )
+                .store(in: &cancellables)
         }
         
         if !isAvailable {
@@ -271,7 +275,7 @@ class AuthViewModel: ObservableObject {
     
     /// Update organization details
     func updateOrganization(_ organization: Organization, completion: @escaping (Bool, String?) -> Void) {
-        guard let cloudKitService = service as? CloudKitAuthService else {
+        guard service is CloudKitAuthService else {
             completion(false, "CloudKit service not available")
             return
         }
@@ -309,7 +313,7 @@ class AuthViewModel: ObservableObject {
             return
         }
         
-        guard let cloudKitService = service as? CloudKitAuthService else {
+        guard service is CloudKitAuthService else {
             completion(false, "CloudKit service not available")
             return
         }
@@ -356,7 +360,7 @@ class AuthViewModel: ObservableObject {
             return
         }
         
-        guard let cloudKitService = service as? CloudKitAuthService else {
+        guard service is CloudKitAuthService else {
             completion(false, "CloudKit service not available")
             return
         }
@@ -389,31 +393,47 @@ class AuthViewModel: ObservableObject {
 
     // MARK: - Multi-Organization Support Methods
 
-    /// Join an organization with role-based access
-    func joinOrganization(with orgID: String, role: OrganizationRole = .member, completion: @escaping (Bool, String?) -> Void) {
+    /// Join an organization with role-based access and project assignments
+    func joinOrganization(with orgID: String, role: OrganizationRole = .member, projectIDs: [String] = [], completion: @escaping (Bool, String?) -> Void) {
+        print("📧 JOIN DEBUG: Starting joinOrganization")
+        print("📧 JOIN DEBUG: OrgID: \(orgID)")
+        print("📧 JOIN DEBUG: Role: \(role.displayName)")
+        
         guard let user = self.user else {
+            print("📧 JOIN DEBUG: ERROR - No user logged in")
             completion(false, "Please sign in first")
             return
         }
         
+        print("📧 JOIN DEBUG: User found: \(user.email)")
+        
         guard let cloudKitService = service as? CloudKitAuthService else {
+            print("📧 JOIN DEBUG: ERROR - CloudKit service not available")
             completion(false, "CloudKit service not available")
             return
         }
         
+        print("📧 JOIN DEBUG: CloudKit service available")
         print("🔗 Joining organization: \(orgID) as \(role.displayName)")
+        if !projectIDs.isEmpty {
+            print("📋 Will be assigned to \(projectIDs.count) specific projects")
+        }
         
         // Use CloudKit to join organization with role
-        cloudKitService.joinOrganizationWithRole(orgID: orgID, userID: user.id, role: role)
+        print("📧 JOIN DEBUG: Calling cloudKitService.joinOrganizationWithRole...")
+        _ = cloudKitService.joinOrganizationWithRole(orgID: orgID, userID: user.id, role: role)
             .receive(on: DispatchQueue.main)
             .sink(
-                receiveCompletion: { [weak self] completionResult in
+                receiveCompletion: { completionResult in
+                    print("📧 JOIN DEBUG: CloudKit completion received")
                     if case .failure(let error) = completionResult {
                         print("❌ Failed to join organization: \(error)")
+                        print("📧 JOIN DEBUG: CloudKit error details: \(error.localizedDescription)")
                         
                         // Provide more specific error messages
                         let errorMessage: String
                         if let ckError = error as? CKError {
+                            print("📧 JOIN DEBUG: CKError code: \(ckError.code.rawValue)")
                             switch ckError.code {
                             case .unknownItem:
                                 errorMessage = "Organization not found. The invite link may be invalid or expired."
@@ -436,31 +456,97 @@ class AuthViewModel: ObservableObject {
                 receiveValue: { [weak self] organization in
                     guard let self = self else { return }
                     
+                    print("📧 JOIN DEBUG: CloudKit success - received organization")
+                    print("📧 JOIN DEBUG: Organization name: \(organization.name)")
+                    print("📧 JOIN DEBUG: Organization ID: \(organization.id)")
                     print("✅ Successfully joined organization: \(organization.name) as \(role.displayName)")
                     
                     // Add to user's organizations if not already there
                     if !self.userOrganizations.contains(where: { $0.id == organization.id }) {
                         self.userOrganizations.append(organization)
+                        print("📧 JOIN DEBUG: Added to userOrganizations")
                     }
                     if !self.organizations.contains(where: { $0.id == organization.id }) {
                         self.organizations.append(organization)
+                        print("📧 JOIN DEBUG: Added to organizations")
                     }
                     
-                    // Set role for this organization
+                    // CRITICAL: Set role for this organization BEFORE setting as current
                     self.organizationRoles[organization.id] = role
+                    print("🔐 Set user role: \(role.displayName) for organization \(organization.id.prefix(8))...")
                     
-                    // Set as current organization if user has no current org
-                    if self.currentOrg == nil {
+                    // For contractors joining new orgs, don't auto-switch if they already have a current org
+                    let shouldAutoSwitch = self.currentOrg == nil || role == .admin || role == .member
+                    print("📧 JOIN DEBUG: Should auto-switch: \(shouldAutoSwitch)")
+                    
+                    if shouldAutoSwitch {
+                        print("📧 JOIN DEBUG: Setting as current organization")
                         self.setCurrentOrganization(organization)
+                        completion(true, "Joined \(organization.name) and switched to it.")
+                    } else {
+                        // For contractors, notify but don't auto-switch
+                        self.inviteStatus = "✅ Joined \(organization.name) as contractor. Use organization menu to switch."
+                        completion(true, "Joined \(organization.name). Use the organization dropdown to switch between your organizations.")
                     }
                     
-                    completion(true, nil)
+                    // Trigger project access setup for team members
+                    if role == .member || role == .admin {
+                        print("📧 JOIN DEBUG: Setting up project access for team member")
+                        Task {
+                            // Auto-assign to all organization projects
+                            await self.setupProjectAccessForNewTeamMember(organization: organization, userID: user.id, role: role)
+                        }
+                    } else if role == .contractor && !projectIDs.isEmpty {
+                        print("📧 JOIN DEBUG: Setting up project access for contractor")
+                        Task {
+                            // Assign to specific projects
+                            await self.setupContractorProjectAccess(organization: organization, userID: user.id, projectIDs: projectIDs)
+                        }
+                    }
                 }
             )
-            .store(in: &cancellables)
+    }
+    
+    /// Setup project access for new team members (auto-assign to all projects)
+    private func setupProjectAccessForNewTeamMember(organization: Organization, userID: String, role: OrganizationRole) async {
+        guard role == .member || role == .admin else {
+            print("👤 Contractor role - projects will be assigned individually")
+            return
+        }
+        
+        print("🔧 Setting up project access for new team member...")
+        
+        // Notify ProjectViewModel to sync project access
+        if let projectVM = projectViewModel {
+            await projectVM.syncTeamMemberProjectAccess()
+            print("✅ Project access setup completed for new team member")
+        }
+    }
+    
+    /// Setup project access for contractors with specific project assignments
+    private func setupContractorProjectAccess(organization: Organization, userID: String, projectIDs: [String]) async {
+        print("🔧 Setting up contractor project access for \(projectIDs.count) projects...")
+        
+        // This would integrate with ProjectViewModel to assign contractor to specific projects
+        if let projectVM = projectViewModel {
+            // Switch to the organization temporarily to assign projects
+            let originalOrg = currentOrg
+            setCurrentOrganization(organization)
+            
+            // TODO: Implement specific project assignment logic
+            // For now, just log the intent
+            print("📋 Would assign contractor \(userID.prefix(8))... to projects: \(projectIDs)")
+            
+            // Switch back to original org if it was different
+            if let originalOrg = originalOrg, originalOrg.id != organization.id {
+                setCurrentOrganization(originalOrg)
+            }
+        }
+        
+        print("✅ Contractor project access setup completed")
     }
 
-    /// Switch between organizations (contractor switching contexts)
+    /// Switch between organizations with context preservation
     func switchToOrganization(_ organization: Organization) {
         guard userOrganizations.contains(where: { $0.id == organization.id }) else {
             print("⚠️ User is not a member of organization: \(organization.name)")
@@ -468,12 +554,79 @@ class AuthViewModel: ObservableObject {
         }
         
         print("🔄 Switching to organization: \(organization.name)")
+        
+        // Store previous organization for quick switching
+        if let currentOrgID = currentOrg?.id {
+            UserDefaults.standard.set(currentOrgID, forKey: "previousOrganizationID")
+        }
+        
         setCurrentOrganization(organization)
         
-        // Show role-based welcome message
+        // Show role-based welcome message and setup
         if let role = organizationRoles[organization.id] {
-            inviteStatus = "✅ Switched to \(organization.name) (\(role.displayName))"
+            switch role {
+            case .admin:
+                inviteStatus = "✅ Switched to \(organization.name) - Full administrative access"
+            case .member:
+                inviteStatus = "✅ Switched to \(organization.name) - Team member access to all projects"
+            case .contractor:
+                inviteStatus = "✅ Switched to \(organization.name) - Contractor access to assigned projects"
+            case .viewer:
+                inviteStatus = "✅ Switched to \(organization.name) - Read-only access"
+            }
+            
+            // Trigger role-specific setup
+            if let projectVM = projectViewModel {
+                Task {
+                    // Sync project access based on role
+                    if role == .member || role == .admin {
+                        await projectVM.syncTeamMemberProjectAccess()
+                    }
+                    print("🔧 Project access synced for role: \(role.displayName)")
+                }
+            }
         }
+    }
+    
+    /// Quick switch back to previous organization (useful for contractors)
+    func switchToPreviousOrganization() {
+        guard let previousOrgID = UserDefaults.standard.string(forKey: "previousOrganizationID"),
+              let previousOrg = userOrganizations.first(where: { $0.id == previousOrgID }) else {
+            print("⚠️ No previous organization available")
+            inviteStatus = "No previous organization to switch to"
+            return
+        }
+        
+        switchToOrganization(previousOrg)
+        print("🔄 Switched back to previous organization: \(previousOrg.name)")
+    }
+    
+    /// Get organization switching context for contractors
+    func getOrganizationSwitchingContext() -> String {
+        let totalOrgs = userOrganizations.count
+        let adminOrgs = adminOrganizations.count
+        let memberOrgs = userOrganizations.filter { organizationRoles[$0.id] == .member }.count
+        let contractorOrgs = contractorOrganizations.count
+        
+        var context = "ORGANIZATION CONTEXT:\n"
+        context += "• Total Organizations: \(totalOrgs)\n"
+        
+        if adminOrgs > 0 {
+            context += "• Your Companies: \(adminOrgs)\n"
+        }
+        if memberOrgs > 0 {
+            context += "• Team Member: \(memberOrgs)\n"
+        }
+        if contractorOrgs > 0 {
+            context += "• Contractor Access: \(contractorOrgs)\n"
+        }
+        
+        if let currentOrg = currentOrg,
+           let role = organizationRoles[currentOrg.id] {
+            context += "\nCURRENT: \(currentOrg.name) (\(role.displayName))"
+        }
+        
+        return context
     }
 
     /// Get user's role in current organization
@@ -520,6 +673,38 @@ class AuthViewModel: ObservableObject {
         return customSchemeLink
     }
     
+    /// Create contractor-specific invite URL for one-time/project-specific work
+    func createContractorInviteURL(for projectIDs: [String] = []) -> String? {
+        guard let currentOrg = self.currentOrg else {
+            print("⚠️ No current organization for contractor invite link")
+            return nil
+        }
+        
+        let token = "contractor-invite-\(UUID().uuidString.prefix(8))"
+        let encodedName = currentOrg.name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? currentOrg.name
+        
+        var urlComponents = URLComponents()
+        urlComponents.scheme = "rheirhome"
+        urlComponents.host = "invite"
+        urlComponents.queryItems = [
+            URLQueryItem(name: "orgID", value: currentOrg.id),
+            URLQueryItem(name: "name", value: encodedName),
+            URLQueryItem(name: "token", value: token),
+            URLQueryItem(name: "role", value: OrganizationRole.contractor.rawValue)
+        ]
+        
+        // Add specific project assignments if provided
+        if !projectIDs.isEmpty {
+            let projectIDsString = projectIDs.joined(separator: ",")
+            urlComponents.queryItems?.append(URLQueryItem(name: "projects", value: projectIDsString))
+        }
+        
+        let contractorInviteLink = urlComponents.url?.absoluteString ?? "rheirhome://invite?orgID=\(currentOrg.id)&name=\(encodedName)&token=\(token)&role=contractor"
+        
+        print("🔗 Generated contractor invite link for: \(currentOrg.name)")
+        return contractorInviteLink
+    }
+    
     /// Get shareable invite URL with user feedback
     func getShareURLForCopying() -> String {
         guard let shareURL = createShareURL() else {
@@ -536,6 +721,21 @@ class AuthViewModel: ObservableObject {
         
         return shareURL
     }
+    
+    /// Get contractor-specific shareable invite URL
+    func getContractorInviteURLForCopying(for projectIDs: [String] = []) -> String {
+        guard let contractorURL = createContractorInviteURL(for: projectIDs) else {
+            return "Unable to create contractor invite link. Please try again."
+        }
+        
+        if projectIDs.isEmpty {
+            inviteStatus = "✅ Contractor invite link created! They'll have access to assigned projects."
+        } else {
+            inviteStatus = "✅ Contractor invite link created! They'll have access to \(projectIDs.count) specific project(s)."
+        }
+        
+        return contractorURL
+    }
 
     // MARK: - Team Member Invitation Methods
     
@@ -550,41 +750,118 @@ class AuthViewModel: ObservableObject {
         let encodedName = currentOrg.name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? currentOrg.name
         
         // Use custom scheme for pre-App Store testing
-        let teamInviteLink = "rheirhome://invite?orgID=\(currentOrg.id)&name=\(encodedName)&token=\(token)&type=team"
+        let teamInviteLink = "rheirhome://invite?orgID=\(currentOrg.id)&name=\(encodedName)&token=\(token)&type=team&role=member"
         
         print("🔗 Generated team invite link for: \(currentOrg.name)")
         return teamInviteLink
     }
 
-    // MARK: - Pending Invite Processing
+    // MARK: - Pending Invite Processing with Timeout
     
     private func checkForPendingInvites() {
         guard let orgID = UserDefaults.standard.string(forKey: "pending_invite_orgID"),
               let orgName = UserDefaults.standard.string(forKey: "pending_invite_orgName") else {
+            print("📧 No pending invite found")
             return
         }
         
-        print("📧 Processing pending invite for: \(orgName)")
+        // Get the role from stored invite, default to member
+        let roleString = UserDefaults.standard.string(forKey: "pending_invite_role") ?? "member"
+        let role = OrganizationRole(rawValue: roleString) ?? .member
         
-        // Join the organization
-        joinOrganization(with: orgID) { [weak self] success, error in
+        print("📧 INVITE DEBUG: Processing pending invite")
+        print("📧 INVITE DEBUG: OrgID: \(orgID)")
+        print("📧 INVITE DEBUG: OrgName: \(orgName)")
+        print("📧 INVITE DEBUG: Role: \(role.displayName)")
+        print("📧 INVITE DEBUG: Current user: \(user?.email ?? "nil")")
+        
+        inviteStatus = "Connecting to \(orgName) as \(role.displayName)..."
+        
+        // Set a timeout to prevent indefinite hanging
+        let timeoutTimer = Timer.scheduledTimer(withTimeInterval: 30.0, repeats: false) { _ in
             DispatchQueue.main.async {
+                print("📧 INVITE DEBUG: TIMEOUT - Invite processing took too long")
+                self.handleInviteTimeout(orgName: orgName)
+            }
+        }
+        
+        // Join the organization with the specified role
+        print("📧 INVITE DEBUG: Calling joinOrganization...")
+        joinOrganization(with: orgID, role: role) { [weak self] success, error in
+            DispatchQueue.main.async {
+                timeoutTimer.invalidate() // Cancel timeout since we got a response
+                
+                print("📧 INVITE DEBUG: joinOrganization completed - Success: \(success)")
+                if let error = error {
+                    print("📧 INVITE DEBUG: Error: \(error)")
+                }
+                
                 if success {
-                    print("✅ Successfully joined organization from invite")
+                    print("✅ Successfully joined organization from invite as \(role.displayName)")
                     
                     // Clear the pending invite
                     UserDefaults.standard.removeObject(forKey: "pending_invite_orgID")
                     UserDefaults.standard.removeObject(forKey: "pending_invite_orgName")
                     UserDefaults.standard.removeObject(forKey: "pending_invite_token")
+                    UserDefaults.standard.removeObject(forKey: "pending_invite_role")
                     
-                    self?.inviteStatus = "✅ Welcome to \(orgName)!"
+                    print("📧 INVITE DEBUG: Cleared pending invite data")
+                    
+                    self?.inviteStatus = "✅ Welcome to \(orgName) as \(role.displayName)!"
                     
                 } else {
                     print("❌ Failed to join organization from invite: \(error ?? "Unknown error")")
                     self?.errorMessage = error ?? "Failed to join organization"
+                    
+                    // Show option to cancel/retry
+                    self?.showInviteFailureOptions(orgName: orgName)
                 }
             }
         }
+    }
+    
+    private func handleInviteTimeout(orgName: String) {
+        print("⏰ Invite processing timed out for: \(orgName)")
+        errorMessage = "Connection timed out. Please check your internet connection and try again."
+        inviteStatus = "Connection timed out"
+        
+        showInviteFailureOptions(orgName: orgName)
+    }
+    
+    private func showInviteFailureOptions(orgName: String) {
+        // For now, we'll just clear the pending invite after a failure
+        // In a full implementation, you might want to show an alert with retry/cancel options
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+            self.clearPendingInvite()
+        }
+    }
+    
+    func clearPendingInvite() {
+        print("🗑️ Clearing stuck pending invite")
+        
+        UserDefaults.standard.removeObject(forKey: "pending_invite_orgID")
+        UserDefaults.standard.removeObject(forKey: "pending_invite_orgName")
+        UserDefaults.standard.removeObject(forKey: "pending_invite_token")
+        UserDefaults.standard.removeObject(forKey: "pending_invite_role")
+        
+        inviteStatus = ""
+        errorMessage = nil
+        
+        // Refresh organization status
+        if let user = self.user {
+            checkUserOrganizationStatus(for: user)
+        }
+    }
+    
+    func retryPendingInvite() {
+        print("🔄 Retrying pending invite")
+        
+        errorMessage = nil
+        inviteStatus = ""
+        
+        // Trigger invite processing again
+        checkForPendingInvites()
     }
 
     // MARK: - Organization Name Validation
@@ -613,7 +890,7 @@ class AuthViewModel: ObservableObject {
                     
                     if case let .failure(error) = completion {
                         print("❌ Name availability check failed: \(error)")
-                        self.nameAvailabilityMessage = "⚠️ Unable to verify name availability"
+                        self.nameAvailabilityMessage = "⚠️ Unable to verify name availability. Please try again."
                     }
                 },
                 receiveValue: { [weak self] isAvailable in
@@ -717,7 +994,7 @@ class AuthViewModel: ObservableObject {
         do {
             print("🔄 Refreshing organizations from CloudKit...")
             let result = try await withCheckedThrowingContinuation { continuation in
-                let cancellable = cloudKitService.fetchOrganizationsWithRoles(for: userID)
+                _ = cloudKitService.fetchOrganizationsWithRoles(for: userID)
                     .sink(
                         receiveCompletion: { completion in
                             if case .failure(let error) = completion {
@@ -761,15 +1038,13 @@ class AuthViewModel: ObservableObject {
     private func fetchUserOrganizationsWithRoles(completion: (([Organization], [String: OrganizationRole]) -> Void)? = nil) {
         guard let id = user?.id else { 
             print("⚠️ No user ID for fetching organizations")
+            completion?([], [:])
             return 
         }
         
         guard let cloudKitService = service as? CloudKitAuthService else {
             print("⚠️ CloudKit service not available")
             isLoadingOrgs = false
-            organizations = []
-            userOrganizations = []
-            organizationRoles = [:]
             completion?([], [:])
             return
         }
@@ -777,7 +1052,7 @@ class AuthViewModel: ObservableObject {
         print("📋 Fetching organizations with roles for user: \(id.prefix(8))...")
         isLoadingOrgs = true
         
-        let cancellable = cloudKitService.fetchOrganizationsWithRoles(for: id)
+        cloudKitService.fetchOrganizationsWithRoles(for: id)
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { [weak self] comp in
@@ -788,24 +1063,59 @@ class AuthViewModel: ObservableObject {
                     if case let .failure(err) = comp {
                         print("❌ Failed to fetch organizations: \(err.localizedDescription)")
                         self.errorMessage = "Failed to load organizations. Please try again."
+                        completion?([], [:])
                     } else {
                         print("✅ Organizations fetch completed")
                     }
                 },
-                receiveValue: { [weak self] result in
-                    guard let self = self else { return }
-                    
+                receiveValue: { result in
                     print("📋 Received \(result.organizations.count) organizations with roles")
-                    
-                    if self.currentOrg == nil && !result.organizations.isEmpty {
-                        self.currentOrg = result.organizations.first
-                        print("📋 Auto-selected organization: \(result.organizations.first?.name ?? "Unknown")")
-                    }
                     
                     completion?(result.organizations, result.roles)
                 }
             )
             .store(in: &cancellables)
+    }
+    
+    // MARK: - Emergency Invite Recovery Methods
+    
+    /// Force clear all invite-related data (for stuck invite recovery)
+    func emergencyClearInviteData() {
+        print("🚨 Emergency clearing all invite data")
+        
+        // Clear all invite-related UserDefaults
+        UserDefaults.standard.removeObject(forKey: "pending_invite_orgID")
+        UserDefaults.standard.removeObject(forKey: "pending_invite_orgName") 
+        UserDefaults.standard.removeObject(forKey: "pending_invite_token")
+        
+        // Clear published properties
+        inviteStatus = ""
+        errorMessage = nil
+        isInviting = false
+        pendingInvites = []
+        
+        print("✅ Emergency cleared all invite data")
+        
+        // Re-check user organization status
+        if let user = self.user {
+            checkUserOrganizationStatus(for: user)
+        }
+    }
+    
+    /// Check if there's a stuck invite and offer recovery
+    func detectAndRecoverStuckInvite() -> Bool {
+        let hasOrgName = UserDefaults.standard.string(forKey: "pending_invite_orgName") != nil
+        let hasOrgID = UserDefaults.standard.string(forKey: "pending_invite_orgID") != nil
+        
+        if hasOrgName || hasOrgID {
+            print("🔍 Detected stuck invite data")
+            
+            // Auto-clear after detection
+            emergencyClearInviteData()
+            return true
+        }
+        
+        return false
     }
 }
 

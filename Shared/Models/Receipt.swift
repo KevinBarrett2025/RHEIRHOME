@@ -236,7 +236,7 @@ public struct Receipt: Identifiable, Codable, Hashable, Sendable {
     public var amount: Double
     public var notes: String
     public var category: ReceiptCategory
-    public var photoIDs: [UUID]
+    public var photoIDs: [UUID]          // CloudKit photo references
     public var tags: [String]
     public var isReturn: Bool
     public var paymentMethod: String
@@ -245,11 +245,9 @@ public struct Receipt: Identifiable, Codable, Hashable, Sendable {
     public var discountAmount: Double
     public var receiptNumber: String
     
-    // Additional properties needed by existing code
+    // Receipt details
     public var items: [ReceiptItem]
     public var processingStatus: ProcessingStatus
-    public var imageData: Data?          // Legacy property for migration
-    public var imageDatas: [Data]        // Legacy property for migration
     
     public init(
         id: UUID = UUID(),
@@ -268,9 +266,7 @@ public struct Receipt: Identifiable, Codable, Hashable, Sendable {
         discountAmount: Double = 0,
         receiptNumber: String = "",
         items: [ReceiptItem] = [],
-        processingStatus: ProcessingStatus = .completed,
-        imageData: Data? = nil,
-        imageDatas: [Data] = []
+        processingStatus: ProcessingStatus = .completed
     ) {
         self.id = id
         self.vendor = vendor
@@ -289,12 +285,10 @@ public struct Receipt: Identifiable, Codable, Hashable, Sendable {
         self.receiptNumber = receiptNumber
         self.items = items
         self.processingStatus = processingStatus
-        self.imageData = imageData
-        self.imageDatas = imageDatas
     }
     
     /// Whether this receipt has associated photos
     public var hasPhotos: Bool {
-        return !photoIDs.isEmpty || imageData != nil || !imageDatas.isEmpty
+        return !photoIDs.isEmpty
     }
 }

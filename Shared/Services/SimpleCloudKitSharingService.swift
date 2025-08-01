@@ -14,6 +14,7 @@ class SimpleCloudKitSharingService: ObservableObject {
     private var currentOrganizationID: String?
     private var currentZone: CKRecordZone?
     private var isZoneSetup = false
+    private var zoneSetupTask: Task<Void, Error>?
     
     init(containerIdentifier: String = "iCloud.com.rheirhome.rheirhomeappV2") {
         self.container = CKContainer(identifier: containerIdentifier)
@@ -21,7 +22,7 @@ class SimpleCloudKitSharingService: ObservableObject {
         print("🔧 SimpleCloudKitSharingService initialized with zone-based isolation")
     }
     
-    // MARK: - Organization Setup
+    // MARK: - Organization Setup with Proper Waiting
     
     /// Set the current organization and initialize its zone
     @MainActor
@@ -31,11 +32,23 @@ class SimpleCloudKitSharingService: ObservableObject {
         print("🏢 Setting current organization: \(organizationID.prefix(8))...")
         currentOrganizationID = organizationID
         
-        // Setup zone for this organization
-        await setupOrganizationZone()
+        // Cancel any existing setup task
+        zoneSetupTask?.cancel()
+        
+        // Setup zone for this organization and wait for completion
+        zoneSetupTask = Task { @MainActor in
+            await setupOrganizationZone()
+        }
+        
+        do {
+            try await zoneSetupTask?.value
+            print("✅ Organization zone setup completed for \(organizationID.prefix(8))...")
+        } catch {
+            print("❌ Failed to complete zone setup for \(organizationID.prefix(8))...: \(error)")
+        }
     }
     
-    /// Setup the organization-specific zone
+    /// Setup the organization-specific zone with proper error handling
     @MainActor
     private func setupOrganizationZone() async {
         guard let organizationID = currentOrganizationID else { return }
@@ -44,10 +57,21 @@ class SimpleCloudKitSharingService: ObservableObject {
         let zone = CKRecordZone(zoneID: zoneID)
         
         do {
+            // First try to fetch existing zone
+            let existingZones = try await privateDB.allRecordZones()
+            if let existingZone = existingZones.first(where: { $0.zoneID.zoneName == zoneID.zoneName }) {
+                currentZone = existingZone
+                isZoneSetup = true
+                print("✅ Found existing organization zone for \(organizationID.prefix(8))...")
+                return
+            }
+            
+            // Create new zone if it doesn't exist
             let savedZone = try await privateDB.save(zone)
             currentZone = savedZone
             isZoneSetup = true
-            print("✅ Organization zone setup complete for \(organizationID.prefix(8))...")
+            print("✅ Created new organization zone for \(organizationID.prefix(8))...")
+            
         } catch let error as CKError where error.code == .serverRecordChanged {
             // Zone already exists, which is fine
             currentZone = zone
@@ -56,6 +80,30 @@ class SimpleCloudKitSharingService: ObservableObject {
         } catch {
             print("❌ Failed to setup zone for organization \(organizationID.prefix(8))...: \(error)")
             isZoneSetup = false
+            currentZone = nil
+        }
+    }
+    
+    // MARK: - Zone Readiness Check
+    
+    private func ensureZoneReady() async throws {
+        guard let organizationID = currentOrganizationID else {
+            throw SharingError.organizationNotSet
+        }
+        
+        // If zone setup is in progress, wait for it
+        if let setupTask = zoneSetupTask {
+            try await setupTask.value
+        }
+        
+        // Double check that zone is ready
+        if !isZoneSetup || currentZone == nil {
+            print("⚠️ Zone not ready, attempting setup...")
+            await setCurrentOrganization(organizationID)
+            
+            guard isZoneSetup, currentZone != nil else {
+                throw SharingError.zoneNotSetup
+            }
         }
     }
     
@@ -70,36 +118,43 @@ class SimpleCloudKitSharingService: ObservableObject {
             }
             
             Task { @MainActor in
-                // Ensure zone is set up
-                if !self.isZoneSetup {
-                    await self.setupOrganizationZone()
+                do {
+                    // Ensure zone is ready before proceeding
+                    try await self.ensureZoneReady()
+                    
+                    // Return success URL since zone-based isolation doesn't require shares
+                    let url = "rheirhome://org/\(organizationID)"
+                    print("✅ Organization zone isolation active for \(organizationID.prefix(8))...")
+                    promise(.success(url))
+                } catch {
+                    promise(.failure(error))
                 }
-                
-                // Return success URL since zone-based isolation doesn't require shares
-                let url = "rheirhome://org/\(organizationID)"
-                print("✅ Organization zone isolation active for \(organizationID.prefix(8))...")
-                promise(.success(url))
             }
         }
         .eraseToAnyPublisher()
     }
     
-    // MARK: - Project Operations with Zone Isolation
+    // MARK: - Project Operations with Proper Zone Waiting
     
     func saveProjectToSharedZone(_ project: Project) -> AnyPublisher<CKRecord, Error> {
         return Future<CKRecord, Error> { [weak self] promise in
-            guard let self = self,
-                  let zone = self.currentZone,
-                  self.isZoneSetup else {
+            guard let self = self else {
                 promise(.failure(SharingError.zoneNotSetup))
                 return
             }
             
             Task {
                 do {
+                    try await self.ensureZoneReady()
+                    
+                    guard let zone = self.currentZone else {
+                        throw SharingError.zoneNotSetup
+                    }
+                    
                     let record = try await self.saveProjectToZone(project, zone: zone)
                     promise(.success(record))
                 } catch {
+                    print("❌ Failed to save project to zone: \(error)")
                     promise(.failure(error))
                 }
             }
@@ -109,18 +164,23 @@ class SimpleCloudKitSharingService: ObservableObject {
     
     func loadProjectsFromSharedZone() -> AnyPublisher<[Project], Error> {
         return Future<[Project], Error> { [weak self] promise in
-            guard let self = self,
-                  let zone = self.currentZone,
-                  self.isZoneSetup else {
+            guard let self = self else {
                 promise(.failure(SharingError.zoneNotSetup))
                 return
             }
             
             Task {
                 do {
+                    try await self.ensureZoneReady()
+                    
+                    guard let zone = self.currentZone else {
+                        throw SharingError.zoneNotSetup
+                    }
+                    
                     let projects = try await self.loadProjectsFromZone(zone: zone)
                     promise(.success(projects))
                 } catch {
+                    print("❌ Failed to load projects from zone: \(error)")
                     promise(.failure(error))
                 }
             }
@@ -128,7 +188,7 @@ class SimpleCloudKitSharingService: ObservableObject {
         .eraseToAnyPublisher()
     }
     
-    // MARK: - Internal Zone Operations
+    // MARK: - Internal Zone Operations with Better Error Handling
     
     private func saveProjectToZone(_ project: Project, zone: CKRecordZone) async throws -> CKRecord {
         let recordID = CKRecord.ID(recordName: project.id.uuidString, zoneID: zone.zoneID)
@@ -142,23 +202,24 @@ class SimpleCloudKitSharingService: ObservableObject {
         projectRecord["endDate"] = project.endDate as CKRecordValue
         projectRecord["status"] = project.status.rawValue as CKRecordValue
         projectRecord["organizationID"] = (currentOrganizationID ?? "") as CKRecordValue
+        projectRecord["createdAt"] = Date() as CKRecordValue
         
-        // Store complete project data as JSON
+        // Store complete project data as JSON for data integrity
         if let projectData = try? JSONEncoder().encode(project) {
             projectRecord["fullProjectData"] = projectData as CKRecordValue
         }
         
         let savedRecord = try await privateDB.save(projectRecord)
         
-        // Ensure main thread for any UI updates
-        await MainActor.run {
-            print("✅ Project '\(project.name)' saved to organization zone")
-        }
+        print("✅ Project '\(project.name)' saved to organization zone \(zone.zoneID.zoneName)")
         
         return savedRecord
     }
     
     private func loadProjectsFromZone(zone: CKRecordZone) async throws -> [Project] {
+        print("🔍 Loading projects from zone: \(zone.zoneID.zoneName)")
+        
+        // Create query with better filtering
         let query = CKQuery(recordType: "Project", predicate: NSPredicate(value: true))
         query.sortDescriptors = [NSSortDescriptor(key: "createdAt", ascending: false)]
         
@@ -167,7 +228,13 @@ class SimpleCloudKitSharingService: ObservableObject {
         let projects = result.matchResults.compactMap { (_, result) -> Project? in
             switch result {
             case .success(let record):
-                return decodeProject(from: record)
+                if let project = decodeProject(from: record) {
+                    print("✅ Decoded project: \(project.name)")
+                    return project
+                } else {
+                    print("⚠️ Failed to decode project from record")
+                    return nil
+                }
             case .failure(let error):
                 print("❌ Failed to fetch project record: \(error)")
                 return nil
@@ -179,7 +246,7 @@ class SimpleCloudKitSharingService: ObservableObject {
     }
     
     private func decodeProject(from record: CKRecord) -> Project? {
-        // Try to decode from full project data first
+        // Try to decode from full project data first (most reliable)
         if let projectData = record["fullProjectData"] as? Data,
            let project = try? JSONDecoder().decode(Project.self, from: projectData) {
             return project
@@ -191,8 +258,12 @@ class SimpleCloudKitSharingService: ObservableObject {
               let totalBudget = record["totalBudget"] as? Double,
               let startDate = record["startDate"] as? Date,
               let endDate = record["endDate"] as? Date else {
+            print("⚠️ Missing required fields for project reconstruction")
             return nil
         }
+        
+        let statusString = record["status"] as? String ?? "Active"
+        let status = ProjectStatus(rawValue: statusString) ?? .active
         
         return Project(
             name: name,
@@ -204,14 +275,15 @@ class SimpleCloudKitSharingService: ObservableObject {
             contingency: 0,
             profit: 0,
             startDate: startDate,
-            endDate: endDate
+            endDate: endDate,
+            status: status
         )
     }
     
-    // MARK: - Utility Methods
+    // MARK: - Enhanced Utility Methods
     
     func isOrganizationSharingActive() -> Bool {
-        return isZoneSetup && currentZone != nil
+        return isZoneSetup && currentZone != nil && currentOrganizationID != nil
     }
     
     func getOrganizationSharingStatus() -> String {
@@ -222,7 +294,8 @@ class SimpleCloudKitSharingService: ObservableObject {
         var status = "📊 ZONE-BASED ISOLATION STATUS:\n\n"
         status += "Organization: \(organizationID.prefix(8))...\n"
         status += "Zone: \(currentZone?.zoneID.zoneName ?? "Not Set")\n"
-        status += "Zone Setup: \(isZoneSetup ? "✅ Complete" : "❌ Not Complete")\n\n"
+        status += "Zone Setup: \(isZoneSetup ? "✅ Complete" : "❌ Not Complete")\n"
+        status += "Zone Ready: \(isOrganizationSharingActive() ? "✅ Active" : "❌ Not Active")\n\n"
         
         if isZoneSetup {
             status += "ISOLATION:\n"
@@ -238,7 +311,7 @@ class SimpleCloudKitSharingService: ObservableObject {
         return currentOrganizationID
     }
     
-    // MARK: - Zone Diagnostics
+    // MARK: - Enhanced Zone Diagnostics
     
     func getZoneDiagnostics() async -> String {
         guard let organizationID = currentOrganizationID else {
@@ -248,20 +321,28 @@ class SimpleCloudKitSharingService: ObservableObject {
         var diagnostics = "🏗️ ZONE-BASED ISOLATION DIAGNOSTICS:\n\n"
         diagnostics += "Organization: \(organizationID.prefix(8))...\n"
         diagnostics += "Zone: \(currentZone?.zoneID.zoneName ?? "Not Set")\n"
-        diagnostics += "Setup Complete: \(isZoneSetup ? "✅" : "❌")\n\n"
+        diagnostics += "Setup Complete: \(isZoneSetup ? "✅" : "❌")\n"
+        diagnostics += "Zone Active: \(isOrganizationSharingActive() ? "✅" : "❌")\n\n"
         
-        if isZoneSetup, let zone = currentZone {
+        if isOrganizationSharingActive(), let zone = currentZone {
             do {
+                try await ensureZoneReady()
+                
                 let query = CKQuery(recordType: "Project", predicate: NSPredicate(value: true))
                 let result = try await privateDB.records(matching: query, inZoneWith: zone.zoneID, resultsLimit: 100)
                 let projectCount = result.matchResults.count
                 
                 diagnostics += "DATA IN ZONE:\n"
                 diagnostics += "• Projects: \(projectCount)\n"
+                diagnostics += "• Zone ID: \(zone.zoneID.zoneName)\n"
+                diagnostics += "• Owner: \(zone.zoneID.ownerName)\n"
             } catch {
                 diagnostics += "DATA IN ZONE:\n"
                 diagnostics += "• Projects: Error loading (\(error.localizedDescription))\n"
             }
+        } else {
+            diagnostics += "DATA IN ZONE:\n"
+            diagnostics += "• Status: Zone not active - cannot query data\n"
         }
         
         return diagnostics
@@ -290,16 +371,18 @@ class SimpleCloudKitSharingService: ObservableObject {
             .eraseToAnyPublisher()
     }
     
-    // MARK: - Nuclear Reset Methods (for TeamManagementSection)
+    // MARK: - Nuclear Reset Methods (Enhanced)
     
     /// Delete all projects from the current organization's zone
     func deleteAllProjectsFromZone() async {
-        guard let zone = currentZone, isZoneSetup else {
-            print("⚠️ No zone setup - cannot delete projects")
-            return
-        }
-        
         do {
+            try await ensureZoneReady()
+            
+            guard let zone = currentZone else {
+                print("⚠️ No zone available - cannot delete projects")
+                return
+            }
+            
             print("🗑️ Deleting all projects from organization zone...")
             
             // Query all projects in the zone
@@ -348,9 +431,11 @@ class SimpleCloudKitSharingService: ObservableObject {
             // Clear current zone state
             currentZone = nil
             isZoneSetup = false
+            zoneSetupTask?.cancel()
+            zoneSetupTask = nil
             
             // Recreate the zone
-            await setupOrganizationZone()
+            await setCurrentOrganization(organizationID)
             
             if isZoneSetup {
                 print("✅ Organization zone reset complete")
@@ -364,7 +449,9 @@ class SimpleCloudKitSharingService: ObservableObject {
             // Try to recreate zone anyway
             currentZone = nil
             isZoneSetup = false
-            await setupOrganizationZone()
+            zoneSetupTask?.cancel()
+            zoneSetupTask = nil
+            await setCurrentOrganization(organizationID)
         }
     }
     
@@ -377,10 +464,13 @@ class SimpleCloudKitSharingService: ObservableObject {
         var status = "💥 NUCLEAR RESET STATUS:\n\n"
         status += "Organization: \(organizationID.prefix(8))...\n"
         status += "Zone: \(currentZone?.zoneID.zoneName ?? "Not Set")\n"
-        status += "Zone Setup: \(isZoneSetup ? "✅ Ready" : "❌ Not Ready")\n\n"
+        status += "Zone Setup: \(isZoneSetup ? "✅ Ready" : "❌ Not Ready")\n"
+        status += "Zone Active: \(isOrganizationSharingActive() ? "✅ Active" : "❌ Inactive")\n\n"
         
-        if isZoneSetup, let zone = currentZone {
+        if isOrganizationSharingActive(), let zone = currentZone {
             do {
+                try await ensureZoneReady()
+                
                 let query = CKQuery(recordType: "Project", predicate: NSPredicate(value: true))
                 let result = try await privateDB.records(matching: query, inZoneWith: zone.zoneID, resultsLimit: 1)
                 let hasProjects = !result.matchResults.isEmpty
@@ -401,7 +491,7 @@ class SimpleCloudKitSharingService: ObservableObject {
     }
 }
 
-// MARK: - Updated Sharing Errors
+// MARK: - Enhanced Sharing Errors
 enum SharingError: LocalizedError {
     case zoneCreationFailed
     case zoneNotFound
@@ -412,6 +502,7 @@ enum SharingError: LocalizedError {
     case userNotFound
     case invalidURL
     case organizationNotSet
+    case zoneSetupTimeout
     
     var errorDescription: String? {
         switch self {
@@ -433,6 +524,8 @@ enum SharingError: LocalizedError {
             return "Invalid share URL"
         case .organizationNotSet:
             return "No organization set - cannot perform operation"
+        case .zoneSetupTimeout:
+            return "Zone setup timed out - please try again"
         }
     }
 }

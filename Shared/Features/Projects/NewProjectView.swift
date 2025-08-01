@@ -48,79 +48,19 @@ struct NewProjectView: View {
     
     var body: some View {
         NavigationStack {
-            Form {
-                Section("Project Details") {
-                    TextField("Project Name", text: $name)
-                    TextField("Client Name", text: $client)
-                    TextField("Phone", text: $phone)
-                        .keyboardType(.phonePad)
-                    TextField("Email", text: $email)
-                        .keyboardType(.emailAddress)
-                        .autocapitalization(.none)
-                }
+            ZStack {
+                // Background blur effect
+                Color.clear
                 
-                Section("Address") {
-                    TextField("Street Address", text: $street)
-                    HStack {
-                        TextField("City", text: $city)
-                        TextField("State", text: $state)
-                            .frame(maxWidth: 80)
-                        TextField("Zip", text: $zip)
-                            .frame(maxWidth: 80)
-                            .keyboardType(.numberPad)
+                ScrollView {
+                    VStack(spacing: 20) {
+                        projectDetailsSection
+                        addressSection
+                        budgetBreakdownSection
+                        timelineSection
+                        notesSection
                     }
-                }
-                
-                Section("Budget Breakdown") {
-                    HStack {
-                        Text("Total Budget")
-                        Spacer()
-                        TextField("0", text: $totalBudget)
-                            .keyboardType(.decimalPad)
-                            .multilineTextAlignment(.trailing)
-                    }
-                    
-                    HStack {
-                        Text("General Conditions")
-                        Spacer()
-                        TextField("0", text: $generalConditions)
-                            .keyboardType(.decimalPad)
-                            .multilineTextAlignment(.trailing)
-                    }
-                    
-                    HStack {
-                        Text("Materials")
-                        Spacer()
-                        TextField("0", text: $materials)
-                            .keyboardType(.decimalPad)
-                            .multilineTextAlignment(.trailing)
-                    }
-                    
-                    HStack {
-                        Text("Labor")
-                        Spacer()
-                        TextField("0", text: $labor)
-                            .keyboardType(.decimalPad)
-                            .multilineTextAlignment(.trailing)
-                    }
-                    
-                    HStack {
-                        Text("Contingency (Auto-calculated)")
-                            .foregroundColor(.secondary)
-                        Spacer()
-                        Text("$\(contingencyAmount, specifier: "%.2f")")
-                            .foregroundColor(.green)
-                    }
-                }
-                
-                Section("Timeline") {
-                    DatePicker("Start Date", selection: $startDate, displayedComponents: .date)
-                    DatePicker("End Date", selection: $endDate, displayedComponents: .date)
-                }
-                
-                Section("Notes") {
-                    TextField("Additional notes...", text: $notes, axis: .vertical)
-                        .lineLimit(3...6)
+                    .padding()
                 }
             }
             .navigationTitle("New Project")
@@ -130,6 +70,8 @@ struct NewProjectView: View {
                     Button("Cancel") {
                         isPresented = false
                     }
+                    .foregroundColor(.primary)
+                    .fontWeight(.medium)
                 }
                 
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -137,9 +79,173 @@ struct NewProjectView: View {
                         createProject()
                     }
                     .disabled(!isValidForm)
+                    .foregroundColor(isValidForm ? .blue : .secondary)
+                    .fontWeight(.semibold)
                 }
             }
         }
+        .presentationBackground(.thinMaterial)
+    }
+    
+    @ViewBuilder
+    private var projectDetailsSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Image(systemName: "doc.text.fill")
+                    .font(.title2)
+                    .foregroundColor(.blue)
+                Text("Project Details")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+            }
+            
+            VStack(spacing: 12) {
+                SemiTransparentTextField(title: "Project Name", text: $name, isRequired: true)
+                SemiTransparentTextField(title: "Client Name", text: $client, isRequired: true)
+                SemiTransparentTextField(title: "Phone", text: $phone, keyboardType: .phonePad)
+                SemiTransparentTextField(title: "Email", text: $email, keyboardType: .emailAddress, autocapitalization: .never)
+            }
+        }
+        .padding()
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+    }
+    
+    @ViewBuilder 
+    private var addressSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Image(systemName: "location.fill")
+                    .font(.title2)
+                    .foregroundColor(.green)
+                Text("Address")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+            }
+            
+            VStack(spacing: 12) {
+                SemiTransparentTextField(title: "Street Address", text: $street)
+                
+                HStack(spacing: 12) {
+                    SemiTransparentTextField(title: "City", text: $city)
+                    SemiTransparentTextField(title: "State", text: $state)
+                        .frame(maxWidth: 100)
+                    SemiTransparentTextField(title: "Zip", text: $zip, keyboardType: .numberPad)
+                        .frame(maxWidth: 100)
+                }
+            }
+        }
+        .padding()
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+    }
+    
+    @ViewBuilder
+    private var budgetBreakdownSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Image(systemName: "dollarsign.circle.fill")
+                    .font(.title2)
+                    .foregroundColor(.orange)
+                Text("Budget Breakdown")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+            }
+            
+            VStack(spacing: 12) {
+                SemiTransparentCurrencyField(title: "Total Budget", text: $totalBudget, isRequired: true)
+                SemiTransparentCurrencyField(title: "General Conditions", text: $generalConditions)
+                SemiTransparentCurrencyField(title: "Materials", text: $materials)
+                SemiTransparentCurrencyField(title: "Labor", text: $labor)
+                
+                // Auto-calculated contingency display
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text("Contingency")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                            Text("(Auto-calculated)")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        
+                        Text("Remaining budget after all expenses")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    Spacer()
+                    
+                    Text(contingencyAmount.formatAsCurrency())
+                        .font(.title3)
+                        .fontWeight(.bold)
+                        .foregroundColor(contingencyAmount >= 0 ? .green : .red)
+                }
+                .padding()
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+            }
+        }
+        .padding()
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+    }
+    
+    @ViewBuilder
+    private var timelineSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Image(systemName: "calendar.badge.clock")
+                    .font(.title2)
+                    .foregroundColor(.purple)
+                Text("Timeline")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+            }
+            
+            VStack(spacing: 12) {
+                SemiTransparentDatePicker(title: "Start Date", selection: $startDate)
+                SemiTransparentDatePicker(title: "End Date", selection: $endDate)
+                
+                // Duration display
+                HStack {
+                    Text("Project Duration")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                    
+                    Spacer()
+                    
+                    let duration = Calendar.current.dateComponents([.day], from: startDate, to: endDate).day ?? 0
+                    Text("\(duration) days")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundColor(duration > 0 ? .primary : .red)
+                }
+                .padding()
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+            }
+        }
+        .padding()
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+    }
+    
+    @ViewBuilder
+    private var notesSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Image(systemName: "note.text")
+                    .font(.title2) 
+                    .foregroundColor(.indigo)
+                Text("Notes")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+            }
+            
+            TextField("Additional notes about the project...", text: $notes, axis: .vertical)
+                .textFieldStyle(.plain)
+                .padding()
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+                .lineLimit(3...6)
+        }
+        .padding()
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
     }
     
     private func createProject() {
@@ -181,6 +287,93 @@ struct NewProjectView: View {
         
         projectVM.createNewProject(project)
         isPresented = false
+    }
+}
+
+// MARK: - Semi-Transparent Components for NewProjectView
+
+struct SemiTransparentTextField: View {
+    let title: String
+    @Binding var text: String
+    var keyboardType: UIKeyboardType = .default
+    var autocapitalization: TextInputAutocapitalization = .sentences
+    var isRequired: Bool = false
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(title)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                
+                if isRequired {
+                    Text("*")
+                        .font(.subheadline)
+                        .foregroundColor(.red)
+                }
+            }
+            
+            TextField(title, text: $text)
+                .textFieldStyle(.plain)
+                .keyboardType(keyboardType)
+                .textInputAutocapitalization(autocapitalization)
+                .padding()
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+        }
+    }
+}
+
+struct SemiTransparentCurrencyField: View {
+    let title: String
+    @Binding var text: String
+    var isRequired: Bool = false
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(title)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                
+                if isRequired {
+                    Text("*")
+                        .font(.subheadline)
+                        .foregroundColor(.red)
+                }
+            }
+            
+            HStack {
+                Text("$")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                
+                TextField("0", text: $text)
+                    .textFieldStyle(.plain)
+                    .keyboardType(.decimalPad)
+                    .multilineTextAlignment(.trailing)
+            }
+            .padding()
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+        }
+    }
+}
+
+struct SemiTransparentDatePicker: View {
+    let title: String
+    @Binding var selection: Date
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.subheadline)
+                .fontWeight(.medium)
+            
+            DatePicker(title, selection: $selection, displayedComponents: .date)
+                .datePickerStyle(.compact)
+                .labelsHidden()
+                .padding()
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+        }
     }
 }
 

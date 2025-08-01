@@ -42,6 +42,11 @@ struct SettingsView: View {
             } message: {
                 Text("This will permanently delete ALL local data and CloudKit data including:\n\n• All 26 organizations\n• All team members\n• All vendors & payment methods\n• All cached projects\n• All settings\n\nThe app will restart automatically after reset. This cannot be undone.")
             }
+            .alert("Debug Action", isPresented: $showingAlert) {
+                Button("OK") { }
+            } message: {
+                Text(alertMessage)
+            }
         }
     }
     
@@ -57,8 +62,39 @@ struct SettingsView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("\(organization.name) Directory")
                             .font(.headline)
-                        // Show correct count - app users vs team members
-                        Text("\(projectVM.teamMembers.filter { $0.employmentStatus == .active }.count) team members • \(organization.members.count + 1) app users")
+                        // Debug: Show both counts to identify discrepancy
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("CloudKit: \(organization.members.count + 1) app users")
+                                .font(.caption)
+                                .foregroundColor(.blue)
+                            Text("Local: \(projectVM.teamMembers.filter { $0.hasAppAccess }.count + 1) app users")
+                                .font(.caption)
+                                .foregroundColor(.green)
+                            Text("Team members: \(projectVM.teamMembers.filter { $0.employmentStatus == .active }.count)")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    
+                    Spacer()
+                    
+                    Image(systemName: "chevron.right")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            
+            // Debug section to see organization members
+            NavigationLink(destination: OrganizationDebugView(organization: organization)) {
+                HStack {
+                    Image(systemName: "ladybug.fill")
+                        .foregroundColor(.orange)
+                        .frame(width: 24)
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Debug Organization Data")
+                            .font(.headline)
+                        Text("See CloudKit vs Local data")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
@@ -142,36 +178,28 @@ struct SettingsView: View {
     
     @ViewBuilder
     private var debugSection: some View {
-        Section("Debug & Maintenance") {
-            Button("🔧 Fix Organization IDs") {
-                fixOrganizationIDs()
+        #if DEBUG
+        Section("Debug & Testing") {
+            Button("Clear Pending Invites") {
+                UserDefaults.standard.removeObject(forKey: "pending_invite_orgID")
+                UserDefaults.standard.removeObject(forKey: "pending_invite_orgName")
+                UserDefaults.standard.removeObject(forKey: "pending_invite_token")
+                
+                alertMessage = "Cleared all pending invite data"
+                showingAlert = true
             }
+            .foregroundColor(.orange)
             
-            Button("📊 Check CloudKit Status") {
-                checkCloudKitStatus()
+            Button("Show UserDefaults Keys") {
+                let keys = UserDefaults.standard.dictionaryRepresentation().keys
+                let rheirKeys = keys.filter { $0.contains("invite") || $0.contains("org") || $0.contains("RHEIR") }
+                
+                alertMessage = "RHEIR-related keys:\n\(rheirKeys.joined(separator: "\n"))"
+                showingAlert = true
             }
-            
-            Button("🔍 Full Diagnostic Report") {
-                getFullDiagnostic()
-            }
-            
-            Button("💥 Nuclear Reset", role: .destructive) {
-                showingNuclearResetAlert = true
-            }
-            .foregroundColor(.red)
-            .disabled(resetService.isResetting)
-            
-            if resetService.isResetting {
-                HStack {
-                    Text(resetService.resetProgress)
-                        .font(.caption)
-                    Spacer()
-                    ProgressView()
-                        .scaleEffect(0.8)
-                }
-                .foregroundColor(.orange)
-            }
+            .foregroundColor(.blue)
         }
+        #endif
     }
     
     @ViewBuilder
@@ -198,6 +226,8 @@ struct SettingsView: View {
     @State private var showingNuclearResetAlert = false
     @State private var isResetting = false
     @State private var resetProgress = ""
+    @State private var showingAlert = false
+    @State private var alertMessage = ""
     
     private func checkCloudKitStatus() {
         projectVM.getDetailedCloudKitStatus { status in

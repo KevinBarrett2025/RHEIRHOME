@@ -7,37 +7,43 @@ extension CloudKitAuthService {
     /// Check CloudKit account status before attempting operations
     private func checkCloudKitAvailability() -> AnyPublisher<Void, Error> {
         return Future<Void, Error> { promise in
-            print("🔍 [CloudKit] Checking account status...")
+            print(" [CloudKit] Checking account status...")
             self.container.accountStatus { status, error in
                 DispatchQueue.main.async {
+                    if let error = error {
+                        print(" [CloudKit] Account status check failed: \(error)")
+                        promise(.failure(error))
+                        return
+                    }
+                    
                     switch status {
                     case .available:
-                        print("✅ [CloudKit] Account available")
+                        print(" [CloudKit] Account available")
                         promise(.success(()))
                     case .noAccount:
-                        print("❌ [CloudKit] No iCloud account found")
+                        print(" [CloudKit] No iCloud account found")
                         let error = NSError(domain: "CloudKitAuthService", code: -1, 
-                                          userInfo: [NSLocalizedDescriptionKey: "No iCloud account found. Please sign in to iCloud in Settings."])
+                                          userInfo: [NSLocalizedDescriptionKey: "No iCloud account found. Please sign in to iCloud in Settings → [Your Name] → iCloud and try again."])
                         promise(.failure(error))
                     case .couldNotDetermine:
-                        print("❌ [CloudKit] Could not determine account status")
+                        print(" [CloudKit] Could not determine account status")
                         let error = NSError(domain: "CloudKitAuthService", code: -2, 
-                                          userInfo: [NSLocalizedDescriptionKey: "Could not determine iCloud account status."])
+                                          userInfo: [NSLocalizedDescriptionKey: "Could not determine iCloud account status. Please check your internet connection and try again."])
                         promise(.failure(error))
                     case .restricted:
-                        print("❌ [CloudKit] Account is restricted")
+                        print(" [CloudKit] Account is restricted")
                         let error = NSError(domain: "CloudKitAuthService", code: -3, 
-                                          userInfo: [NSLocalizedDescriptionKey: "iCloud account is restricted."])
+                                          userInfo: [NSLocalizedDescriptionKey: "iCloud account is restricted. Please check your Screen Time or parental control settings."])
                         promise(.failure(error))
                     case .temporarilyUnavailable:
-                        print("❌ [CloudKit] Account temporarily unavailable")
+                        print(" [CloudKit] Account temporarily unavailable")
                         let error = NSError(domain: "CloudKitAuthService", code: -4, 
-                                          userInfo: [NSLocalizedDescriptionKey: "iCloud is temporarily unavailable."])
+                                          userInfo: [NSLocalizedDescriptionKey: "iCloud is temporarily unavailable. Please try again in a few minutes."])
                         promise(.failure(error))
                     @unknown default:
-                        print("❌ [CloudKit] Unknown account status")
+                        print(" [CloudKit] Unknown account status: \(status.rawValue)")
                         let error = NSError(domain: "CloudKitAuthService", code: -5, 
-                                          userInfo: [NSLocalizedDescriptionKey: "Unknown iCloud account status."])
+                                          userInfo: [NSLocalizedDescriptionKey: "Unknown iCloud account status. Please try signing out and back into iCloud."])
                         promise(.failure(error))
                     }
                 }
@@ -50,18 +56,18 @@ extension CloudKitAuthService {
         orgName: String,
         adminUserID: String
     ) -> AnyPublisher<Organization, Error> {
-        print("🏢 [CloudKit] Creating organization: '\(orgName)' for admin: \(adminUserID)")
+        print(" [CloudKit] Creating organization: '\(orgName)' for admin: \(adminUserID)")
         
-        // Check CloudKit availability first
+        // Check CloudKit availability first - NO timeout here, let the overall operation handle it
         return checkCloudKitAvailability()
             .flatMap { _ -> AnyPublisher<Organization, Error> in
-                print("🔍 [CloudKit] CloudKit available, proceeding with organization creation")
+                print(" [CloudKit] CloudKit available, proceeding with organization creation")
                 
                 let privateDB = self.container.privateCloudDatabase
                 let generatedOrgID = UUID().uuidString
                 
-                print("🔍 [CloudKit] Generated organization ID: \(generatedOrgID)")
-                print("🔍 [CloudKit] Using private database: \(privateDB)")
+                print(" [CloudKit] Generated organization ID: \(generatedOrgID)")
+                print(" [CloudKit] Using private database: \(privateDB)")
                 
                 // Create organization record with proper data isolation
                 let orgRecord = CKRecord(recordType: "Organization", recordID: CKRecord.ID(recordName: generatedOrgID))
@@ -77,16 +83,16 @@ extension CloudKitAuthService {
                 // Add development/production environment flag
                 #if DEBUG
                 orgRecord["environment"] = "development" as CKRecordValue
-                print("🔍 [CloudKit] Set environment to: development")
+                print(" [CloudKit] Set environment to: development")
                 #else
                 orgRecord["environment"] = "production" as CKRecordValue
-                print("🔍 [CloudKit] Set environment to: production")
+                print(" [CloudKit] Set environment to: production")
                 #endif
 
                 // Initialize empty member roles JSON
                 orgRecord["memberRoles"] = "{}" as CKRecordValue
 
-                print("🔍 [CloudKit] About to save Organization record with fields:")
+                print(" [CloudKit] About to save Organization record with fields:")
                 print("   - recordID: \(orgRecord.recordID.recordName)")
                 print("   - id: \(generatedOrgID)")
                 print("   - name: \(orgName)")
@@ -96,47 +102,83 @@ extension CloudKitAuthService {
                 print("   - recordType: \(orgRecord.recordType)")
 
                 return Future<Organization, Error> { promise in
-                    print("🔍 [CloudKit] Calling privateDB.save...")
+                    print(" [CloudKit] Calling privateDB.save...")
+                    
+                    // Track if completion handler has been called to prevent race conditions
+                    var hasCompleted = false
+                    let completionLock = NSLock()
                     
                     privateDB.save(orgRecord) { savedRecord, error in
                         DispatchQueue.main.async {
+                            completionLock.lock()
+                            defer { completionLock.unlock() }
+                            
+                            // Prevent duplicate completion handler calls
+                            guard !hasCompleted else {
+                                print(" [CloudKit] Save completion called multiple times - ignoring")
+                                return
+                            }
+                            hasCompleted = true
+                            
                             if let error = error {
-                                print("❌ [CloudKit] Failed to save Organization record:")
+                                print(" [CloudKit] Failed to save Organization record:")
                                 print("   Error: \(error)")
                                 print("   Localized: \(error.localizedDescription)")
                                 
                                 if let ckError = error as? CKError {
                                     print("   CKError code: \(ckError.code.rawValue)")
                                     
+                                    let userFriendlyError: NSError
                                     switch ckError.code {
                                     case .unknownItem:
-                                        print("   → Record type may not exist in schema")
+                                        print("   → Record type 'Organization' may not exist in schema")
+                                        userFriendlyError = NSError(domain: "CloudKit", code: -1, 
+                                                                  userInfo: [NSLocalizedDescriptionKey: "CloudKit schema not set up properly. The 'Organization' record type doesn't exist. Please contact support."])
                                     case .invalidArguments:
                                         print("   → Invalid field values or types")
+                                        userFriendlyError = NSError(domain: "CloudKit", code: -2, 
+                                                                  userInfo: [NSLocalizedDescriptionKey: "Invalid organization data. Please try again."])
                                     case .quotaExceeded:
                                         print("   → CloudKit quota exceeded")
+                                        userFriendlyError = NSError(domain: "CloudKit", code: -3, 
+                                                                  userInfo: [NSLocalizedDescriptionKey: "CloudKit storage quota exceeded. Please free up space in iCloud."])
                                     case .networkUnavailable:
                                         print("   → Network unavailable")
+                                        userFriendlyError = NSError(domain: "CloudKit", code: -4, 
+                                                                  userInfo: [NSLocalizedDescriptionKey: "Network unavailable. Please check your internet connection and try again."])
                                     case .notAuthenticated:
                                         print("   → Not authenticated with iCloud")
+                                        userFriendlyError = NSError(domain: "CloudKit", code: -5, 
+                                                                  userInfo: [NSLocalizedDescriptionKey: "Please sign in to iCloud in Settings and try again."])
+                                    case .permissionFailure:
+                                        print("   → Permission failure")
+                                        userFriendlyError = NSError(domain: "CloudKit", code: -6, 
+                                                                  userInfo: [NSLocalizedDescriptionKey: "CloudKit permission denied. Please check iCloud settings."])
+                                    case .serverRejectedRequest:
+                                        print("   → Server rejected request")
+                                        userFriendlyError = NSError(domain: "CloudKit", code: -7, 
+                                                                  userInfo: [NSLocalizedDescriptionKey: "CloudKit server rejected the request. The database schema may not be configured properly."])
                                     default:
-                                        print("   → Other CloudKit error")
+                                        print("   → Other CloudKit error: \(ckError.localizedDescription)")
+                                        userFriendlyError = NSError(domain: "CloudKit", code: -8, 
+                                                                  userInfo: [NSLocalizedDescriptionKey: "CloudKit error: \(ckError.localizedDescription)"])
                                     }
+                                    promise(.failure(userFriendlyError))
+                                } else {
+                                    promise(.failure(error))
                                 }
-                                
-                                promise(.failure(error))
                                 return
                             }
                             
                             guard let record = savedRecord else {
-                                print("❌ [CloudKit] No record returned from save operation")
+                                print(" [CloudKit] No record returned from save operation")
                                 let error = NSError(domain: "CloudKit", code: -1, 
-                                                   userInfo: [NSLocalizedDescriptionKey: "No record returned from save"])
+                                                   userInfo: [NSLocalizedDescriptionKey: "No record returned from CloudKit save operation"])
                                 promise(.failure(error))
                                 return
                             }
 
-                            print("✅ [CloudKit] Successfully saved Organization record:")
+                            print(" [CloudKit] Successfully saved Organization record:")
                             print("   Record ID: \(record.recordID.recordName)")
                             print("   Name: \(record["name"] as? String ?? "nil")")
                             print("   Admin: \(record["adminUserID"] as? String ?? "nil")")
@@ -152,13 +194,14 @@ extension CloudKitAuthService {
                                 cloudKitRecordID: record.recordID.recordName
                             )
                             
-                            print("✅ [CloudKit] Created Organization object: \(organization.name) (ID: \(organization.id))")
+                            print(" [CloudKit] Created Organization object: \(organization.name) (ID: \(organization.id))")
                             promise(.success(organization))
                         }
                     }
                 }
                 .eraseToAnyPublisher()
             }
+            .timeout(.seconds(15), scheduler: DispatchQueue.main) // Single timeout for the entire operation
             .eraseToAnyPublisher()
     }
     
@@ -166,7 +209,7 @@ extension CloudKitAuthService {
         email: String,
         orgID: String
     ) -> AnyPublisher<Void, Error> {
-        print("📧 [CloudKit] Inviting \(email) to organization \(orgID)")
+        print(" [CloudKit] Inviting \(email) to organization \(orgID)")
         
         return checkCloudKitAvailability()
             .flatMap { _ -> AnyPublisher<Void, Error> in
@@ -184,28 +227,31 @@ extension CloudKitAuthService {
                 
                 return Future<Void, Error> { promise in
                     privateDB.save(inviteRecord) { _, error in
-                        if let error = error {
-                            print("❌ [CloudKit] Failed to save invite: \(error)")
-                            promise(.failure(error))
-                        } else {
-                            print("✅ [CloudKit] Invite saved successfully")
-                            promise(.success(()))
+                        DispatchQueue.main.async {
+                            if let error = error {
+                                print(" [CloudKit] Failed to save invite: \(error)")
+                                promise(.failure(error))
+                            } else {
+                                print(" [CloudKit] Invite saved successfully")
+                                promise(.success(()))
+                            }
                         }
                     }
                 }
                 .eraseToAnyPublisher()
             }
+            .timeout(.seconds(10), scheduler: DispatchQueue.main)
             .eraseToAnyPublisher()
     }
 
     public func fetchOrganizations(
         for userID: String
     ) -> AnyPublisher<[Organization], Error> {
-        print("📋 [CloudKit] Fetching organizations for user: \(userID)")
+        print(" [CloudKit] Fetching organizations for user: \(userID)")
         
         return checkCloudKitAvailability()
             .flatMap { _ -> AnyPublisher<[Organization], Error> in
-                print("🔍 [CloudKit] CloudKit available, proceeding with fetch")
+                print(" [CloudKit] CloudKit available, proceeding with fetch")
                 
                 let privateDB = self.container.privateCloudDatabase
                 
@@ -214,22 +260,22 @@ extension CloudKitAuthService {
                 let adminPredicate = NSPredicate(format: "adminUserID == %@", userID)
                 let adminQuery = CKQuery(recordType: "Organization", predicate: adminPredicate)
                 
-                print("🔍 [CloudKit] Admin query predicate: \(adminPredicate)")
+                print(" [CloudKit] Admin query predicate: \(adminPredicate)")
                 
                 // Query 2: Organizations where user is in members list
                 let memberPredicate = NSPredicate(format: "members CONTAINS %@", userID)
                 let memberQuery = CKQuery(recordType: "Organization", predicate: memberPredicate)
                 
-                print("🔍 [CloudKit] Member query predicate: \(memberPredicate)")
+                print(" [CloudKit] Member query predicate: \(memberPredicate)")
 
                 // Execute both queries and combine results
                 let adminQueryPublisher = Future<[CKRecord], Error> { promise in
-                    print("🔍 [CloudKit] Executing admin query...")
+                    print(" [CloudKit] Executing admin query...")
                     
                     privateDB.fetch(withQuery: adminQuery, inZoneWith: nil, desiredKeys: nil, resultsLimit: 25) { result in
                         switch result {
                         case .failure(let error):
-                            print("❌ [CloudKit] Admin query failed: \(error)")
+                            print(" [CloudKit] Admin query failed: \(error)")
                             promise(.failure(error))
                         case .success(let matchInfo):
                             let records = matchInfo.matchResults.compactMap { pair -> CKRecord? in
@@ -238,19 +284,19 @@ extension CloudKitAuthService {
                                 }
                                 return nil
                             }
-                            print("✅ [CloudKit] Admin query found \(records.count) organizations")
+                            print(" [CloudKit] Admin query found \(records.count) organizations")
                             promise(.success(records))
                         }
                     }
                 }.eraseToAnyPublisher()
                 
                 let memberQueryPublisher = Future<[CKRecord], Error> { promise in
-                    print("🔍 [CloudKit] Executing member query...")
+                    print(" [CloudKit] Executing member query...")
                     
                     privateDB.fetch(withQuery: memberQuery, inZoneWith: nil, desiredKeys: nil, resultsLimit: 25) { result in
                         switch result {
                         case .failure(let error):
-                            print("❌ [CloudKit] Member query failed: \(error)")
+                            print(" [CloudKit] Member query failed: \(error)")
                             // Don't fail the whole operation if member query fails
                             // Just return empty array for member organizations
                             promise(.success([]))
@@ -261,7 +307,7 @@ extension CloudKitAuthService {
                                 }
                                 return nil
                             }
-                            print("✅ [CloudKit] Member query found \(records.count) organizations")
+                            print(" [CloudKit] Member query found \(records.count) organizations")
                             promise(.success(records))
                         }
                     }
@@ -270,7 +316,7 @@ extension CloudKitAuthService {
                 // Combine both query results
                 return Publishers.Zip(adminQueryPublisher, memberQueryPublisher)
                     .map { adminRecords, memberRecords -> [CKRecord] in
-                        print("🔍 [CloudKit] Combining query results:")
+                        print(" [CloudKit] Combining query results:")
                         print("   Admin records: \(adminRecords.count)")
                         print("   Member records: \(memberRecords.count)")
                         
@@ -284,11 +330,11 @@ extension CloudKitAuthService {
                             }
                         }
                         
-                        print("🔍 [CloudKit] Combined unique records: \(allRecords.count)")
+                        print(" [CloudKit] Combined unique records: \(allRecords.count)")
                         return allRecords
                     }
                     .map { records -> [Organization] in
-                        print("🔍 [CloudKit] Processing \(records.count) records")
+                        print(" [CloudKit] Processing \(records.count) records")
                         
                         // Filter by environment if the field exists
                         #if DEBUG
@@ -297,10 +343,10 @@ extension CloudKitAuthService {
                         let targetEnvironment = "production"
                         #endif
                         
-                        print("🔍 [CloudKit] Filtering for environment: \(targetEnvironment)")
+                        print(" [CloudKit] Filtering for environment: \(targetEnvironment)")
                         
                         let filteredRecords = records.filter { record in
-                            print("🔍 [CloudKit] Processing record: \(record["name"] as? String ?? "unknown")")
+                            print(" [CloudKit] Processing record: \(record["name"] as? String ?? "unknown")")
                             print("   Record ID: \(record.recordID.recordName)")
                             print("   Admin: \(record["adminUserID"] as? String ?? "nil")")
                             print("   Environment: \(record["environment"] as? String ?? "nil")")
@@ -317,7 +363,7 @@ extension CloudKitAuthService {
                             }
                         }
                         
-                        print("🔍 [CloudKit] After environment filtering: \(filteredRecords.count) records")
+                        print(" [CloudKit] After environment filtering: \(filteredRecords.count) records")
                         
                         let organizations = filteredRecords.map { record in
                             let org = Organization(
@@ -330,7 +376,7 @@ extension CloudKitAuthService {
                                 cloudKitRecordID: record.recordID.recordName
                             )
                             
-                            print("   ✅ Created Organization:")
+                            print("   Created Organization:")
                             print("     Name: \(org.name)")
                             print("     ID: \(org.id)")
                             print("     Admin: \(org.adminUserID)")
@@ -340,13 +386,14 @@ extension CloudKitAuthService {
                             return org
                         }
                         
-                        print("✅ [CloudKit] Successfully processed \(organizations.count) organizations for user \(userID.prefix(8))...")
+                        print(" [CloudKit] Successfully processed \(organizations.count) organizations for user \(userID.prefix(8))...")
                         
                         // Sort organizations by creation date in code instead of CloudKit
                         return organizations.sorted { $0.createdAt > $1.createdAt }
                     }
                     .eraseToAnyPublisher()
             }
+            .timeout(.seconds(12), scheduler: DispatchQueue.main)
             .eraseToAnyPublisher()
     }
     
@@ -375,16 +422,16 @@ extension CloudKitAuthService {
                             return
                         }
                         
-                        print("✅ [CloudKit] Found organization record")
+                        print(" [CloudKit] Found organization record")
                         
                         // Add user to members list if not already present
                         var members = orgRecord["members"] as? [String] ?? []
                         if !members.contains(userID) {
                             members.append(userID)
                             orgRecord["members"] = members as CKRecordValue
-                            print("🔍 [CloudKit] Adding user to members list")
+                            print(" [CloudKit] Adding user to members list")
                         } else {
-                            print("🔍 [CloudKit] User already in members list")
+                            print(" [CloudKit] User already in members list")
                         }
                         
                         // Update member roles JSON
@@ -399,29 +446,17 @@ extension CloudKitAuthService {
                         if let rolesData = try? JSONSerialization.data(withJSONObject: memberRoles),
                            let rolesJSON = String(data: rolesData, encoding: .utf8) {
                             orgRecord["memberRoles"] = rolesJSON as CKRecordValue
-                            print("🔍 [CloudKit] Updated member roles")
+                            print(" [CloudKit] Updated member roles")
                         }
                         
                         // Save the updated organization record
                         privateDB.save(orgRecord) { _, saveError in
                             DispatchQueue.main.async {
                                 if let saveError = saveError {
-                                    print("❌ [CloudKit] Failed to save organization: \(saveError)")
+                                    print(" [CloudKit] Failed to save organization: \(saveError)")
                                     promise(.failure(saveError))
                                 } else {
-                                    print("✅ [CloudKit] Successfully added user \(userID.prefix(8))... to organization as member")
-                                    
-                                    // Create organization object from updated record
-                                    let organization = Organization(
-                                        id: orgRecord["id"] as? String ?? organizationID,
-                                        name: orgRecord["name"] as? String ?? "Unknown Organization",
-                                        members: members,
-                                        adminUserID: orgRecord["adminUserID"] as? String ?? "",
-                                        isActive: (orgRecord["isActiveV2"] as? Int64) == 1,
-                                        createdAt: orgRecord["createdAt"] as? Date ?? Date(),
-                                        cloudKitRecordID: orgRecord.recordID.recordName
-                                    )
-                                    
+                                    print(" [CloudKit] Successfully added user \(userID.prefix(8))... to organization as member")
                                     promise(.success(()))
                                 }
                             }
@@ -430,6 +465,7 @@ extension CloudKitAuthService {
                 }
                 .eraseToAnyPublisher()
             }
+            .timeout(.seconds(10), scheduler: DispatchQueue.main)
             .eraseToAnyPublisher()
     }
     
@@ -445,16 +481,17 @@ extension CloudKitAuthService {
                 return Future<Void, Error> { promise in
                     privateDB.delete(withRecordID: recordID) { _, error in
                         if let error = error {
-                            print("❌ [CloudKit] Failed to delete organization: \(error)")
+                            print(" [CloudKit] Failed to delete organization: \(error)")
                             promise(.failure(error))
                         } else {
-                            print("✅ [CloudKit] Organization deleted successfully")
+                            print(" [CloudKit] Organization deleted successfully")
                             promise(.success(()))
                         }
                     }
                 }
                 .eraseToAnyPublisher()
             }
+            .timeout(.seconds(8), scheduler: DispatchQueue.main)
             .eraseToAnyPublisher()
         #else
         return Fail(error: NSError(domain: "CloudKit", code: -1, 
@@ -475,52 +512,40 @@ extension CloudKitAuthService {
                 
                 let privateDB = self.container.privateCloudDatabase
                 
-                // Query for organizations with this exact name (case-insensitive)
-                let namePredicate = NSPredicate(format: "name ==[c] %@", name)
+                // Simple exact match query - case sensitive for now, which works fine
+                let namePredicate = NSPredicate(format: "name == %@", name)
                 let query = CKQuery(recordType: "Organization", predicate: namePredicate)
                 
-                print("🔍 [CloudKit] Name availability query:")
-                print("   Predicate: \(namePredicate)")
-                print("   Record type: \(query.recordType)")
+                print("🔍 [CloudKit] Name availability query: \(namePredicate)")
                 
                 return Future<Bool, Error> { promise in
                     print("🔍 [CloudKit] Executing name availability query...")
                     
-                    privateDB.fetch(withQuery: query, inZoneWith: nil, desiredKeys: ["name", "environment"], resultsLimit: 50) { result in
+                    privateDB.fetch(withQuery: query, inZoneWith: nil, desiredKeys: ["name", "environment"], resultsLimit: 10) { result in
                         DispatchQueue.main.async {
                             switch result {
                             case .failure(let error):
-                                print("❌ [CloudKit] Failed to check organization name availability:")
-                                print("   Error: \(error)")
-                                print("   Localized: \(error.localizedDescription)")
+                                print("❌ [CloudKit] Failed to check organization name availability: \(error)")
                                 
-                                if let ckError = error as? CKError {
-                                    print("   CKError code: \(ckError.code.rawValue)")
-                                    print("   CKError description: \(ckError.localizedDescription)")
-                                    
-                                    // For development, assume name is available if query fails
-                                    #if DEBUG
-                                    print("⚠️ [CloudKit] Development mode - assuming name is available due to query error")
-                                    promise(.success(true))
-                                    return
-                                    #endif
-                                }
-                                
+                                // For development, assume name is available if query fails
+                                #if DEBUG
+                                print("⚠️ [CloudKit] Development mode - assuming name is available due to query error")
+                                promise(.success(true))
+                                #else
                                 promise(.failure(error))
+                                #endif
                                 
                             case .success(let matchInfo):
-                                print("✅ [CloudKit] Name availability query succeeded")
-                                print("   Found \(matchInfo.matchResults.count) potential matches")
-                                
                                 let records = matchInfo.matchResults.compactMap { pair -> CKRecord? in
                                     if case .success(let record) = pair.1 {
-                                        print("   Found organization: '\(record["name"] as? String ?? "unknown")'")
                                         return record
                                     }
                                     return nil
                                 }
                                 
-                                // Filter by environment if the field exists, otherwise include all
+                                print("✅ [CloudKit] Name availability query found \(records.count) potential matches")
+                                
+                                // Filter by environment if the field exists
                                 #if DEBUG
                                 let targetEnvironment = "development"
                                 #else
@@ -528,12 +553,10 @@ extension CloudKitAuthService {
                                 #endif
                                 
                                 let relevantRecords = records.filter { record in
-                                    // If environment field exists, check it; otherwise include the record
                                     if let environment = record["environment"] as? String {
                                         return environment == targetEnvironment
                                     } else {
                                         // Include records without environment field (legacy records)
-                                        print("⚠️ [CloudKit] Found organization without environment field - including in check")
                                         return true
                                     }
                                 }
@@ -544,10 +567,6 @@ extension CloudKitAuthService {
                                     print("✅ [CloudKit] Organization name '\(name)' is available")
                                 } else {
                                     print("⚠️ [CloudKit] Organization name '\(name)' is already taken")
-                                    print("   Found \(relevantRecords.count) conflicting organization(s):")
-                                    for record in relevantRecords {
-                                        print("     - '\(record["name"] as? String ?? "unknown")' (env: \(record["environment"] as? String ?? "none"))")
-                                    }
                                 }
                                 
                                 promise(.success(isAvailable))
@@ -557,26 +576,27 @@ extension CloudKitAuthService {
                 }
                 .eraseToAnyPublisher()
             }
+            .timeout(.seconds(10), scheduler: DispatchQueue.main)
             .eraseToAnyPublisher()
     }
-    
+
     /// Get suggested alternative organization names if the desired name is taken
     public func suggestAlternativeOrganizationNames(_ baseName: String) -> AnyPublisher<[String], Error> {
-        print("💡 [CloudKit] Generating alternative names for '\(baseName)'")
+        print(" [CloudKit] Generating alternative names for '\(baseName)'")
         
         return checkCloudKitAvailability()
             .flatMap { _ -> AnyPublisher<[String], Error> in
                 let privateDB = self.container.privateCloudDatabase
                 
-                // Query for organizations with similar names
-                let namePredicate = NSPredicate(format: "name BEGINSWITH[c] %@", baseName)
+                // Query for organizations with similar names - use BEGINSWITH which is supported
+                let namePredicate = NSPredicate(format: "name BEGINSWITH %@", baseName)
                 let query = CKQuery(recordType: "Organization", predicate: namePredicate)
                 
                 return Future<[String], Error> { promise in
                     privateDB.fetch(withQuery: query, inZoneWith: nil, desiredKeys: ["name", "environment"], resultsLimit: 20) { result in
                         switch result {
                         case .failure(let error):
-                            print("❌ [CloudKit] Failed to fetch similar organization names: \(error)")
+                            print(" [CloudKit] Failed to fetch similar organization names: \(error)")
                             
                             // If query fails, provide basic suggestions
                             let basicSuggestions = [
@@ -652,16 +672,17 @@ extension CloudKitAuthService {
                             // Limit to top 5 suggestions
                             suggestions = Array(suggestions.prefix(5))
                             
-                            print("💡 [CloudKit] Generated \(suggestions.count) alternative names for '\(baseName)'")
+                            print(" [CloudKit] Generated \(suggestions.count) alternative names for '\(baseName)'")
                             promise(.success(suggestions))
                         }
                     }
                 }
                 .eraseToAnyPublisher()
             }
+            .timeout(.seconds(8), scheduler: DispatchQueue.main)
             .eraseToAnyPublisher()
     }
-    
+
     // MARK: - Role-Based Organization Membership
 
     public func joinOrganizationWithRole(
@@ -669,7 +690,7 @@ extension CloudKitAuthService {
         userID: String,
         role: OrganizationRole
     ) -> AnyPublisher<Organization, Error> {
-        print("🔗 [CloudKit] Joining organization \(orgID) as \(role.displayName)")
+        print(" [CloudKit] Joining organization \(orgID) as \(role.displayName)")
         
         return checkCloudKitAvailability()
             .flatMap { _ -> AnyPublisher<Organization, Error> in
@@ -677,59 +698,62 @@ extension CloudKitAuthService {
                 let recordID = CKRecord.ID(recordName: orgID)
                 
                 return Future<Organization, Error> { promise in
-                    print("🔍 [CloudKit] Fetching organization record: \(orgID)")
+                    print(" [CloudKit] Fetching organization record: \(orgID)")
                     
                     privateDB.fetch(withRecordID: recordID) { record, error in
                         DispatchQueue.main.async {
                             if let error = error {
-                                print("❌ [CloudKit] Failed to fetch organization: \(error)")
+                                print(" [CloudKit] Failed to fetch organization: \(error)")
                                 promise(.failure(error))
                                 return
                             }
                             
                             guard let orgRecord = record else {
-                                print("❌ [CloudKit] Organization record not found: \(orgID)")
+                                print(" [CloudKit] Organization record not found: \(orgID)")
                                 let error = NSError(domain: "CloudKit", code: -1, 
                                                    userInfo: [NSLocalizedDescriptionKey: "Organization not found"])
                                 promise(.failure(error))
                                 return
                             }
                             
-                            print("✅ [CloudKit] Found organization record")
+                            print(" [CloudKit] Found organization record")
                             
                             // Add user to members list if not already present
                             var members = orgRecord["members"] as? [String] ?? []
                             if !members.contains(userID) {
                                 members.append(userID)
                                 orgRecord["members"] = members as CKRecordValue
-                                print("🔍 [CloudKit] Adding user to members list")
+                                print(" [CloudKit] Adding user to members list")
                             } else {
-                                print("🔍 [CloudKit] User already in members list")
+                                print(" [CloudKit] User already in members list")
                             }
                             
-                            // Update member roles JSON
+                            // Update member roles JSON with the specified role
                             var memberRoles: [String: String] = [:]
                             if let existingRolesJSON = orgRecord["memberRoles"] as? String,
                                let data = existingRolesJSON.data(using: .utf8),
                                let roles = try? JSONSerialization.jsonObject(with: data) as? [String: String] {
                                 memberRoles = roles
                             }
+                            
+                            // Set the specified role (not default to member)
                             memberRoles[userID] = role.rawValue
+                            print(" [CloudKit] Setting user role to: \(role.displayName)")
                             
                             if let rolesData = try? JSONSerialization.data(withJSONObject: memberRoles),
                                let rolesJSON = String(data: rolesData, encoding: .utf8) {
                                 orgRecord["memberRoles"] = rolesJSON as CKRecordValue
-                                print("🔍 [CloudKit] Updated member roles")
+                                print(" [CloudKit] Updated member roles JSON")
                             }
                             
                             // Save the updated organization record
                             privateDB.save(orgRecord) { _, saveError in
                                 DispatchQueue.main.async {
                                     if let saveError = saveError {
-                                        print("❌ [CloudKit] Failed to save organization: \(saveError)")
+                                        print(" [CloudKit] Failed to save organization: \(saveError)")
                                         promise(.failure(saveError))
                                     } else {
-                                        print("✅ [CloudKit] Successfully added user \(userID.prefix(8))... to organization as \(role.displayName)")
+                                        print(" [CloudKit] Successfully added user \(userID.prefix(8))... to organization as \(role.displayName)")
                                         
                                         // Create organization object from updated record
                                         let organization = Organization(
@@ -751,6 +775,7 @@ extension CloudKitAuthService {
                 }
                 .eraseToAnyPublisher()
             }
+            .timeout(.seconds(10), scheduler: DispatchQueue.main)
             .eraseToAnyPublisher()
     }
     
@@ -759,27 +784,95 @@ extension CloudKitAuthService {
     public func fetchOrganizationsWithRoles(
         for userID: String
     ) -> AnyPublisher<(organizations: [Organization], roles: [String: OrganizationRole]), Error> {
-        print("📋 [CloudKit] Fetching organizations with roles for user: \(userID)")
+        print(" [CloudKit] Fetching organizations with roles for user: \(userID)")
         
         return fetchOrganizations(for: userID)
             .map { organizations in
                 var userRoles: [String: OrganizationRole] = [:]
                 
-                // Extract roles from memberRoles JSON field
+                // Extract roles from memberRoles JSON field and admin status
                 for org in organizations {
                     let isAdmin = org.adminUserID == userID
                     
                     if isAdmin {
                         userRoles[org.id] = .admin
+                        print(" [CloudKit] User is admin of organization: \(org.name)")
                     } else {
-                        // Try to get role from memberRoles field (when available)
-                        userRoles[org.id] = .member // Default to member
+                        // Try to get role from CloudKit record's memberRoles field
+                        // For now, we'll fetch this separately in a real implementation
+                        // Here we'll default to member for simplicity
+                        userRoles[org.id] = .member
+                        print(" [CloudKit] User is member of organization: \(org.name)")
                     }
                 }
                 
-                print("✅ [CloudKit] Mapped roles for \(organizations.count) organizations")
+                print(" [CloudKit] Mapped roles for \(organizations.count) organizations")
                 return (organizations: organizations, roles: userRoles)
             }
+            .eraseToAnyPublisher()
+    }
+    
+    /// Fetch detailed role information for a specific organization
+    public func fetchUserRoleInOrganization(
+        userID: String, 
+        organizationID: String
+    ) -> AnyPublisher<OrganizationRole, Error> {
+        print(" [CloudKit] Fetching user role in organization: \(organizationID.prefix(8))...")
+        
+        return checkCloudKitAvailability()
+            .flatMap { _ -> AnyPublisher<OrganizationRole, Error> in
+                let privateDB = self.container.privateCloudDatabase
+                let recordID = CKRecord.ID(recordName: organizationID)
+                
+                return Future<OrganizationRole, Error> { promise in
+                    privateDB.fetch(withRecordID: recordID) { record, error in
+                        DispatchQueue.main.async {
+                            if let error = error {
+                                print(" [CloudKit] Failed to fetch organization for role check: \(error)")
+                                promise(.failure(error))
+                                return
+                            }
+                            
+                            guard let orgRecord = record else {
+                                let error = NSError(domain: "CloudKit", code: -1, 
+                                                   userInfo: [NSLocalizedDescriptionKey: "Organization not found"])
+                                promise(.failure(error))
+                                return
+                            }
+                            
+                            // Check if user is admin
+                            if let adminUserID = orgRecord["adminUserID"] as? String, adminUserID == userID {
+                                print(" [CloudKit] User is admin of organization")
+                                promise(.success(.admin))
+                                return
+                            }
+                            
+                            // Check member roles JSON
+                            if let memberRolesJSON = orgRecord["memberRoles"] as? String,
+                               let data = memberRolesJSON.data(using: .utf8),
+                               let memberRoles = try? JSONSerialization.jsonObject(with: data) as? [String: String],
+                               let roleString = memberRoles[userID],
+                               let role = OrganizationRole(rawValue: roleString) {
+                                print(" [CloudKit] User role found: \(role.displayName)")
+                                promise(.success(role))
+                            } else {
+                                // Default to member if found in members list
+                                let members = orgRecord["members"] as? [String] ?? []
+                                if members.contains(userID) {
+                                    print(" [CloudKit] User found in members list, defaulting to member role")
+                                    promise(.success(.member))
+                                } else {
+                                    let error = NSError(domain: "CloudKit", code: -2, 
+                                                       userInfo: [NSLocalizedDescriptionKey: "User is not a member of this organization"])
+                                    promise(.failure(error))
+                                }
+                            }
+                        }
+                    }
+                }
+                .eraseToAnyPublisher()
+            }
+            .timeout(.seconds(8), scheduler: DispatchQueue.main)
             .eraseToAnyPublisher()
     }
 }

@@ -8,13 +8,17 @@ extension ProjectViewModel {
     /// Clock an employee in now.
     func clockIn(employee: String, rate: Double) {
         guard let sel = selectedProject,
-              let idx = projects.firstIndex(where: { $0.id == sel.id })
+              let idx = organizationProjects.firstIndex(where: { $0.id == sel.id })
         else { return }
 
         let wh = WorkHour(startTime: Date(), employee: employee, rate: rate)
-        projects[idx].loggedHours.append(wh)
-        selectedProject = projects[idx]
-        saveAllProjects()
+        organizationProjects[idx].loggedHours.append(wh)
+        selectedProject = organizationProjects[idx]
+        
+        // Save to CloudKit
+        Task {
+            await saveAllProjectsToCloudKit()
+        }
         recomputeLaborData()
     }
 

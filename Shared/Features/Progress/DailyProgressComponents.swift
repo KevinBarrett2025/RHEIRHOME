@@ -1,10 +1,10 @@
 import SwiftUI
 
 // MARK: - Models
-struct IdentifiableInt: Identifiable {
-    let id: Int
+struct IdentifiableUUID: Identifiable {
+    let id: UUID
     
-    init(_ value: Int) {
+    init(_ value: UUID) {
         self.id = value
     }
 }
@@ -172,7 +172,7 @@ struct TaskProgressEntry: View {
     let tasks: [ProjectTask]
     let onTaskTap: (ProjectTask) -> Void
     let onDeleteTask: (ProjectTask) -> Void
-    @State private var selectedImageIndex: IdentifiableInt?
+    @State private var selectedPhotoID: IdentifiableUUID?
     @State private var showingDeleteAlert = false
     @State private var taskToDelete: ProjectTask?
     
@@ -238,23 +238,31 @@ struct TaskProgressEntry: View {
                 }
             }
             
-            // Photos if any
-            if !entry.imageDatas.isEmpty {
+            // Photos using modern photoIDs system
+            if !entry.photoIDs.isEmpty {
                 LazyVStack {
-                    ForEach(Array(entry.imageDatas.enumerated()), id: \.offset) { index, imageData in
-                        if let uiImage = UIImage(data: imageData) {
-                            HStack {
-                                Image(uiImage: uiImage)
+                    ForEach(entry.photoIDs, id: \.self) { photoID in
+                        HStack {
+                            AsyncProgressPhoto(photoID: photoID) { image in
+                                image
                                     .resizable()
                                     .aspectRatio(contentMode: .fill)
                                     .frame(width: 60, height: 60)
                                     .clipped()
                                     .cornerRadius(8)
                                     .onTapGesture {
-                                        selectedImageIndex = IdentifiableInt(index)
+                                        selectedPhotoID = IdentifiableUUID(photoID)
                                     }
-                                Spacer()
+                            } placeholder: {
+                                RoundedRectangle(cornerRadius: 8)
+                                    .fill(Color(.systemGray5))
+                                    .frame(width: 60, height: 60)
+                                    .overlay {
+                                        ProgressView()
+                                            .scaleEffect(0.7)
+                                    }
                             }
+                            Spacer()
                         }
                     }
                 }
@@ -264,12 +272,9 @@ struct TaskProgressEntry: View {
         .padding(.horizontal, 12)
         .background(Color.green.opacity(0.1))
         .cornerRadius(8)
-        .fullScreenCover(item: $selectedImageIndex) { identifiableIndex in
-            if let imageData = entry.imageDatas[safe: identifiableIndex.id],
-               let uiImage = UIImage(data: imageData) {
-                ZoomableImageView(image: uiImage) {
-                    selectedImageIndex = nil
-                }
+        .fullScreenCover(item: $selectedPhotoID) { identifiablePhotoID in
+            AsyncProgressPhotoDetailView(photoID: identifiablePhotoID.id) {
+                selectedPhotoID = nil
             }
         }
         .alert("Delete Task", isPresented: $showingDeleteAlert) {
@@ -297,7 +302,7 @@ struct TaskProgressEntry: View {
 struct ManualProgressEntry: View {
     let entry: ProgressLog
     let employees: [Employee]
-    @State private var selectedImageIndex: IdentifiableInt?
+    @State private var selectedPhotoID: IdentifiableUUID?
     
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -331,23 +336,31 @@ struct ManualProgressEntry: View {
                 }
             }
             
-            // Photos if any
-            if !entry.imageDatas.isEmpty {
+            // Photos using modern photoIDs system
+            if !entry.photoIDs.isEmpty {
                 LazyVStack {
-                    ForEach(Array(entry.imageDatas.enumerated()), id: \.offset) { index, imageData in
-                        if let uiImage = UIImage(data: imageData) {
-                            HStack {
-                                Image(uiImage: uiImage)
+                    ForEach(entry.photoIDs, id: \.self) { photoID in
+                        HStack {
+                            AsyncProgressPhoto(photoID: photoID) { image in
+                                image
                                     .resizable()
                                     .aspectRatio(contentMode: .fill)
                                     .frame(width: 60, height: 60)
                                     .clipped()
                                     .cornerRadius(8)
                                     .onTapGesture {
-                                        selectedImageIndex = IdentifiableInt(index)
+                                        selectedPhotoID = IdentifiableUUID(photoID)
                                     }
-                                Spacer()
+                            } placeholder: {
+                                RoundedRectangle(cornerRadius: 8)
+                                    .fill(Color(.systemGray5))
+                                    .frame(width: 60, height: 60)
+                                    .overlay {
+                                        ProgressView()
+                                            .scaleEffect(0.7)
+                                    }
                             }
+                            Spacer()
                         }
                     }
                 }
@@ -357,12 +370,9 @@ struct ManualProgressEntry: View {
         .padding(.horizontal, 12)
         .background(Color.blue.opacity(0.1))
         .cornerRadius(8)
-        .fullScreenCover(item: $selectedImageIndex) { identifiableIndex in
-            if let imageData = entry.imageDatas[safe: identifiableIndex.id],
-               let uiImage = UIImage(data: imageData) {
-                ZoomableImageView(image: uiImage) {
-                    selectedImageIndex = nil
-                }
+        .fullScreenCover(item: $selectedPhotoID) { identifiablePhotoID in
+            AsyncProgressPhotoDetailView(photoID: identifiablePhotoID.id) {
+                selectedPhotoID = nil
             }
         }
     }
@@ -375,9 +385,117 @@ struct ManualProgressEntry: View {
     }
 }
 
-// Safe array access extension
-extension Array {
-    subscript(safe index: Int) -> Element? {
-        return indices.contains(index) ? self[index] : nil
+// MARK: - Async Photo Loading Components
+
+struct AsyncProgressPhoto<Content: View, Placeholder: View>: View {
+    let photoID: UUID
+    let content: (Image) -> Content
+    let placeholder: () -> Placeholder
+    
+    @State private var loadedImage: UIImage?
+    @State private var isLoading = true
+    @StateObject private var photoService = CloudKitPhotoService()
+    
+    var body: some View {
+        Group {
+            if let loadedImage = loadedImage {
+                content(Image(uiImage: loadedImage))
+            } else {
+                placeholder()
+            }
+        }
+        .task {
+            await loadPhoto()
+        }
+    }
+    
+    private func loadPhoto() async {
+        isLoading = true
+        
+        do {
+            // Try to load the progress photo from CloudKit
+            let progressPhotos = try await photoService.fetchProgressPhotos(progressLogID: photoID)
+            
+            if let progressPhoto = progressPhotos.first,
+               let assetURL = progressPhoto.ckAssetURL {
+                let imageData = try await photoService.downloadPhotoData(from: assetURL)
+                
+                if let uiImage = UIImage(data: imageData) {
+                    await MainActor.run {
+                        self.loadedImage = uiImage
+                        self.isLoading = false
+                    }
+                }
+            }
+        } catch {
+            print("❌ Failed to load progress photo \(photoID): \(error)")
+            await MainActor.run {
+                self.isLoading = false
+            }
+        }
+    }
+}
+
+struct AsyncProgressPhotoDetailView: View {
+    let photoID: UUID
+    let onDismiss: () -> Void
+    
+    @State private var loadedImage: UIImage?
+    @State private var isLoading = true
+    @StateObject private var photoService = CloudKitPhotoService()
+    
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+            
+            if let loadedImage = loadedImage {
+                ZoomableImageView(image: loadedImage, onDismiss: onDismiss)
+            } else if isLoading {
+                ProgressView("Loading photo...")
+                    .foregroundColor(.white)
+            } else {
+                VStack {
+                    Image(systemName: "photo")
+                        .font(.system(size: 60))
+                        .foregroundColor(.gray)
+                    Text("Failed to load photo")
+                        .foregroundColor(.gray)
+                    
+                    Button("Dismiss") {
+                        onDismiss()
+                    }
+                    .foregroundColor(.white)
+                    .padding()
+                }
+            }
+        }
+        .task {
+            await loadPhoto()
+        }
+    }
+    
+    private func loadPhoto() async {
+        isLoading = true
+        
+        do {
+            let progressPhotos = try await photoService.fetchProgressPhotos(progressLogID: photoID)
+            
+            if let progressPhoto = progressPhotos.first,
+               let assetURL = progressPhoto.ckAssetURL {
+                let imageData = try await photoService.downloadPhotoData(from: assetURL)
+                
+                if let uiImage = UIImage(data: imageData) {
+                    await MainActor.run {
+                        self.loadedImage = uiImage
+                        self.isLoading = false
+                    }
+                }
+            }
+        } catch {
+            print("❌ Failed to load progress photo \(photoID): \(error)")
+            await MainActor.run {
+                self.isLoading = false
+            }
+        }
     }
 }

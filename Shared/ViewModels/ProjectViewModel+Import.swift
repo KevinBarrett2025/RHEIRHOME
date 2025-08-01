@@ -24,11 +24,14 @@ extension ProjectViewModel {
 
         // 3️⃣ Try bare-project first
         if let project = try? decoder.decode(Project.self, from: raw) {
-            // Add the imported project to our projects array
-            if !projects.contains(where: { $0.id == project.id }) {
-                projects.append(project)
+            // Add the imported project to our organization projects array
+            if !organizationProjects.contains(where: { $0.id == project.id }) {
+                organizationProjects.append(project)
             }
-            saveAllProjects()
+            // Save to CloudKit
+            Task {
+                await saveAllProjectsToCloudKit()
+            }
             return
         }
 
@@ -67,13 +70,15 @@ extension ProjectViewModel {
             }
         }
 
-        // 6️⃣ Add the imported project
-        if !projects.contains(where: { $0.id == pkg.project.id }) {
-            projects.append(pkg.project)
+        // 6️⃣ Add the imported project to organization projects
+        if !organizationProjects.contains(where: { $0.id == pkg.project.id }) {
+            organizationProjects.append(pkg.project)
         }
 
-        // 7️⃣ Save everything
-        saveAllProjects()
-        saveTeamMembers()
+        // 7️⃣ Save everything to CloudKit
+        Task {
+            await saveAllProjectsToCloudKit()
+            await saveTeamMembersToCloudKit()
+        }
     }
 }

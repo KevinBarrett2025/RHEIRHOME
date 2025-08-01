@@ -36,12 +36,14 @@ struct ContentView: View {
         var orgID: String?
         var orgName: String?
         var token: String?
+        var roleString: String?
         
         for item in queryItems {
             switch item.name {
             case "orgID": orgID = item.value
             case "name": orgName = item.value?.removingPercentEncoding
             case "token": token = item.value
+            case "role": roleString = item.value
             default: break
             }
         }
@@ -51,13 +53,16 @@ struct ContentView: View {
             return
         }
         
-        print("📧 INVITE URL ▶︎ Received invite for: \(orgName) (\(orgID))")
+        // Parse role, default to member if not specified
+        let role = OrganizationRole(rawValue: roleString ?? "member") ?? .member
+        
+        print("📧 INVITE URL ▶︎ Received invite for: \(orgName) (\(orgID)) as \(role.displayName)")
         
         if authVM.user != nil {
-            // User is logged in - join immediately
-            authVM.joinOrganization(with: orgID) { success, error in
+            // User is logged in - join immediately with the specified role
+            authVM.joinOrganization(with: orgID, role: role) { success, error in
                 if success {
-                    print("📧 INVITE URL ▶︎ ✅ Successfully joined organization")
+                    print("📧 INVITE URL ▶︎ ✅ Successfully joined organization as \(role.displayName)")
                 } else {
                     print("📧 INVITE URL ▶︎ ❌ Failed to join: \(error ?? "Unknown error")")
                 }
@@ -67,8 +72,9 @@ struct ContentView: View {
             UserDefaults.standard.set(orgID, forKey: "pending_invite_orgID")
             UserDefaults.standard.set(orgName, forKey: "pending_invite_orgName")
             UserDefaults.standard.set(token, forKey: "pending_invite_token")
+            UserDefaults.standard.set(role.rawValue, forKey: "pending_invite_role")
             
-            print("📧 INVITE URL ▶︎ Stored pending invite - will process after login")
+            print("📧 INVITE URL ▶︎ Stored pending invite - will process after login as \(role.displayName)")
         }
     }
 }

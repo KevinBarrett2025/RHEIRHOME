@@ -99,10 +99,4 @@ struct CreateOrganizationView: View {
     }
 }
 
-struct CreateOrganizationView_Previews: PreviewProvider {
-    static var previews: some View {
-        CreateOrganizationView(vm: AuthViewModel(service: PreviewAuthService()))
-    }
-}
-
 #endif

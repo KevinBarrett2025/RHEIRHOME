@@ -52,7 +52,7 @@ struct ProjectsListView: View {
             }
             .navigationTitle("Projects")
             .refreshable {
-                projectVM.loadOrganizationProjects()
+                await projectVM.loadProjects() // This loads both local and organization projects
             }
         }
     }

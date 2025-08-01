@@ -6,7 +6,6 @@ struct OrganizationSelectorView: View {
     @State private var showingEditOrganization = false
     @State private var showingDeleteConfirmation = false
     @State private var organizationToDelete: Organization?
-    @State private var showingCreateOrganization = false
     
     var body: some View {
         HStack {
@@ -35,6 +34,13 @@ struct OrganizationSelectorView: View {
                                 Text("\(authVM.userOrganizations.count) orgs")
                                     .font(.caption2)
                                     .foregroundColor(.secondary)
+                                
+                                // Show multi-org indicator if user belongs to multiple orgs
+                                if authVM.userOrganizations.count > 1 {
+                                    Image(systemName: "building.2.crop.circle")
+                                        .font(.caption2)
+                                        .foregroundColor(.blue)
+                                }
                             }
                         } else {
                             Text("No Organization")
@@ -54,13 +60,50 @@ struct OrganizationSelectorView: View {
             .buttonStyle(PlainButtonStyle())
             
             Spacer()
+            
+            // Quick switch button for multi-org users
+            if authVM.userOrganizations.count > 1 {
+                Menu {
+                    ForEach(authVM.userOrganizations.prefix(3)) { org in
+                        if org.id != authVM.currentOrg?.id {
+                            Button(action: {
+                                authVM.switchToOrganization(org)
+                            }) {
+                                HStack {
+                                    Text(org.name)
+                                    if let role = authVM.organizationRoles[org.id] {
+                                        Text("(\(role.displayName))")
+                                            .foregroundColor(.secondary)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    if authVM.userOrganizations.count > 3 {
+                        Divider()
+                        Button("View All Organizations...") {
+                            showingOrganizationMenu = true
+                        }
+                    }
+                    
+                    Divider()
+                    Button("Previous Organization") {
+                        authVM.switchToPreviousOrganization()
+                    }
+                } label: {
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                        .font(.caption)
+                        .foregroundColor(.blue)
+                }
+                .menuStyle(BorderlessButtonMenuStyle())
+            }
         }
         .sheet(isPresented: $showingOrganizationMenu) {
             OrganizationMenuView(
                 showingEditOrganization: $showingEditOrganization,
                 showingDeleteConfirmation: $showingDeleteConfirmation,
-                organizationToDelete: $organizationToDelete,
-                showingCreateOrganization: $showingCreateOrganization
+                organizationToDelete: $organizationToDelete
             )
             .environmentObject(authVM)
         }
@@ -69,10 +112,6 @@ struct OrganizationSelectorView: View {
                 OrganizationEditView(organization: currentOrg)
                     .environmentObject(authVM)
             }
-        }
-        .sheet(isPresented: $showingCreateOrganization) {
-            OrganizationSetupView()
-                .environmentObject(authVM)
         }
         .alert(authVM.organizationRoles[organizationToDelete?.id ?? ""] == .admin ? "Delete Organization" : "Leave Organization", 
                isPresented: $showingDeleteConfirmation) {
@@ -131,7 +170,6 @@ struct OrganizationMenuView: View {
     @Binding var showingEditOrganization: Bool
     @Binding var showingDeleteConfirmation: Bool
     @Binding var organizationToDelete: Organization?
-    @Binding var showingCreateOrganization: Bool
     
     private var adminOrganizations: [Organization] {
         return authVM.adminOrganizations
@@ -151,6 +189,36 @@ struct OrganizationMenuView: View {
     var body: some View {
         NavigationView {
             List {
+                // Multi-Organization Context Section (for contractors)
+                if authVM.userOrganizations.count > 1 {
+                    Section {
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Image(systemName: "building.2.crop.circle")
+                                    .foregroundColor(.blue)
+                                Text("Multi-Organization User")
+                                    .font(.headline)
+                                    .foregroundColor(.blue)
+                            }
+                            
+                            Text(authVM.getOrganizationSwitchingContext())
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                            
+                            if UserDefaults.standard.string(forKey: "previousOrganizationID") != nil {
+                                Button("Switch to Previous Organization") {
+                                    authVM.switchToPreviousOrganization()
+                                    dismiss()
+                                }
+                                .font(.caption)
+                                .foregroundColor(.blue)
+                            }
+                        }
+                        .padding(.vertical, 4)
+                    }
+                }
+                
                 // Current Organization Section
                 if let currentOrg = authVM.currentOrg {
                     Section("Current Organization") {
@@ -180,7 +248,7 @@ struct OrganizationMenuView: View {
                 if !contractorOrganizations.isEmpty {
                     Section("Contractor Access") {
                         ForEach(contractorOrganizations, id: \.id) { organization in
-                            organizationRow(organization)
+                            contractorOrganizationRow(organization)
                         }
                     }
                 }
@@ -189,13 +257,45 @@ struct OrganizationMenuView: View {
                 Section {
                     Button(action: {
                         dismiss()
-                        showingCreateOrganization = true
+                        // Use the AuthViewModel's state management to trigger organization setup
+                        authVM.showOrganizationSetup = true
                     }) {
                         HStack {
                             Image(systemName: "plus.circle.fill")
                                 .foregroundColor(.blue)
                             Text("Create New Organization")
                                 .foregroundColor(.blue)
+                        }
+                    }
+                }
+                
+                // Invite Management for Multi-Org Users
+                if authVM.userOrganizations.count > 1 && authVM.canPerformAdminActions {
+                    Section("Invite Management") {
+                        Button(action: {
+                            let teamInvite = authVM.getTeamMemberInviteLink() ?? "Unable to create invite"
+                            UIPasteboard.general.string = teamInvite
+                            dismiss()
+                        }) {
+                            HStack {
+                                Image(systemName: "person.badge.plus")
+                                    .foregroundColor(.green)
+                                Text("Create Team Member Invite")
+                                    .foregroundColor(.green)
+                            }
+                        }
+                        
+                        Button(action: {
+                            let contractorInvite = authVM.getContractorInviteURLForCopying()
+                            UIPasteboard.general.string = contractorInvite
+                            dismiss()
+                        }) {
+                            HStack {
+                                Image(systemName: "hammer.circle")
+                                    .foregroundColor(.orange)
+                                Text("Create Contractor Invite")
+                                    .foregroundColor(.orange)
+                            }
                         }
                     }
                 }
@@ -323,6 +423,59 @@ struct OrganizationMenuView: View {
                     Image(systemName: "chevron.right")
                         .font(.caption)
                         .foregroundColor(.secondary)
+                }
+            }
+        }
+        .buttonStyle(PlainButtonStyle())
+        .padding(.vertical, 4)
+    }
+    
+    private func contractorOrganizationRow(_ organization: Organization) -> some View {
+        Button(action: {
+            authVM.switchToOrganization(organization)
+            dismiss()
+        }) {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text(organization.name)
+                            .font(.headline)
+                            .foregroundColor(.primary)
+                        
+                        Text("Contractor")
+                            .font(.caption)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 2)
+                            .background(Color.orange.opacity(0.2))
+                            .foregroundColor(.orange)
+                            .cornerRadius(4)
+                    }
+                    
+                    Text("Limited project access")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                
+                Spacer()
+                
+                if organization.id == authVM.currentOrg?.id {
+                    Text("CURRENT")
+                        .font(.caption2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.orange)
+                        .cornerRadius(4)
+                } else {
+                    VStack(spacing: 2) {
+                        Image(systemName: "chevron.right")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Text("Switch")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
                 }
             }
         }

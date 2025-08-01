@@ -110,7 +110,7 @@ struct ReceiptsView: View {
     }
     
     private func deleteReceipts(offsets: IndexSet) {
-        guard let project = projectVM.selectedProject else { return }
+        guard projectVM.selectedProject != nil else { return }
         
         for index in offsets {
             let receipt = receipts[index]

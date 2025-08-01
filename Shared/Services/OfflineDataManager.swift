@@ -435,10 +435,10 @@ class OfflineStorageManager {
         var receipts = loadReceipts()
         receipts.append(ProjectReceipt(projectId: projectId, receipt: receipt))
         
-        // Save receipt photo if exists
-        if let imageData = receipt.imageData {
-            let receiptPhotoURL = photosDirectoryURL.appendingPathComponent("\(receipt.id)_receipt.jpg")
-            try? imageData.write(to: receiptPhotoURL)
+        // Save receipt photos using photoIDs (modern CloudKit approach)
+        // Photos are handled by CloudKitPhotoService, offline caching handled separately
+        if !receipt.photoIDs.isEmpty {
+            print("📷 Receipt has \(receipt.photoIDs.count) photo references")
         }
         
         return saveReceipts(receipts)

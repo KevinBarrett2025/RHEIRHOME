@@ -37,6 +37,14 @@ public struct Project: Identifiable, Codable, Hashable, Sendable {
     public var status: ProjectStatus
 
     public var organizationID: String?
+    
+    // MARK: - Role-Based Access Control
+    /// Users with specific access to this project (contractors, external consultants)
+    public var assignedUserIDs: [String] = []
+    /// Project access level (public to all org members vs restricted)
+    public var accessLevel: ProjectAccessLevel = .organization
+    /// Project owner/manager (defaults to creator)
+    public var projectManagerID: String?
 
     // MARK: – Codable
 
@@ -49,6 +57,7 @@ public struct Project: Identifiable, Codable, Hashable, Sendable {
         case loggedHours, tasks, communications, progressLogs, changeOrders, receipts, taskTemplates
         case status
         case organizationID
+        case assignedUserIDs, accessLevel, projectManagerID
     }
 
     public init(
@@ -79,7 +88,10 @@ public struct Project: Identifiable, Codable, Hashable, Sendable {
         receipts: [Receipt] = [],
         taskTemplates: [TaskTemplate] = [],
         status: ProjectStatus = .active,
-        organizationID: String? = nil
+        organizationID: String? = nil,
+        assignedUserIDs: [String] = [],
+        accessLevel: ProjectAccessLevel = .organization,
+        projectManagerID: String? = nil
     ) {
         self.id = id
         self.name = name
@@ -109,6 +121,9 @@ public struct Project: Identifiable, Codable, Hashable, Sendable {
         self.taskTemplates = taskTemplates
         self.status = status
         self.organizationID = organizationID
+        self.assignedUserIDs = assignedUserIDs
+        self.accessLevel = accessLevel
+        self.projectManagerID = projectManagerID
     }
 
     public func hash(into hasher: inout Hasher) {
@@ -117,5 +132,105 @@ public struct Project: Identifiable, Codable, Hashable, Sendable {
     
     public static func == (lhs: Project, rhs: Project) -> Bool {
         lhs.id == rhs.id
+    }
+    
+    // MARK: - Role-Based Access Methods
+    
+    /// Check if a user has access to this project based on their role and assignments
+    public func userHasAccess(userID: String, userRole: OrganizationRole) -> Bool {
+        // Admins always have access to all projects
+        if userRole == .admin {
+            return true
+        }
+        
+        // Project manager always has access
+        if projectManagerID == userID {
+            return true
+        }
+        
+        // Organization members have access to organization-level projects
+        if userRole == .member && accessLevel == .organization {
+            return true
+        }
+        
+        // Contractors only have access to specifically assigned projects
+        if userRole == .contractor && assignedUserIDs.contains(userID) {
+            return true
+        }
+        
+        // Viewers have read-only access to organization projects
+        if userRole == .viewer && accessLevel == .organization {
+            return true
+        }
+        
+        return false
+    }
+    
+    /// Check if user can edit this project
+    public func userCanEdit(userID: String, userRole: OrganizationRole) -> Bool {
+        // Admins can always edit
+        if userRole == .admin {
+            return true
+        }
+        
+        // Project manager can edit
+        if projectManagerID == userID {
+            return true
+        }
+        
+        // Members can edit organization projects
+        if userRole == .member && accessLevel == .organization {
+            return true
+        }
+        
+        // Contractors can edit their assigned projects
+        if userRole == .contractor && assignedUserIDs.contains(userID) {
+            return true
+        }
+        
+        // Viewers cannot edit
+        return false
+    }
+    
+    /// Assign a user to this project (for contractors)
+    public mutating func assignUser(_ userID: String) {
+        if !assignedUserIDs.contains(userID) {
+            assignedUserIDs.append(userID)
+        }
+    }
+    
+    /// Remove user assignment from this project
+    public mutating func removeUserAssignment(_ userID: String) {
+        assignedUserIDs.removeAll { $0 == userID }
+    }
+    
+    /// Set project manager
+    public mutating func setProjectManager(_ userID: String) {
+        projectManagerID = userID
+    }
+}
+
+// MARK: - Project Access Level
+
+public enum ProjectAccessLevel: String, Codable, CaseIterable, Sendable {
+    case organization = "organization"  // All org members can see
+    case restricted = "restricted"      // Only assigned users can see
+    
+    public var displayName: String {
+        switch self {
+        case .organization:
+            return "Organization Wide"
+        case .restricted:
+            return "Restricted Access"
+        }
+    }
+    
+    public var description: String {
+        switch self {
+        case .organization:
+            return "All team members can access this project"
+        case .restricted:
+            return "Only assigned users can access this project"
+        }
     }
 }

@@ -10,7 +10,7 @@ struct TaskDetailViewWrapper: View {
     @Environment(\.dismiss) private var dismiss
     @State private var showingEditView = false
     @State private var showingDeleteAlert = false
-    @State private var selectedImageIndex: IdentifiableInt?
+    @State private var selectedPhotoID: IdentifiableUUID?
     
     var body: some View {
         NavigationStack {
@@ -116,10 +116,10 @@ struct TaskDetailViewWrapper: View {
                         .cornerRadius(12)
                     }
                     
-                    // Photos
-                    if !task.imageDatas.isEmpty {
+                    // Photos using modern photoIDs system
+                    if !task.photoIDs.isEmpty {
                         VStack(alignment: .leading, spacing: 12) {
-                            Text("Photos")
+                            Text("Photos (\(task.photoIDs.count))")
                                 .font(.headline)
                             
                             LazyVGrid(columns: [
@@ -127,16 +127,24 @@ struct TaskDetailViewWrapper: View {
                                 GridItem(.flexible()),
                                 GridItem(.flexible())
                             ], spacing: 8) {
-                                ForEach(Array(task.imageDatas.enumerated()), id: \.offset) { index, imageData in
-                                    if let uiImage = UIImage(data: imageData) {
-                                        Image(uiImage: uiImage)
+                                ForEach(task.photoIDs, id: \.self) { photoID in
+                                    AsyncTaskPhoto(photoID: photoID, taskID: task.id) { image in
+                                        image
                                             .resizable()
                                             .aspectRatio(contentMode: .fill)
                                             .frame(height: 100)
                                             .clipped()
                                             .cornerRadius(8)
                                             .onTapGesture {
-                                                selectedImageIndex = IdentifiableInt(index)
+                                                selectedPhotoID = IdentifiableUUID(photoID)
+                                            }
+                                    } placeholder: {
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .fill(Color(.systemGray5))
+                                            .frame(height: 100)
+                                            .overlay {
+                                                ProgressView()
+                                                    .scaleEffect(0.7)
                                             }
                                     }
                                 }
@@ -200,12 +208,9 @@ struct TaskDetailViewWrapper: View {
                 }
             )
         }
-        .fullScreenCover(item: $selectedImageIndex) { identifiableIndex in
-            if let imageData = task.imageDatas[safe: identifiableIndex.id],
-               let uiImage = UIImage(data: imageData) {
-                ZoomableImageView(image: uiImage) {
-                    selectedImageIndex = nil
-                }
+        .fullScreenCover(item: $selectedPhotoID) { identifiablePhotoID in
+            AsyncTaskPhotoDetailView(photoID: identifiablePhotoID.id, taskID: task.id) {
+                selectedPhotoID = nil
             }
         }
         .alert("Delete Task", isPresented: $showingDeleteAlert) {
@@ -224,13 +229,130 @@ struct TaskDetailViewWrapper: View {
         case .low: return .green
         case .medium: return .blue
         case .high: return .orange
-        case .critical: return .red
+        case .urgent: return .red
         }
     }
     
     private var assignedEmployees: [Employee] {
         task.assignedEmployeeIDs.compactMap { employeeID in
             employees.first { $0.id == employeeID }
+        }
+    }
+}
+
+// MARK: - Async Task Photo Loading Components
+
+struct AsyncTaskPhoto<Content: View, Placeholder: View>: View {
+    let photoID: UUID
+    let taskID: UUID
+    let content: (Image) -> Content
+    let placeholder: () -> Placeholder
+    
+    @State private var loadedImage: UIImage?
+    @State private var isLoading = true
+    @StateObject private var photoService = CloudKitPhotoService()
+    
+    var body: some View {
+        Group {
+            if let loadedImage = loadedImage {
+                content(Image(uiImage: loadedImage))
+            } else {
+                placeholder()
+            }
+        }
+        .task {
+            await loadPhoto()
+        }
+    }
+    
+    private func loadPhoto() async {
+        isLoading = true
+        
+        do {
+            // Try to load the task photo from CloudKit
+            let taskPhotos = try await photoService.fetchTaskPhotos(taskID: taskID)
+            
+            if let taskPhoto = taskPhotos.first(where: { $0.id == photoID }),
+               let assetURL = taskPhoto.ckAssetURL {
+                let imageData = try await photoService.downloadPhotoData(from: assetURL)
+                
+                if let uiImage = UIImage(data: imageData) {
+                    await MainActor.run {
+                        self.loadedImage = uiImage
+                        self.isLoading = false
+                    }
+                }
+            }
+        } catch {
+            print("❌ Failed to load task photo \(photoID): \(error)")
+            await MainActor.run {
+                self.isLoading = false
+            }
+        }
+    }
+}
+
+struct AsyncTaskPhotoDetailView: View {
+    let photoID: UUID
+    let taskID: UUID
+    let onDismiss: () -> Void
+    
+    @State private var loadedImage: UIImage?
+    @State private var isLoading = true
+    @StateObject private var photoService = CloudKitPhotoService()
+    
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+            
+            if let loadedImage = loadedImage {
+                ZoomableImageView(image: loadedImage, onDismiss: onDismiss)
+            } else if isLoading {
+                ProgressView("Loading photo...")
+                    .foregroundColor(.white)
+            } else {
+                VStack {
+                    Image(systemName: "photo")
+                        .font(.system(size: 60))
+                        .foregroundColor(.gray)
+                    Text("Failed to load photo")
+                        .foregroundColor(.gray)
+                    
+                    Button("Dismiss") {
+                        onDismiss()
+                    }
+                    .foregroundColor(.white)
+                    .padding()
+                }
+            }
+        }
+        .task {
+            await loadPhoto()
+        }
+    }
+    
+    private func loadPhoto() async {
+        isLoading = true
+        
+        do {
+            let taskPhotos = try await photoService.fetchTaskPhotos(taskID: taskID)
+            
+            if let taskPhoto = taskPhotos.first(where: { $0.id == photoID }),
+               let assetURL = taskPhoto.ckAssetURL {
+                let imageData = try await photoService.downloadPhotoData(from: assetURL)
+                
+                if let uiImage = UIImage(data: imageData) {
+                    await MainActor.run {
+                        self.loadedImage = uiImage
+                        self.isLoading = false
+                    }
+                }
+            }
+        } catch {
+            print("❌ Failed to load task photo \(photoID): \(error)")
+            await MainActor.run {
+                self.isLoading = false
+            }
         }
     }
 }

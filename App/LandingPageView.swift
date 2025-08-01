@@ -10,8 +10,8 @@ struct LandingPageView: View {
     @Namespace private var animation
 
     private var activeProjects: [Project] {
-        // Show ALL projects (local + shared) that are active
-        return viewModel.allProjects.filter { $0.status == .active }
+        // Use role-based filtered projects instead of all projects
+        return viewModel.accessibleProjects.filter { $0.status == .active }
     }
 
     var body: some View {
@@ -81,6 +81,26 @@ struct LandingPageView: View {
                     
                     Spacer()
                     
+                    // Multi-org indicator and quick stats
+                    if authVM.userOrganizations.count > 1 {
+                        VStack(alignment: .trailing, spacing: 2) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "building.2.crop.circle")
+                                    .font(.caption2)
+                                    .foregroundColor(.blue)
+                                Text("\(authVM.userOrganizations.count) orgs")
+                                    .font(.caption2)
+                                    .foregroundColor(.blue)
+                            }
+                            
+                            if let role = authVM.currentOrganizationRole {
+                                Text(role.displayName)
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                    }
+                    
                     // Show refresh indicator if needed
                     if isRefreshing {
                         ProgressView()
@@ -135,11 +155,42 @@ struct LandingPageView: View {
                 
                 if let org = authVM.currentOrg {
                     VStack(spacing: 8) {
-                        Text("Create your first project for \(org.name)")
-                            .multilineTextAlignment(.center)
-                            .foregroundColor(.secondary)
+                        if let role = authVM.currentOrganizationRole {
+                            switch role {
+                            case .admin, .member:
+                                Text("Create your first project for \(org.name)")
+                                    .multilineTextAlignment(.center)
+                                    .foregroundColor(.secondary)
+                            case .contractor:
+                                Text("No projects assigned to you in \(org.name)")
+                                    .multilineTextAlignment(.center)
+                                    .foregroundColor(.secondary)
+                                Text("Contact the admin to assign you to projects")
+                                    .font(.caption)
+                                    .multilineTextAlignment(.center)
+                                    .foregroundColor(.secondary)
+                            case .viewer:
+                                Text("No projects to view in \(org.name)")
+                                    .multilineTextAlignment(.center)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
                         
-                        Text("Local: \(viewModel.projects.count) • Shared: \(viewModel.organizationProjects.count)")
+                        // Multi-org context for contractors
+                        if authVM.userOrganizations.count > 1 {
+                            VStack(spacing: 4) {
+                                Text("You belong to \(authVM.userOrganizations.count) organizations")
+                                    .font(.caption)
+                                    .foregroundColor(.blue)
+                                
+                                Text("Use the organization dropdown to switch between them")
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                            }
+                            .padding(.top, 8)
+                        }
+                        
+                        Text("Accessible: \(viewModel.accessibleProjects.count) • Total: \(viewModel.organizationProjects.count)")
                             .font(.caption2)
                             .foregroundColor(.secondary)
                         
@@ -168,18 +219,38 @@ struct LandingPageView: View {
     private var projectsListSection: some View {
         ScrollView {
             LazyVStack(spacing: 16) {
-                // Projects count header
+                // Projects count header with role context
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("\(activeProjects.count) Active Projects")
-                            .font(.headline)
+                        if let role = authVM.currentOrganizationRole {
+                            HStack {
+                                Text("\(activeProjects.count) Active Projects")
+                                    .font(.headline)
+                                
+                                Text("(\(role.displayName))")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        } else {
+                            Text("\(activeProjects.count) Active Projects")
+                                .font(.headline)
+                        }
+                        
                         HStack(spacing: 12) {
                             Label("\(viewModel.projects.filter { $0.status == .active }.count)", systemImage: "iphone")
                                 .font(.caption)
                                 .foregroundColor(.blue)
-                            Label("\(viewModel.organizationProjects.filter { $0.status == .active }.count)", systemImage: "icloud")
+                            Label("\(viewModel.accessibleProjects.filter { $0.status == .active }.count)", systemImage: "icloud")
                                 .font(.caption)
                                 .foregroundColor(.green)
+                        }
+                        
+                        // Show organization context for multi-org users
+                        if authVM.userOrganizations.count > 1,
+                           let currentOrg = authVM.currentOrg {
+                            Text("Current: \(currentOrg.name)")
+                                .font(.caption2)
+                                .foregroundColor(.blue)
                         }
                         
                         // Show bulk sync progress if syncing
@@ -216,6 +287,14 @@ struct LandingPageView: View {
                                 Button("🔄 Sync All Projects to CloudKit") {
                                     syncAllProjectsToCloudKit()
                                 }
+                            }
+                        }
+                        
+                        // Multi-org actions
+                        if authVM.userOrganizations.count > 1 {
+                            Divider()
+                            Button("Switch Organization") {
+                                // This would trigger the organization selector
                             }
                         }
                     } label: {
@@ -314,8 +393,10 @@ struct LandingPageView: View {
     // MARK: - Project Loading Methods
     
     private func loadSharedProjects() {
-        print(" Auto-loading shared projects from CloudKit...")
-        viewModel.loadOrganizationProjects()
+        print("☁️ Auto-loading shared projects from CloudKit...")
+        Task {
+            await viewModel.loadProjects() // This now loads from CloudKit organization zone
+        }
     }
     
     private func refreshProjects() {
@@ -325,30 +406,27 @@ struct LandingPageView: View {
             isRefreshing = true
         }
         
-        print(" Manually refreshing all projects (local + shared)...")
+        print("☁️ Manually refreshing all projects from CloudKit...")
         
-        // Load shared projects from CloudKit
-        viewModel.loadOrganizationProjects()
-        
-        // Simulate network delay and then stop refreshing
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-            withAnimation {
-                isRefreshing = false
+        Task {
+            await viewModel.loadProjects() // This now loads from CloudKit organization zone
+            
+            await MainActor.run {
+                withAnimation {
+                    isRefreshing = false
+                }
+                print("✅ Manual refresh complete - showing \(activeProjects.count) active projects from CloudKit")
             }
-            print(" Manual refresh complete - showing \(activeProjects.count) active projects")
         }
     }
     
     private func refreshProjectsAsync() async {
-        print(" Pull-to-refresh triggered...")
+        print("☁️ Pull-to-refresh triggered for CloudKit projects...")
         
-        // Load shared projects
-        viewModel.loadOrganizationProjects()
+        // Load projects from CloudKit organization zone
+        await viewModel.loadProjects()
         
-        // Wait a moment for the data to load
-        try? await Task.sleep(nanoseconds: 1_500_000_000) // 1.5 seconds
-        
-        print(" Pull-to-refresh complete - auto-sync active")
+        print("✅ Pull-to-refresh complete - CloudKit projects loaded")
     }
     
     @State private var showingStatusAlert = false

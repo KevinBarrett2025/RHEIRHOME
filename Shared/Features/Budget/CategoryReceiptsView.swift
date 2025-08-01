@@ -9,10 +9,24 @@ struct CategoryReceiptsView: View {
     @State private var receiptToDelete: Receipt? = nil
     
     var body: some View {
-        VStack(spacing: 0) {
-            headerView
-            receiptsListSection
+        NavigationView {
+            ZStack {
+                // Background blur effect
+                Color.clear
+                
+                ScrollView {
+                    VStack(spacing: 20) {
+                        categoryHeaderSection
+                        spendingSummarySection
+                        receiptsListSection
+                    }
+                    .padding()
+                }
+            }
         }
+        .presentationBackground(.thinMaterial)
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
         .sheet(item: $receiptToEdit) { receipt in
             ReceiptEditView(receipt: receipt, isPresented: Binding(
                 get: { receiptToEdit != nil },
@@ -41,28 +55,6 @@ struct CategoryReceiptsView: View {
     }
     
     @ViewBuilder
-    private var headerView: some View {
-        NavigationView {
-            ScrollView {
-                VStack(spacing: 20) {
-                    categoryHeaderSection
-                    spendingSummarySection
-                }
-                .padding()
-            }
-            .navigationTitle("\(selectedCategory.rawValue) Receipts")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") {
-                        // dismiss()
-                    }
-                }
-            }
-        }
-    }
-    
-    @ViewBuilder
     private var categoryHeaderSection: some View {
         VStack(spacing: 12) {
             HStack {
@@ -84,8 +76,7 @@ struct CategoryReceiptsView: View {
             }
         }
         .padding()
-        .background(Color(.systemGray6))
-        .cornerRadius(12)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
     }
     
     @ViewBuilder
@@ -153,17 +144,16 @@ struct CategoryReceiptsView: View {
             }
         }
         .padding()
-        .background(Color(.systemGray6))
-        .cornerRadius(12)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
     }
     
     @ViewBuilder
     private var receiptsListSection: some View {
         if projectVM.filteredReceipts.filter { $0.category == selectedCategory }.isEmpty {
             VStack(spacing: 16) {
-                Image(systemName: "receipt")
-                    .font(.system(size: 40))
-                    .foregroundColor(.secondary)
+                Image(systemName: categoryIcon(for: selectedCategory))
+                    .font(.system(size: 48))
+                    .foregroundColor(categoryColor(for: selectedCategory).opacity(0.6))
                 
                 Text("No receipts in this category")
                     .font(.headline)
@@ -176,33 +166,33 @@ struct CategoryReceiptsView: View {
                     .padding(.horizontal)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .padding()
+            .padding(.vertical, 40)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
         } else {
-            List {
-                ForEach(projectVM.filteredReceipts.filter { $0.category == selectedCategory }.sorted { $0.date > $1.date }) { receipt in
-                    NavigationLink(destination: ReceiptDetailView(receipt: receipt)) {
-                        ReceiptRowView(receipt: receipt)
-                    }
-                    .swipeActions(edge: .trailing, allowsFullSwap: false) {
-                        Button("Delete", role: .destructive) {
-                            self.showingDeleteAlert = true
-                            self.receiptToDelete = receipt
+            VStack(spacing: 8) {
+                HStack {
+                    Text("All \(selectedCategory.rawValue) Receipts")
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                    Spacer()
+                }
+                .padding(.horizontal)
+                
+                LazyVStack(spacing: 8) {
+                    ForEach(projectVM.filteredReceipts.filter { $0.category == selectedCategory }.sorted { $0.date > $1.date }) { receipt in
+                        SemiTransparentReceiptRow(receipt: receipt) {
+                            // Edit action
+                            receiptToEdit = receipt
+                        } deleteAction: {
+                            // Delete action
+                            showingDeleteAlert = true
+                            receiptToDelete = receipt
                         }
-                        
-                        Button("Edit") {
-                            self.receiptToEdit = receipt
-                        }
-                        .tint(.blue)
-                    }
-                    .swipeActions(edge: .leading, allowsFullSwap: true) {
-                        Button("Edit") {
-                            self.receiptToEdit = receipt
-                        }
-                        .tint(.blue)
                     }
                 }
+                .padding()
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
             }
-            .listStyle(PlainListStyle())
         }
     }
     
@@ -276,8 +266,10 @@ struct CategoryReceiptsView: View {
     }
 }
 
-struct ReceiptRowView: View {
+struct SemiTransparentReceiptRow: View {
     let receipt: Receipt
+    let editAction: () -> Void
+    let deleteAction: () -> Void
     
     var body: some View {
         HStack {
@@ -358,8 +350,19 @@ struct ReceiptRowView: View {
             }
         }
         .padding()
-        .background(Color(.systemGray6))
-        .cornerRadius(8)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+        .contextMenu {
+            Button("Edit", systemImage: "pencil") {
+                editAction()
+            }
+            
+            Button("Delete", systemImage: "trash", role: .destructive) {
+                deleteAction()
+            }
+        }
+        .onTapGesture {
+            // Optional: Add tap to view details or edit
+        }
     }
 }
 

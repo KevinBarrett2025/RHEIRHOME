@@ -96,18 +96,27 @@ struct TaskCompletionView: View {
                         .lineLimit(3...6)
                 }
                 
-                if !task.imageDatas.isEmpty {
-                    Section("Task Photos") {
+                // Task Photos using modern photoIDs system
+                if !task.photoIDs.isEmpty {
+                    Section("Task Photos (\(task.photoIDs.count))") {
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 12) {
-                                ForEach(Array(task.imageDatas.enumerated()), id: \.offset) { index, imageData in
-                                    if let uiImage = UIImage(data: imageData) {
-                                        Image(uiImage: uiImage)
+                                ForEach(task.photoIDs, id: \.self) { photoID in
+                                    AsyncTaskPhoto(photoID: photoID, taskID: task.id) { image in
+                                        image
                                             .resizable()
                                             .aspectRatio(contentMode: .fill)
                                             .frame(width: 80, height: 80)
                                             .clipped()
                                             .cornerRadius(8)
+                                    } placeholder: {
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .fill(Color(.systemGray5))
+                                            .frame(width: 80, height: 80)
+                                            .overlay {
+                                                ProgressView()
+                                                    .scaleEffect(0.6)
+                                            }
                                     }
                                 }
                             }

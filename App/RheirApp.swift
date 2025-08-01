@@ -77,8 +77,9 @@ struct RheirApp: App {
         let orgID = queryItems.first(where: { $0.name == "orgID" })?.value
         let token = queryItems.first(where: { $0.name == "token" })?.value
         let orgName = queryItems.first(where: { $0.name == "name" })?.value
+        let roleString = queryItems.first(where: { $0.name == "role" })?.value
         
-        print("📧 Extracted - orgID: \(orgID ?? "nil"), token: \(token ?? "nil"), name: \(orgName ?? "nil")")
+        print("📧 Extracted - orgID: \(orgID ?? "nil"), token: \(token ?? "nil"), name: \(orgName ?? "nil"), role: \(roleString ?? "nil")")
         
         // Validate required parameters
         guard let validOrgID = orgID, !validOrgID.isEmpty else {
@@ -86,13 +87,17 @@ struct RheirApp: App {
             return
         }
         
-        print("✅ Valid invite detected - processing...")
+        // Parse role, default to member if not specified
+        let role = OrganizationRole(rawValue: roleString ?? "member") ?? .member
+        
+        print("✅ Valid invite detected - processing as \(role.displayName)...")
         
         // Store the invite details for processing after authentication
         UserDefaults.standard.set(validOrgID, forKey: "pending_invite_orgID")
         UserDefaults.standard.set(orgName ?? "Organization", forKey: "pending_invite_orgName")
         UserDefaults.standard.set(token ?? "", forKey: "pending_invite_token")
-        print("📧 Stored pending invite details")
+        UserDefaults.standard.set(role.rawValue, forKey: "pending_invite_role")
+        print("📧 Stored pending invite details with role: \(role.displayName)")
         
         // If user is already authenticated, process the invite immediately
         if authViewModel.user != nil {
@@ -109,21 +114,26 @@ struct RheirApp: App {
             return
         }
         
-        print("📧 Processing pending invite for: \(orgName)")
+        // Get the role from stored invite, default to member
+        let roleString = UserDefaults.standard.string(forKey: "pending_invite_role") ?? "member"
+        let role = OrganizationRole(rawValue: roleString) ?? .member
         
-        // Join the organization
-        authViewModel.joinOrganization(with: orgID) { success, error in
+        print("📧 Processing pending invite for: \(orgName) as \(role.displayName)")
+        
+        // Join the organization with the specified role
+        authViewModel.joinOrganization(with: orgID, role: role) { success, error in
             DispatchQueue.main.async {
                 if success {
-                    print("✅ Successfully joined organization: \(orgName)")
+                    print("✅ Successfully joined organization: \(orgName) as \(role.displayName)")
                     
                     // Clear the pending invite
                     UserDefaults.standard.removeObject(forKey: "pending_invite_orgID")
                     UserDefaults.standard.removeObject(forKey: "pending_invite_orgName")
                     UserDefaults.standard.removeObject(forKey: "pending_invite_token")
+                    UserDefaults.standard.removeObject(forKey: "pending_invite_role")
                     
                     // Show success message
-                    self.authViewModel.inviteStatus = "✅ Successfully joined \(orgName)!"
+                    self.authViewModel.inviteStatus = "✅ Successfully joined \(orgName) as \(role.displayName)!"
                     
                 } else {
                     print("❌ Failed to join organization: \(error ?? "Unknown error")")

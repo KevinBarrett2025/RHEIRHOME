@@ -57,7 +57,10 @@ struct CategoryRowView: View {
         }
         .sheet(isPresented: $showingCategoryReceipts) {
             if let category = linkCategory, let project = projectVM.selectedProject {
-                InlineCategoryReceiptsView(category: category, project: project)
+                SemiTransparentCategoryView(category: category, project: project)
+                    .presentationBackground(.thinMaterial)
+                    .presentationDetents([.medium, .large])
+                    .presentationDragIndicator(.visible)
             }
         }
     }
@@ -70,7 +73,7 @@ struct CategoryRowView: View {
     }
 }
 
-struct InlineCategoryReceiptsView: View {
+struct SemiTransparentCategoryView: View {
     let category: ReceiptCategory
     let project: Project
     @Environment(\.dismiss) private var dismiss
@@ -87,13 +90,18 @@ struct InlineCategoryReceiptsView: View {
     
     var body: some View {
         NavigationView {
-            ScrollView {
-                VStack(spacing: 20) {
-                    categoryHeaderSection
-                    spendingSummarySection
-                    receiptsListSection
+            ZStack {
+                // Background blur effect
+                Color.clear
+                
+                ScrollView {
+                    VStack(spacing: 20) {
+                        categoryHeaderSection
+                        spendingSummarySection
+                        receiptsListSection
+                    }
+                    .padding()
                 }
-                .padding()
             }
             .navigationTitle("\(category.rawValue) Receipts")
             .navigationBarTitleDisplayMode(.inline)
@@ -102,6 +110,8 @@ struct InlineCategoryReceiptsView: View {
                     Button("Done") {
                         dismiss()
                     }
+                    .foregroundColor(.primary)
+                    .fontWeight(.medium)
                 }
             }
         }
@@ -129,8 +139,7 @@ struct InlineCategoryReceiptsView: View {
             }
         }
         .padding()
-        .background(Color(.systemGray6))
-        .cornerRadius(12)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
     }
     
     @ViewBuilder
@@ -169,8 +178,7 @@ struct InlineCategoryReceiptsView: View {
             }
         }
         .padding()
-        .background(Color(.systemGray6))
-        .cornerRadius(12)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
     }
     
     @ViewBuilder
@@ -184,16 +192,32 @@ struct InlineCategoryReceiptsView: View {
             }
             
             if categoryReceipts.isEmpty {
-                Text("No receipts found in this category")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                    .padding(.vertical, 20)
+                VStack(spacing: 16) {
+                    Image(systemName: categoryIcon(for: category))
+                        .font(.system(size: 48))
+                        .foregroundColor(categoryColor(for: category).opacity(0.6))
+                    
+                    Text("No receipts found in this category")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                    
+                    Text("Add receipts to track spending in \(category.rawValue.lowercased())")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .padding(.vertical, 40)
+                .frame(maxWidth: .infinity)
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
             } else {
-                LazyVStack(spacing: 12) {
+                LazyVStack(spacing: 8) {
                     ForEach(categoryReceipts.sorted { $0.date > $1.date }) { receipt in
-                        InlineCategoryReceiptRowCard(receipt: receipt)
+                        SemiTransparentReceiptRowCard(receipt: receipt)
                     }
                 }
+                .padding()
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
             }
         }
     }
@@ -222,7 +246,7 @@ struct InlineCategoryReceiptsView: View {
     }
 }
 
-struct InlineCategoryReceiptRowCard: View {
+struct SemiTransparentReceiptRowCard: View {
     let receipt: Receipt
     
     var body: some View {
@@ -304,8 +328,7 @@ struct InlineCategoryReceiptRowCard: View {
             }
         }
         .padding()
-        .background(Color(.systemGray6))
-        .cornerRadius(8)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
     }
     
     private func formatCurrency(_ amount: Double) -> String {

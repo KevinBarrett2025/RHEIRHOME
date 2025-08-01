@@ -99,7 +99,6 @@
 		D4427PV22DE26CAA00E70B1E /* PreviewAuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4427PV12DE26CAA00E70B1E /* PreviewAuthService.swift */; };
 		D442BD5D64F1F00C /* CloudKitPhotoService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D442C31F915A5121 /* CloudKitPhotoService.swift */; };
 		D442C65597E66F71 /* TaskPhoto.swift in Sources */ = {isa = PBXBuildFile; fileRef = D442DEA6C7D5DE76 /* TaskPhoto.swift */; };
-		D442D4AF8D206D89 /* PhotoDataMigrationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D442891E7068E040 /* PhotoDataMigrationService.swift */; };
 		D442FE828A30247D /* ProgressPhoto.swift in Sources */ = {isa = PBXBuildFile; fileRef = D442117C9B4CDC28 /* ProgressPhoto.swift */; };
 		D442FEDB20BE283E /* OfflineDataManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = D442E530D0DFA1BA /* OfflineDataManager.swift */; };
 		D4635E262DF208DB00A936E0 /* CloudKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D4635E252DF208DB00A936E0 /* CloudKit.framework */; };
@@ -224,7 +223,6 @@
 		D4427BFE2DE3B75A00E70B1E /* AppleIDAuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleIDAuthService.swift; sourceTree = "<group>"; };
 		D4427C042DE3E66600E70B1E /* RemoteAuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteAuthService.swift; sourceTree = "<group>"; };
 		D4427PV12DE26CAA00E70B1E /* PreviewAuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewAuthService.swift; sourceTree = "<group>"; };
-		D442891E7068E040 /* PhotoDataMigrationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoDataMigrationService.swift; sourceTree = "<group>"; };
 		D442C31F915A5121 /* CloudKitPhotoService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitPhotoService.swift; sourceTree = "<group>"; };
 		D442DEA6C7D5DE76 /* TaskPhoto.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskPhoto.swift; sourceTree = "<group>"; };
 		D442E530D0DFA1BA /* OfflineDataManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfflineDataManager.swift; sourceTree = "<group>"; };
@@ -504,7 +502,6 @@
 				D4D087998CBC43C585EE6395 /* VendorManagementService.swift */,
 				614DE1CD44BF4DFA96D40947 /* PaymentMethodManagementService.swift */,
 				D442C31F915A5121 /* CloudKitPhotoService.swift */,
-				D442891E7068E040 /* PhotoDataMigrationService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -823,7 +820,6 @@
 				D442FEDB20BE283E /* OfflineDataManager.swift in Sources */,
 				D4426DB2A442CE58 /* SimpleCloudKitSharingService.swift in Sources */,
 				D442BD5D64F1F00C /* CloudKitPhotoService.swift in Sources */,
-				D442D4AF8D206D89 /* PhotoDataMigrationService.swift in Sources */,
 				D44279F72DE090A300E70B1E /* LandingPageView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
