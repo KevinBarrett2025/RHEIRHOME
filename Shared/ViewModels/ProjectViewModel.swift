@@ -521,7 +521,8 @@ final class ProjectViewModel: ObservableObject {
     
     func rebuildTeamMemberCache() {
         // Cache is now computed from organization.teamMembers
-        recomputeLaborData()
+        // Team member cache is now computed property from organization.teamMembers
+        // No manual rebuild needed - recomputeLaborData() handles the computation
     }
     
     func debouncedSaveTeamMembers() {
