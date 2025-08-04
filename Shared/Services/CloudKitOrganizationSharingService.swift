@@ -8,17 +8,17 @@ class CloudKitOrganizationSharingService: ObservableObject {
     
     // MARK: - Properties
     private let container: CKContainer
-    private let privateDB: CKDatabase
-    private let sharedDB: CKDatabase
+    private let privateDatabase: CKDatabase
+    private let sharedDatabase: CKDatabase
     
     // MARK: - Zone Management
     private var organizationZones: [String: CKRecordZone] = [:]
     private var organizationShares: [String: CKShare] = [:]
     
-    init(containerIdentifier: String = "iCloud.com.rheirhome.rheirhomeapp") {
+    init(containerIdentifier: String = "iCloud.com.rheirhome.rheirhomeappV3") {
         self.container = CKContainer(identifier: containerIdentifier)
-        self.privateDB = container.privateCloudDatabase
-        self.sharedDB = container.sharedCloudDatabase
+        self.privateDatabase = container.privateCloudDatabase
+        self.sharedDatabase = container.sharedCloudDatabase
         print("🏢 CloudKitOrganizationSharingService initialized")
     }
     
@@ -51,7 +51,7 @@ class CloudKitOrganizationSharingService: ObservableObject {
                 }
             }
             
-            self.privateDB.add(operation)
+            self.privateDatabase.add(operation)
         }
         .eraseToAnyPublisher()
     }
@@ -59,7 +59,7 @@ class CloudKitOrganizationSharingService: ObservableObject {
     /// Fetches existing organization zones
     func fetchOrganizationZones() -> AnyPublisher<[CKRecordZone], Error> {
         return Future<[CKRecordZone], Error> { promise in
-            self.privateDB.fetchAllRecordZones { zones, error in
+            self.privateDatabase.fetchAllRecordZones { zones, error in
                 if let error = error {
                     promise(.failure(error))
                     return
@@ -100,7 +100,7 @@ class CloudKitOrganizationSharingService: ObservableObject {
         print("🏢 Creating organization record in zone: \(zone.zoneID.zoneName)")
         
         return Future<CKRecord, Error> { promise in
-            self.privateDB.save(record) { savedRecord, error in
+            self.privateDatabase.save(record) { savedRecord, error in
                 if let error = error {
                     print("❌ Failed to create organization record: \(error)")
                     promise(.failure(error))
@@ -153,7 +153,7 @@ class CloudKitOrganizationSharingService: ObservableObject {
                 }
             }
             
-            self.privateDB.add(operation)
+            self.privateDatabase.add(operation)
         }
         .eraseToAnyPublisher()
     }
@@ -195,7 +195,7 @@ class CloudKitOrganizationSharingService: ObservableObject {
                 share.addParticipant(participant)
                 
                 // Save the updated share
-                self.privateDB.save(share) { savedShare, saveError in
+                self.privateDatabase.save(share) { savedShare, saveError in
                     if let saveError = saveError {
                         print("❌ Failed to save updated share: \(saveError)")
                         promise(.failure(saveError))
@@ -269,7 +269,7 @@ class CloudKitOrganizationSharingService: ObservableObject {
         print("📋 Saving project '\(project.name)' to organization zone")
         
         return Future<CKRecord, Error> { promise in
-            self.privateDB.save(record) { savedRecord, error in
+            self.privateDatabase.save(record) { savedRecord, error in
                 if let error = error {
                     print("❌ Failed to save project: \(error)")
                     promise(.failure(error))

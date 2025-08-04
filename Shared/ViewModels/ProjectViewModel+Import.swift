@@ -66,7 +66,7 @@ extension ProjectViewModel {
         // 5️⃣ Merge in any new team members
         for member in pkg.employees {
             if !teamMembers.contains(where: { $0.id == member.id }) {
-                teamMembers.append(member)
+                addTeamMemberToOrganization(member)
             }
         }
 

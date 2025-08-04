@@ -7,13 +7,16 @@ import CloudKit
 class CloudKitZoneManager: ObservableObject {
     
     // MARK: - Zone Configuration
-    private let container = CKContainer(identifier: "iCloud.com.rheirhome.rheirhomeappV2")
+    private let container = CKContainer(identifier: "iCloud.com.rheirhome.rheirhomeappV3")
     private let organizationID: String
     
     // Organization-specific zone ID for complete data isolation
     private var organizationZoneID: CKRecordZone.ID {
         CKRecordZone.ID(zoneName: "Org-\(organizationID)", ownerName: CKCurrentUserDefaultName)
     }
+    
+    private lazy var privateDatabase = container.privateCloudDatabase
+    private lazy var sharedDatabase = container.sharedCloudDatabase
     
     // MARK: - Published Properties
     @Published var isSetupComplete = false
@@ -205,6 +208,53 @@ class CloudKitZoneManager: ObservableObject {
         let recordID = CKRecord.ID(recordName: project.id.uuidString, zoneID: organizationZoneID)
         try await deleteRecord(recordID: recordID)
         print("✅ Deleted project '\(project.name)' from organization zone \(organizationID.prefix(8))...")
+    }
+    
+    // MARK: - Team Member-Specific Methods
+    
+    /// Save team members to this organization's zone
+    func saveTeamMembers(_ teamMembers: [TeamMember]) async throws -> CKRecord {
+        let orgRecordID = CKRecord.ID(recordName: "organization_\(organizationID)", zoneID: organizationZoneID)
+        let orgRecord = CKRecord(recordType: "Organization", recordID: orgRecordID)
+        
+        // Store organization metadata
+        orgRecord["organizationID"] = organizationID as CKRecordValue
+        orgRecord["lastUpdated"] = Date() as CKRecordValue
+        
+        // Store team members as JSON data
+        if let teamMembersData = try? JSONEncoder().encode(teamMembers) {
+            orgRecord["teamMembersData"] = teamMembersData as CKRecordValue
+        }
+        
+        let savedRecord = try await saveRecord(orgRecord)
+        print("✅ Saved \(teamMembers.count) team members to organization zone \(organizationID.prefix(8))...")
+        
+        return savedRecord
+    }
+    
+    /// Load team members from this organization's zone
+    func loadTeamMembers() async throws -> [TeamMember] {
+        let recordID = CKRecord.ID(recordName: "organization_\(organizationID)", zoneID: organizationZoneID)
+        
+        do {
+            let record = try await container.privateCloudDatabase.record(for: recordID)
+            
+            // Try to decode team members from JSON data
+            if let teamMembersData = record["teamMembersData"] as? Data,
+               let teamMembers = try? JSONDecoder().decode([TeamMember].self, from: teamMembersData) {
+                print("✅ Loaded \(teamMembers.count) team members from organization zone \(organizationID.prefix(8))...")
+                return teamMembers
+            }
+        } catch let error as CKError where error.code == .unknownItem {
+            // Organization record doesn't exist yet, return empty array
+            print("ℹ️ No organization record found for \(organizationID.prefix(8))..., returning empty team members")
+            return []
+        } catch {
+            print("❌ Failed to load team members: \(error)")
+            throw error
+        }
+        
+        return []
     }
     
     // MARK: - Zone Diagnostics

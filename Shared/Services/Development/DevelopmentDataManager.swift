@@ -9,20 +9,27 @@ import CloudKit
 public class DevelopmentDataManager: ObservableObject {
     
     private let container: CKContainer
-    private let privateDB: CKDatabase
-    private let publicDB: CKDatabase
+    private let privateDatabase: CKDatabase
     
     @Published public var isResetting = false
     @Published public var resetProgress = ""
+    @Published var isLoading = false
+    @Published var statusMessage = ""
+    @Published var projects: [Project] = []
+    @Published var teamMembers: [TeamMember] = []
+    @Published var receipts: [Receipt] = []
+    @Published var vendors: [Vendor] = []
+    @Published var paymentMethods: [PaymentMethod] = []
     
     // Safety flags to prevent accidental execution
     private let RESET_CONFIRMATION_CODE = "RESET_RHEIR_DEV_DATA_2025"
     private var hasBeenReset = UserDefaults.standard.bool(forKey: "DevelopmentDataHasBeenReset")
     
     public init() {
-        self.container = CKContainer(identifier: "iCloud.com.rheirhome.rheirhomeappV2")
-        self.privateDB = container.privateCloudDatabase
-        self.publicDB = container.publicCloudDatabase
+        self.container = CKContainer(identifier: "iCloud.com.rheirhome.rheirhomeappV3")
+        self.privateDatabase = container.privateCloudDatabase
+        
+        print("🧪 DevelopmentDataManager initialized")
     }
     
     /// Perform one-time development data reset
@@ -49,41 +56,41 @@ public class DevelopmentDataManager: ObservableObject {
         do {
             // Reset organization data
             resetProgress = "Deleting organizations..."
-            try await deleteAllRecords(recordType: "Organization", database: privateDB)
+            try await deleteAllRecords(recordType: "Organization", database: privateDatabase)
             
             // Reset organization registry (public)
             resetProgress = "Deleting organization registry..."
-            try await deleteAllRecords(recordType: "OrganizationRegistry", database: publicDB)
+            try await deleteAllRecords(recordType: "OrganizationRegistry", database: privateDatabase)
             
             // Reset projects
             resetProgress = "Deleting projects..."
-            try await deleteAllRecords(recordType: "Project", database: privateDB)
+            try await deleteAllRecords(recordType: "Project", database: privateDatabase)
             
             // Reset users
             resetProgress = "Deleting users..."
-            try await deleteAllRecords(recordType: "User", database: privateDB)
+            try await deleteAllRecords(recordType: "User", database: privateDatabase)
             
             // Reset team members
             resetProgress = "Deleting team members..."
-            try await deleteAllRecords(recordType: "TeamMember", database: privateDB)
+            try await deleteAllRecords(recordType: "TeamMember", database: privateDatabase)
             
             // Reset receipts
             resetProgress = "Deleting receipts..."
-            try await deleteAllRecords(recordType: "Receipt", database: privateDB)
+            try await deleteAllRecords(recordType: "Receipt", database: privateDatabase)
             
             // Reset vendors
             resetProgress = "Deleting vendors..."
-            try await deleteAllRecords(recordType: "Vendor", database: privateDB)
+            try await deleteAllRecords(recordType: "Vendor", database: privateDatabase)
             
             // Reset payment methods
             resetProgress = "Deleting payment methods..."
-            try await deleteAllRecords(recordType: "PaymentMethod", database: privateDB)
+            try await deleteAllRecords(recordType: "PaymentMethod", database: privateDatabase)
             
             // Reset photos
             resetProgress = "Deleting photos..."
-            try await deleteAllRecords(recordType: "ReceiptPhoto", database: privateDB)
-            try await deleteAllRecords(recordType: "ProgressPhoto", database: privateDB)
-            try await deleteAllRecords(recordType: "TaskPhoto", database: privateDB)
+            try await deleteAllRecords(recordType: "ReceiptPhoto", database: privateDatabase)
+            try await deleteAllRecords(recordType: "ProgressPhoto", database: privateDatabase)
+            try await deleteAllRecords(recordType: "TaskPhoto", database: privateDatabase)
             
             // Clear local caches
             resetProgress = "Clearing local data..."

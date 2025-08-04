@@ -278,7 +278,7 @@ struct AddReceiptView: View {
 struct AddReceiptView_Previews: PreviewProvider {
     static var previews: some View {
         AddReceiptView()
-            .environmentObject(ProjectViewModel())
+            .environmentObject(ProjectViewModel(cloudKitService: CloudKitAuthService()))
             .environmentObject(AuthViewModel(service: PreviewAuthService()))
             .previewDevice("iPhone 14")
             .previewDisplayName("Add Receipt")

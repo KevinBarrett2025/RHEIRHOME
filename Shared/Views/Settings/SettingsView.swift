@@ -178,8 +178,83 @@ struct SettingsView: View {
     
     @ViewBuilder
     private var debugSection: some View {
-        #if DEBUG
         Section("Debug & Testing") {
+            NavigationLink(destination: CloudKitDebugView()) {
+                HStack {
+                    Image(systemName: "icloud.and.arrow.up.fill")
+                        .foregroundColor(.blue)
+                        .frame(width: 24)
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("CloudKit Debug Console")
+                            .font(.headline)
+                        Text("Test zone creation and sharing")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    Spacer()
+                    
+                    Image(systemName: "chevron.right")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            
+            NavigationLink(destination: CloudKitDataView()) {
+                HStack {
+                    Image(systemName: "cylinder.fill")
+                        .foregroundColor(.green)
+                        .frame(width: 24)
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("CloudKit Data Browser")
+                            .font(.headline)
+                        Text("View raw CloudKit records")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    Spacer()
+                    
+                    Image(systemName: "chevron.right")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            
+            // MIGRATION SECTION - CRITICAL FIX
+            Button("Fix Team Member Labor Hours") {
+                let migrationStatus = projectVM.getLaborHoursMigrationStatus()
+                
+                if projectVM.needsLaborHoursMigration {
+                    projectVM.migrateLaborHoursToTeamMemberIDs()
+                    alertMessage = "✅ Migration completed!\n\n" + projectVM.getLaborHoursMigrationStatus()
+                } else {
+                    alertMessage = "ℹ️ No migration needed.\n\n" + migrationStatus
+                }
+                
+                showingAlert = true
+            }
+            .foregroundColor(.purple)
+            
+            Button("🆘 Emergency Data Recovery") {
+                Task {
+                    let recoveryReport = await projectVM.emergencyDataRecovery()
+                    await MainActor.run {
+                        alertMessage = recoveryReport
+                        showingAlert = true
+                    }
+                }
+            }
+            .foregroundColor(.red)
+            
+            Button("Show Labor Hours Migration Status") {
+                alertMessage = projectVM.getLaborHoursMigrationStatus()
+                showingAlert = true
+            }
+            .foregroundColor(.blue)
+            
             Button("Clear Pending Invites") {
                 UserDefaults.standard.removeObject(forKey: "pending_invite_orgID")
                 UserDefaults.standard.removeObject(forKey: "pending_invite_orgName")
@@ -198,8 +273,15 @@ struct SettingsView: View {
                 showingAlert = true
             }
             .foregroundColor(.blue)
+            
+            Button("Force Zone Recreation") {
+                Task {
+                    statusMessage = await authVM.forceRecreateCloudKitZones()
+                    showingStatusAlert = true
+                }
+            }
+            .foregroundColor(.red)
         }
-        #endif
     }
     
     @ViewBuilder
@@ -245,7 +327,7 @@ struct SettingsView: View {
     
     private func fixOrganizationIDs() {
         projectVM.fixMissingOrganizationIDs { success, message in
-            statusMessage = message
+            statusMessage = message ?? "Organization IDs fixed"
             showingStatusAlert = true
         }
     }

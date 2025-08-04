@@ -7,8 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		614DE1CD44BF4DFA96D40946 /* PaymentMethodManagementService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 614DE1CD44BF4DFA96D40947 /* PaymentMethodManagementService.swift */; };
 		D4424E47087ACEFD /* ReceiptPhoto.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4421223AC6AA9FB /* ReceiptPhoto.swift */; };
-		D4426DB2A442CE58 /* SimpleCloudKitSharingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4425A3CEB2E308E /* SimpleCloudKitSharingService.swift */; };
 		D44279F52DE090A300E70B1E /* MainTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D44279F22DE090A300E70B1E /* MainTabView.swift */; };
 		D44279F62DE090A300E70B1E /* RheirApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D44279F32DE090A300E70B1E /* RheirApp.swift */; };
 		D44279F72DE090A300E70B1E /* LandingPageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D44279F12DE090A300E70B1E /* LandingPageView.swift */; };
@@ -98,7 +98,6 @@
 		D4427PV22DE26CAA00E70B1E /* PreviewAuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4427PV12DE26CAA00E70B1E /* PreviewAuthService.swift */; };
 		D442BD5D64F1F00C /* CloudKitPhotoService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D442C31F915A5121 /* CloudKitPhotoService.swift */; };
 		D442C65597E66F71 /* TaskPhoto.swift in Sources */ = {isa = PBXBuildFile; fileRef = D442DEA6C7D5DE76 /* TaskPhoto.swift */; };
-		D442D4AF8D206D89 /* PhotoDataMigrationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D442891E7068E040 /* PhotoDataMigrationService.swift */; };
 		D442FE828A30247D /* ProgressPhoto.swift in Sources */ = {isa = PBXBuildFile; fileRef = D442117C9B4CDC28 /* ProgressPhoto.swift */; };
 		D442FEDB20BE283E /* OfflineDataManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = D442E530D0DFA1BA /* OfflineDataManager.swift */; };
 		D4635E262DF208DB00A936E0 /* CloudKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D4635E252DF208DB00A936E0 /* CloudKit.framework */; };
@@ -106,6 +105,7 @@
 		D4635E302DF230EE00A936E0 /* AuthViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4427ACB2DE26D7B00E70B1E /* AuthViewModel.swift */; };
 		D4AF9CE82DF37CA700D3169F /* CloudKitAuthService+User.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4AF9CE72DF37CA700D3169F /* CloudKitAuthService+User.swift */; };
 		D4AF9CEA2DF37CBC00D3169F /* CloudKitAuthService+Organization.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4AF9CE92DF37CBC00D3169F /* CloudKitAuthService+Organization.swift */; };
+		D4D087998CBC43C585EE6394 /* VendorManagementService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4D087998CBC43C585EE6395 /* VendorManagementService.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -126,9 +126,9 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		614DE1CD44BF4DFA96D40947 /* PaymentMethodManagementService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaymentMethodManagementService.swift; sourceTree = "<group>"; };
 		D442117C9B4CDC28 /* ProgressPhoto.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgressPhoto.swift; sourceTree = "<group>"; };
 		D4421223AC6AA9FB /* ReceiptPhoto.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReceiptPhoto.swift; sourceTree = "<group>"; };
-		D4425A3CEB2E308E /* SimpleCloudKitSharingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SimpleCloudKitSharingService.swift; sourceTree = "<group>"; };
 		D44279C52DE08FA000E70B1E /* RHEIR.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = RHEIR.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		D44279D22DE08FA100E70B1E /* RHEIRTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RHEIRTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		D44279DC2DE08FA100E70B1E /* RHEIRUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RHEIRUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -221,7 +221,6 @@
 		D4427BFE2DE3B75A00E70B1E /* AppleIDAuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleIDAuthService.swift; sourceTree = "<group>"; };
 		D4427C042DE3E66600E70B1E /* RemoteAuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteAuthService.swift; sourceTree = "<group>"; };
 		D4427PV12DE26CAA00E70B1E /* PreviewAuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewAuthService.swift; sourceTree = "<group>"; };
-		D442891E7068E040 /* PhotoDataMigrationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoDataMigrationService.swift; sourceTree = "<group>"; };
 		D442C31F915A5121 /* CloudKitPhotoService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitPhotoService.swift; sourceTree = "<group>"; };
 		D442DEA6C7D5DE76 /* TaskPhoto.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskPhoto.swift; sourceTree = "<group>"; };
 		D442E530D0DFA1BA /* OfflineDataManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfflineDataManager.swift; sourceTree = "<group>"; };
@@ -230,6 +229,7 @@
 		D4AF9CE62DF2642A00D3169F /* RHEIR.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = RHEIR.entitlements; sourceTree = "<group>"; };
 		D4AF9CE72DF37CA700D3169F /* CloudKitAuthService+User.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CloudKitAuthService+User.swift"; sourceTree = "<group>"; };
 		D4AF9CE92DF37CBC00D3169F /* CloudKitAuthService+Organization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CloudKitAuthService+Organization.swift"; sourceTree = "<group>"; };
+		D4D087998CBC43C585EE6395 /* VendorManagementService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VendorManagementService.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -496,9 +496,9 @@
 				D4427BFE2DE3B75A00E70B1E /* AppleIDAuthService.swift */,
 				D4427C042DE3E66600E70B1E /* RemoteAuthService.swift */,
 				D442E530D0DFA1BA /* OfflineDataManager.swift */,
-				D4425A3CEB2E308E /* SimpleCloudKitSharingService.swift */,
+				D4D087998CBC43C585EE6395 /* VendorManagementService.swift */,
+				614DE1CD44BF4DFA96D40947 /* PaymentMethodManagementService.swift */,
 				D442C31F915A5121 /* CloudKitPhotoService.swift */,
-				D442891E7068E040 /* PhotoDataMigrationService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -808,14 +808,14 @@
 				D4427AA12DE090C600E70B1E /* ChangeOrder.swift in Sources */,
 				D4427AA22DE090C600E70B1E /* FAB.swift in Sources */,
 				D4427AB52DE26CAA00E70B1E /* AuthService.swift in Sources */,
+				D4D087998CBC43C585EE6394 /* VendorManagementService.swift in Sources */,
+				614DE1CD44BF4DFA96D40946 /* PaymentMethodManagementService.swift in Sources */,
 				D4427AA32DE090C600E70B1E /* ImagePicker.swift in Sources */,
 				D4424E47087ACEFD /* ReceiptPhoto.swift in Sources */,
 				D442FE828A30247D /* ProgressPhoto.swift in Sources */,
 				D442C65597E66F71 /* TaskPhoto.swift in Sources */,
 				D442FEDB20BE283E /* OfflineDataManager.swift in Sources */,
-				D4426DB2A442CE58 /* SimpleCloudKitSharingService.swift in Sources */,
 				D442BD5D64F1F00C /* CloudKitPhotoService.swift in Sources */,
-				D442D4AF8D206D89 /* PhotoDataMigrationService.swift in Sources */,
 				D44279F72DE090A300E70B1E /* LandingPageView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

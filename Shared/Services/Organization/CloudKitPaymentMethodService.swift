@@ -10,46 +10,21 @@ class CloudKitPaymentMethodService: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
     
-    private let organizationID: String
     private let container: CKContainer
-    private let database: CKDatabase
-    private var organizationZoneID: CKRecordZone.ID
+    private let privateDatabase: CKDatabase
     
-    private var cancellables = Set<AnyCancellable>()
-    
-    init(organizationID: String) {
-        self.organizationID = organizationID
-        self.container = CKContainer(identifier: "iCloud.com.rheirhome.rheirhomeappV2")
-        self.database = container.privateCloudDatabase
-        self.organizationZoneID = CKRecordZone.ID(zoneName: "org-\(organizationID)")
+    init() {
+        self.container = CKContainer(identifier: "iCloud.com.rheirhome.rheirhomeappV3")
+        self.privateDatabase = container.privateCloudDatabase
         
         Task {
-            await setupOrganizationZone()
-            await loadPaymentMethodsFromCloudKit()
-        }
-    }
-    
-    // MARK: - Zone Setup
-    
-    private func setupOrganizationZone() async {
-        do {
-            let zone = CKRecordZone(zoneID: organizationZoneID)
-            _ = try await database.save(zone)
-            print("✅ Organization zone setup complete for payment methods: \(organizationZoneID.zoneName)")
-        } catch let error as CKError where error.code == .zoneNotEmpty {
-            // Zone already exists, which is fine
-            print("📋 Organization zone already exists for payment methods: \(organizationZoneID.zoneName)")
-        } catch {
-            print("❌ Failed to setup organization zone for payment methods: \(error)")
-            await MainActor.run {
-                self.errorMessage = "Failed to setup organization zone: \(error.localizedDescription)"
-            }
+            await loadPaymentMethods()
         }
     }
     
     // MARK: - CloudKit Operations
     
-    func loadPaymentMethodsFromCloudKit() async {
+    func loadPaymentMethods() async {
         await MainActor.run { isLoading = true }
         
         do {
@@ -59,7 +34,7 @@ class CloudKitPaymentMethodService: ObservableObject {
                 NSSortDescriptor(key: "name", ascending: true)
             ]
             
-            let (matchResults, _) = try await database.records(matching: query, inZoneWith: organizationZoneID)
+            let (matchResults, _) = try await privateDatabase.records(matching: query)
             
             let cloudKitPaymentMethods = matchResults.compactMap { (_, result) -> PaymentMethod? in
                 switch result {
@@ -91,7 +66,7 @@ class CloudKitPaymentMethodService: ObservableObject {
         let record = createRecordFromPaymentMethod(paymentMethod)
         
         do {
-            _ = try await database.save(record)
+            _ = try await privateDatabase.save(record)
             print("✅ Saved payment method to CloudKit: \(paymentMethod.name)")
             
             // Update local array
@@ -114,7 +89,7 @@ class CloudKitPaymentMethodService: ObservableObject {
         let recordID = CKRecord.ID(recordName: paymentMethod.id.uuidString, zoneID: organizationZoneID)
         
         do {
-            _ = try await database.deleteRecord(withID: recordID)
+            _ = try await privateDatabase.deleteRecord(withID: recordID)
             print("✅ Deleted payment method from CloudKit: \(paymentMethod.name)")
             
             // Update local array

@@ -13,6 +13,14 @@ struct TaskCreateEditView: View {
     @State private var category: TaskCategory = .general
     @State private var selectedEmployeeIDs: Set<UUID> = []
     
+    // Photo management
+    @State private var taskImages: [UIImage] = []
+    @State private var showingImagePicker = false
+    @State private var imagePickerSource: UIImagePickerController.SourceType = .photoLibrary
+    @State private var showingDeleteAlert = false
+    @State private var imageToDelete: Int?
+    @StateObject private var cameraPerm = CameraPermission()
+    
     // Existing task for editing
     let existingTask: ProjectTask?
     
@@ -31,7 +39,7 @@ struct TaskCreateEditView: View {
         if let task = existingTask {
             _title = State(initialValue: task.title)
             _description = State(initialValue: task.description)
-            _dueDate = State(initialValue: task.dueDate)
+            _dueDate = State(initialValue: task.dueDate ?? Date())
             _priority = State(initialValue: task.priority)
             _category = State(initialValue: task.category)
             _selectedEmployeeIDs = State(initialValue: Set(task.assignedEmployeeIDs))
@@ -114,20 +122,7 @@ struct TaskCreateEditView: View {
                 }
                 
                 Section("Photos") {
-                    HStack {
-                        Spacer()
-                        VStack(spacing: 12) {
-                            Image(systemName: "camera.fill")
-                                .font(.title)
-                                .foregroundColor(.secondary)
-                            Text("Photo support coming soon")
-                                .font(.subheadline)
-                                .foregroundColor(.secondary)
-                                .multilineTextAlignment(.center)
-                        }
-                        .padding()
-                        Spacer()
-                    }
+                    photoManagementSection
                 }
             }
             .navigationTitle(existingTask == nil ? "New Task" : "Edit Task")
@@ -147,12 +142,193 @@ struct TaskCreateEditView: View {
                     .fontWeight(.semibold)
                 }
             }
+            .sheet(isPresented: $showingImagePicker) {
+                ImagePicker(
+                    sourceType: imagePickerSource,
+                    image: Binding(
+                        get: { nil },
+                        set: { if let img = $0 { taskImages.append(img) } }
+                    )
+                )
+            }
+            .alert("Delete Photo", isPresented: $showingDeleteAlert) {
+                Button("Cancel", role: .cancel) {
+                    imageToDelete = nil
+                }
+                Button("Delete", role: .destructive) {
+                    if let index = imageToDelete {
+                        taskImages.remove(at: index)
+                        imageToDelete = nil
+                    }
+                }
+            } message: {
+                Text("Are you sure you want to delete this photo?")
+            }
+            .alert("Camera Access Needed", isPresented: $cameraPerm.showSettingsAlert) {
+                Button("Cancel", role: .cancel) {}
+                Button("Settings") { cameraPerm.openSettings() }
+            } message: {
+                Text("Please allow camera access in Settings to take photos for this task.")
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private var photoManagementSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            if taskImages.isEmpty {
+                VStack(spacing: 12) {
+                    Image(systemName: "camera.fill")
+                        .font(.largeTitle)
+                        .foregroundColor(.secondary)
+                    
+                    Text("Add Before/After Photos")
+                        .font(.headline)
+                        .foregroundColor(.secondary)
+                    
+                    Text("Document task progress and completion with photos")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 20)
+                .background(Color(.systemGray6))
+                .cornerRadius(12)
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 12) {
+                        ForEach(taskImages.indices, id: \.self) { index in
+                            taskPhotoView(image: taskImages[index], index: index)
+                        }
+                        
+                        // Add more photos button
+                        addPhotoButtons
+                    }
+                    .padding(.horizontal, 4)
+                }
+            }
+            
+            if taskImages.isEmpty {
+                photoActionButtons
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private func taskPhotoView(image: UIImage, index: Int) -> some View {
+        ZStack(alignment: .topTrailing) {
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFill()
+                .frame(width: 120, height: 120)
+                .clipped()
+                .cornerRadius(12)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(Color(.systemGray4), lineWidth: 1)
+                )
+            
+            // Delete button with small X
+            Button {
+                imageToDelete = index
+                showingDeleteAlert = true
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 20))
+                    .foregroundStyle(.white, .red)
+                    .shadow(color: .black.opacity(0.3), radius: 2, x: 1, y: 1)
+            }
+            .offset(x: 6, y: -6)
+        }
+    }
+    
+    @ViewBuilder
+    private var addPhotoButtons: some View {
+        HStack(spacing: 12) {
+            // Camera button
+            Button {
+                requestCameraAccess()
+            } label: {
+                VStack(spacing: 8) {
+                    Image(systemName: "camera")
+                        .font(.title2)
+                        .foregroundColor(.blue)
+                    Text("Camera")
+                        .font(.caption)
+                        .foregroundColor(.blue)
+                }
+                .frame(width: 80, height: 80)
+                .background(Color.blue.opacity(0.1))
+                .cornerRadius(12)
+            }
+            
+            // Photo library button
+            Button {
+                imagePickerSource = .photoLibrary
+                showingImagePicker = true
+            } label: {
+                VStack(spacing: 8) {
+                    Image(systemName: "photo.on.rectangle")
+                        .font(.title2)
+                        .foregroundColor(.green)
+                    Text("Photos")
+                        .font(.caption)
+                        .foregroundColor(.green)
+                }
+                .frame(width: 80, height: 80)
+                .background(Color.green.opacity(0.1))
+                .cornerRadius(12)
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private var photoActionButtons: some View {
+        HStack(spacing: 16) {
+            Button {
+                requestCameraAccess()
+            } label: {
+                Label("Take Photo", systemImage: "camera")
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color.blue.opacity(0.1))
+                    .foregroundColor(.blue)
+                    .cornerRadius(10)
+            }
+            
+            Button {
+                imagePickerSource = .photoLibrary
+                showingImagePicker = true
+            } label: {
+                Label("Choose Photo", systemImage: "photo.on.rectangle")
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color.green.opacity(0.1))
+                    .foregroundColor(.green)
+                    .cornerRadius(10)
+            }
         }
     }
     
     // MARK: - Actions
     
+    private func requestCameraAccess() {
+        cameraPerm.requestAccess { granted in
+            guard granted,
+                  UIImagePickerController.isSourceTypeAvailable(.camera) else { 
+                return 
+            }
+            imagePickerSource = .camera
+            showingImagePicker = true
+        }
+    }
+    
     private func saveTask() {
+        // TODO: Upload images and get photo IDs
+        let photoIDs: [UUID] = [] // Will be populated when photo service is implemented
+        
         // Create task
         let task = ProjectTask(
             id: existingTask?.id ?? UUID(),
@@ -163,7 +339,8 @@ struct TaskCreateEditView: View {
             completedDate: existingTask?.completedDate,
             priority: priority,
             category: category,
-            photoIDs: existingTask?.photoIDs ?? [],
+            projectID: project?.id ?? UUID(),
+            photoIDs: photoIDs,
             assignedEmployeeIDs: Array(selectedEmployeeIDs),
             completedByEmployeeIDs: existingTask?.completedByEmployeeIDs ?? [],
             completionNotes: existingTask?.completionNotes ?? "",
@@ -171,7 +348,7 @@ struct TaskCreateEditView: View {
             updatedAt: Date()
         )
         
-        print("✅ Task '\(task.title)' saved (photo integration pending)")
+        print("✅ Task '\(task.title)' saved with \(taskImages.count) photos (upload pending)")
         onSave(task)
         dismiss()
     }
@@ -181,7 +358,7 @@ struct TaskCreateEditView: View {
         case .low: return .green
         case .medium: return .blue
         case .high: return .orange
-        case .critical: return .red
+        case .urgent: return .red
         }
     }
 }

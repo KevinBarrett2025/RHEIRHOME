@@ -14,18 +14,12 @@ class CloudKitOrganizationDebugService: ObservableObject {
     @Published var recommendedActions: [String] = []
     
     // MARK: - Services
-    private let cloudKitService: CloudKitAuthService
-    private let simpleCloudKitService: SimpleCloudKitSharingService
-    private let projectViewModel: ProjectViewModel?
+    private let organizationZoneService: OrganizationZoneService
     
     init(
-        cloudKitService: CloudKitAuthService = CloudKitAuthService(),
-        simpleCloudKitService: SimpleCloudKitSharingService = SimpleCloudKitSharingService(),
-        projectViewModel: ProjectViewModel? = nil
+        organizationZoneService: OrganizationZoneService = OrganizationZoneService()
     ) {
-        self.cloudKitService = cloudKitService
-        self.simpleCloudKitService = simpleCloudKitService
-        self.projectViewModel = projectViewModel
+        self.organizationZoneService = organizationZoneService
     }
     
     // MARK: - Main Diagnostic Methods
@@ -182,7 +176,7 @@ class CloudKitOrganizationDebugService: ObservableObject {
         }
         
         // Check CloudKit zone status
-        let zoneActive = simpleCloudKitService.isOrganizationSharingActive()
+        let zoneActive = organizationZoneService.isOrganizationSharingActive()
         analysis += "• CloudKit Zone Active: \(zoneActive ? "✅ Yes" : "❌ No")\n"
         
         if !zoneActive {
@@ -209,8 +203,8 @@ class CloudKitOrganizationDebugService: ObservableObject {
         var analysis = "☁️ CLOUDKIT ZONE HEALTH\n"
         analysis += "==========================\n"
         
-        let zoneStatus = simpleCloudKitService.getOrganizationSharingStatus()
-        let diagnostics = await simpleCloudKitService.getZoneDiagnostics()
+        let zoneStatus = organizationZoneService.getOrganizationSharingStatus()
+        let diagnostics = await organizationZoneService.getZoneDiagnostics()
         
         analysis += zoneStatus
         analysis += "\n"
@@ -244,7 +238,7 @@ class CloudKitOrganizationDebugService: ObservableObject {
         }
         
         // Zone health fixes
-        if !simpleCloudKitService.isOrganizationSharingActive() {
+        if !organizationZoneService.isOrganizationSharingActive() {
             recommendedActions.append("Reinitialize CloudKit organization zone")
             recommendedActions.append("Check CloudKit container permissions")
         }
@@ -304,7 +298,7 @@ class CloudKitOrganizationDebugService: ObservableObject {
                     employmentStatus: .active
                 )
                 
-                projectVM.teamMembers.append(newTeamMember)
+                projectVM.addTeamMemberToOrganization(newTeamMember)
                 print("✅ Added placeholder team member for user \(memberID.prefix(8))...")
             }
         }
@@ -321,8 +315,14 @@ class CloudKitOrganizationDebugService: ObservableObject {
             let member = projectVM.teamMembers[i]
             
             if member.hasAppAccess && member.userID != organization.adminUserID && !organization.members.contains(member.userID ?? "") {
-                projectVM.teamMembers[i].hasAppAccess = false
-                print("✅ Removed app access from \(member.name) - not in organization")
+                // Since teamMembers is computed, we need to update the organization directly
+                if let memberID = member.id {
+                    if var orgMember = projectVM.getTeamMember(by: memberID) {
+                        orgMember.hasAppAccess = false
+                        projectVM.updateTeamMemberInOrganization(orgMember)
+                        print("✅ Removed app access from \(member.name) - not in organization")
+                    }
+                }
             }
         }
         
@@ -335,7 +335,7 @@ class CloudKitOrganizationDebugService: ObservableObject {
         
         do {
             // 1. Reset and reinitialize CloudKit zone
-            await simpleCloudKitService.resetOrganizationZone()
+            await organizationZoneService.resetOrganizationZone()
             
             // 2. Force sync all projects
             let success = await projectVM.triggerManualSync()
@@ -379,7 +379,7 @@ class CloudKitOrganizationDebugService: ObservableObject {
         let cloudKitUsers = organization.members.count + 1
         let localAppUsers = projectVM.teamMembers.filter { $0.hasAppAccess }.count + 1
         let organizationProjects = projectVM.organizationProjects.count
-        let zoneActive = simpleCloudKitService.isOrganizationSharingActive()
+        let zoneActive = organizationZoneService.isOrganizationSharingActive()
         
         var diagnostic = "QUICK DIAGNOSTIC:\n"
         diagnostic += "• CloudKit Users: \(cloudKitUsers)\n"

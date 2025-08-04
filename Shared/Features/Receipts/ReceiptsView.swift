@@ -133,7 +133,7 @@ struct ReceiptsView: View {
         updateVendorSpending(for: receipt, isRemoving: true)
         updatePaymentMethodSpending(for: receipt, isRemoving: true)
         
-        projectVM.save(updatedProject)
+        projectVM.updateProject(updatedProject)
         projectVM.recomputeFilteredReceipts()
         
         receiptToDelete = nil

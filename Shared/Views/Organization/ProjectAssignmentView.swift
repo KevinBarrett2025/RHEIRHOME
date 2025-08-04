@@ -77,18 +77,21 @@ struct ProjectAssignmentView: View {
     }
     
     private func assignToProjects() {
+        guard !selectedProjects.isEmpty else { return }
+        
         // Update team member status to active if they're being assigned to projects
         var updatedMember = teamMember
-        if !selectedProjects.isEmpty {
-            updatedMember.employmentStatus = .active
+        updatedMember.employmentStatus = .active
+        
+        // Assign the team member to each selected project using the new assignment method
+        for projectID in selectedProjects {
+            projectVM.assignTeamMemberToProject(updatedMember.id.uuidString, projectID: projectID)
         }
         
+        // Update the team member with any changes
         projectVM.updateTeamMember(updatedMember)
         
-        // In a complete implementation, you'd also update project assignments
-        // This would involve adding team member references to the selected projects
-        
-        print("✅ Assigned \(teamMember.name) to \(selectedProjects.count) projects")
+        print("✅ Successfully assigned \(teamMember.name) to \(selectedProjects.count) project(s)")
         print("📊 Updated employment status to: \(updatedMember.employmentStatus.displayName)")
         
         dismiss()
@@ -104,5 +107,5 @@ struct ProjectAssignmentView: View {
     )
     
     ProjectAssignmentView(teamMember: sampleMember)
-        .environmentObject(ProjectViewModel())
+        .environmentObject(ProjectViewModel(cloudKitService: CloudKitAuthService()))
 }

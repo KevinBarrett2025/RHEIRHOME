@@ -12,25 +12,24 @@ protocol CloudKitServiceProtocol {
     func fetchUserRecordID() -> AnyPublisher<CKRecord.ID, Error>
 }
 
-final class CloudKitService: CloudKitServiceProtocol {
+final class CloudKitService: ObservableObject, CloudKitServiceProtocol {
     // MARK: - Properties
-    let container: CKContainer
-    let privateDatabase: CKDatabase
+    private let container: CKContainer
+    private let privateDatabase: CKDatabase
     let publicDatabase: CKDatabase
     
+    @Published var isSignedIn: Bool = false
+    @Published var accountStatus: CKAccountStatus = .couldNotDetermine
+    @Published var errorMessage: String?
+    
     // MARK: - Initialization
-    init(containerIdentifier: String = "iCloud.com.rheirhome.rheirhomeapp") {
+    init(containerIdentifier: String = "iCloud.com.rheirhome.rheirhomeappV3") {
         self.container = CKContainer(identifier: containerIdentifier)
         self.privateDatabase = container.privateCloudDatabase
         self.publicDatabase = container.publicCloudDatabase
         
-        // Debug: Check CloudKit status on init
-        container.accountStatus { status, error in
-            print("☁️ [CloudKit] Container: \(containerIdentifier)")
-            print("☁️ [CloudKit] Account status: \(status.rawValue)")
-            if let error = error {
-                print("☁️ [CloudKit] Account error: \(error.localizedDescription)")
-            }
+        Task {
+            await checkAccountStatus()
         }
     }
     
@@ -54,26 +53,33 @@ final class CloudKitService: CloudKitServiceProtocol {
                     switch status {
                     case .available:
                         print("✅ [CloudKit] Account available")
+                        self.isSignedIn = true
+                        self.accountStatus = status
                         promise(.success(()))
                     case .noAccount:
                         let error = CloudKitError.noAccount
                         print("❌ [CloudKit] \(error.localizedDescription)")
+                        self.errorMessage = error.localizedDescription
                         promise(.failure(error))
                     case .couldNotDetermine:
                         let error = CloudKitError.couldNotDetermineStatus
                         print("❌ [CloudKit] \(error.localizedDescription)")
+                        self.errorMessage = error.localizedDescription
                         promise(.failure(error))
                     case .restricted:
                         let error = CloudKitError.accountRestricted
                         print("❌ [CloudKit] \(error.localizedDescription)")
+                        self.errorMessage = error.localizedDescription
                         promise(.failure(error))
                     case .temporarilyUnavailable:
                         let error = CloudKitError.temporarilyUnavailable
                         print("⚠️ [CloudKit] \(error.localizedDescription)")
+                        self.errorMessage = error.localizedDescription
                         promise(.failure(error))
                     @unknown default:
                         let error = CloudKitError.unknownStatus
                         print("❌ [CloudKit] \(error.localizedDescription)")
+                        self.errorMessage = error.localizedDescription
                         promise(.failure(error))
                     }
                 }

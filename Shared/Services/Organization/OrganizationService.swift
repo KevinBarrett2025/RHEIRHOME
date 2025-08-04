@@ -6,23 +6,33 @@ import CloudKit
 @MainActor
 public class OrganizationService: ObservableObject {
     
+    // MARK: - Properties
+    private let container: CKContainer
+    private let privateDatabase: CKDatabase
+    private let sharedDatabase: CKDatabase
+    private let zoneManager: CloudKitZoneManager?
+    
     // MARK: - Published Properties
-    @Published public var isLoading = false
-    @Published public var validationStatus: NameValidationStatus = .unknown
     @Published public var organizations: [Organization] = []
     @Published public var currentOrganization: Organization?
-    
-    // MARK: - Private Properties
-    private let container: CKContainer
-    private let privateDB: CKDatabase
-    private let publicDB: CKDatabase // For unique name validation
-    private var cancellables = Set<AnyCancellable>()
+    @Published public var isLoading: Bool = false
+    @Published public var errorMessage: String?
     
     // MARK: - Initialization
-    public init(containerIdentifier: String = "iCloud.com.rheirhome.rheirhomeappV2") {
+    public init(containerIdentifier: String = "iCloud.com.rheirhome.rheirhomeappV3", organizationID: String? = nil) {
         self.container = CKContainer(identifier: containerIdentifier)
-        self.privateDB = container.privateCloudDatabase
-        self.publicDB = container.publicCloudDatabase
+        self.privateDatabase = container.privateCloudDatabase
+        self.sharedDatabase = container.sharedCloudDatabase
+        self.zoneManager = organizationID != nil ? CloudKitZoneManager(organizationID: organizationID!) : nil
+        
+        print("🏢 OrganizationService initialized with container: \(containerIdentifier)")
+        
+        // Set up zone if organization ID is provided
+        if let orgID = organizationID {
+            Task {
+                try? await zoneManager?.setupOrganizationZones()
+            }
+        }
     }
     
     // MARK: - Name Validation
@@ -61,7 +71,7 @@ public class OrganizationService: ObservableObject {
         let query = CKQuery(recordType: "OrganizationRegistry", predicate: compoundPredicate)
         
         do {
-            let result = try await publicDB.records(matching: query)
+            let result = try await sharedDatabase.records(matching: query)
             let existingRecords = result.matchResults.compactMap { try? $0.1.get() }
             
             if !existingRecords.isEmpty {
@@ -108,7 +118,7 @@ public class OrganizationService: ObservableObject {
         
         // Save to private database
         let privateRecord = createPrivateOrganizationRecord(from: organization, slug: slug)
-        let savedPrivateRecord = try await privateDB.save(privateRecord)
+        let savedPrivateRecord = try await privateDatabase.save(privateRecord)
         
         // Register name in public database for uniqueness
         let registryRecord = createOrganizationRegistryRecord(
@@ -117,7 +127,7 @@ public class OrganizationService: ObservableObject {
             slug: slug,
             adminUserID: adminUserID
         )
-        try await publicDB.save(registryRecord)
+        try await sharedDatabase.save(registryRecord)
         
         // Update organization with CloudKit info
         var finalOrganization = organization
@@ -141,7 +151,7 @@ public class OrganizationService: ObservableObject {
         let predicate = NSPredicate(format: "members CONTAINS %@", userID)
         let query = CKQuery(recordType: "Organization", predicate: predicate)
         
-        let result = try await privateDB.records(matching: query)
+        let result = try await privateDatabase.records(matching: query)
         
         let fetchedOrganizations = result.matchResults.compactMap { (recordID, result) in
             switch result {
@@ -171,12 +181,12 @@ public class OrganizationService: ObservableObject {
         defer { isLoading = false }
         
         let ckRecordID = CKRecord.ID(recordName: recordID)
-        let record = try await privateDB.record(for: ckRecordID)
+        let record = try await privateDatabase.record(for: ckRecordID)
         
         // Update record fields
         updateRecordFromOrganization(record, organization: organization)
         
-        let savedRecord = try await privateDB.save(record)
+        let savedRecord = try await privateDatabase.save(record)
         let updatedOrganization = parseOrganizationFromRecord(savedRecord)
         
         // Update local cache
@@ -235,6 +245,64 @@ public class OrganizationService: ObservableObject {
         
         let updatedOrg = try await updateOrganization(organization)
         organizations[orgIndex] = updatedOrg
+    }
+    
+    // MARK: - Team Member Management (CloudKit Integration)
+    
+    /// Save team members to CloudKit for the current organization
+    public func saveTeamMembersToCloudKit(_ teamMembers: [TeamMember]) async throws {
+        guard let zoneManager = zoneManager else {
+            throw OrganizationServiceError.invalidOrganization("Zone manager not initialized")
+        }
+        
+        isLoading = true
+        defer { isLoading = false }
+        
+        try await zoneManager.saveTeamMembers(teamMembers)
+        print("✅ Team members saved to CloudKit")
+    }
+    
+    /// Load team members from CloudKit for the current organization
+    public func loadTeamMembersFromCloudKit() async throws -> [TeamMember] {
+        guard let zoneManager = zoneManager else {
+            throw OrganizationServiceError.invalidOrganization("Zone manager not initialized")
+        }
+        
+        isLoading = true
+        defer { isLoading = false }
+        
+        let teamMembers = try await zoneManager.loadTeamMembers()
+        print("✅ Loaded \(teamMembers.count) team members from CloudKit")
+        return teamMembers
+    }
+    
+    // MARK: - Project Management (CloudKit Integration)
+    
+    /// Save a project to CloudKit for the current organization
+    public func saveProjectToCloudKit(_ project: Project) async throws {
+        guard let zoneManager = zoneManager else {
+            throw OrganizationServiceError.invalidOrganization("Zone manager not initialized")
+        }
+        
+        isLoading = true
+        defer { isLoading = false }
+        
+        try await zoneManager.saveProject(project)
+        print("✅ Project saved to CloudKit: \(project.name)")
+    }
+    
+    /// Load all projects from CloudKit for the current organization
+    public func loadProjectsFromCloudKit() async throws -> [Project] {
+        guard let zoneManager = zoneManager else {
+            throw OrganizationServiceError.invalidOrganization("Zone manager not initialized")
+        }
+        
+        isLoading = true
+        defer { isLoading = false }
+        
+        let projects = try await zoneManager.loadProjects()
+        print("✅ Loaded \(projects.count) projects from CloudKit")
+        return projects
     }
     
     // MARK: - Helper Methods
@@ -379,7 +447,7 @@ extension OrganizationService: OrganizationServiceProtocol {
         let recordID = CKRecord.ID(recordName: id)
         
         return Future<Void, Error> { promise in
-            self.privateDB.delete(withRecordID: recordID) { _, error in
+            self.privateDatabase.delete(withRecordID: recordID) { _, error in
                 if let error = error {
                     promise(.failure(error))
                 } else {

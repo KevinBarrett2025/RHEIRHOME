@@ -142,6 +142,6 @@ struct LogHoursView: View {
 struct LogHoursView_Previews: PreviewProvider {
     static var previews: some View {
         LogHoursView(isPresented: .constant(true))
-            .environmentObject(ProjectViewModel())
+            .environmentObject(ProjectViewModel(cloudKitService: CloudKitAuthService()))
     }
 }

@@ -3,7 +3,11 @@ import CloudKit
 
 // MARK: - DataMigrationService
 class DataMigrationService {
-    private let cloudKitContainer = CKContainer(identifier: "iCloud.com.rheirhome.rheirhomeapp")
+    private let cloudKitContainer = CKContainer(identifier: "iCloud.com.rheirhome.rheirhomeappV3")
+    
+    private var privateDatabase: CKDatabase {
+        return cloudKitContainer.privateCloudDatabase
+    }
     
     private var currentEnvironment: String {
         #if DEBUG
@@ -14,7 +18,7 @@ class DataMigrationService {
     }
     
     func migrateLocalProjectsToCloudKit(projects: [Project], completion: @escaping (Bool) -> Void) {
-        let privateDB = cloudKitContainer.privateCloudDatabase
+        let privateDB = privateDatabase
         let group = DispatchGroup()
         var allSucceeded = true
         
@@ -56,7 +60,7 @@ class DataMigrationService {
     }
     
     func cleanupOrganizations(keepOnlyOrganizationWithName: String, completion: @escaping (Bool) -> Void) {
-        let privateDB = cloudKitContainer.privateCloudDatabase
+        let privateDB = privateDatabase
         
         let query = CKQuery(recordType: "Organization", predicate: NSPredicate(value: true))
         
@@ -114,7 +118,7 @@ class DataMigrationService {
     }
     
     private func deleteRecords(_ records: [CKRecord], completion: @escaping (Bool) -> Void) {
-        let privateDB = cloudKitContainer.privateCloudDatabase
+        let privateDB = privateDatabase
         let recordIDs = records.map { $0.recordID }
         
         print("🗑️ Deleting \(recordIDs.count) organization records...")
@@ -137,7 +141,7 @@ class DataMigrationService {
     }
     
     func testCloudKitEnvironment(completion: @escaping (String) -> Void) {
-        let privateDB = cloudKitContainer.privateCloudDatabase
+        let privateDB = privateDatabase
         let query = CKQuery(recordType: "Organization", predicate: NSPredicate(value: true))
         
         privateDB.fetch(withQuery: query, inZoneWith: nil, desiredKeys: ["name"], resultsLimit: 10) { result in
@@ -181,7 +185,7 @@ class DataMigrationService {
     
     func exploreCloudKitData(completion: @escaping (String) -> Void) {
         var results = "🔍 CLOUDKIT DATA EXPLORER:\n\n"
-        let privateDB = cloudKitContainer.privateCloudDatabase
+        let privateDB = privateDatabase
         
         let recordTypes = ["Organization", "Project", "Receipt", "ProgressLog", "Employee", "ProjectTask"]
         let group = DispatchGroup()
@@ -240,7 +244,7 @@ class DataMigrationService {
     
     func exploreCloudKitDataSafely(completion: @escaping (String) -> Void) {
         var results = "🔍 CLOUDKIT DATA EXPLORER (Safe Mode):\n\n"
-        let privateDB = cloudKitContainer.privateCloudDatabase
+        let privateDB = privateDatabase
         
         let recordTypes = ["Organization", "Project", "Receipt", "ProgressLog", "Employee", "ProjectTask"]
         let group = DispatchGroup()
@@ -304,7 +308,7 @@ class DataMigrationService {
     
     func findRecentActivity(completion: @escaping (String) -> Void) {
         var results = "📅 RECENT ACTIVITY (Last 2 Weeks):\n\n"
-        let privateDB = cloudKitContainer.privateCloudDatabase
+        let privateDB = privateDatabase
         let twoWeeksAgo = Calendar.current.date(byAdding: .day, value: -14, to: Date()) ?? Date()
         
         let recordTypes = ["Project", "Receipt", "ProgressLog"]

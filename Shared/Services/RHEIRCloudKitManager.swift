@@ -29,8 +29,7 @@ class RHEIRCloudKitManager: ObservableObject {
     
     // MARK: - Services
     
-    @Published var scalableArchitecture = ScalableCloudKitArchitecture()
-    @Published var simpleSharing = SimpleCloudKitSharingService()
+    @Published var organizationZoneService = OrganizationZoneService()
     
     // MARK: - State Management
     
@@ -95,23 +94,27 @@ class RHEIRCloudKitManager: ObservableObject {
     private func initializeSimpleSharing() {
         setupProgress = .initializingSimpleSharing
         
-        // Auto-setup organization sharing for two-phone mode
-        simpleSharing.setupOrganizationSharing()
-            .receive(on: DispatchQueue.main)
-            .sink(
-                receiveCompletion: { [weak self] completion in
-                    if case let .failure(error) = completion {
-                        print("❌ Simple sharing setup failed: \(error)")
-                        self?.setupProgress = .failed(error)
-                    }
-                },
-                receiveValue: { [weak self] shareURL in
-                    print("✅ Simple sharing setup complete")
-                    self?.setupProgress = .complete
-                    self?.isSetupComplete = true
+        // Auto-setup organization zone for two-phone mode
+        Task { @MainActor in
+            do {
+                // Setup the organization zone (will create shared zone)
+                guard let currentUserID = getCurrentUserID() else {
+                    print("❌ No current user ID available")
+                    setupProgress = .failed(RHEIRCloudKitError.noCurrentOrganization)
+                    return
                 }
-            )
-            .store(in: &cancellables)
+                
+                // Setup organization zone for current user
+                let _ = try await organizationZoneService.setupOrganizationSharedZone(for: currentUserID)
+                
+                print("✅ Simple sharing setup complete")
+                setupProgress = .complete
+                isSetupComplete = true
+            } catch {
+                print("❌ Simple sharing setup failed: \(error)")
+                setupProgress = .failed(error)
+            }
+        }
     }
     
     private var cancellables = Set<AnyCancellable>()
@@ -139,17 +142,33 @@ class RHEIRCloudKitManager: ObservableObject {
         
         setupProgress = .creatingOrganization
         
-        return scalableArchitecture.createOrganization(
+        // Create organization object
+        let organization = Organization(
             name: name,
-            adminUserID: adminUserID,
-            industry: "Construction",
-            settings: OrganizationSettings()
+            adminUserID: adminUserID
         )
-        .map { result in
-            self.currentOrganization = result.organization
-            self.setupProgress = .complete
-            self.isSetupComplete = true
-            return result.organization
+        
+        return Future<Organization, Error> { [weak self] promise in
+            guard let self = self else { 
+                promise(.failure(RHEIRCloudKitError.noCurrentOrganization))
+                return 
+            }
+            
+            Task { @MainActor in
+                do {
+                    // Setup shared zone for the organization
+                    let _ = try await self.organizationZoneService.setupOrganizationSharedZone(for: organization.id)
+                    
+                    self.currentOrganization = organization
+                    self.setupProgress = .complete
+                    self.isSetupComplete = true
+                    
+                    promise(.success(organization))
+                } catch {
+                    print("❌ Failed to create scalable organization: \(error)")
+                    promise(.failure(error))
+                }
+            }
         }
         .eraseToAnyPublisher()
     }
@@ -180,164 +199,130 @@ class RHEIRCloudKitManager: ObservableObject {
     
     // MARK: - Project Management
     
-    /// Saves a project using the appropriate architecture
+    /// Saves a project using OrganizationZoneService
     func saveProject(_ project: Project) -> AnyPublisher<Void, Error> {
-        if shouldUseScalableArchitecture {
-            return scalableArchitecture.saveProject(project)
-                .map { _ in () }
-                .eraseToAnyPublisher()
-        } else {
-            return simpleSharing.saveProjectToSharedZone(project)
-                .map { _ in () }
-                .eraseToAnyPublisher()
+        return Future<Void, Error> { [weak self] promise in
+            guard let self = self else { 
+                promise(.failure(RHEIRCloudKitError.noCurrentOrganization))
+                return 
+            }
+            
+            Task {
+                do {
+                    try await self.organizationZoneService.saveProject(project)
+                    promise(.success(()))
+                } catch {
+                    promise(.failure(error))
+                }
+            }
         }
+        .eraseToAnyPublisher()
     }
     
-    /// Loads projects using the appropriate architecture
+    /// Loads projects using OrganizationZoneService
     func loadProjects() -> AnyPublisher<[Project], Error> {
-        if shouldUseScalableArchitecture {
-            return scalableArchitecture.loadOrganizationProjects()
-        } else {
-            return simpleSharing.loadProjectsFromSharedZone()
+        return Future<[Project], Error> { [weak self] promise in
+            guard let self = self else { 
+                promise(.failure(RHEIRCloudKitError.noCurrentOrganization))
+                return 
+            }
+            
+            Task {
+                do {
+                    let projects = try await self.organizationZoneService.loadProjectsFromCurrentSharedZone()
+                    promise(.success(projects))
+                } catch {
+                    promise(.failure(error))
+                }
+            }
         }
+        .eraseToAnyPublisher()
     }
     
     // MARK: - Team Management
     
-    /// Invites a user to the organization
+    /// Invites a user to the organization using OrganizationZoneService
     func inviteUser(email: String) -> AnyPublisher<Void, Error> {
-        if shouldUseScalableArchitecture {
-            return scalableArchitecture.inviteUserToOrganization(email: email)
-                .map { _ in () }
-                .eraseToAnyPublisher()
-        } else {
-            return inviteToSimpleOrganization(email: email)
+        return Future<Void, Error> { [weak self] promise in
+            guard let self = self else { 
+                promise(.failure(RHEIRCloudKitError.noCurrentOrganization))
+                return 
+            }
+            
+            Task {
+                do {
+                    let _ = try await self.organizationZoneService.inviteUserToOrganization(email)
+                    promise(.success(()))
+                } catch {
+                    promise(.failure(error))
+                }
+            }
         }
+        .eraseToAnyPublisher()
     }
     
     private func inviteToSimpleOrganization(email: String) -> AnyPublisher<Void, Error> {
-        return simpleSharing.inviteUserToOrganization(email: email)
+        return inviteUser(email: email)
     }
     
-    /// Gets the share URL for manual sharing
+    /// Gets the share URL using OrganizationZoneService
     func getShareURL() -> String? {
-        if shouldUseScalableArchitecture {
-            return scalableArchitecture.getOrganizationShareURL()?.absoluteString
-        } else {
-            return simpleSharing.getOrganizationShareURL()
-        }
+        return organizationZoneService.getOrganizationInviteURL()
     }
     
     // MARK: - Data Management by Type
     
-    /// Saves organization-wide data (employees, vendors, etc.)
+    /// Saves organization-wide data using OrganizationZoneService
     func saveOrganizationData<T: Codable>(
         _ data: [T],
         type: OrganizationDataType
     ) -> AnyPublisher<Void, Error> {
         
-        if shouldUseScalableArchitecture {
-            // Save each item individually in scalable architecture
-            let publishers = data.enumerated().map { index, item in
-                scalableArchitecture.saveOrganizationData(
-                    item,
-                    recordType: type.recordType,
-                    recordName: "\(type.recordType)_\(index)_\(UUID().uuidString)"
-                )
-            }
-            
-            return Publishers.MergeMany(publishers)
-                .collect()
-                .map { _ in () }
-                .eraseToAnyPublisher()
-        } else {
-            // For simple architecture, store in UserDefaults temporarily
-            // This will be migrated when switching to scalable architecture
-            if let encoded = try? JSONEncoder().encode(data) {
-                UserDefaults.standard.set(encoded, forKey: type.storageKey)
-            }
-            
-            return Just(())
-                .setFailureType(to: Error.self)
-                .eraseToAnyPublisher()
+        // For now, store in UserDefaults with both architectures
+        // This will be enhanced when we add more CloudKit record types
+        if let encoded = try? JSONEncoder().encode(data) {
+            UserDefaults.standard.set(encoded, forKey: type.storageKey)
         }
+        
+        return Just(())
+            .setFailureType(to: Error.self)
+            .eraseToAnyPublisher()
     }
     
-    /// Loads organization-wide data
+    /// Loads organization-wide data using OrganizationZoneService
     func loadOrganizationData<T: Codable>(
         type: OrganizationDataType,
         dataType: T.Type
     ) -> AnyPublisher<[T], Error> {
         
-        if shouldUseScalableArchitecture {
-            return scalableArchitecture.loadOrganizationData(
-                recordType: type.recordType,
-                dataType: dataType
-            )
+        // Load from UserDefaults for now
+        if let data = UserDefaults.standard.data(forKey: type.storageKey),
+           let decoded = try? JSONDecoder().decode([T].self, from: data) {
+            return Just(decoded)
+                .setFailureType(to: Error.self)
+                .eraseToAnyPublisher()
         } else {
-            // Load from UserDefaults for simple architecture
-            if let data = UserDefaults.standard.data(forKey: type.storageKey),
-               let decoded = try? JSONDecoder().decode([T].self, from: data) {
-                return Just(decoded)
-                    .setFailureType(to: Error.self)
-                    .eraseToAnyPublisher()
-            } else {
-                return Just([])
-                    .setFailureType(to: Error.self)
-                    .eraseToAnyPublisher()
-            }
+            return Just([])
+                .setFailureType(to: Error.self)
+                .eraseToAnyPublisher()
         }
     }
     
     // MARK: - Migration Support
     
-    /// Migrates from simple to scalable architecture when needed
+    /// Migrates data using OrganizationZoneService only
     func migrateToScalableArchitecture() -> AnyPublisher<Void, Error> {
-        print("🔄 Migrating to scalable architecture...")
+        print("🔄 Migration not needed - using OrganizationZoneService for all operations")
         
-        guard !shouldUseScalableArchitecture else {
-            return Just(())
-                .setFailureType(to: Error.self)
-                .eraseToAnyPublisher()
-        }
-        
-        // Switch to scalable mode
-        deploymentMode = .appStore
-        
-        // Create organization in scalable architecture
-        guard let currentOrg = currentOrganization else {
-            return Fail(error: RHEIRCloudKitError.noCurrentOrganization)
-                .eraseToAnyPublisher()
-        }
-        
-        return scalableArchitecture.createOrganization(
-            name: currentOrg.name,
-            adminUserID: currentOrg.adminUserID,
-            industry: "Construction",
-            settings: OrganizationSettings()
-        )
-        .flatMap { result in
-            // Migrate existing projects and data
-            self.migrateExistingData()
-        }
-        .map { _ in
-            print("✅ Migration to scalable architecture complete")
-        }
-        .eraseToAnyPublisher()
+        return Just(())
+            .setFailureType(to: Error.self)
+            .eraseToAnyPublisher()
     }
     
     private func migrateExistingData() -> AnyPublisher<Void, Error> {
-        // Load projects from simple sharing and save to scalable architecture
-        return simpleSharing.loadProjectsFromSharedZone()
-            .flatMap { projects in
-                let projectPublishers = projects.map { project in
-                    self.scalableArchitecture.saveProject(project)
-                }
-                
-                return Publishers.MergeMany(projectPublishers)
-                    .collect()
-                    .map { _ in () }
-            }
+        // No migration needed with single service architecture
+        return Just(())
+            .setFailureType(to: Error.self)
             .eraseToAnyPublisher()
     }
     

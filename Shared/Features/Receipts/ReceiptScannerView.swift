@@ -61,6 +61,6 @@ struct ReceiptScannerView_Previews: PreviewProvider {
         )
         
         ReceiptScannerView(isPresented: .constant(true), project: sampleProject)
-            .environmentObject(ProjectViewModel())
+            .environmentObject(ProjectViewModel(cloudKitService: CloudKitAuthService()))
     }
 }

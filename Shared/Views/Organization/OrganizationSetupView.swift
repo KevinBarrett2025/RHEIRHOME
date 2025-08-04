@@ -19,44 +19,42 @@ struct OrganizationSetupView: View {
     ]
     
     var body: some View {
-        NavigationView {
-            ScrollView {
-                VStack(spacing: 24) {
-                    headerSection
-                    
-                    organizationFormSection
-                    
-                    nameValidationSection
-                    
-                    suggestedNamesSection
-                    
-                    createOrganizationButton
-                    
-                    Spacer(minLength: 50)
-                }
-                .padding()
+        ScrollView {
+            VStack(spacing: 24) {
+                headerSection
+                
+                organizationFormSection
+                
+                nameValidationSection
+                
+                suggestedNamesSection
+                
+                createOrganizationButton
+                
+                Spacer(minLength: 50)
             }
-            .navigationTitle("Setup Organization")
-            .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") {
-                        dismiss()
-                    }
+            .padding()
+        }
+        .navigationTitle("Setup Organization")
+        .navigationBarTitleDisplayMode(.large)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button("Cancel") {
+                    dismiss()
                 }
             }
-            .alert("Error", isPresented: $showError) {
-                Button("OK") { }
-            } message: {
-                Text(errorMessage)
-            }
+        }
+        .alert("Error", isPresented: $showError) {
+            Button("OK") { }
+        } message: {
+            Text(errorMessage)
         }
     }
     
     @ViewBuilder
     private var headerSection: some View {
         VStack(spacing: 16) {
-            Image(systemName: "building.2.circle.fill")
+            Image(systemName: "building.2.fill")
                 .font(.system(size: 60))
                 .foregroundColor(.blue)
             

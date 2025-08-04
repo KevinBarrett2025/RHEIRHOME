@@ -33,48 +33,91 @@ struct ContentView: View {
         guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
               let queryItems = components.queryItems else { return }
         
+        var token: String?
+        var isSecure = false
+        
+        // Check for new secure token-based invites first
+        for item in queryItems {
+            switch item.name {
+            case "token": token = item.value
+            case "secure": isSecure = item.value == "true"
+            default: break
+            }
+        }
+        
+        if let inviteToken = token, isSecure {
+            // Handle secure token-based invite
+            handleSecureInviteToken(inviteToken)
+            return
+        }
+        
+        // Fallback to legacy invite handling for backward compatibility
+        handleLegacyInviteURL(queryItems)
+    }
+    
+    private func handleSecureInviteToken(_ token: String) {
+        print("🔐 SECURE INVITE ▶︎ Processing token: \(token.prefix(8))...")
+        
+        if authVM.user != nil {
+            // User is logged in - process invite immediately
+            Task {
+                let result = await authVM.processInviteToken(token)
+                
+                await MainActor.run {
+                    switch result {
+                    case .success(let message):
+                        print("🔐 SECURE INVITE ▶︎ ✅ \(message)")
+                    case .failure(let error):
+                        print("🔐 SECURE INVITE ▶︎ ❌ \(error.localizedDescription)")
+                    }
+                }
+            }
+        } else {
+            // User not logged in - store secure token for after authentication
+            UserDefaults.standard.set(token, forKey: "pending_secure_invite_token")
+            print("🔐 SECURE INVITE ▶︎ Stored secure token for after login")
+        }
+    }
+    
+    private func handleLegacyInviteURL(_ queryItems: [URLQueryItem]) {
+        // Legacy invite handling (keep for backward compatibility)
         var orgID: String?
         var orgName: String?
-        var token: String?
         var roleString: String?
         
         for item in queryItems {
             switch item.name {
             case "orgID": orgID = item.value
             case "name": orgName = item.value?.removingPercentEncoding
-            case "token": token = item.value
             case "role": roleString = item.value
             default: break
             }
         }
         
-        guard let orgID = orgID, let orgName = orgName, let token = token else {
-            print("❌ Invalid invite URL - missing required parameters")
+        guard let orgID = orgID, let orgName = orgName else {
+            print("❌ Legacy invite URL - missing required parameters")
             return
         }
         
-        // Parse role, default to member if not specified
         let role = OrganizationRole(rawValue: roleString ?? "member") ?? .member
         
-        print("📧 INVITE URL ▶︎ Received invite for: \(orgName) (\(orgID)) as \(role.displayName)")
+        print("📧 LEGACY INVITE ▶︎ Received invite for: \(orgName) (\(orgID)) as \(role.displayName)")
         
         if authVM.user != nil {
-            // User is logged in - join immediately with the specified role
             authVM.joinOrganization(with: orgID, role: role) { success, error in
                 if success {
-                    print("📧 INVITE URL ▶︎ ✅ Successfully joined organization as \(role.displayName)")
+                    print("📧 LEGACY INVITE ▶︎ ✅ Successfully joined organization as \(role.displayName)")
                 } else {
-                    print("📧 INVITE URL ▶︎ ❌ Failed to join: \(error ?? "Unknown error")")
+                    print("📧 LEGACY INVITE ▶︎ ❌ Failed to join: \(error ?? "Unknown error")")
                 }
             }
         } else {
-            // User not logged in - store invite for after authentication
+            // Store legacy invite
             UserDefaults.standard.set(orgID, forKey: "pending_invite_orgID")
             UserDefaults.standard.set(orgName, forKey: "pending_invite_orgName")
-            UserDefaults.standard.set(token, forKey: "pending_invite_token")
             UserDefaults.standard.set(role.rawValue, forKey: "pending_invite_role")
             
-            print("📧 INVITE URL ▶︎ Stored pending invite - will process after login as \(role.displayName)")
+            print("📧 LEGACY INVITE ▶︎ Stored pending invite - will process after login as \(role.displayName)")
         }
     }
 }

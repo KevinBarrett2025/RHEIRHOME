@@ -6,7 +6,12 @@ import CloudKit
 class OrganizationDataMigrationService: ObservableObject {
     
     // MARK: - Properties
-    private let cloudKitContainer = CKContainer(identifier: "iCloud.com.rheirhome.rheirhomeapp")
+    private let cloudKitContainer = CKContainer(identifier: "iCloud.com.rheirhome.rheirhomeappV3")
+    
+    private var privateDatabase: CKDatabase {
+        return cloudKitContainer.privateCloudDatabase
+    }
+    
     private let organizationSharingService = CloudKitOrganizationSharingService()
     
     @Published var migrationProgress = ""

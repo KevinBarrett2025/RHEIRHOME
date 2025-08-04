@@ -2,8 +2,8 @@ import SwiftUI
 
 struct DirectoryAddTeamMemberView: View {
     @Environment(\.dismiss) private var dismiss
-    @Binding var teamMembers: [TeamMember]
     @EnvironmentObject var authVM: AuthViewModel
+    @EnvironmentObject var projectVM: ProjectViewModel
     
     @State private var name = ""
     @State private var email = ""
@@ -27,14 +27,6 @@ struct DirectoryAddTeamMemberView: View {
                 )
                 
                 FormFooterSection(organizationName: authVM.currentOrg?.name ?? "organization")
-                
-                if !authVM.inviteStatus.isEmpty {
-                    Section("Invitation Status") {
-                        Text(authVM.inviteStatus)
-                            .font(.subheadline)
-                            .foregroundColor(.green)
-                    }
-                }
             }
             .navigationTitle("Add Team Member")
             .navigationBarTitleDisplayMode(.inline)
@@ -50,16 +42,6 @@ struct DirectoryAddTeamMemberView: View {
                 }
             }
         }
-        .alert("Team Member Invited!", isPresented: $showingInviteStatus) {
-            Button("OK") {}
-            Button("Copy Invite Link") {
-                if let link = authVM.getTeamMemberInviteLink() {
-                    UIPasteboard.general.string = link
-                }
-            }
-        } message: {
-            Text(inviteMessage)
-        }
     }
     
     // MARK: - Private Methods
@@ -74,35 +56,10 @@ struct DirectoryAddTeamMemberView: View {
             organizationID: authVM.currentOrg?.id ?? "RHEIR-LLC-MAIN-ORG"
         )
         
-        teamMembers.append(teamMember)
-        saveToUserDefaults()
-        
-        // Send organization invitation if email is provided
-        if !email.isEmpty {
-            sendOrganizationInvite(to: teamMember)
-        }
+        // Add team member through ProjectViewModel (single source of truth)
+        projectVM.addTeamMemberToOrganization(teamMember)
         
         dismiss()
-    }
-    
-    private func sendOrganizationInvite(to teamMember: TeamMember) {
-        print("📧 Sending organization invite to: \(teamMember.email)")
-        authVM.inviteTeamMemberToOrganization(teamMember: teamMember)
-        
-        // Show the invite status after a brief delay
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-            if !authVM.inviteStatus.isEmpty {
-                showingInviteStatus = true
-                inviteMessage = authVM.inviteStatus
-            }
-        }
-    }
-
-    private func saveToUserDefaults() {
-        guard let orgID = authVM.currentOrg?.id,
-              let data = try? JSONEncoder().encode(teamMembers) else { return }
-        
-        UserDefaults.standard.set(data, forKey: "teamMembers_\(orgID)")
     }
 }
 
@@ -139,6 +96,7 @@ private struct FormFooterSection: View {
 }
 
 #Preview {
-    DirectoryAddTeamMemberView(teamMembers: .constant([]))
+    DirectoryAddTeamMemberView()
         .environmentObject(AuthViewModel(service: PreviewAuthService()))
+        .environmentObject(ProjectViewModel())
 }

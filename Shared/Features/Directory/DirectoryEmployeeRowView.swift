@@ -3,6 +3,7 @@ import SwiftUI
 struct DirectoryEmployeeRowView: View {
     let employee: TeamMember
     let authVM: AuthViewModel
+    @EnvironmentObject var projectVM: ProjectViewModel
     @State private var showingInviteConfirmation = false
     
     var body: some View {
@@ -17,7 +18,16 @@ struct DirectoryEmployeeRowView: View {
         .alert("Send Invite", isPresented: $showingInviteConfirmation) {
             Button("Cancel", role: .cancel) { }
             Button("Send") {
-                authVM.inviteTeamMember(employee)
+                // Use the proper CloudKit invitation method through AuthViewModel
+                if !employee.email.isEmpty {
+                    authVM.sendTeamMemberInvitation(to: employee.email) { success, message in
+                        if success {
+                            print("📧 Invitation sent successfully to \(employee.email)")
+                        } else {
+                            print("❌ Failed to send invitation: \(message ?? "Unknown error")")
+                        }
+                    }
+                }
             }
         } message: {
             Text("Send an invite email to \(employee.email)?")
@@ -78,5 +88,6 @@ private struct InviteButtonView: View {
     let authVM = AuthViewModel(service: PreviewAuthService())
     
     DirectoryEmployeeRowView(employee: employee, authVM: authVM)
+        .environmentObject(ProjectViewModel())
         .padding()
 }

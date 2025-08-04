@@ -5,10 +5,11 @@ struct CloudKitDataView: View {
     @State private var organizations: [CKRecord] = []
     @State private var projects: [CKRecord] = []
     @State private var isLoading = false
-    @State private var errorMessage = ""
+    @State private var statusMessage = ""
     @State private var showingError = false
+    @State private var errorMessage = ""
     
-    private let cloudKitContainer = CKContainer(identifier: "iCloud.com.rheirhome.rheirhomeappV2")
+    private let cloudKitContainer = CKContainer(identifier: "iCloud.com.rheirhome.rheirhomeappV3")
     
     var body: some View {
         NavigationStack {

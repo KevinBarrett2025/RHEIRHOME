@@ -297,7 +297,7 @@ struct DataManagementSection: View {
                 // Fix the method call with correct parameter names
                 let migratedProject = try await projectViewModel.migrateProjectPhotos(
                     project: firstProject,
-                    onProgress: { progress in
+                    progressCallback: { progress in
                         // Update progress
                         Task { @MainActor in
                             projectViewModel.migrationProgress = "Progress: \(Int(progress * 100))%"

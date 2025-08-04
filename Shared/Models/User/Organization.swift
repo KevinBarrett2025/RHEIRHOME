@@ -2,6 +2,10 @@
 
 import Foundation
 
+// MARK: - Type Aliases to resolve ambiguity
+public typealias OrgVendor = Vendor  // Use the Vendor from Receipt.swift
+public typealias OrgPaymentMethod = PaymentMethod  // Use the PaymentMethod from Receipt.swift
+
 // MARK: - Organization Role Management
 
 public enum OrganizationRole: String, Codable, CaseIterable {
@@ -53,8 +57,11 @@ public struct Organization: Identifiable, Codable, Hashable {
     public var cloudKitRecordID: String?
     public var cloudKitZoneID: String?
     public var shareURL: String?
-    public var vendors: [Vendor] = []
-    public var paymentMethods: [PaymentMethod] = []
+    public var vendors: [OrgVendor] = []
+    public var paymentMethods: [OrgPaymentMethod] = []
+    
+    // MARK: - Team Members (Single Source of Truth)
+    public var teamMembers: [TeamMember] = []
     
     // MARK: - Initializers
     
@@ -167,6 +174,108 @@ public struct Organization: Identifiable, Codable, Hashable {
         }
         
         lastModified = Date()
+    }
+    
+    // MARK: - Team Member Management (Enterprise Features)
+    
+    /// Add a new team member to the organization
+    public mutating func addTeamMember(_ teamMember: TeamMember) -> Bool {
+        guard canAddMoreMembers else { return false }
+        
+        // Ensure the team member belongs to this organization
+        var member = teamMember
+        member.organizationID = self.id
+        
+        // Add to team members array
+        teamMembers.append(member)
+        
+        // Add to basic members list if they have app access
+        if member.hasAppAccess, let appUserID = member.appUserID, !members.contains(appUserID) {
+            members.append(appUserID)
+        }
+        
+        lastModified = Date()
+        return true
+    }
+    
+    /// Remove a team member from the organization
+    public mutating func removeTeamMember(_ teamMemberID: UUID) -> Bool {
+        guard let index = teamMembers.firstIndex(where: { $0.id == teamMemberID }) else {
+            return false
+        }
+        
+        let member = teamMembers[index]
+        
+        // Remove from basic members list if they had app access
+        if let appUserID = member.appUserID {
+            members.removeAll { $0 == appUserID }
+        }
+        
+        // Remove from team members
+        teamMembers.remove(at: index)
+        
+        lastModified = Date()
+        return true
+    }
+    
+    /// Update a team member
+    public mutating func updateTeamMember(_ updatedMember: TeamMember) -> Bool {
+        guard let index = teamMembers.firstIndex(where: { $0.id == updatedMember.id }) else {
+            return false
+        }
+        
+        // Ensure they still belong to this organization
+        var member = updatedMember
+        member.organizationID = self.id
+        
+        teamMembers[index] = member
+        lastModified = Date()
+        return true
+    }
+    
+    /// Get team member by ID
+    public func getTeamMember(by id: UUID) -> TeamMember? {
+        return teamMembers.first { $0.id == id }
+    }
+    
+    /// Get active team members
+    public var activeTeamMembers: [TeamMember] {
+        return teamMembers.filter { $0.employmentStatus.isWorkingStatus }
+    }
+    
+    /// Get team members available for project assignment
+    public var availableTeamMembers: [TeamMember] {
+        return teamMembers.filter { $0.employmentStatus.canBeAssignedToProjects }
+    }
+    
+    /// Get team members by employment type
+    public func getTeamMembers(by type: EmploymentType) -> [TeamMember] {
+        return teamMembers.filter { $0.employmentType == type }
+    }
+    
+    /// Update team member statuses based on project activity
+    public mutating func updateTeamMemberStatuses(basedOn projects: [Project]) {
+        for i in 0..<teamMembers.count {
+            teamMembers[i].updateStatusFromProjects(projects)
+        }
+        lastModified = Date()
+    }
+    
+    /// Get payroll summary for all team members
+    public func getPayrollSummary() -> OrganizationPayrollSummary {
+        let employees = teamMembers.filter { $0.employmentType == .employee }
+        let contractors = teamMembers.filter { 
+            $0.employmentType == .contractor || $0.employmentType == .subcontractor 
+        }
+        
+        return OrganizationPayrollSummary(
+            totalEmployees: employees.count,
+            totalContractors: contractors.count,
+            activeEmployees: employees.filter { $0.employmentStatus.isWorkingStatus }.count,
+            activeContractors: contractors.filter { $0.employmentStatus.isWorkingStatus }.count,
+            needsW9: teamMembers.filter { $0.employmentType.requiresW9 && !$0.w9OnFile }.count,
+            needsI9: teamMembers.filter { $0.employmentType.requiresI9 && !$0.i9OnFile }.count
+        )
     }
 }
 
@@ -415,5 +524,32 @@ extension Organization {
         if let website = website { settings?.customFields["website"] = website }
         
         lastModified = Date()
+    }
+}
+
+// MARK: - Organization Payroll Summary
+
+public struct OrganizationPayrollSummary: Codable, Sendable {
+    public let totalEmployees: Int
+    public let totalContractors: Int
+    public let activeEmployees: Int
+    public let activeContractors: Int
+    public let needsW9: Int
+    public let needsI9: Int
+    
+    public var totalTeamMembers: Int {
+        return totalEmployees + totalContractors
+    }
+    
+    public var totalActive: Int {
+        return activeEmployees + activeContractors
+    }
+    
+    public var documentationCompletionRate: Double {
+        let totalRequiringDocs = totalEmployees + totalContractors
+        guard totalRequiringDocs > 0 else { return 1.0 }
+        
+        let missingDocs = needsW9 + needsI9
+        return Double(totalRequiringDocs - missingDocs) / Double(totalRequiringDocs)
     }
 }

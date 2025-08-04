@@ -10,44 +10,36 @@ import CloudKit
 
 @MainActor
 extension ProjectViewModel {
-    // MARK: – Team Members
+    // MARK: – Team Members (Enterprise Single Source of Truth)
 
-    /// Add a new team member to the directory.
+    /// Add a new team member to the organization directory.
     func addTeamMember(_ teamMember: TeamMember) {
-        // Check for duplicates by name
+        // Check for duplicates by name in organization
         if teamMembers.contains(where: { $0.name.lowercased() == teamMember.name.lowercased() }) {
             print("⚠️ Team member with name '\(teamMember.name)' already exists, not adding duplicate")
             return
         }
         
-        print("✅ Adding new team member: \(teamMember.name) with \(teamMember.rates.count) rates")
-        teamMembers.append(teamMember)
-        rebuildTeamMemberCache() // Rebuild cache immediately
-        debouncedSaveTeamMembers()
+        print("✅ Adding new team member to organization: \(teamMember.name) with \(teamMember.rates.count) rates")
+        addTeamMemberToOrganization(teamMember)
         
-        // PHASE 5: Save to directory zone
-        Task {
-            do {
-                try await self.saveTeamMemberToZone(teamMember)
-                print("✅ PHASE 5: Team member '\(teamMember.name)' saved to directory zone")
-            } catch {
-                print("⚠️ PHASE 5: Failed to save team member to zone: \(error)")
-            }
-        }
+        rebuildTeamMemberCache() // Rebuild cache immediately
     }
 
-    /// Update an existing team member's details.
+    /// Update an existing team member's details in the organization.
     func updateTeamMember(_ updated: TeamMember) {
-        guard let idx = teamMembers.firstIndex(where: { $0.id == updated.id }) else {
-            print("❌ Could not find team member with ID \(updated.id) to update")
+        guard teamMembers.contains(where: { $0.id == updated.id }) else {
+            print("❌ Could not find team member with ID \(updated.id) in organization")
             return
         }
         
-        print("✅ Updating team member: \(teamMembers[idx].name) → \(updated.name)")
-        print("  Rates: \(teamMembers[idx].rates.count) → \(updated.rates.count)")
+        let oldTeamMember = teamMembers.first { $0.id == updated.id }
+        let oldName = oldTeamMember?.name ?? ""
         
-        let oldName = teamMembers[idx].name
-        teamMembers[idx] = updated
+        print("✅ Updating team member in organization: \(oldName) → \(updated.name)")
+        print("  Rates: \(oldTeamMember?.rates.count ?? 0) → \(updated.rates.count)")
+        
+        updateTeamMemberInOrganization(updated)
         
         // If name changed, update all WorkHour entries
         if oldName != updated.name {
@@ -55,95 +47,79 @@ extension ProjectViewModel {
         }
         
         rebuildTeamMemberCache() // Rebuild cache immediately
-        debouncedSaveTeamMembers()
-        
-        // PHASE 5: Update in directory zone
-        Task {
-            do {
-                try await self.saveTeamMemberToZone(updated)
-                print("✅ PHASE 5: Team member '\(updated.name)' updated in directory zone")
-            } catch {
-                print("⚠️ PHASE 5: Failed to update team member in zone: \(error)")
-            }
-        }
     }
 
-    /// Remove a team member (and their rates) from the directory.
+    /// Remove a team member (and their rates) from the organization directory.
     func removeTeamMember(_ teamMember: TeamMember) {
-        print("🗑️ Removing team member: \(teamMember.name)")
-        teamMembers.removeAll { $0.id == teamMember.id }
-        rebuildTeamMemberCache() // Rebuild cache immediately
-        debouncedSaveTeamMembers()
+        print("🗑️ Removing team member from organization: \(teamMember.name)")
+        removeTeamMemberFromOrganization(teamMember.id)
         
-        // PHASE 5: Remove from directory zone
-        Task {
-            do {
-                try await self.removeTeamMemberFromZone(teamMember)
-                print("✅ PHASE 5: Team member '\(teamMember.name)' removed from directory zone")
-            } catch {
-                print("⚠️ PHASE 5: Failed to remove team member from zone: \(error)")
-            }
-        }
+        rebuildTeamMemberCache() // Rebuild cache immediately
     }
 
-    /// Delete a team member entirely: removes from directory,
+    /// Delete a team member entirely: removes from organization directory,
     /// and also clears any logged hours for them on the current project.
     func deleteTeamMember(_ toDelete: TeamMember) {
-        print("🗑️ Deleting team member entirely: \(toDelete.name)")
+        print("🗑️ Deleting team member entirely from organization: \(toDelete.name)")
         
-        // 1) remove from team member directory
-        teamMembers.removeAll { $0.id == toDelete.id }
+        // 1) Remove from organization team member directory
+        removeTeamMemberFromOrganization(toDelete.id)
         
-        // 2) strip out any logged hours under that name in the selected project
+        // 2) Strip out any logged hours under that name in the selected project
         guard let sel = selectedProject,
-              let projIdx = projects.firstIndex(where: { $0.id == sel.id })
+              let projIdx = organizationProjects.firstIndex(where: { $0.id == sel.id })
         else { 
             rebuildTeamMemberCache()
-            debouncedSaveTeamMembers()
             return 
         }
 
-        let beforeCount = projects[projIdx].loggedHours.count
-        projects[projIdx].loggedHours.removeAll { $0.employee == toDelete.name }
-        let afterCount = projects[projIdx].loggedHours.count
+        let beforeCount = organizationProjects[projIdx].loggedHours.count
+        organizationProjects[projIdx].loggedHours.removeAll { hour in
+            // Match by employeeID first, then fallback to name
+            if let employeeID = hour.employeeID {
+                return employeeID == toDelete.id
+            } else {
+                return hour.employee == toDelete.name
+            }
+        }
+        let afterCount = organizationProjects[projIdx].loggedHours.count
         
         print("  Removed \(beforeCount - afterCount) logged hours for \(toDelete.name)")
         
         // re-assign to force view update
-        selectedProject = projects[projIdx]
+        selectedProject = organizationProjects[projIdx]
         
         rebuildTeamMemberCache()
         recomputeLaborData()
-        debouncedSaveTeamMembers()
         debouncedSaveProjects()
     }
     
     /// Update team member names in all WorkHour entries when a team member's name changes
     private func updateWorkHourTeamMemberNames(from oldName: String, to newName: String) {
         guard let sel = selectedProject,
-              let projIdx = projects.firstIndex(where: { $0.id == sel.id }) else {
+              let projIdx = organizationProjects.firstIndex(where: { $0.id == sel.id }) else {
             return
         }
         
         var updatedCount = 0
-        for i in 0..<projects[projIdx].loggedHours.count {
-            if projects[projIdx].loggedHours[i].employee == oldName {
-                projects[projIdx].loggedHours[i].employee = newName
+        for i in 0..<organizationProjects[projIdx].loggedHours.count {
+            if organizationProjects[projIdx].loggedHours[i].employee == oldName {
+                organizationProjects[projIdx].loggedHours[i].employee = newName
                 updatedCount += 1
             }
         }
         
         if updatedCount > 0 {
             print("  Updated \(updatedCount) work hour entries from '\(oldName)' to '\(newName)'")
-            selectedProject = projects[projIdx]
+            selectedProject = organizationProjects[projIdx]
             recomputeLaborData()
             debouncedSaveProjects()
         }
     }
     
-    /// Debug method to print current team member state
+    /// Debug method to print current team member state from organization
     func debugTeamMemberState() {
-        print("🔍 Current Team Member State:")
+        print("🔍 Current Team Member State (from Organization):")
         print("  Total team members: \(teamMembers.count)")
         for (index, teamMember) in teamMembers.enumerated() {
             print("  [\(index)] \(teamMember.name) - \(teamMember.rates.count) rates - Role: \(teamMember.role.displayName)")
@@ -152,14 +128,18 @@ extension ProjectViewModel {
             }
         }
         print("  Cache size: \(teamMemberCache.count)")
+        print("  Organization: \(currentOrganization?.name ?? "None")")
     }
     
-    // MARK: - Backward Compatibility Methods
+    // MARK: - Backward Compatibility Methods (Updated for Organization)
     
-    /// Backward compatibility for existing code
+    /// Backward compatibility for existing code - now reads from organization
     var employees: [TeamMember] {
         get { teamMembers }
-        set { teamMembers = newValue }
+        set { 
+            print("⚠️ Setting employees array is deprecated - use organization team member methods instead")
+            // For backward compatibility, we could update the organization, but this is not recommended
+        }
     }
     
     func addEmployee(_ employee: TeamMember) {
@@ -180,7 +160,9 @@ extension ProjectViewModel {
     
     var employeeCache: [String: TeamMember] {
         get { teamMemberCache }
-        set { teamMemberCache = newValue }
+        set { 
+            print("⚠️ Setting employeeCache is deprecated - cache is now computed from organization")
+        }
     }
     
     func rebuildEmployeeCache() {

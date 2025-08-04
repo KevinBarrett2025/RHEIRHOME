@@ -45,6 +45,10 @@ public struct Project: Identifiable, Codable, Hashable, Sendable {
     public var accessLevel: ProjectAccessLevel = .organization
     /// Project owner/manager (defaults to creator)
     public var projectManagerID: String?
+    
+    // MARK: - Team Member Assignments
+    /// Team members assigned to this project
+    public var assignedTeamMemberIDs: [String] = []
 
     // MARK: – Codable
 
@@ -58,6 +62,7 @@ public struct Project: Identifiable, Codable, Hashable, Sendable {
         case status
         case organizationID
         case assignedUserIDs, accessLevel, projectManagerID
+        case assignedTeamMemberIDs
     }
 
     public init(
@@ -91,7 +96,8 @@ public struct Project: Identifiable, Codable, Hashable, Sendable {
         organizationID: String? = nil,
         assignedUserIDs: [String] = [],
         accessLevel: ProjectAccessLevel = .organization,
-        projectManagerID: String? = nil
+        projectManagerID: String? = nil,
+        assignedTeamMemberIDs: [String] = []
     ) {
         self.id = id
         self.name = name
@@ -124,6 +130,7 @@ public struct Project: Identifiable, Codable, Hashable, Sendable {
         self.assignedUserIDs = assignedUserIDs
         self.accessLevel = accessLevel
         self.projectManagerID = projectManagerID
+        self.assignedTeamMemberIDs = assignedTeamMemberIDs
     }
 
     public func hash(into hasher: inout Hasher) {
@@ -132,6 +139,19 @@ public struct Project: Identifiable, Codable, Hashable, Sendable {
     
     public static func == (lhs: Project, rhs: Project) -> Bool {
         lhs.id == rhs.id
+    }
+    
+    // MARK: - Computed Properties
+    
+    /// Returns the full address as a formatted string
+    public var fullAddress: String {
+        let components = [street, city, state, zip].filter { !$0.isEmpty }
+        return components.joined(separator: ", ")
+    }
+    
+    /// Backward compatibility - progressReports is the same as progressLogs  
+    public var progressReports: [ProgressLog] {
+        return progressLogs
     }
     
     // MARK: - Role-Based Access Methods
@@ -207,6 +227,25 @@ public struct Project: Identifiable, Codable, Hashable, Sendable {
     /// Set project manager
     public mutating func setProjectManager(_ userID: String) {
         projectManagerID = userID
+    }
+    
+    // MARK: - Team Member Assignment Methods
+    
+    /// Assign a team member to this project
+    public mutating func assignTeamMember(_ teamMemberID: String) {
+        if !assignedTeamMemberIDs.contains(teamMemberID) {
+            assignedTeamMemberIDs.append(teamMemberID)
+        }
+    }
+    
+    /// Remove team member assignment from this project
+    public mutating func removeTeamMemberAssignment(_ teamMemberID: String) {
+        assignedTeamMemberIDs.removeAll { $0 == teamMemberID }
+    }
+    
+    /// Check if a team member is assigned to this project
+    public func isTeamMemberAssigned(_ teamMemberID: String) -> Bool {
+        return assignedTeamMemberIDs.contains(teamMemberID)
     }
 }
 

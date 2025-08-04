@@ -1,7 +1,7 @@
 import SwiftUI
 import MessageUI
 
-// MARK: - Supporting Data Structures
+// MARK: - Supporting Data Structures 
 
 struct VendorSpendingItem {
     let vendor: Vendor
@@ -24,12 +24,14 @@ struct BudgetBreakdownView: View {
     
     private enum BudgetTab: String, CaseIterable {
         case breakdown = "Breakdown"
+        case teamMembers = "Team"
         case vendors = "Vendors"
         case payments = "Payments"
         
         var icon: String {
             switch self {
             case .breakdown: return "chart.pie.fill"
+            case .teamMembers: return "person.2.fill"
             case .vendors: return "building.2.fill"
             case .payments: return "creditcard.fill"
             }
@@ -47,6 +49,11 @@ struct BudgetBreakdownView: View {
                     .environmentObject(projectVM)
                     .environmentObject(authVM)
                     .tag(BudgetTab.breakdown)
+                
+                ProjectTeamMembersView()
+                    .environmentObject(projectVM)
+                    .environmentObject(authVM)
+                    .tag(BudgetTab.teamMembers)
                 
                 SpendingByVendorView()
                     .environmentObject(projectVM)
@@ -84,6 +91,7 @@ struct BudgetBreakdownView: View {
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 12)
+                    .padding(.horizontal, 20)
                     .background(
                         RoundedRectangle(cornerRadius: 8)
                             .fill(selectedBudgetTab == tab ? Color.blue.opacity(0.1) : Color.clear)
@@ -467,8 +475,398 @@ struct BudgetBreakdownContentView: View {
     private func closeProject(_ project: Project) {
         var copy = project
         copy.status = .completed
-        projectVM.save(copy)
+        projectVM.updateProject(copy)
         selectedTab = .more
+    }
+}
+
+// MARK: - Project Team Members View
+struct ProjectTeamMembersView: View {
+    @EnvironmentObject private var projectVM: ProjectViewModel
+    @EnvironmentObject private var authVM: AuthViewModel
+    @State private var showingAddTeamMember = false
+    @State private var showingAssignMember = false
+    @State private var showingFullDirectory = false
+    @State private var selectedTeamMember: TeamMember?
+    @State private var showingMemberDetail = false
+    
+    private var project: Project? {
+        projectVM.selectedProject
+    }
+    
+    // Team members currently working on this project (based on receipts, hours, progress)
+    private var projectTeamMembers: [TeamMember] {
+        guard let project = project else { return [] }
+        
+        // Find team members explicitly assigned to the project
+        let assignedMemberIDs = Set(project.assignedTeamMemberIDs.compactMap { UUID(uuidString: $0) })
+        
+        // Find team members who have worked on this project
+        let receiptMemberIDs = project.receipts.compactMap { $0.teamMemberID }
+        let progressMemberIDs = project.progressReports.flatMap { $0.employeeIDs }
+        let workingMemberIDs = Set(receiptMemberIDs + progressMemberIDs)
+        
+        // Combine both sets
+        let allRelevantMemberIDs = assignedMemberIDs.union(workingMemberIDs)
+        
+        return projectVM.teamMembers.filter { member in
+            // Include if explicitly assigned or has worked on the project
+            allRelevantMemberIDs.contains(member.id) || 
+            // Or if they're active and belong to the organization
+            (member.employmentStatus.canBeAssignedToProjects && member.organizationID == project.organizationID)
+        }.filter { member in
+            // Filter to only show active members or those who have actually worked
+            member.employmentStatus == .active ||
+            assignedMemberIDs.contains(member.id) ||
+            hasWorkedOnProject(member, project)
+        }
+    }
+    
+    // Available team members who could be assigned to this project
+    private var availableTeamMembers: [TeamMember] {
+        let projectMemberIDs = Set(projectTeamMembers.map { $0.id })
+        return projectVM.teamMembers.filter { member in
+            !projectMemberIDs.contains(member.id) &&
+            member.employmentStatus.canBeAssignedToProjects
+        }
+    }
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            if let project = project {
+                projectTeamContent(for: project)
+            } else {
+                emptyProjectView
+            }
+        }
+        .sheet(isPresented: $showingAddTeamMember) {
+            EnhancedAddTeamMemberView()
+                .environmentObject(projectVM)
+        }
+        .sheet(isPresented: $showingAssignMember) {
+            ProjectTeamAssignmentView(
+                project: project!,
+                availableMembers: availableTeamMembers
+            )
+            .environmentObject(projectVM)
+        }
+        .sheet(isPresented: $showingFullDirectory) {
+            if let currentOrg = authVM.currentOrg {
+                NavigationView {
+                    EnhancedOrganizationDirectoryView(organization: currentOrg)
+                        .environmentObject(authVM)
+                        .environmentObject(projectVM)
+                        .toolbar {
+                            ToolbarItem(placement: .navigationBarTrailing) {
+                                Button("Done") {
+                                    showingFullDirectory = false
+                                }
+                            }
+                        }
+                }
+            }
+        }
+        .sheet(isPresented: $showingMemberDetail) {
+            if let member = selectedTeamMember {
+                ProjectTeamMemberDetailView(
+                    member: member,
+                    project: project!
+                )
+                .environmentObject(projectVM)
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private func projectTeamContent(for project: Project) -> some View {
+        ScrollView {
+            VStack(spacing: 24) {
+                // Project Header
+                projectHeaderSection(for: project)
+                
+                Divider()
+                
+                // Team Overview Stats
+                teamOverviewSection
+                
+                Divider()
+                
+                // Current Project Team
+                if projectTeamMembers.isEmpty {
+                    emptyTeamSection
+                } else {
+                    activeTeamSection
+                }
+                
+                Divider()
+                
+                // Quick Actions
+                quickActionsSection
+            }
+            .padding()
+        }
+    }
+    
+    @ViewBuilder
+    private func projectHeaderSection(for project: Project) -> some View {
+        VStack(spacing: 12) {
+            HStack {
+                Image(systemName: "person.2.fill")
+                    .font(.title2)
+                    .foregroundColor(.blue)
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Team Management")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                    
+                    Text("for \(project.name)")
+                        .font(.headline)
+                        .foregroundColor(.secondary)
+                }
+                
+                Spacer()
+            }
+            
+            // Project Status Banner
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Project Status")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    Text(project.status.displayName)
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundColor(project.status == .active ? .green : .orange)
+                }
+                
+                Spacer()
+                
+                VStack(alignment: .trailing, spacing: 4) {
+                    Text("Client")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    Text(project.client)
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                }
+            }
+            .padding()
+            .background(Color(.systemGray6))
+            .cornerRadius(12)
+        }
+    }
+    
+    @ViewBuilder
+    private var teamOverviewSection: some View {
+        VStack(spacing: 16) {
+            HStack {
+                Text("Team Overview")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                Spacer()
+            }
+            
+            LazyVGrid(columns: [
+                GridItem(.flexible()),
+                GridItem(.flexible())
+            ], spacing: 16) {
+                TeamStatCard(
+                    icon: "person.fill.checkmark",
+                    title: "Active on Project",
+                    value: "\(projectTeamMembers.count)",
+                    subtitle: "Currently assigned",
+                    color: .green
+                )
+                
+                TeamStatCard(
+                    icon: "person.badge.plus",
+                    title: "Available to Assign",
+                    value: "\(availableTeamMembers.count)",
+                    subtitle: "Ready for work",
+                    color: .blue
+                )
+                
+                TeamStatCard(
+                    icon: "dollarsign.circle",
+                    title: "Total Labor Cost",
+                    value: projectVM.calculateTotalLaborCost().formatAsCurrency(),
+                    subtitle: "Estimated project cost",
+                    color: .orange
+                )
+                
+                TeamStatCard(
+                    icon: "clock.fill",
+                    title: "Hours Logged",
+                    value: "\(projectVM.calculateTotalHours())",
+                    subtitle: "Total project hours",
+                    color: .purple
+                )
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private var activeTeamSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Text("Project Team Members")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                
+                Spacer()
+                
+                Button("Assign More") {
+                    showingAssignMember = true
+                }
+                .font(.subheadline)
+                .foregroundColor(.blue)
+                .disabled(availableTeamMembers.isEmpty)
+            }
+            
+            LazyVStack(spacing: 12) {
+                ForEach(projectTeamMembers) { member in
+                    ProjectTeamMemberCard(member: member, project: project!) {
+                        selectedTeamMember = member
+                        showingMemberDetail = true
+                    }
+                }
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private var emptyTeamSection: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "person.badge.plus")
+                .font(.system(size: 48))
+                .foregroundColor(.secondary)
+            
+            Text("No Team Members Assigned")
+                .font(.title2)
+                .fontWeight(.semibold)
+            
+            Text("Assign team members to this project to track their work, hours, and contributions.")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+            
+            Button("Assign Team Members") {
+                if availableTeamMembers.isEmpty {
+                    showingAddTeamMember = true
+                } else {
+                    showingAssignMember = true
+                }
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(projectVM.teamMembers.isEmpty)
+        }
+        .padding(.vertical, 32)
+    }
+    
+    @ViewBuilder
+    private var quickActionsSection: some View {
+        VStack(spacing: 16) {
+            HStack {
+                Text("Quick Actions")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                Spacer()
+            }
+            
+            VStack(spacing: 12) {
+                QuickActionCard(
+                    icon: "person.badge.plus.fill",
+                    title: "Add New Team Member",
+                    description: "Create a new team member and add them to your organization",
+                    color: .green
+                ) {
+                    showingAddTeamMember = true
+                }
+                
+                if !availableTeamMembers.isEmpty {
+                    QuickActionCard(
+                        icon: "person.2.circle.fill",
+                        title: "Assign Existing Member",
+                        description: "Assign an existing team member to this project",
+                        color: .blue
+                    ) {
+                        showingAssignMember = true
+                    }
+                }
+                
+                QuickActionCard(
+                    icon: "building.2.fill",
+                    title: "Manage All Team Members",
+                    description: "View and manage all organization team members",
+                    color: .purple
+                ) {
+                    showingFullDirectory = true
+                }
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private var emptyProjectView: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "folder")
+                .font(.system(size: 48))
+                .foregroundColor(.secondary)
+            
+            Text("No Project Selected")
+                .font(.title2)
+                .fontWeight(.semibold)
+            
+            Text("Select a project to view and manage team member assignments.")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .padding()
+    }
+    
+    // MARK: - Helper Methods
+    
+    private func hasWorkedOnProject(_ member: TeamMember, _ project: Project) -> Bool {
+        // Check if member has receipts, progress reports, or hours logged on this project
+        let hasReceipts = project.receipts.contains { receipt in
+            receipt.teamMemberID == member.id
+        }
+        let hasProgress = project.progressReports.contains { log in
+            log.employeeIDs.contains(member.id)
+        }
+        // Add more activity checks as needed
+        
+        return hasReceipts || hasProgress
+    }
+    
+    // New helper methods
+    private func getReceiptCountForMember(_ member: TeamMember, in project: Project) -> Int {
+        return project.receipts.filter { receipt in
+            receipt.teamMemberID == member.id
+        }.count
+    }
+    
+    private func getProgressCountForMember(_ member: TeamMember, in project: Project) -> Int {
+        return project.progressReports.filter { log in
+            log.employeeIDs.contains(member.id)
+        }.count
+    }
+    
+    private func getLastActivityDateForMember(_ member: TeamMember, in project: Project) -> Date? {
+        let receiptDates = project.receipts.filter { receipt in
+            receipt.teamMemberID == member.id
+        }.map { $0.date }
+        
+        let progressDates = project.progressReports.filter { log in
+            log.employeeIDs.contains(member.id)
+        }.map { $0.date }
+        
+        let allDates = receiptDates + progressDates
+        return allDates.max()
     }
 }
 
@@ -957,8 +1355,6 @@ struct SpendingByPaymentMethodView: View {
     }
 }
 
-// MARK: - Supporting Components
-
 // MARK: - Quick Stat Card Component
 struct QuickStatCard: View {
     let icon: String
@@ -969,38 +1365,20 @@ struct QuickStatCard: View {
     
     var body: some View {
         VStack(spacing: 8) {
-            HStack {
-                Image(systemName: icon)
-                    .font(.title3)
-                    .foregroundColor(color)
-                Spacer()
-            }
+            Image(systemName: icon)
+                .font(.title2)
+                .foregroundColor(color)
             
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Text(title)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    Spacer()
-                }
-                
-                HStack {
-                    Text(value)
-                        .font(.title3)
-                        .fontWeight(.bold)
-                        .foregroundColor(.primary)
-                    Spacer()
-                }
-                
-                HStack {
-                    Text(subtitle)
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
-                    Spacer()
-                }
-            }
+            Text(value)
+                .font(.title3)
+                .fontWeight(.bold)
+            
+            Text(title)
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
         }
+        .frame(maxWidth: .infinity)
         .padding()
         .background(Color(.systemGray6))
         .cornerRadius(12)
@@ -1070,196 +1448,7 @@ struct ProjectReportsView: View {
     }
 }
 
-// MARK: - Row Components
-
-// MARK: - Vendor Spending Row View
-struct VendorSpendingRowView: View {
-    let vendor: Vendor
-    let totalSpent: Double
-    let receiptCount: Int
-    let percentage: Double
-    let onTap: () -> Void
-    
-    var body: some View {
-        Button(action: onTap) {
-            HStack(spacing: 16) {
-                // Vendor icon and info
-                HStack(spacing: 12) {
-                    Image(systemName: vendorIcon)
-                        .font(.title2)
-                        .foregroundColor(.blue)
-                        .frame(width: 32)
-                    
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(vendor.name)
-                            .font(.headline)
-                            .fontWeight(.medium)
-                            .lineLimit(1)
-                        
-                        HStack(spacing: 8) {
-                            Text(vendor.category.rawValue)
-                                .font(.caption)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 2)
-                                .background(categoryColor.opacity(0.2))
-                                .foregroundColor(categoryColor)
-                                .cornerRadius(4)
-                            
-                            Text("\(receiptCount) receipt\(receiptCount == 1 ? "" : "s")")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                }
-                
-                Spacer()
-                
-                // Amount and percentage
-                VStack(alignment: .trailing, spacing: 4) {
-                    Text(totalSpent.formatAsCurrency())
-                        .font(.headline)
-                        .fontWeight(.semibold)
-                    
-                    Text("\(Int(percentage * 100))%")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-            }
-            .padding()
-            .background(Color(.systemGray6))
-            .cornerRadius(12)
-        }
-        .buttonStyle(PlainButtonStyle())
-    }
-    
-    private var vendorIcon: String {
-        switch vendor.category {
-        case .hardware: return "hammer.fill"
-        case .lumber: return "tree.fill"
-        case .electrical: return "bolt.fill"
-        case .plumbing: return "drop.fill"
-        case .paint: return "paintbrush.fill"
-        case .rental: return "wrench.and.screwdriver.fill"
-        case .grocery: return "cart.fill"
-        case .restaurant: return "fork.knife"
-        case .gas: return "fuelpump.fill"
-        case .automotive: return "car.fill"
-        case .professional: return "briefcase.fill"
-        case .office: return "folder.fill"
-        case .other: return "building.2.fill"
-        }
-    }
-    
-    private var categoryColor: Color {
-        switch vendor.category {
-        case .hardware: return .orange
-        case .lumber: return .brown
-        case .electrical: return .yellow
-        case .plumbing: return .blue
-        case .paint: return .purple
-        case .rental: return .green
-        case .grocery: return .red
-        case .restaurant: return .pink
-        case .gas: return .black
-        case .automotive: return .gray
-        case .professional: return .indigo
-        case .office: return .cyan
-        case .other: return .secondary
-        }
-    }
-}
-
-// MARK: - Payment Method Spending Row View
-struct PaymentMethodSpendingRowView: View {
-    let paymentMethod: PaymentMethod
-    let totalSpent: Double
-    let receiptCount: Int
-    let percentage: Double
-    let onTap: () -> Void
-    
-    var body: some View {
-        Button(action: onTap) {
-            HStack(spacing: 16) {
-                // Payment method icon and info
-                HStack(spacing: 12) {
-                    Image(systemName: paymentIcon)
-                        .font(.title2)
-                        .foregroundColor(.green)
-                        .frame(width: 32)
-                    
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(paymentMethod.displayName)
-                            .font(.headline)
-                            .fontWeight(.medium)
-                            .lineLimit(1)
-                        
-                        HStack(spacing: 8) {
-                            Text(paymentMethod.type.rawValue)
-                                .font(.caption)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 2)
-                                .background(typeColor.opacity(0.2))
-                                .foregroundColor(typeColor)
-                                .cornerRadius(4)
-                            
-                            if !paymentMethod.lastFourDigits.isEmpty {
-                                Text("•••• \(paymentMethod.lastFourDigits)")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
-                            
-                            Text("\(receiptCount) transaction\(receiptCount == 1 ? "" : "s")")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                }
-                
-                Spacer()
-                
-                // Amount and percentage
-                VStack(alignment: .trailing, spacing: 4) {
-                    Text(totalSpent.formatAsCurrency())
-                        .font(.headline)
-                        .fontWeight(.semibold)
-                    
-                    Text("\(Int(percentage * 100))%")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-            }
-            .padding()
-            .background(Color(.systemGray6))
-            .cornerRadius(12)
-        }
-        .buttonStyle(PlainButtonStyle())
-    }
-    
-    private var paymentIcon: String {
-        switch paymentMethod.type {
-        case .creditCard: return "creditcard.fill"
-        case .debitCard: return "creditcard"
-        case .cash: return "dollarsign.circle.fill"
-        case .check: return "doc.text.fill"
-        case .bankTransfer: return "building.columns.fill"
-        case .other: return "questionmark.circle.fill"
-        }
-    }
-    
-    private var typeColor: Color {
-        switch paymentMethod.type {
-        case .creditCard: return .blue
-        case .debitCard: return .green
-        case .cash: return .orange
-        case .check: return .purple
-        case .bankTransfer: return .indigo
-        case .other: return .secondary
-        }
-    }
-}
-
 // MARK: - Simple Detail Views
-
 struct SimpleVendorDetailView: View {
     let vendorID: UUID
     let project: Project
@@ -1559,6 +1748,711 @@ struct SimplePaymentMethodDetailView: View {
     }
 }
 
+// MARK: - Row Components
+
+// MARK: - Vendor Spending Row View
+struct VendorSpendingRowView: View {
+    let vendor: Vendor
+    let totalSpent: Double
+    let receiptCount: Int
+    let percentage: Double
+    let onTap: () -> Void
+    
+    var body: some View {
+        Button(action: onTap) {
+            HStack {
+                // Vendor icon and info
+                HStack(spacing: 12) {
+                    Image(systemName: vendorIcon)
+                        .font(.title2)
+                        .foregroundColor(.blue)
+                        .frame(width: 32)
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(vendor.name)
+                            .font(.headline)
+                            .fontWeight(.medium)
+                            .lineLimit(1)
+                        
+                        HStack(spacing: 8) {
+                            Text(vendor.category.rawValue)
+                                .font(.caption)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 2)
+                                .background(categoryColor.opacity(0.2))
+                                .foregroundColor(categoryColor)
+                                .cornerRadius(4)
+                            
+                            Text("\(receiptCount) receipt\(receiptCount == 1 ? "" : "s")")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
+                
+                Spacer()
+                
+                // Amount and percentage
+                VStack(alignment: .trailing, spacing: 4) {
+                    Text(totalSpent.formatAsCurrency())
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                    
+                    Text("\(Int(percentage * 100))%")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            .padding()
+            .background(Color(.systemGray6))
+            .cornerRadius(12)
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+    
+    private var vendorIcon: String {
+        switch vendor.category {
+        case .hardware: return "hammer.fill"
+        case .lumber: return "tree.fill"
+        case .electrical: return "bolt.fill"
+        case .plumbing: return "drop.fill"
+        case .paint: return "paintbrush.fill"
+        case .rental: return "wrench.and.screwdriver.fill"
+        case .grocery: return "cart.fill"
+        case .restaurant: return "fork.knife"
+        case .gas: return "fuelpump.fill"
+        case .automotive: return "car.fill"
+        case .professional: return "briefcase.fill"
+        case .office: return "folder.fill"
+        case .other: return "building.2.fill"
+        }
+    }
+    
+    private var categoryColor: Color {
+        switch vendor.category {
+        case .hardware: return .orange
+        case .lumber: return .brown
+        case .electrical: return .yellow
+        case .plumbing: return .blue
+        case .paint: return .purple
+        case .rental: return .green
+        case .grocery: return .red
+        case .restaurant: return .pink
+        case .gas: return .black
+        case .automotive: return .gray
+        case .professional: return .indigo
+        case .office: return .cyan
+        case .other: return .secondary
+        }
+    }
+}
+
+// MARK: - Payment Method Spending Row View
+struct PaymentMethodSpendingRowView: View {
+    let paymentMethod: PaymentMethod
+    let totalSpent: Double
+    let receiptCount: Int
+    let percentage: Double
+    let onTap: () -> Void
+    
+    var body: some View {
+        Button(action: onTap) {
+            HStack {
+                // Payment method icon and info
+                HStack(spacing: 12) {
+                    Image(systemName: paymentIcon)
+                        .font(.title2)
+                        .foregroundColor(.green)
+                        .frame(width: 32)
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(paymentMethod.displayName)
+                            .font(.headline)
+                            .fontWeight(.medium)
+                            .lineLimit(1)
+                        
+                        HStack(spacing: 8) {
+                            Text(paymentMethod.type.rawValue)
+                                .font(.caption)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 2)
+                                .background(typeColor.opacity(0.2))
+                                .foregroundColor(typeColor)
+                                .cornerRadius(4)
+                            
+                            if !paymentMethod.lastFourDigits.isEmpty {
+                                Text("•••• \(paymentMethod.lastFourDigits)")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            
+                            Text("\(receiptCount) transaction\(receiptCount == 1 ? "" : "s")")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
+                
+                Spacer()
+                
+                // Amount and percentage
+                VStack(alignment: .trailing, spacing: 4) {
+                    Text(totalSpent.formatAsCurrency())
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                    
+                    Text("\(Int(percentage * 100))%")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            .padding()
+            .background(Color(.systemGray6))
+            .cornerRadius(12)
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+    
+    private var paymentIcon: String {
+        switch paymentMethod.type {
+        case .creditCard: return "creditcard.fill"
+        case .debitCard: return "creditcard"
+        case .cash: return "dollarsign.circle.fill"
+        case .check: return "doc.text.fill"
+        case .bankTransfer: return "building.columns.fill"
+        case .other: return "questionmark.circle.fill"
+        }
+    }
+    
+    private var typeColor: Color {
+        switch paymentMethod.type {
+        case .creditCard: return .blue
+        case .debitCard: return .green
+        case .cash: return .orange
+        case .check: return .purple
+        case .bankTransfer: return .indigo
+        case .other: return .secondary
+        }
+    }
+}
+
+// MARK: - Team Stat Card Component
+struct TeamStatCard: View {
+    let icon: String
+    let title: String
+    let value: String
+    let subtitle: String
+    let color: Color
+    
+    var body: some View {
+        VStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.title2)
+                .foregroundColor(color)
+            
+            Text(value)
+                .font(.title3)
+                .fontWeight(.bold)
+            
+            Text(title)
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding()
+        .background(Color(.systemGray6))
+        .cornerRadius(12)
+    }
+}
+
+// MARK: - Project Team Member Card
+struct ProjectTeamMemberCard: View {
+    let member: TeamMember
+    let project: Project
+    let onTap: () -> Void
+    
+    var body: some View {
+        Button(action: onTap) {
+            HStack {
+                // Member Status Indicator
+                Circle()
+                    .fill(statusColor)
+                    .frame(width: 12, height: 12)
+                
+                // Member Info
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text(member.name)
+                            .font(.headline)
+                            .fontWeight(.medium)
+                            .foregroundColor(.primary)
+                        
+                        if member.hasAppAccess {
+                            Image(systemName: "iphone")
+                                .font(.caption)
+                                .foregroundColor(.green)
+                        }
+                        
+                        Spacer()
+                    }
+                    
+                    Text(member.jobTitle)
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                    
+                    HStack(spacing: 12) {
+                        if let rate = member.defaultRate {
+                            Label(rate.rate.formatAsCurrency() + "/hr", systemImage: "dollarsign.circle")
+                                .font(.caption)
+                                .foregroundColor(.green)
+                        }
+                        
+                        Label(member.employmentType.displayName, systemImage: "person.badge")
+                            .font(.caption)
+                            .foregroundColor(.blue)
+                    }
+                }
+                
+                Spacer()
+                
+                // Action Indicator
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            .padding()
+            .background(Color(.systemGray6))
+            .cornerRadius(12)
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+    
+    private var statusColor: Color {
+        switch member.employmentStatus {
+        case .active: return .green
+        case .betweenProjects: return .blue
+        case .completed: return .gray
+        default: return .orange
+        }
+    }
+}
+
+// MARK: - Quick Action Card Component
+struct QuickActionCard: View {
+    let icon: String
+    let title: String
+    let description: String
+    let color: Color
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            HStack {
+                Image(systemName: icon)
+                    .font(.title2)
+                    .foregroundColor(color)
+                    .frame(width: 32)
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundColor(.primary)
+                    
+                    Text(description)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.leading)
+                }
+                
+                Spacer()
+                
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            .padding()
+            .background(Color(.systemGray6))
+            .cornerRadius(12)
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+}
+
+// MARK: - Project Team Assignment View
+struct ProjectTeamAssignmentView: View {
+    let project: Project
+    let availableMembers: [TeamMember]
+    @EnvironmentObject private var projectVM: ProjectViewModel
+    @Environment(\.dismiss) private var dismiss
+    
+    @State private var selectedMembers: Set<UUID> = []
+    
+    var body: some View {
+        NavigationView {
+            VStack {
+                if availableMembers.isEmpty {
+                    emptyStateView
+                } else {
+                    memberSelectionView
+                }
+            }
+            .navigationTitle("Assign to \(project.name)")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+                
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Assign") {
+                        assignSelectedMembers()
+                    }
+                    .disabled(selectedMembers.isEmpty)
+                }
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private var emptyStateView: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "person.badge.plus")
+                .font(.system(size: 48))
+                .foregroundColor(.secondary)
+            
+            Text("No Available Team Members")
+                .font(.title2)
+                .fontWeight(.semibold)
+            
+            Text("All team members are either already assigned to this project or not available for assignment.")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .padding()
+    }
+    
+    @ViewBuilder
+    private var memberSelectionView: some View {
+        List(availableMembers) { member in
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(member.name)
+                        .font(.headline)
+                    
+                    Text(member.jobTitle)
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                    
+                    HStack {
+                        Text(member.employmentStatus.displayName)
+                            .font(.caption)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 2)
+                            .background(Color.blue.opacity(0.2))
+                            .foregroundColor(.blue)
+                            .cornerRadius(4)
+                        
+                        if let rate = member.defaultRate {
+                            Text(rate.rate.formatAsCurrency() + "/hr")
+                                .font(.caption)
+                                .foregroundColor(.green)
+                        }
+                    }
+                }
+                
+                Spacer()
+                
+                Image(systemName: selectedMembers.contains(member.id) ? "checkmark.circle.fill" : "circle")
+                    .foregroundColor(selectedMembers.contains(member.id) ? .blue : .gray)
+                    .font(.title2)
+            }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                if selectedMembers.contains(member.id) {
+                    selectedMembers.remove(member.id)
+                } else {
+                    selectedMembers.insert(member.id)
+                }
+            }
+        }
+    }
+    
+    private func assignSelectedMembers() {
+        // In a full implementation, this would:
+        // 1. Create project assignments for selected members
+        // 2. Update member status to active if needed
+        // 3. Send notifications
+        // 4. Log the assignment activity
+        
+        let assignedMembers = availableMembers.filter { selectedMembers.contains($0.id) }
+        
+        for member in assignedMembers {
+            var updatedMember = member
+            if updatedMember.employmentStatus != .active {
+                updatedMember.employmentStatus = .active
+            }
+            projectVM.updateTeamMember(updatedMember)
+        }
+        
+        print(" Assigned \(assignedMembers.count) team members to project: \(project.name)")
+        
+        dismiss()
+    }
+}
+
+// MARK: - Project Team Member Detail View
+struct ProjectTeamMemberDetailView: View {
+    let member: TeamMember
+    let project: Project
+    @EnvironmentObject private var projectVM: ProjectViewModel
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        NavigationView {
+            ScrollView {
+                VStack(spacing: 20) {
+                    // Member Header
+                    memberHeaderSection
+                    
+                    // Project Activity
+                    projectActivitySection
+                    
+                    // Performance Metrics
+                    performanceSection
+                }
+                .padding()
+            }
+            .navigationTitle(member.name)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private var memberHeaderSection: some View {
+        VStack(spacing: 12) {
+            HStack {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(member.name)
+                        .font(.title2)
+                        .fontWeight(.bold)
+                    
+                    Text(member.jobTitle)
+                        .font(.headline)
+                        .foregroundColor(.secondary)
+                    
+                    HStack {
+                        Text(member.employmentStatus.displayName)
+                            .font(.caption)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 2)
+                            .background(Color.green.opacity(0.2))
+                            .foregroundColor(.green)
+                            .cornerRadius(4)
+                        
+                        if member.hasAppAccess {
+                            Text("iPhone Access")
+                                .font(.caption)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 2)
+                                .background(Color.blue.opacity(0.2))
+                                .foregroundColor(.blue)
+                                .cornerRadius(4)
+                        }
+                    }
+                }
+                
+                Spacer()
+            }
+        }
+        .padding()
+        .background(Color(.systemGray6))
+        .cornerRadius(12)
+    }
+    
+    @ViewBuilder
+    private var projectActivitySection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Project Activity")
+                .font(.headline)
+                .fontWeight(.semibold)
+            
+            // Activity metrics for this specific project
+            LazyVGrid(columns: [
+                GridItem(.flexible()),
+                GridItem(.flexible())
+            ], spacing: 12) {
+                ActivityCard(
+                    title: "Receipts Submitted",
+                    value: "\(getReceiptCountForMember(member, in: project))",
+                    icon: "receipt.fill",
+                    color: .blue
+                )
+                
+                ActivityCard(
+                    title: "Progress Reports",
+                    value: "\(getProgressCountForMember(member, in: project))",
+                    icon: "chart.line.uptrend.xyaxis",
+                    color: .green
+                )
+                
+                ActivityCard(
+                    title: "Hours Logged",
+                    value: "\(getHoursLoggedForMember(member, in: project))",
+                    icon: "clock.fill",
+                    color: .orange
+                )
+                
+                ActivityCard(
+                    title: "Days Active",
+                    value: "\(getDaysActiveForMember(member, in: project))",
+                    icon: "calendar.badge.clock",
+                    color: .purple
+                )
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private var performanceSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Performance Overview")
+                .font(.headline)
+                .fontWeight(.semibold)
+            
+            VStack(spacing: 12) {
+                if let rate = member.defaultRate {
+                    PerformanceRow(
+                        title: "Hourly Rate",
+                        value: rate.rate.formatAsCurrency() + "/hr",
+                        icon: "dollarsign.circle"
+                    )
+                }
+                
+                PerformanceRow(
+                    title: "Employment Type",
+                    value: member.employmentType.displayName,
+                    icon: "person.badge"
+                )
+                
+                PerformanceRow(
+                    title: "Hire Date",
+                    value: member.hireDate.formatted(date: .abbreviated, time: .omitted),
+                    icon: "calendar"
+                )
+                
+                PerformanceRow(
+                    title: "Employment Duration",
+                    value: member.employmentDuration,
+                    icon: "timer"
+                )
+            }
+        }
+    }
+    
+    // MARK: - Helper Methods
+    
+    private func getReceiptCountForMember(_ member: TeamMember, in project: Project) -> Int {
+        return project.receipts.filter { receipt in
+            receipt.teamMemberID == member.id
+        }.count
+    }
+    
+    private func getProgressCountForMember(_ member: TeamMember, in project: Project) -> Int {
+        return project.progressReports.filter { log in
+            log.employeeIDs.contains(member.id)
+        }.count
+    }
+    
+    private func getHoursLoggedForMember(_ member: TeamMember, in project: Project) -> Int {
+        // This would integrate with your time tracking system
+        // For now, return a placeholder based on progress reports or receipts
+        return getProgressCountForMember(member, in: project) * 8 // Rough estimate
+    }
+    
+    private func getDaysActiveForMember(_ member: TeamMember, in project: Project) -> Int {
+        // Calculate days between first and last activity on this project
+        let activities = project.receipts.filter { receipt in
+            receipt.teamMemberID == member.id
+        }.map { $0.date } +
+                project.progressReports.filter { log in
+                    log.employeeIDs.contains(member.id)
+                }.map { $0.date }
+        
+        guard let firstActivity = activities.min(),
+              let lastActivity = activities.max() else {
+            return 0
+        }
+        
+        return Calendar.current.dateComponents([.day], from: firstActivity, to: lastActivity).day ?? 0
+    }
+}
+
+// MARK: - Activity Card Component
+struct ActivityCard: View {
+    let title: String
+    let value: String
+    let icon: String
+    let color: Color
+    
+    var body: some View {
+        VStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.title2)
+                .foregroundColor(color)
+            
+            Text(value)
+                .font(.title3)
+                .fontWeight(.bold)
+            
+            Text(title)
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding()
+        .background(Color(.systemGray6))
+        .cornerRadius(12)
+    }
+}
+
+// MARK: - Performance Row Component
+struct PerformanceRow: View {
+    let title: String
+    let value: String
+    let icon: String
+    
+    var body: some View {
+        HStack {
+            Image(systemName: icon)
+                .foregroundColor(.blue)
+                .frame(width: 20)
+            
+            Text(title)
+                .font(.subheadline)
+            
+            Spacer()
+            
+            Text(value)
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+        }
+        .padding(.vertical, 4)
+    }
+}
+
 // MARK: - Receipt Row Cards
 struct VendorReceiptRowCard: View {
     let receipt: Receipt
@@ -1706,8 +2600,6 @@ struct PaymentReceiptRowCard: View {
     }
 }
 
-#Preview {
-    BudgetBreakdownView(selectedTab: .constant(.projects))
-        .environmentObject(ProjectViewModel(cloudKitService: CloudKitAuthService()))
-        .environmentObject(AuthViewModel(service: CloudKitAuthService()))
+extension ProjectViewModel {
+    // Removed calculateTotalLaborCost() and calculateTotalHours() methods
 }

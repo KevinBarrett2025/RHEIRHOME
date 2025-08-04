@@ -10,56 +10,31 @@ class CloudKitVendorService: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
     
-    private let organizationID: String
     private let container: CKContainer
-    private let database: CKDatabase
-    private var organizationZoneID: CKRecordZone.ID
+    private let privateDatabase: CKDatabase
     
-    private var cancellables = Set<AnyCancellable>()
-    
-    init(organizationID: String) {
-        self.organizationID = organizationID
-        self.container = CKContainer(identifier: "iCloud.com.rheirhome.rheirhomeappV2")
-        self.database = container.privateCloudDatabase
-        self.organizationZoneID = CKRecordZone.ID(zoneName: "org-\(organizationID)")
+    init() {
+        self.container = CKContainer(identifier: "iCloud.com.rheirhome.rheirhomeappV3")
+        self.privateDatabase = container.privateCloudDatabase
         
         Task {
-            await setupOrganizationZone()
-            await loadVendorsFromCloudKit()
-        }
-    }
-    
-    // MARK: - Zone Setup
-    
-    private func setupOrganizationZone() async {
-        do {
-            let zone = CKRecordZone(zoneID: organizationZoneID)
-            _ = try await database.save(zone)
-            print("✅ Organization zone setup complete for vendors: \(organizationZoneID.zoneName)")
-        } catch let error as CKError where error.code == .zoneNotEmpty {
-            // Zone already exists, which is fine
-            print("📋 Organization zone already exists for vendors: \(organizationZoneID.zoneName)")
-        } catch {
-            print("❌ Failed to setup organization zone for vendors: \(error)")
-            await MainActor.run {
-                self.errorMessage = "Failed to setup organization zone: \(error.localizedDescription)"
-            }
+            await loadVendors()
         }
     }
     
     // MARK: - CloudKit Operations
     
-    func loadVendorsFromCloudKit() async {
+    func loadVendors() async {
         await MainActor.run { isLoading = true }
         
         do {
-            let predicate = NSPredicate(format: "organizationID == %@", organizationID)
+            let predicate = NSPredicate(format: "organizationID == %@", "organizationID")
             let query = CKQuery(recordType: "Vendor", predicate: predicate)
             query.sortDescriptors = [
                 NSSortDescriptor(key: "name", ascending: true)
             ]
             
-            let (matchResults, _) = try await database.records(matching: query, inZoneWith: organizationZoneID)
+            let (matchResults, _) = try await privateDatabase.records(matching: query)
             
             let cloudKitVendors = matchResults.compactMap { (_, result) -> Vendor? in
                 switch result {
@@ -91,7 +66,7 @@ class CloudKitVendorService: ObservableObject {
         let record = createRecordFromVendor(vendor)
         
         do {
-            _ = try await database.save(record)
+            _ = try await privateDatabase.save(record)
             print("✅ Saved vendor to CloudKit: \(vendor.name)")
             
             // Update local array
@@ -114,7 +89,7 @@ class CloudKitVendorService: ObservableObject {
         let recordID = CKRecord.ID(recordName: vendor.id.uuidString, zoneID: organizationZoneID)
         
         do {
-            _ = try await database.deleteRecord(withID: recordID)
+            _ = try await privateDatabase.deleteRecord(withID: recordID)
             print("✅ Deleted vendor from CloudKit: \(vendor.name)")
             
             // Update local array

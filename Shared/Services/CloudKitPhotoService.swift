@@ -7,14 +7,14 @@ import Combine
 public class CloudKitPhotoService: ObservableObject {
     
     private let container: CKContainer
-    private let database: CKDatabase
+    private let privateDatabase: CKDatabase
     
     @Published public var uploadProgress: [UUID: Double] = [:]
     @Published public var downloadProgress: [UUID: Double] = [:]
     
-    public init(containerIdentifier: String = "iCloud.com.rheirhome.rheirhomeappV2") {
+    public init(containerIdentifier: String = "iCloud.com.rheirhome.rheirhomeappV3") {
         self.container = CKContainer(identifier: containerIdentifier)
-        self.database = container.privateCloudDatabase
+        self.privateDatabase = container.privateCloudDatabase
     }
     
     // MARK: - Receipt Photos
@@ -56,7 +56,7 @@ public class CloudKitPhotoService: ObservableObject {
         let predicate = NSPredicate(format: "receiptID == %@", receiptID.uuidString)
         let query = CKQuery(recordType: "ReceiptPhoto", predicate: predicate)
         
-        let result = try await database.records(matching: query)
+        let result = try await privateDatabase.records(matching: query)
         
         return result.matchResults.compactMap { (_, result) in
             switch result {
@@ -110,7 +110,7 @@ public class CloudKitPhotoService: ObservableObject {
         let predicate = NSPredicate(format: "progressLogID == %@", progressLogID.uuidString)
         let query = CKQuery(recordType: "ProgressPhoto", predicate: predicate)
         
-        let result = try await database.records(matching: query)
+        let result = try await privateDatabase.records(matching: query)
         
         return result.matchResults.compactMap { (_, result) in
             switch result {
@@ -164,7 +164,7 @@ public class CloudKitPhotoService: ObservableObject {
         let predicate = NSPredicate(format: "taskID == %@", taskID.uuidString)
         let query = CKQuery(recordType: "TaskPhoto", predicate: predicate)
         
-        let result = try await database.records(matching: query)
+        let result = try await privateDatabase.records(matching: query)
         
         return result.matchResults.compactMap { (_, result) in
             switch result {
@@ -370,7 +370,7 @@ public class CloudKitPhotoService: ObservableObject {
             }
             
             // Save to CloudKit
-            let savedRecord = try await database.save(record)
+            let savedRecord = try await privateDatabase.save(record)
             
             // Update progress
             await MainActor.run {
@@ -405,7 +405,7 @@ public class CloudKitPhotoService: ObservableObject {
         let predicate = NSPredicate(format: "___recordID == %@", photoID.uuidString)
         let query = CKQuery(recordType: "TaskPhoto", predicate: predicate)
         
-        let result = try await database.records(matching: query)
+        let result = try await privateDatabase.records(matching: query)
         
         return result.matchResults.compactMap { (_, result) in
             switch result {
@@ -434,7 +434,7 @@ public class CloudKitPhotoService: ObservableObject {
     
     /// Delete photo from CloudKit
     public func deletePhoto(recordID: CKRecord.ID) async throws {
-        try await database.deleteRecord(withID: recordID)
+        try await privateDatabase.deleteRecord(withID: recordID)
     }
     
     /// Delete all photos for a receipt

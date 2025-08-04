@@ -73,11 +73,12 @@ struct EmployeeHourRowView: View {
     }
 }
 
+#if DEBUG
 struct EmployeeHoursList_Previews: PreviewProvider {
     static var previews: some View {
-        NavigationStack {
-            EmployeeHoursList()
-                .environmentObject(ProjectViewModel())
-        }
+        EmployeeHoursList()
+            .environmentObject(ProjectViewModel(cloudKitService: CloudKitAuthService()))
+            .environmentObject(AuthViewModel(service: PreviewAuthService()))
     }
 }
+#endif

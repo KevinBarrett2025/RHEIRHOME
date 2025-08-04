@@ -6,41 +6,27 @@ import AuthenticationServices
 /// CloudKitAuthService implements AuthService using CloudKit + Sign in with Apple.
 /// Its one credential‐based entry point is:
 ///     func signInWithApple(using credential: ASAuthorizationAppleIDCredential) -> AnyPublisher<User, Error>
-public final class CloudKitAuthService: AuthService {
+public class CloudKitAuthService: ObservableObject, AuthService {
     // MARK: - Properties
-    
-    internal let container: CKContainer
-    
-    private var _currentUser: User?
-    
-    /// Organization ID for the current organization (default for RHEIR LLC)
-    public let organizationID: String = "RHEIR-LLC-MAIN-ORG"
-    
-    public var currentUser: User? {
-        // If we have a cached user, return it
-        if let user = _currentUser {
-            return user
-        }
-        
-        // Try to restore from persistent storage
-        if let storedUserID = UserDefaults.standard.string(forKey: "apple_user_id") {
-            let storedEmail = getStoredEmail(for: storedUserID)
-            let user = User(id: storedUserID, email: storedEmail)
-            _currentUser = user
-            print("🔄 [CloudKit] Restored user from storage: \(storedUserID), email: \(storedEmail)")
-            return user
-        }
-        
-        return nil
-    }
+    internal let container: CKContainer  // Changed from private to internal
+    internal let privateDatabase: CKDatabase  // Changed from private to internal
+    internal let publicDatabase: CKDatabase   // Changed from private to internal
 
-    // MARK: - Init
-    public init(containerIdentifier: String = "iCloud.com.rheirhome.rheirhomeappV2") {
-        // Initialize CloudKit container for extension methods
+    // MARK: - Published Properties
+    @Published public var accountStatus: CKAccountStatus = .couldNotDetermine
+    @Published public var userRecord: CKRecord?
+    @Published public var isSignedIn: Bool = false
+    @Published public var errorMessage: String?
+
+    // MARK: - Initialization
+    public init(containerIdentifier: String = "iCloud.com.rheirhome.rheirhomeappV3") {
         self.container = CKContainer(identifier: containerIdentifier)
+        self.privateDatabase = container.privateCloudDatabase
+        self.publicDatabase = container.publicCloudDatabase
         
-        print("🔧 [CloudKit] Initialized CloudKitAuthService")
-        print("🔧 [CloudKit] Container: \(containerIdentifier)")
+        Task {
+            await checkAccountStatus()
+        }
     }
 
     // MARK: - AuthService Protocol Implementation
@@ -72,6 +58,92 @@ public final class CloudKitAuthService: AuthService {
         UserDefaults.standard.removeObject(forKey: "apple_user_id")
         
         print("🔒 [CloudKit] User signed out and data cleared")
+    }
+    
+    // MARK: - AuthService Protocol Implementation - Invite Method
+    
+    public func invite(email: String, orgID: String) -> AnyPublisher<Void, Error> {
+        print(" [CloudKit] Inviting \(email) to organization \(orgID)")
+        
+        return checkCloudKitAvailability()
+            .flatMap { _ -> AnyPublisher<Void, Error> in
+                let privateDB = self.container.privateCloudDatabase
+                
+                // Create an invitation record
+                let inviteRecord = CKRecord(recordType: "OrganizationInvite")
+                inviteRecord["organizationID"] = orgID as CKRecordValue
+                inviteRecord["inviteeEmail"] = email as CKRecordValue
+                inviteRecord["status"] = "pending" as CKRecordValue
+                inviteRecord["createdAt"] = Date() as CKRecordValue
+                if let currentUserID = self.currentUser?.id {
+                    inviteRecord["inviterUserID"] = currentUserID as CKRecordValue
+                }
+                
+                return Future<Void, Error> { promise in
+                    privateDB.save(inviteRecord) { _, error in
+                        DispatchQueue.main.async {
+                            if let error = error {
+                                print(" [CloudKit] Failed to save invite: \(error)")
+                                promise(.failure(error))
+                            } else {
+                                print(" [CloudKit] Invite saved successfully")
+                                promise(.success(()))
+                            }
+                        }
+                    }
+                }
+                .eraseToAnyPublisher()
+            }
+            .timeout(.seconds(10), scheduler: DispatchQueue.main)
+            .eraseToAnyPublisher()
+    }
+    
+    /// Check CloudKit account status before attempting operations
+    internal func checkCloudKitAvailability() -> AnyPublisher<Void, Error> {  // Changed to internal
+        return Future<Void, Error> { promise in
+            print(" [CloudKit] Checking account status...")
+            self.container.accountStatus { status, error in
+                DispatchQueue.main.async {
+                    if let error = error {
+                        print(" [CloudKit] Account status check failed: \(error)")
+                        promise(.failure(error))
+                        return
+                    }
+                    
+                    switch status {
+                    case .available:
+                        print(" [CloudKit] Account available")
+                        promise(.success(()))
+                    case .noAccount:
+                        print(" [CloudKit] No iCloud account found")
+                        let error = NSError(domain: "CloudKitAuthService", code: -1, 
+                                          userInfo: [NSLocalizedDescriptionKey: "No iCloud account found. Please sign in to iCloud in Settings → [Your Name] → iCloud and try again."])
+                        promise(.failure(error))
+                    case .couldNotDetermine:
+                        print(" [CloudKit] Could not determine account status")
+                        let error = NSError(domain: "CloudKitAuthService", code: -2, 
+                                          userInfo: [NSLocalizedDescriptionKey: "Could not determine iCloud account status. Please check your internet connection and try again."])
+                        promise(.failure(error))
+                    case .restricted:
+                        print(" [CloudKit] Account is restricted")
+                        let error = NSError(domain: "CloudKitAuthService", code: -3, 
+                                          userInfo: [NSLocalizedDescriptionKey: "iCloud account is restricted. Please check your Screen Time or parental control settings."])
+                        promise(.failure(error))
+                    case .temporarilyUnavailable:
+                        print(" [CloudKit] Account temporarily unavailable")
+                        let error = NSError(domain: "CloudKitAuthService", code: -4, 
+                                          userInfo: [NSLocalizedDescriptionKey: "iCloud is temporarily unavailable. Please try again in a few minutes."])
+                        promise(.failure(error))
+                    @unknown default:
+                        print(" [CloudKit] Unknown account status: \(status.rawValue)")
+                        let error = NSError(domain: "CloudKitAuthService", code: -5, 
+                                          userInfo: [NSLocalizedDescriptionKey: "Unknown iCloud account status. Please try signing out and back into iCloud."])
+                        promise(.failure(error))
+                    }
+                }
+            }
+        }
+        .eraseToAnyPublisher()
     }
 
     // MARK: - Extended Methods (Apple Sign-In)
@@ -146,6 +218,7 @@ public final class CloudKitAuthService: AuthService {
     
     // NOTE: createOrganization, fetchOrganizations, and invite methods are defined in CloudKitAuthService+Organization.swift extension
     // NOTE: upsertUserRecord method is defined in CloudKitAuthService+User.swift extension
+    // NOTE: The invite(email:orgID:) method required by AuthService protocol is implemented in the Organization extension
     
     // MARK: - JWT Access (placeholder for backward compatibility)
     
@@ -158,6 +231,44 @@ public final class CloudKitAuthService: AuthService {
         return Just(storedJWT)
             .setFailureType(to: Error.self)
             .eraseToAnyPublisher()
+    }
+    
+    // MARK: - Private Properties
+    
+    private var _currentUser: User?
+    
+    /// Organization ID for the current organization (default for RHEIR LLC)
+    public let organizationID: String = "RHEIR-LLC-MAIN-ORG"
+    
+    public var currentUser: User? {
+        // If we have a cached user, return it
+        if let user = _currentUser {
+            return user
+        }
+        
+        // Try to restore from persistent storage
+        if let storedUserID = UserDefaults.standard.string(forKey: "apple_user_id") {
+            let storedEmail = getStoredEmail(for: storedUserID)
+            let user = User(id: storedUserID, email: storedEmail)
+            _currentUser = user
+            print("🔄 [CloudKit] Restored user from storage: \(storedUserID), email: \(storedEmail)")
+            return user
+        }
+        
+        return nil
+    }
+    
+    // MARK: - Private Methods
+    
+    private func checkAccountStatus() async {
+        do {
+            let status = try await container.accountStatus()
+            accountStatus = status
+            print(" [CloudKit] Account status: \(status)")
+        } catch {
+            print(" [CloudKit] Failed to check account status: \(error)")
+            errorMessage = "Failed to check account status. Please try again later."
+        }
     }
 }
 

@@ -78,7 +78,7 @@ struct CompletedProjectsView_Previews: PreviewProvider {
     static var previews: some View {
         NavigationStack {
             CompletedProjectsView()
-                .environmentObject(ProjectViewModel())
+                .environmentObject(ProjectViewModel(cloudKitService: CloudKitAuthService()))
         }
     }
 }

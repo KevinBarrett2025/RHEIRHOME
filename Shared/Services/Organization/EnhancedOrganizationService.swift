@@ -6,23 +6,24 @@ import CloudKit
 @MainActor
 public class EnhancedOrganizationService: ObservableObject {
     
+    // MARK: - Properties
+    private let container: CKContainer
+    private let privateDatabase: CKDatabase
+    private let sharedDatabase: CKDatabase
+    
     // MARK: - Published Properties
-    @Published public var isLoading = false
-    @Published public var validationStatus: NameValidationStatus = .unknown
     @Published public var organizations: [Organization] = []
     @Published public var currentOrganization: Organization?
-    
-    // MARK: - Private Properties
-    private let container: CKContainer
-    private let privateDB: CKDatabase
-    private let publicDB: CKDatabase // For unique name validation
-    private var cancellables = Set<AnyCancellable>()
+    @Published public var isLoading: Bool = false
+    @Published public var errorMessage: String?
     
     // MARK: - Initialization
-    public init(containerIdentifier: String = "iCloud.com.rheirhome.rheirhomeappV2") {
+    public init(containerIdentifier: String = "iCloud.com.rheirhome.rheirhomeappV3") {
         self.container = CKContainer(identifier: containerIdentifier)
-        self.privateDB = container.privateCloudDatabase
-        self.publicDB = container.publicCloudDatabase
+        self.privateDatabase = container.privateCloudDatabase
+        self.sharedDatabase = container.sharedCloudDatabase
+        
+        print("🏢 EnhancedOrganizationService initialized with container: \(containerIdentifier)")
     }
     
     // MARK: - Name Validation
@@ -61,7 +62,7 @@ public class EnhancedOrganizationService: ObservableObject {
         let query = CKQuery(recordType: "OrganizationRegistry", predicate: compoundPredicate)
         
         do {
-            let result = try await publicDB.records(matching: query)
+            let result = try await sharedDatabase.records(matching: query)
             let existingRecords = result.matchResults.compactMap { try? $0.1.get() }
             
             if !existingRecords.isEmpty {
@@ -108,7 +109,7 @@ public class EnhancedOrganizationService: ObservableObject {
         
         // Save to private database
         let privateRecord = createPrivateOrganizationRecord(from: organization, slug: slug)
-        let savedPrivateRecord = try await privateDB.save(privateRecord)
+        let savedPrivateRecord = try await privateDatabase.save(privateRecord)
         
         // Register name in public database for uniqueness
         let registryRecord = createOrganizationRegistryRecord(
@@ -117,7 +118,7 @@ public class EnhancedOrganizationService: ObservableObject {
             slug: slug,
             adminUserID: adminUserID
         )
-        try await publicDB.save(registryRecord)
+        try await sharedDatabase.save(registryRecord)
         
         // Update organization with CloudKit info
         var finalOrganization = organization
@@ -141,7 +142,7 @@ public class EnhancedOrganizationService: ObservableObject {
         let predicate = NSPredicate(format: "members CONTAINS %@", userID)
         let query = CKQuery(recordType: "Organization", predicate: predicate)
         
-        let result = try await privateDB.records(matching: query)
+        let result = try await privateDatabase.records(matching: query)
         
         let fetchedOrganizations = result.matchResults.compactMap { (recordID, result) in
             switch result {
@@ -171,12 +172,12 @@ public class EnhancedOrganizationService: ObservableObject {
         defer { isLoading = false }
         
         let ckRecordID = CKRecord.ID(recordName: recordID)
-        let record = try await privateDB.record(for: ckRecordID)
+        let record = try await privateDatabase.record(for: ckRecordID)
         
         // Update record fields
         updateRecordFromOrganization(record, organization: organization)
         
-        let savedRecord = try await privateDB.save(record)
+        let savedRecord = try await privateDatabase.save(record)
         let updatedOrganization = parseOrganizationFromRecord(savedRecord)
         
         // Update local cache

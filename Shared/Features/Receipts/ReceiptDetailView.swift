@@ -102,7 +102,7 @@ struct ReceiptDetailView: View {
         updateVendorSpending(for: receipt, isRemoving: true)
         updatePaymentMethodSpending(for: receipt, isRemoving: true)
         
-        projectVM.save(updatedProject)
+        projectVM.updateProject(updatedProject)
         projectVM.recomputeFilteredReceipts()
         
         // Navigate back
@@ -322,26 +322,23 @@ struct ReceiptDetailView: View {
     }
 }
 
+#if DEBUG
 struct ReceiptDetailView_Previews: PreviewProvider {
     static var previews: some View {
         let sampleReceipt = Receipt(
             vendor: "Home Depot",
             date: Date(),
-            amount: 156.78,
-            notes: "Lumber for framing project",
+            amount: 125.47,
+            notes: "Sample receipt for preview",
             category: .material,
-            paymentMethod: "Chase Visa",
-            taxAmount: 8.67,
-            receiptNumber: "1234567890",
-            items: [
-                ReceiptItem(name: "2x4 Lumber", unitPrice: 5.99, totalPrice: 47.92, category: .material),
-                ReceiptItem(name: "Wood Screws", unitPrice: 12.99, totalPrice: 12.99, category: .material)
-            ]
+            paymentMethod: "Credit Card"
         )
         
-        NavigationStack {
+        NavigationView {
             ReceiptDetailView(receipt: sampleReceipt)
-                .environmentObject(ProjectViewModel())
+                .environmentObject(ProjectViewModel(cloudKitService: CloudKitAuthService()))
+                .environmentObject(AuthViewModel(service: PreviewAuthService()))
         }
     }
 }
+#endif

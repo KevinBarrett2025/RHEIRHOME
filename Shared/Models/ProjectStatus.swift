@@ -7,6 +7,10 @@ public enum ProjectStatus: String, CaseIterable, Codable, Sendable {
     case cancelled = "Cancelled"
     case planning = "Planning"
     
+    public var displayName: String {
+        return rawValue
+    }
+    
     public var icon: String {
         switch self {
         case .active: return "play.circle.fill"

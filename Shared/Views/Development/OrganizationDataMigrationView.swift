@@ -161,5 +161,5 @@ struct OrganizationDataMigrationView: View {
 }
 
 #Preview {
-    OrganizationDataMigrationView(projectViewModel: ProjectViewModel())
+    OrganizationDataMigrationView(projectViewModel: ProjectViewModel(cloudKitService: CloudKitAuthService()))
 }

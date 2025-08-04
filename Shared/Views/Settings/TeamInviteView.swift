@@ -263,5 +263,5 @@ struct TeamInviteView: View {
 #Preview {
     TeamInviteView()
         .environmentObject(AuthViewModel(service: CloudKitAuthService()))
-        .environmentObject(ProjectViewModel())
+        .environmentObject(ProjectViewModel(cloudKitService: CloudKitAuthService()))
 }

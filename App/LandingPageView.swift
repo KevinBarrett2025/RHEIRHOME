@@ -438,12 +438,12 @@ struct LandingPageView: View {
                 statusMessage = """
                 Organization sharing setup complete!
                 
-                \(message)
+                \(message ?? "Setup successful")
                 
                 Now try refreshing your projects - they should sync to CloudKit and be accessible to Rachel.
                 """
             } else {
-                statusMessage = "Failed to setup organization sharing: \(message)"
+                statusMessage = "Failed to setup organization sharing: \(message ?? "Unknown error")"
             }
             showingStatusAlert = true
             
@@ -458,7 +458,7 @@ struct LandingPageView: View {
     
     private func syncAllProjectsToCloudKit() {
         viewModel.syncAllProjectsToCloudKit { success, message in
-            statusMessage = message
+            statusMessage = message ?? "Sync completed"
             showingStatusAlert = true
         }
     }

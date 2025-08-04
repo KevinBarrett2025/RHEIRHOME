@@ -52,8 +52,8 @@ class ScalableCloudKitArchitecture: ObservableObject {
     // MARK: - Core Properties
     
     private let container: CKContainer
-    private let privateDB: CKDatabase
-    private let sharedDB: CKDatabase
+    private let privateDatabase: CKDatabase
+    private let sharedDatabase: CKDatabase
     
     // Organization management
     @Published var currentOrganization: Organization?
@@ -73,12 +73,12 @@ class ScalableCloudKitArchitecture: ObservableObject {
         #endif
     }
     
-    init(containerIdentifier: String = "iCloud.com.rheirhome.rheirhomeapp") {
+    init(containerIdentifier: String = "iCloud.com.rheirhome.rheirhomeappV3") {
         self.container = CKContainer(identifier: containerIdentifier)
-        self.privateDB = container.privateCloudDatabase
-        self.sharedDB = container.sharedCloudDatabase
+        self.privateDatabase = container.privateCloudDatabase
+        self.sharedDatabase = container.sharedCloudDatabase
         
-        print("🏗️ ScalableCloudKitArchitecture initialized for \(environment)")
+        print("📊 ScalableCloudKitArchitecture initialized")
     }
     
     // MARK: - 1. Organization Zone Management
@@ -133,7 +133,7 @@ class ScalableCloudKitArchitecture: ObservableObject {
         
         return Future<CKRecordZone, Error> { promise in
             // Check if zone already exists
-            self.privateDB.fetch(withRecordZoneID: zoneID) { existingZone, error in
+            self.privateDatabase.fetch(withRecordZoneID: zoneID) { existingZone, error in
                 if let existingZone = existingZone {
                     print("✅ Organization zone already exists")
                     promise(.success(existingZone))
@@ -161,7 +161,7 @@ class ScalableCloudKitArchitecture: ObservableObject {
                     }
                 }
                 
-                self.privateDB.add(operation)
+                self.privateDatabase.add(operation)
             }
         }
         .eraseToAnyPublisher()
@@ -201,7 +201,7 @@ class ScalableCloudKitArchitecture: ObservableObject {
         print("🏢 Creating organization record in zone")
         
         return Future<CKRecord, Error> { promise in
-            self.privateDB.save(record) { savedRecord, error in
+            self.privateDatabase.save(record) { savedRecord, error in
                 if let error = error {
                     print("❌ Failed to create organization record: \(error)")
                     promise(.failure(error))
@@ -251,7 +251,7 @@ class ScalableCloudKitArchitecture: ObservableObject {
                 }
             }
             
-            self.privateDB.add(operation)
+            self.privateDatabase.add(operation)
         }
         .eraseToAnyPublisher()
     }
@@ -288,7 +288,7 @@ class ScalableCloudKitArchitecture: ObservableObject {
         print("💾 Saving \(recordType) to organization zone")
         
         return Future<CKRecord, Error> { promise in
-            self.privateDB.save(record) { savedRecord, error in
+            self.privateDatabase.save(record) { savedRecord, error in
                 if let error = error {
                     print("❌ Failed to save \(recordType): \(error)")
                     promise(.failure(error))
@@ -321,7 +321,7 @@ class ScalableCloudKitArchitecture: ObservableObject {
         print("📥 Loading \(recordType) from organization zone")
         
         return Future<[T], Error> { promise in
-            self.privateDB.fetch(withQuery: query, inZoneWith: zone.zoneID, desiredKeys: ["data"], resultsLimit: 1000) { result in
+            self.privateDatabase.fetch(withQuery: query, inZoneWith: zone.zoneID, desiredKeys: ["data"], resultsLimit: 1000) { result in
                 switch result {
                 case .success(let (matchResults, _)):
                     let records = matchResults.compactMap { (_, recordResult) -> CKRecord? in
@@ -385,7 +385,7 @@ class ScalableCloudKitArchitecture: ObservableObject {
         print("📋 Saving project '\(project.name)' to organization zone")
         
         return Future<CKRecord, Error> { promise in
-            self.privateDB.save(record) { savedRecord, error in
+            self.privateDatabase.save(record) { savedRecord, error in
                 if let error = error {
                     print("❌ Failed to save project: \(error)")
                     promise(.failure(error))
@@ -414,7 +414,7 @@ class ScalableCloudKitArchitecture: ObservableObject {
         print("📥 Loading projects from organization zone")
         
         return Future<[Project], Error> { promise in
-            self.privateDB.fetch(withQuery: query, inZoneWith: zone.zoneID, desiredKeys: nil, resultsLimit: 1000) { result in
+            self.privateDatabase.fetch(withQuery: query, inZoneWith: zone.zoneID, desiredKeys: nil, resultsLimit: 1000) { result in
                 switch result {
                 case .success(let (matchResults, _)):
                     let records = matchResults.compactMap { (_, recordResult) -> CKRecord? in
@@ -486,7 +486,7 @@ class ScalableCloudKitArchitecture: ObservableObject {
                 share.addParticipant(participant)
                 
                 // Save updated share
-                self.privateDB.save(share) { savedShare, saveError in
+                self.privateDatabase.save(share) { savedShare, saveError in
                     if let saveError = saveError {
                         print("❌ Failed to add participant: \(saveError)")
                         promise(.failure(saveError))
@@ -568,7 +568,7 @@ class ScalableCloudKitArchitecture: ObservableObject {
             // Count projects
             group.enter()
             let projectQuery = CKQuery(recordType: "Project", predicate: NSPredicate(format: "organizationId == %@", orgId))
-            self.privateDB.fetch(withQuery: projectQuery, inZoneWith: zone.zoneID, desiredKeys: nil, resultsLimit: 1000) { result in
+            self.privateDatabase.fetch(withQuery: projectQuery, inZoneWith: zone.zoneID, desiredKeys: nil, resultsLimit: 1000) { result in
                 switch result {
                 case .success(let (matchResults, _)):
                     metrics.totalProjects = matchResults.count
@@ -581,7 +581,7 @@ class ScalableCloudKitArchitecture: ObservableObject {
             // Count employees
             group.enter()
             let employeeQuery = CKQuery(recordType: "Employee", predicate: NSPredicate(format: "organizationId == %@", orgId))
-            self.privateDB.fetch(withQuery: employeeQuery, inZoneWith: zone.zoneID, desiredKeys: nil, resultsLimit: 100) { result in
+            self.privateDatabase.fetch(withQuery: employeeQuery, inZoneWith: zone.zoneID, desiredKeys: nil, resultsLimit: 100) { result in
                 switch result {
                 case .success(let (matchResults, _)):
                     metrics.totalEmployees = matchResults.count

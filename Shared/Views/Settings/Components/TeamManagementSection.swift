@@ -114,7 +114,7 @@ struct TeamManagementSection: View {
                             self.environmentInfo = """
                             ✅ NUCLEAR RESET COMPLETE!
                             
-                            \(message)
+                            \(message ?? "Reset completed successfully")
                             
                             👥 RACHEL'S ACCESS:
                             • Added rachelmelvin@icloud.com as ADMIN
@@ -137,7 +137,7 @@ struct TeamManagementSection: View {
                     self.environmentInfo = """
                     ❌ NUCLEAR RESET FAILED
                     
-                    Error: \(message)
+                    Error: \(message ?? "Unknown error occurred")
                     
                     The CloudKit sharing system has fundamental issues.
                     We may need to switch to a different sharing approach.
@@ -150,7 +150,7 @@ struct TeamManagementSection: View {
     
     private func cleanPhotosFromProject(_ project: Project) {
         let cleanProject = projectViewModel.removeAllPhotosFromProject(project)
-        projectViewModel.save(cleanProject)
+        projectViewModel.updateProject(cleanProject)
         
         environmentInfo = """
         🧹 PHOTOS REMOVED!

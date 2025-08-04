@@ -427,5 +427,5 @@ struct TeamMemberTerminationView: View {
     )
     
     EnhancedTeamMemberDetailView(member: sampleMember)
-        .environmentObject(ProjectViewModel())
+        .environmentObject(ProjectViewModel(cloudKitService: CloudKitAuthService()))
 }

@@ -119,7 +119,7 @@ struct CompletedProjectDetailView_Previews: PreviewProvider {
         
         NavigationStack {
             CompletedProjectDetailView(project: sampleProject)
-                .environmentObject(ProjectViewModel())
+                .environmentObject(ProjectViewModel(cloudKitService: CloudKitAuthService()))
         }
     }
 }

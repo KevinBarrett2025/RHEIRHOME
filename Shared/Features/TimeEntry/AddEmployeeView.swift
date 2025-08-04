@@ -77,8 +77,7 @@ struct AddEmployeeView: View {
             organizationID: "RHEIR-LLC-MAIN-ORG" // Default organization
         )
         
-        projectVM.teamMembers.append(teamMember)
-        projectVM.saveTeamMembers()
+        projectVM.addTeamMemberToOrganization(teamMember)
         
         isPresented = false
     }
@@ -87,6 +86,6 @@ struct AddEmployeeView: View {
 struct AddEmployeeView_Previews: PreviewProvider {
     static var previews: some View {
         AddEmployeeView(isPresented: .constant(true))
-            .environmentObject(ProjectViewModel())
+            .environmentObject(ProjectViewModel(cloudKitService: CloudKitAuthService()))
     }
 }

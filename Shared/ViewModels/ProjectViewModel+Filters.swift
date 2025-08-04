@@ -184,4 +184,38 @@ extension ProjectViewModel {
         }
         return result
     }
+    
+    // MARK: - Team and Labor Calculations
+    
+    /// Calculate total labor cost for the current selected project based on team member rates
+    func calculateTotalLaborCost() -> Double {
+        guard let project = selectedProject else { return 0.0 }
+        
+        // Start with actual labor costs from logged hours
+        let actualLaborCost = spentLabor
+        
+        // Add estimates for assigned team members if minimal hours logged
+        let assignedMemberIDs = Set(project.assignedTeamMemberIDs.compactMap { UUID(uuidString: $0) })
+        let assignedMembers = teamMembers.filter { assignedMemberIDs.contains($0.id) }
+        
+        let estimatedCost = assignedMembers.reduce(0.0) { total, member in
+            let rate = member.defaultRate?.rate ?? 25.0
+            let estimatedHours = project.loggedHours.isEmpty ? 40.0 : 0.0 // Only estimate if no hours logged
+            return total + (rate * estimatedHours)
+        }
+        
+        return max(actualLaborCost, estimatedCost)
+    }
+    
+    /// Calculate total hours logged for the current selected project
+    func calculateTotalHours() -> Int {
+        guard let project = selectedProject else { return 0 }
+        
+        let totalHours = project.loggedHours.reduce(0.0) { total, hour in
+            guard hour.hours.isFinite else { return total }
+            return total + hour.hours
+        }
+        
+        return Int(totalHours)
+    }
 }

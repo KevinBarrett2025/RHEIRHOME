@@ -5,11 +5,13 @@ import SwiftUI
 /// Simple CloudKit sharing service for organization data
 class CloudKitSharingService: ObservableObject {
     private let container: CKContainer
-    private let privateDB: CKDatabase
+    private let privateDatabase: CKDatabase
+    private let sharedDatabase: CKDatabase
     
-    init(containerIdentifier: String = "iCloud.com.rheirhome.rheirhomeapp") {
+    init(containerIdentifier: String = "iCloud.com.rheirhome.rheirhomeappV3") {
         self.container = CKContainer(identifier: containerIdentifier)
-        self.privateDB = container.privateCloudDatabase
+        self.privateDatabase = container.privateCloudDatabase
+        self.sharedDatabase = container.sharedCloudDatabase
     }
     
     /// Create a shareable link for an organization
@@ -19,7 +21,7 @@ class CloudKitSharingService: ObservableObject {
         // Fetch the organization record first
         let recordID = CKRecord.ID(recordName: organizationID)
         
-        privateDB.fetch(withRecordID: recordID) { [weak self] record, error in
+        privateDatabase.fetch(withRecordID: recordID) { [weak self] record, error in
             guard let self = self else { return }
             
             if let error = error {
@@ -62,7 +64,7 @@ class CloudKitSharingService: ObservableObject {
                 }
             }
             
-            self.privateDB.add(operation)
+            self.privateDatabase.add(operation)
         }
     }
     

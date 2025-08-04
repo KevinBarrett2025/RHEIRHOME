@@ -30,6 +30,10 @@ public struct TeamMember: Identifiable, Codable, Hashable, Sendable {
     public var emergencyContact: String
     public var emergencyPhone: String
     
+    // MARK: - Photo Support
+    public var photoID: UUID? // Reference to CloudKit photo asset
+    public var hasPhoto: Bool { photoID != nil }
+
     // MARK: - Tax & Legal Information
     public var taxID: String // SSN or Tax ID (encrypted/hashed in production)
     public var w9OnFile: Bool
@@ -64,6 +68,7 @@ public struct TeamMember: Identifiable, Codable, Hashable, Sendable {
         zipCode: String = "",
         emergencyContact: String = "",
         emergencyPhone: String = "",
+        photoID: UUID? = nil,
         taxID: String = "",
         w9OnFile: Bool = false,
         i9OnFile: Bool = false,
@@ -94,6 +99,7 @@ public struct TeamMember: Identifiable, Codable, Hashable, Sendable {
         self.zipCode = zipCode
         self.emergencyContact = emergencyContact
         self.emergencyPhone = emergencyPhone
+        self.photoID = photoID
         self.taxID = taxID
         self.w9OnFile = w9OnFile
         self.i9OnFile = i9OnFile

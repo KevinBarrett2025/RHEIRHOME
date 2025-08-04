@@ -89,8 +89,8 @@ struct DashboardView_Previews: PreviewProvider {
             status: .active
         )
 
-        let vm = ProjectViewModel()
-        vm.projects = [sampleProject]
+        let vm = ProjectViewModel(cloudKitService: CloudKitAuthService())
+        vm.organizationProjects = [sampleProject]
         vm.selectedProject = sampleProject
 
         return DashboardView()

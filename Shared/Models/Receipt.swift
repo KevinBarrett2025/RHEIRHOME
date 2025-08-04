@@ -244,6 +244,7 @@ public struct Receipt: Identifiable, Codable, Hashable, Sendable {
     public var taxAmount: Double
     public var discountAmount: Double
     public var receiptNumber: String
+    public var teamMemberID: UUID?       // Link to team member who made the purchase
     
     // Receipt details
     public var items: [ReceiptItem]
@@ -265,6 +266,7 @@ public struct Receipt: Identifiable, Codable, Hashable, Sendable {
         taxAmount: Double = 0,
         discountAmount: Double = 0,
         receiptNumber: String = "",
+        teamMemberID: UUID? = nil,
         items: [ReceiptItem] = [],
         processingStatus: ProcessingStatus = .completed
     ) {
@@ -283,6 +285,7 @@ public struct Receipt: Identifiable, Codable, Hashable, Sendable {
         self.taxAmount = taxAmount
         self.discountAmount = discountAmount
         self.receiptNumber = receiptNumber
+        self.teamMemberID = teamMemberID
         self.items = items
         self.processingStatus = processingStatus
     }

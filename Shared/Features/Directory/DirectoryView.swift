@@ -2,20 +2,20 @@ import SwiftUI
 
 struct DirectoryView: View {
     @EnvironmentObject var authVM: AuthViewModel
+    @EnvironmentObject var projectVM: ProjectViewModel
     @State private var showAddEmployee = false
-    @State private var teamMembers: [TeamMember] = []
     
     var body: some View {
         NavigationView {
             List {
                 // Team Members Section
                 Section(header: Text("Team Members")) {
-                    if teamMembers.isEmpty {
+                    if projectVM.teamMembers.isEmpty {
                         DirectoryEmptyStateView {
                             showAddEmployee = true
                         }
                     } else {
-                        ForEach(teamMembers) { teamMember in
+                        ForEach(projectVM.teamMembers) { teamMember in
                             DirectoryEmployeeRowView(employee: teamMember, authVM: authVM)
                         }
                         .onDelete(perform: deleteEmployee)
@@ -38,33 +38,22 @@ struct DirectoryView: View {
                 }
             }
             .sheet(isPresented: $showAddEmployee) {
-                DirectoryAddTeamMemberView(teamMembers: $teamMembers)
+                DirectoryAddTeamMemberView()
+                    .environmentObject(authVM)
+                    .environmentObject(projectVM)
             }
-            .onAppear(perform: loadTeamMembers)
         }
     }
     
     // MARK: - Private Methods
-    private func loadTeamMembers() {
-        guard let orgID = authVM.currentOrg?.id else { return }
-        
-        if let data = UserDefaults.standard.data(forKey: "teamMembers_\(orgID)"),
-           let members = try? JSONDecoder().decode([TeamMember].self, from: data) {
-            teamMembers = members
-        }
-    }
-    
-    private func saveTeamMembers() {
-        guard let orgID = authVM.currentOrg?.id else { return }
-        
-        if let data = try? JSONEncoder().encode(teamMembers) {
-            UserDefaults.standard.set(data, forKey: "teamMembers_\(orgID)")
-        }
-    }
-    
     private func deleteEmployee(at offsets: IndexSet) {
-        teamMembers.remove(atOffsets: offsets)
-        saveTeamMembers()
+        // Handle deletions through the proper methods
+        for index in offsets {
+            if index < projectVM.teamMembers.count {
+                let teamMember = projectVM.teamMembers[index]
+                projectVM.deleteTeamMember(teamMember)
+            }
+        }
     }
 }
 
@@ -112,4 +101,5 @@ struct DirectoryComingSoonSection: View {
 #Preview {
     DirectoryView()
         .environmentObject(AuthViewModel(service: PreviewAuthService()))
+        .environmentObject(ProjectViewModel())
 }

@@ -515,6 +515,6 @@ struct InfoRow: View {
     NavigationView {
         OrganizationDebugView(organization: sampleOrg)
             .environmentObject(AuthViewModel(service: PreviewAuthService()))
-            .environmentObject(ProjectViewModel())
+            .environmentObject(ProjectViewModel(cloudKitService: CloudKitAuthService()))
     }
 }

@@ -32,7 +32,7 @@ struct OrganizationSwitcherView: View {
     @ViewBuilder
     private var headerSection: some View {
         VStack(spacing: 12) {
-            Image(systemName: "building.2.circle.fill")
+            Image(systemName: "building.2.fill")
                 .font(.system(size: 50))
                 .foregroundColor(.blue)
             

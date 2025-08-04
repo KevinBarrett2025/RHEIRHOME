@@ -8,13 +8,14 @@ class CompleteDataResetService: ObservableObject {
     
     @Published var isResetting = false
     @Published var resetProgress = ""
+    @Published var resetComplete = false
     
     private let container: CKContainer
     private let privateDB: CKDatabase
     private let publicDB: CKDatabase
     
     init() {
-        self.container = CKContainer(identifier: "iCloud.com.rheirhome.rheirhomeappV2")
+        self.container = CKContainer(identifier: "iCloud.com.rheirhome.rheirhomeappV3")
         self.privateDB = container.privateCloudDatabase
         self.publicDB = container.publicCloudDatabase
     }
@@ -46,6 +47,7 @@ class CompleteDataResetService: ObservableObject {
         }
         
         isResetting = false
+        resetComplete = true
     }
     
     /// Clear all local UserDefaults data
@@ -67,7 +69,6 @@ class CompleteDataResetService: ObservableObject {
             "DevelopmentDataHasBeenReset",
             "CloudKitAuthService.userRecord",
             "CloudKitAuthService.userEmail",
-            "SimpleCloudKitSharingService.currentOrganizationID",
             "preferredMapProvider"
         ]
         

@@ -150,7 +150,7 @@ struct EmailInviteView: View {
     }
     
     private func createShareLink() {
-        shareURL = authViewModel.getShareURLForCopying()
+        shareURL = authViewModel.getShareURLForCopying() ?? ""
     }
     
     private func copyToClipboard() {

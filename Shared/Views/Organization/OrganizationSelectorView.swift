@@ -171,6 +171,8 @@ struct OrganizationMenuView: View {
     @Binding var showingDeleteConfirmation: Bool
     @Binding var organizationToDelete: Organization?
     
+    @State private var showingCompanyProfile = false
+    
     private var adminOrganizations: [Organization] {
         return authVM.adminOrganizations
     }
@@ -189,6 +191,39 @@ struct OrganizationMenuView: View {
     var body: some View {
         NavigationView {
             List {
+                // Company Profile Section
+                if let currentOrg = authVM.currentOrg {
+                    Section {
+                        Button(action: {
+                            showingCompanyProfile = true
+                        }) {
+                            HStack {
+                                Image(systemName: "building.2.crop.circle.fill")
+                                    .foregroundColor(.blue)
+                                    .font(.title2)
+                                
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Company Profile")
+                                        .font(.headline)
+                                        .foregroundColor(.primary)
+                                    
+                                    Text("Team • Vendors • Clients • Settings")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                                
+                                Spacer()
+                                
+                                Image(systemName: "chevron.right")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            .padding(.vertical, 4)
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                    }
+                }
+                
                 // Multi-Organization Context Section (for contractors)
                 if authVM.userOrganizations.count > 1 {
                     Section {
@@ -308,6 +343,10 @@ struct OrganizationMenuView: View {
                         dismiss()
                     }
                 }
+            }
+            .sheet(isPresented: $showingCompanyProfile) {
+                CompanyProfileView()
+                    .environmentObject(authVM)
             }
         }
     }
