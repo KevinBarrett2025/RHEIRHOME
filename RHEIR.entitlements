@@ -10,7 +10,7 @@
 	</array>
 	<key>com.apple.developer.icloud-container-identifiers</key>
 	<array>
-		<string>iCloud.com.rheirhome.rheirhomeapp</string>
+		<string>iCloud.com.rheirhome.rheirhomeappV3</string>
 	</array>
 	<key>com.apple.developer.icloud-services</key>
 	<array>

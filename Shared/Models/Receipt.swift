@@ -1,11 +1,168 @@
 import Foundation
+#if canImport(UIKit)
+import UIKit
+#endif
 
-/// Which budget bucket a receipt applies to.
+/// Which budget bucket a receipt applies to - Enhanced for renovation intelligence.
 public enum ReceiptCategory: String, CaseIterable, Identifiable, Codable, Hashable, Sendable {
+    // MARK: - Traditional Budget Categories
     case material    = "Materials"
     case general     = "General Conditions"
     case contingency = "Contingency"
+    
+    // MARK: - Renovation Phase Categories (Phase 2E Enhancement)
+    case demolition     = "Demolition"
+    case sitework       = "Site Work"
+    case foundation     = "Foundation"
+    case framing        = "Framing"
+    case roofing        = "Roofing"
+    case exterior       = "Exterior"
+    case electrical     = "Electrical"
+    case plumbing       = "Plumbing"
+    case hvac           = "HVAC"
+    case insulation     = "Insulation"
+    case drywall        = "Drywall"
+    case flooring       = "Flooring"
+    case trim           = "Trim & Millwork"
+    case paint          = "Paint & Finishes"
+    case kitchen        = "Kitchen"
+    case bathroom       = "Bathroom"
+    case fixtures       = "Fixtures & Hardware"
+    case appliances     = "Appliances"
+    case landscaping    = "Landscaping"
+    case permits        = "Permits & Inspections"
+    case cleanup        = "Cleanup"
+    
+    // MARK: - Design Element Categories
+    case lighting       = "Lighting"
+    case cabinetry      = "Cabinetry"
+    case countertops    = "Countertops"
+    case tile           = "Tile & Stone"
+    case windows        = "Windows & Doors"
+    case specialty      = "Specialty Items"
+    
+    public var id: Self { self }
+    
+    /// Category group for organizing in UI
+    public var categoryGroup: CategoryGroup {
+        switch self {
+        case .material, .general, .contingency:
+            return .traditional
+        case .demolition, .sitework, .foundation, .framing, .roofing, .exterior:
+            return .structural
+        case .electrical, .plumbing, .hvac:
+            return .mechanical
+        case .insulation, .drywall, .flooring, .trim, .paint:
+            return .finishes
+        case .kitchen, .bathroom, .fixtures, .appliances:
+            return .specialties
+        case .lighting, .cabinetry, .countertops, .tile, .windows, .specialty:
+            return .design
+        case .landscaping, .permits, .cleanup:
+            return .other
+        }
+    }
+    
+    /// Icon for visual representation
+    public var icon: String {
+        switch self {
+        case .material: return "cube.box.fill"
+        case .general: return "building.2.fill"
+        case .contingency: return "exclamationmark.triangle.fill"
+        case .demolition: return "hammer.fill"
+        case .sitework: return "square.and.arrow.up.fill"
+        case .foundation: return "square.stack.3d.down.right.fill"
+        case .framing: return "square.grid.3x3.fill"
+        case .roofing: return "house.fill"
+        case .exterior: return "house.and.flag.fill"
+        case .electrical: return "bolt.fill"
+        case .plumbing: return "drop.fill"
+        case .hvac: return "fan.fill"
+        case .insulation: return "snow"
+        case .drywall: return "rectangle.fill"
+        case .flooring: return "square.fill"
+        case .trim: return "ruler.fill"
+        case .paint: return "paintbrush.fill"
+        case .kitchen: return "oven.fill"
+        case .bathroom: return "bathtub.fill"
+        case .fixtures: return "lightbulb.fill"
+        case .appliances: return "washer.fill"
+        case .landscaping: return "leaf.fill"
+        case .permits: return "doc.text.fill"
+        case .cleanup: return "trash.fill"
+        case .lighting: return "lightbulb.2.fill"
+        case .cabinetry: return "cabinet.fill"
+        case .countertops: return "rectangle.3.group.fill"
+        case .tile: return "square.grid.2x2.fill"
+        case .windows: return "rectangle.portrait.and.arrow.right.fill"
+        case .specialty: return "star.fill"
+        }
+    }
+    
+    /// Color for visual representation
+    public var color: String {
+        switch categoryGroup {
+        case .traditional: return "blue"
+        case .structural: return "orange"
+        case .mechanical: return "yellow"
+        case .finishes: return "green"
+        case .specialties: return "purple"
+        case .design: return "pink"
+        case .other: return "gray"
+        }
+    }
+    
+    /// Whether this category typically has scheduled phases
+    public var hasPhaseScheduling: Bool {
+        switch self {
+        case .demolition, .sitework, .foundation, .framing, .roofing, .exterior,
+             .electrical, .plumbing, .hvac, .insulation, .drywall, .flooring,
+             .trim, .paint, .kitchen, .bathroom, .fixtures, .appliances, .cleanup:
+            return true
+        default:
+            return false
+        }
+    }
+    
+    /// Typical order in renovation sequence (1-20, 0 for non-sequenced)
+    public var renovationSequence: Int {
+        switch self {
+        case .permits: return 1
+        case .demolition: return 2
+        case .sitework: return 3
+        case .foundation: return 4
+        case .framing: return 5
+        case .roofing: return 6
+        case .exterior: return 7
+        case .electrical: return 8
+        case .plumbing: return 9
+        case .hvac: return 10
+        case .insulation: return 11
+        case .drywall: return 12
+        case .flooring: return 13
+        case .trim: return 14
+        case .paint: return 15
+        case .kitchen: return 16
+        case .bathroom: return 17
+        case .fixtures, .lighting: return 18
+        case .appliances: return 19
+        case .landscaping: return 20
+        case .cleanup: return 21
+        default: return 0 // Non-sequenced categories
+        }
+    }
+}
 
+/// Category groups for organizing renovation phases
+public enum CategoryGroup: String, CaseIterable, Identifiable, Codable, Sendable {
+    case traditional = "Traditional Budget"
+    case structural = "Structural Work"
+    case mechanical = "Mechanical Systems" 
+    case finishes = "Interior Finishes"
+    case specialties = "Room Specialties"
+    case design = "Design Elements"
+    case other = "Other"
+    
     public var id: Self { self }
 }
 
@@ -19,6 +176,9 @@ public enum ProcessingStatus: String, CaseIterable, Identifiable, Codable, Senda
     
     public var id: Self { self }
 }
+
+// Type alias for compatibility
+public typealias ReceiptProcessingStatus = ProcessingStatus
 
 /// Represents a vendor/supplier in the organization directory
 public struct Vendor: Identifiable, Codable, Hashable, Sendable {
@@ -121,6 +281,7 @@ public struct PaymentMethod: Identifiable, Codable, Hashable, Sendable {
     public var dateAdded: Date
     public var totalSpent: Double
     public var isActive: Bool
+    public var isDefault: Bool           // Default payment method for quick selection
     public var accountNumber: String     // For checks/bank transfers (masked)
     
     public init(
@@ -133,6 +294,7 @@ public struct PaymentMethod: Identifiable, Codable, Hashable, Sendable {
         dateAdded: Date = Date(),
         totalSpent: Double = 0.0,
         isActive: Bool = true,
+        isDefault: Bool = false,
         accountNumber: String = ""
     ) {
         self.id = id
@@ -144,6 +306,7 @@ public struct PaymentMethod: Identifiable, Codable, Hashable, Sendable {
         self.dateAdded = dateAdded
         self.totalSpent = totalSpent
         self.isActive = isActive
+        self.isDefault = isDefault
         self.accountNumber = accountNumber
     }
     
@@ -229,9 +392,9 @@ public struct ReceiptItem: Identifiable, Codable, Hashable, Sendable {
 
 /// A purchase receipt (sales or returns).
 public struct Receipt: Identifiable, Codable, Hashable, Sendable {
-    public let id: UUID
+    public let id: String
     public var vendor: String
-    public var vendorID: UUID?           // Link to Vendor
+    public var vendorID: String?           // Link to Vendor
     public var date: Date
     public var amount: Double
     public var notes: String
@@ -240,35 +403,46 @@ public struct Receipt: Identifiable, Codable, Hashable, Sendable {
     public var tags: [String]
     public var isReturn: Bool
     public var paymentMethod: String
-    public var paymentMethodID: UUID?    // Link to PaymentMethod
+    public var paymentMethodID: String?    // Link to PaymentMethod
     public var taxAmount: Double
     public var discountAmount: Double
     public var receiptNumber: String
     public var teamMemberID: UUID?       // Link to team member who made the purchase
     
+    // PHASE 2I STEP 4: Budget integration metadata
+    public var teamMemberName: String?  // Cache team member name for quick display
+    public var projectID: UUID?          // Link to project for analytics
+    
     // Receipt details
     public var items: [ReceiptItem]
     public var processingStatus: ProcessingStatus
     
+    // AI Analysis data (when using ChatGPT)
+    public var aiAnalysis: AIAnalysisData?
+    
+    // MARK: - Receipt Image Storage
+    public var receiptImageData: Data?
+    public var receiptImageName: String?
+    public var hasReceiptImage: Bool { receiptImageData != nil }
+    
     public init(
-        id: UUID = UUID(),
+        id: String = UUID().uuidString,
         vendor: String,
-        vendorID: UUID? = nil,
+        vendorID: String? = nil,
         date: Date,
         amount: Double,
         notes: String = "",
         category: ReceiptCategory = .material,
-        photoIDs: [UUID] = [],
-        tags: [String] = [],
+        subcategory: String = "",
         isReturn: Bool = false,
-        paymentMethod: String = "",
-        paymentMethodID: UUID? = nil,
-        taxAmount: Double = 0,
-        discountAmount: Double = 0,
+        paymentMethod: String = "Cash",
+        paymentMethodID: String? = nil,
+        taxAmount: Double = 0.0,
+        discountAmount: Double = 0.0,
         receiptNumber: String = "",
-        teamMemberID: UUID? = nil,
-        items: [ReceiptItem] = [],
-        processingStatus: ProcessingStatus = .completed
+        processingStatus: ReceiptProcessingStatus = .pending,
+        aiAnalysis: AIAnalysisData? = nil,
+        receiptImageData: Data? = nil  // Accept Data directly instead of UIImage
     ) {
         self.id = id
         self.vendor = vendor
@@ -277,21 +451,198 @@ public struct Receipt: Identifiable, Codable, Hashable, Sendable {
         self.amount = amount
         self.notes = notes
         self.category = category
-        self.photoIDs = photoIDs
-        self.tags = tags
+        self.photoIDs = []
+        self.tags = []
         self.isReturn = isReturn
         self.paymentMethod = paymentMethod
         self.paymentMethodID = paymentMethodID
         self.taxAmount = taxAmount
         self.discountAmount = discountAmount
         self.receiptNumber = receiptNumber
-        self.teamMemberID = teamMemberID
-        self.items = items
+        self.teamMemberID = nil
+        
+        // PHASE 2I STEP 4: Initialize budget integration fields
+        self.teamMemberName = nil
+        self.projectID = nil
+        
+        self.items = []
         self.processingStatus = processingStatus
+        self.aiAnalysis = aiAnalysis
+        
+        // Set image data directly
+        self.receiptImageData = receiptImageData
+        self.receiptImageName = receiptImageData != nil ? "receipt_\(id).jpg" : nil
+    }
+    
+    // MARK: - Image Access Methods
+    
+    /// Get the receipt image as UIImage (when UIKit is available)
+    #if canImport(UIKit)
+    public var receiptImage: UIImage? {
+        guard let imageData = receiptImageData else { return nil }
+        return UIImage(data: imageData)
+    }
+    
+    /// Update the receipt image from UIImage
+    public mutating func setReceiptImage(_ image: UIImage?) {
+        if let image = image {
+            self.receiptImageData = image.jpegData(compressionQuality: 0.8)
+            self.receiptImageName = "receipt_\(id).jpg"
+        } else {
+            self.receiptImageData = nil
+            self.receiptImageName = nil
+        }
+    }
+    #endif
+    
+    /// Update the receipt image from Data
+    public mutating func setReceiptImageData(_ data: Data?) {
+        self.receiptImageData = data
+        self.receiptImageName = data != nil ? "receipt_\(id).jpg" : nil
     }
     
     /// Whether this receipt has associated photos
     public var hasPhotos: Bool {
         return !photoIDs.isEmpty
+    }
+    
+    /// Whether this receipt was processed using AI
+    public var wasProcessedByAI: Bool {
+        return aiAnalysis != nil
+    }
+}
+
+/// AI Analysis metadata for receipts processed by ChatGPT
+public struct AIAnalysisData: Codable, Hashable, Sendable {
+    public let confidence: Double
+    public let detectedVendor: String
+    public let detectedCategory: String
+    public let detectedPaymentMethod: String
+    public let itemCount: Int
+    public let processingDate: Date
+    
+    public init(
+        confidence: Double,
+        detectedVendor: String,
+        detectedCategory: String,
+        detectedPaymentMethod: String,
+        itemCount: Int,
+        processingDate: Date = Date()
+    ) {
+        self.confidence = confidence
+        self.detectedVendor = detectedVendor
+        self.detectedCategory = detectedCategory
+        self.detectedPaymentMethod = detectedPaymentMethod
+        self.itemCount = itemCount
+        self.processingDate = processingDate
+    }
+}
+
+// MARK: - Receipt Analysis Models (for AI processing)
+
+/// Result of AI-powered receipt analysis
+public struct ReceiptAnalysisResult {
+    public let vendor: String
+    public let category: String
+    public let amount: Double
+    public let taxAmount: Double
+    public let discountAmount: Double
+    public let paymentMethod: String
+    public let paymentMethodDetails: PaymentMethodDetails?
+    public let receiptNumber: String
+    public let receiptDate: Date? // Actual receipt date from OCR
+    public let items: [ReceiptItemResult]
+    public let isReturn: Bool
+    public let confidence: Double
+    
+    public init(
+        vendor: String,
+        category: String,
+        amount: Double,
+        taxAmount: Double,
+        discountAmount: Double,
+        paymentMethod: String,
+        paymentMethodDetails: PaymentMethodDetails? = nil,
+        receiptNumber: String,
+        receiptDate: Date? = nil,
+        items: [ReceiptItemResult],
+        isReturn: Bool,
+        confidence: Double
+    ) {
+        self.vendor = vendor
+        self.category = category
+        self.amount = amount
+        self.taxAmount = taxAmount
+        self.discountAmount = discountAmount
+        self.paymentMethod = paymentMethod
+        self.paymentMethodDetails = paymentMethodDetails
+        self.receiptNumber = receiptNumber
+        self.receiptDate = receiptDate
+        self.items = items
+        self.isReturn = isReturn
+        self.confidence = confidence
+    }
+}
+
+/// Payment method details extracted from receipt
+public struct PaymentMethodDetails: Codable, Hashable, Sendable {
+    public let cardBrand: String?
+    public let lastFourDigits: String?
+    public let accountInfo: String?
+    
+    public init(cardBrand: String?, lastFourDigits: String?, accountInfo: String?) {
+        self.cardBrand = cardBrand
+        self.lastFourDigits = lastFourDigits
+        self.accountInfo = accountInfo
+    }
+}
+
+/// Individual item from receipt analysis
+public struct ReceiptItemResult {
+    public let name: String
+    public let quantity: Double
+    public let unitPrice: Double
+    public let totalPrice: Double
+    public let category: String
+    
+    public init(
+        name: String,
+        quantity: Double,
+        unitPrice: Double,
+        totalPrice: Double,
+        category: String
+    ) {
+        self.name = name
+        self.quantity = quantity
+        self.unitPrice = unitPrice
+        self.totalPrice = totalPrice
+        self.category = category
+    }
+}
+
+/// Receipt analysis errors
+public enum ReceiptAnalysisError: LocalizedError {
+    case invalidImage
+    case noTextFound
+    case aiAnalysisFailed
+    case subscriptionLimitReached
+    case featureNotAllowed
+    case noOrganization
+    
+    public var errorDescription: String? {
+        switch self {
+        case .invalidImage:
+            return "Invalid image format. Please try taking another photo."
+        case .noTextFound:
+            return "No readable text found in the image. Please ensure the receipt is clearly visible and well-lit."
+        case .aiAnalysisFailed:
+            return "AI analysis failed. Please try again or use manual entry."
+        case .subscriptionLimitReached:
+            return "Monthly AI usage limit exceeded. Please upgrade your subscription or wait until next month."
+        case .featureNotAllowed:
+            return "This AI feature is not available with your current subscription plan. Please upgrade to access advanced features."
+        case .noOrganization:
+            return "No organization found. Please ensure you're logged in and part of an organization."
+        }
     }
 }

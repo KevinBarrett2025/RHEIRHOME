@@ -27,6 +27,7 @@ struct BudgetBreakdownView: View {
         case teamMembers = "Team"
         case vendors = "Vendors"
         case payments = "Payments"
+        case intelligence = "Intelligence"
         
         var icon: String {
             switch self {
@@ -34,6 +35,7 @@ struct BudgetBreakdownView: View {
             case .teamMembers: return "person.2.fill"
             case .vendors: return "building.2.fill"
             case .payments: return "creditcard.fill"
+            case .intelligence: return "brain.head.profile"
             }
         }
     }
@@ -64,6 +66,17 @@ struct BudgetBreakdownView: View {
                     .environmentObject(projectVM)
                     .environmentObject(authVM)
                     .tag(BudgetTab.payments)
+                
+                if let project = projectVM.selectedProject {
+                    IntelligentBudgetDashboard(project: project)
+                        .environmentObject(projectVM)
+                        .environmentObject(authVM)
+                        .tag(BudgetTab.intelligence)
+                } else {
+                    Text("Select a project to view Intelligence")
+                        .foregroundColor(.secondary)
+                        .tag(BudgetTab.intelligence)
+                }
             }
             .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
         }
@@ -504,13 +517,18 @@ struct ProjectTeamMembersView: View {
         // Find team members who have worked on this project
         let receiptMemberIDs = project.receipts.compactMap { $0.teamMemberID }
         let progressMemberIDs = project.progressReports.flatMap { $0.employeeIDs }
-        let workingMemberIDs = Set(receiptMemberIDs + progressMemberIDs)
         
-        // Combine both sets
+        // CRITICAL FIX: Also check logged hours (work hours) for team member activity
+        let loggedHoursMemberIDs = project.loggedHours.compactMap { workHour in
+            workHour.employeeID
+        }
+        
+        // Combine all sets
+        let workingMemberIDs = Set(receiptMemberIDs + progressMemberIDs + loggedHoursMemberIDs)
         let allRelevantMemberIDs = assignedMemberIDs.union(workingMemberIDs)
         
         return projectVM.teamMembers.filter { member in
-            // Include if explicitly assigned or has worked on the project
+            // Include if explicitly assigned or has worked on the project (including logged hours)
             allRelevantMemberIDs.contains(member.id) || 
             // Or if they're active and belong to the organization
             (member.employmentStatus.canBeAssignedToProjects && member.organizationID == project.organizationID)
@@ -657,6 +675,7 @@ struct ProjectTeamMembersView: View {
             .background(Color(.systemGray6))
             .cornerRadius(12)
         }
+        .padding()
     }
     
     @ViewBuilder
@@ -838,9 +857,12 @@ struct ProjectTeamMembersView: View {
         let hasProgress = project.progressReports.contains { log in
             log.employeeIDs.contains(member.id)
         }
-        // Add more activity checks as needed
+        // CRITICAL FIX: Also check logged hours (work hours)
+        let hasLoggedHours = project.loggedHours.contains { hour in
+            hour.employeeID == member.id
+        }
         
-        return hasReceipts || hasProgress
+        return hasReceipts || hasProgress || hasLoggedHours
     }
     
     // New helper methods
@@ -1448,6 +1470,94 @@ struct ProjectReportsView: View {
     }
 }
 
+// MARK: - Intelligent Budget Dashboard
+struct IntelligentBudgetDashboard: View {
+    let project: Project
+    @EnvironmentObject private var projectVM: ProjectViewModel
+    @EnvironmentObject private var authVM: AuthViewModel
+    
+    var body: some View {
+       ScrollView {
+            VStack(spacing: 24) {
+                // Header
+                VStack(spacing: 12) {
+                    HStack {
+                        Image(systemName: "brain.head.profile")
+                            .font(.title2)
+                            .foregroundColor(.purple)
+                        
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("AI-Powered Insights")
+                                .font(.title2)
+                                .fontWeight(.bold)
+                            
+                            Text("for \(project.name)")
+                                .font(.headline)
+                                .foregroundColor(.secondary)
+                        }
+                        
+                        Spacer()
+                    }
+                    
+                    // Intelligence Coming Soon
+                    VStack(spacing: 16) {
+                        Image(systemName: "wand.and.stars")
+                            .font(.system(size: 48))
+                            .foregroundColor(.purple)
+                        
+                        Text("Intelligence Dashboard")
+                            .font(.title2)
+                            .fontWeight(.bold)
+                        
+                        Text("Advanced AI-powered project analytics and insights are coming soon. This will include predictive budget analysis, timeline intelligence, and team performance metrics.")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
+                        
+                        // Preview features
+                        LazyVGrid(columns: [
+                            GridItem(.flexible()),
+                            GridItem(.flexible())
+                        ], spacing: 16) {
+                            // IntelligencePreviewCard(
+                            //     icon: "chart.line.uptrend.xyaxis",
+                            //     title: "Predictive Analytics",
+                            //     description: "AI-powered budget and timeline predictions",
+                            //     color: .blue
+                            // )
+                            
+                            // IntelligencePreviewCard(
+                            //     icon: "person.2.badge.gearshape",
+                            //     title: "Team Intelligence",
+                            //     description: "Performance metrics and efficiency analysis",
+                            //     color: .green
+                            // )
+                            
+                            // IntelligencePreviewCard(
+                            //     icon: "lightbulb.fill",
+                            //     title: "Smart Recommendations",
+                            //     description: "Automated suggestions for optimization",
+                            //     color: .orange
+                            // )
+                            
+                            // IntelligencePreviewCard(
+                            //     icon: "stethoscope",
+                            //     title: "Project Health",
+                            //     description: "Real-time project health monitoring",
+                            //     color: .red
+                            // )
+                        }
+                        .padding(.horizontal)
+                    }
+                    .padding(.vertical, 32)
+                }
+            }
+            .padding()
+        }
+    }
+}
+
 // MARK: - Simple Detail Views
 struct SimpleVendorDetailView: View {
     let vendorID: UUID
@@ -1462,7 +1572,7 @@ struct SimpleVendorDetailView: View {
     
     private var vendorReceipts: [Receipt] {
         project.receipts.filter { receipt in
-            receipt.vendorID == vendorID || 
+            receipt.vendorID == vendorID.uuidString || 
             (vendor != nil && receipt.vendor.lowercased() == vendor!.name.lowercased())
         }
     }
@@ -1614,7 +1724,7 @@ struct SimplePaymentMethodDetailView: View {
     
     private var paymentReceipts: [Receipt] {
         project.receipts.filter { receipt in
-            receipt.paymentMethodID == paymentMethodID || 
+            receipt.paymentMethodID == paymentMethodID.uuidString || 
             (paymentMethod != nil && (
                 receipt.paymentMethod.lowercased() == paymentMethod!.name.lowercased() ||
                 receipt.paymentMethod.lowercased() == paymentMethod!.displayName.lowercased()
@@ -1882,7 +1992,7 @@ struct PaymentMethodSpendingRowView: View {
                             
                             if !paymentMethod.lastFourDigits.isEmpty {
                                 Text("•••• \(paymentMethod.lastFourDigits)")
-                                    .font(.caption)
+                                    .font(.caption2)
                                     .foregroundColor(.secondary)
                             }
                             
@@ -2151,16 +2261,12 @@ struct ProjectTeamAssignmentView: View {
                     HStack {
                         Text(member.employmentStatus.displayName)
                             .font(.caption)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 2)
-                            .background(Color.blue.opacity(0.2))
-                            .foregroundColor(.blue)
-                            .cornerRadius(4)
+                            .foregroundColor(.green)
                         
                         if let rate = member.defaultRate {
                             Text(rate.rate.formatAsCurrency() + "/hr")
                                 .font(.caption)
-                                .foregroundColor(.green)
+                                .foregroundColor(.blue)
                         }
                     }
                 }
@@ -2255,20 +2361,12 @@ struct ProjectTeamMemberDetailView: View {
                     HStack {
                         Text(member.employmentStatus.displayName)
                             .font(.caption)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 2)
-                            .background(Color.green.opacity(0.2))
                             .foregroundColor(.green)
-                            .cornerRadius(4)
                         
                         if member.hasAppAccess {
                             Text("iPhone Access")
                                 .font(.caption)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 2)
-                                .background(Color.blue.opacity(0.2))
                                 .foregroundColor(.blue)
-                                .cornerRadius(4)
                         }
                     }
                 }
@@ -2490,7 +2588,7 @@ struct VendorReceiptRowCard: View {
                         .foregroundColor(.secondary)
                 }
                 
-                HStack {
+                HStack(spacing: 12) {
                     Text(receipt.category.rawValue)
                         .font(.caption2)
                         .foregroundColor(.secondary)
@@ -2601,5 +2699,4 @@ struct PaymentReceiptRowCard: View {
 }
 
 extension ProjectViewModel {
-    // Removed calculateTotalLaborCost() and calculateTotalHours() methods
 }
