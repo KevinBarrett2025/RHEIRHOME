@@ -2,31 +2,22 @@ import SwiftUI
 
 struct LaborModuleView: View {
     @EnvironmentObject var projectVM: ProjectViewModel
-    @EnvironmentObject var authVM: AuthViewModel
     @State private var showingLogHours = false
     @State private var selectedTeamMember: TeamMember?
     @State private var showingPaymentView = false
     
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                // Universal Header
-                UniversalHeaderView()
-                    .environmentObject(authVM)
-                    .environmentObject(projectVM)
-                
-                VStack(spacing: 16) {
-                    if let project = projectVM.selectedProject {
-                        laborSummarySection(project)
-                        teamMembersList
-                    } else {
-                        noProjectSelectedView
-                    }
+            VStack(spacing: 16) {
+                if let project = projectVM.selectedProject {
+                    laborSummarySection(project)
+                    teamMembersList
+                } else {
+                    noProjectSelectedView
                 }
-                .padding()
             }
-            .navigationTitle("")
-            .navigationBarHidden(true)
+            .padding()
+            .navigationTitle("Labor")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Menu {

@@ -2,7 +2,6 @@ import SwiftUI
 
 struct ReceiptsView: View {
     @EnvironmentObject var projectVM: ProjectViewModel
-    @EnvironmentObject var authVM: AuthViewModel
     @Binding var selectedTab: Tab
     @State private var showingNewReceipt = false
     @State private var showingScanner = false
@@ -66,15 +65,10 @@ struct ReceiptsView: View {
     private var activeCategories: [ReceiptCategory] {
         Array(Set(receipts.map { $0.category })).sorted { $0.rawValue < $1.rawValue }
     }
-
+    
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                // Universal Header
-                UniversalHeaderView()
-                    .environmentObject(authVM)
-                    .environmentObject(projectVM)
-                
                 if projectVM.selectedProject != nil {
                     // Custom tab bar for view modes
                     viewModeSelector
@@ -100,8 +94,8 @@ struct ReceiptsView: View {
                     enhancedFABButtons
                 }
             }
-            .navigationTitle("")
-            .navigationBarHidden(true)
+            .navigationTitle("Receipts")
+            .navigationBarTitleDisplayMode(.large)
             .sheet(isPresented: $showingNewReceipt) {
                 if let project = projectVM.selectedProject {
                     ManualReceiptEntryView(isPresented: $showingNewReceipt, project: project)

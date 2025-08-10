@@ -2,7 +2,6 @@ import SwiftUI
 
 struct TasksListView: View {
     @EnvironmentObject var projectVM: ProjectViewModel
-    @EnvironmentObject var authVM: AuthViewModel
     @State private var showingNewTask = false
     @State private var showingCompletedTasks = false
     @State private var searchText = ""
@@ -94,17 +93,8 @@ struct TasksListView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-                // Universal Header
-                UniversalHeaderView()
-                    .environmentObject(authVM)
-                    .environmentObject(projectVM)
-                
-                mainContent
-            }
-            .navigationTitle("")
-            .navigationBarHidden(true)
+        mainContent
+            .navigationTitle("Tasks")
             .searchable(text: $searchText, prompt: "Search tasks...")
             .toolbar {
                 toolbarContent
@@ -116,7 +106,6 @@ struct TasksListView: View {
                 TaskDetailView(task: task)
                     .environmentObject(projectVM)
             }
-        }
     }
     
     private var mainContent: some View {
