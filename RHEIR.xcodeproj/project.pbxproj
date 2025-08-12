@@ -232,16 +232,6 @@
 		D4D087998CBC43C585EE6395 /* VendorManagementService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VendorManagementService.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
-/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		D4F5EC712DE5E7E3007C1A60 /* Exceptions for "Views" folder in "RHEIR" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				Auth/InviteUserView.swift,
-			);
-			target = D44279C42DE08FA000E70B1E /* RHEIR */;
-		};
-/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
-
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		D44279D52DE08FA100E70B1E /* RHEIRTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
@@ -265,9 +255,6 @@
 		};
 		D4427AD12DE26DAD00E70B1E /* Views */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-				D4F5EC712DE5E7E3007C1A60 /* Exceptions for "Views" folder in "RHEIR" target */,
-			);
 			path = Views;
 			sourceTree = "<group>";
 		};

@@ -11,29 +11,25 @@ struct MainTabView: View {
         TabView(selection: $selection) {
             LandingPageView(selectedTab: $selection)
                 .environmentObject(projectVM)
-                .environmentObject(authVM)
                 .tabItem { Label("Projects", systemImage: "folder") }
                 .tag(Tab.projects)
 
             ReceiptsView(selectedTab: $selection)
                 .environmentObject(projectVM)
-                .environmentObject(authVM)
                 .tabItem { Label("Receipts", systemImage: "tray.full") }
                 .tag(Tab.receipts)
+
+            LaborModuleView()
+                .environmentObject(projectVM)
+                .tabItem { Label("Labor", systemImage: "clock") }
+                .tag(Tab.labor)
 
             NavigationStack {
                 TasksListView()
                     .environmentObject(projectVM)
-                    .environmentObject(authVM)
             }
             .tabItem { Label("Tasks", systemImage: "checklist") }
             .tag(Tab.tasks)
-
-            LaborModuleView()
-                .environmentObject(projectVM)
-                .environmentObject(authVM)
-                .tabItem { Label("Labor", systemImage: "clock") }
-                .tag(Tab.labor)
 
             NavigationStack {
                 MasterCompanySettingsView()
@@ -42,7 +38,6 @@ struct MainTabView: View {
             }
             .tabItem { Label("Company", systemImage: "building.2") }
             .tag(Tab.company)
-
         }
         .onAppear(perform: selectFirstProjectIfNeeded)
     }

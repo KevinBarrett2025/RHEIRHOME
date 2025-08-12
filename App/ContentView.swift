@@ -1,7 +1,7 @@
-import SwiftUI
+// ... existing code ...
 
 struct ContentView: View {
-    @StateObject private var projectVM = ProjectViewModel(offlineDataManager: OfflineDataManager())
+    @StateObject private var projectVM = ProjectViewModel(cloudKitService: CloudKitAuthService())
     @StateObject private var authVM = AuthViewModel(service: CloudKitAuthService())
     @State private var selectedTab: Tab = .projects
 
@@ -138,3 +138,5 @@ struct LoadingView: View {
         .background(Color(.systemBackground))
     }
 }
+
+// ... existing code ...
