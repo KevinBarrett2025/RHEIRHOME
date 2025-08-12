@@ -250,4 +250,17 @@ extension Project {
             assignedUserIDs.append(teamMemberID)
         }
     }
+    
+    // MARK: - User Assignment Methods
+    public mutating func assignUser(_ userID: String) {
+        if !assignedUserIDs.contains(userID) {
+            assignedUserIDs.append(userID)
+            lastModifiedDate = Date()
+        }
+    }
+    
+    public mutating func unassignUser(_ userID: String) {
+        assignedUserIDs.removeAll { $0 == userID }
+        lastModifiedDate = Date()
+    }
 }

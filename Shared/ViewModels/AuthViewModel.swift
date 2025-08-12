@@ -1257,6 +1257,46 @@ class AuthViewModel: ObservableObject {
         }
     }
     
+    // MARK: - User Invitation Methods
+    
+    func invite(email: String) {
+        print("TODO: invite(email:) - Phase 2 implementation needed")
+        isInviting = true
+        inviteStatus = "Sending invitation..."
+        
+        // Stub implementation for Phase 1
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+            self?.isInviting = false
+            self?.inviteStatus = "Invitation sent to \(email)"
+            print("📧 PHASE 1: Simulated invitation sent to \(email)")
+        }
+    }
+    
+    func inviteUser(email: String, role: OrganizationRole = .member) async -> InviteResult {
+        print("TODO: inviteUser(email:role:) - Phase 2 implementation needed")
+        
+        // Stub implementation for Phase 1
+        await MainActor.run {
+            isInviting = true
+            inviteStatus = "Sending invitation to \(email)..."
+        }
+        
+        // Simulate network delay
+        try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
+        
+        await MainActor.run {
+            isInviting = false
+            inviteStatus = "Invitation sent to \(email) as \(role.displayName)"
+        }
+        
+        return InviteResult(success: true, message: "Invitation sent successfully")
+    }
+    
+    /// Get user role for a specific organization
+    func getUserRole(for organization: Organization) -> OrganizationRole? {
+        return organizationRoles[organization.id];
+    }
+    
     // MARK: - Subscription Tier Management (Testing)
     
     /// Update subscription tier for testing AI features (Development Only)
@@ -1334,10 +1374,5 @@ class AuthViewModel: ObservableObject {
         } catch {
             return "Connection Failed";
         }
-    }
-    
-    /// Get user role for a specific organization
-    func getUserRole(for organization: Organization) -> OrganizationRole? {
-        return organizationRoles[organization.id];
     }
 }

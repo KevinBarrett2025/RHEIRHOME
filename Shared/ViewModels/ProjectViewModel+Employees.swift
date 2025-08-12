@@ -23,7 +23,7 @@ extension ProjectViewModel {
         print("✅ Adding new team member to organization: \(teamMember.name) with \(teamMember.rates.count) rates")
         addTeamMemberToOrganization(teamMember)
         
-        rebuildTeamMemberCache() // Rebuild cache immediately
+        updateTeamMemberCaches() // Rebuild cache immediately
     }
 
     /// Update an existing team member's details in the organization.
@@ -46,15 +46,17 @@ extension ProjectViewModel {
             updateWorkHourTeamMemberNames(from: oldName, to: updated.name)
         }
         
-        rebuildTeamMemberCache() // Rebuild cache immediately
+        updateTeamMemberCaches() // Rebuild cache immediately
     }
 
     /// Remove a team member (and their rates) from the organization directory.
     func removeTeamMember(_ teamMember: TeamMember) {
         print("🗑️ Removing team member from organization: \(teamMember.name)")
-        removeTeamMemberFromOrganization(teamMember.id)
+        Task {
+            await removeTeamMember(teamMember)
+        }
         
-        rebuildTeamMemberCache() // Rebuild cache immediately
+        updateTeamMemberCaches() // Rebuild cache immediately
     }
 
     /// Delete a team member entirely: removes from organization directory,
@@ -63,13 +65,15 @@ extension ProjectViewModel {
         print("🗑️ Deleting team member entirely from organization: \(toDelete.name)")
         
         // 1) Remove from organization team member directory
-        removeTeamMemberFromOrganization(toDelete.id)
+        Task {
+            await removeTeamMember(toDelete)
+        }
         
         // 2) Strip out any logged hours under that name in the selected project
         guard let sel = selectedProject,
               let projIdx = organizationProjects.firstIndex(where: { $0.id == sel.id })
         else { 
-            rebuildTeamMemberCache()
+            updateTeamMemberCaches()
             return 
         }
 
@@ -89,7 +93,7 @@ extension ProjectViewModel {
         // re-assign to force view update
         selectedProject = organizationProjects[projIdx]
         
-        rebuildTeamMemberCache()
+        updateTeamMemberCaches()
         recomputeLaborData()
         debouncedSaveProjects()
     }
@@ -127,7 +131,7 @@ extension ProjectViewModel {
                 print("    - \(rate.taskType): $\(rate.rate)")
             }
         }
-        print("  Cache size: \(teamMemberCache.count)")
+        print("  Cache size: \(teamMembersCache.count)")
         print("  Organization: \(currentOrganizationID?.prefix(8).description ?? "None")...")
     }
     
@@ -159,18 +163,18 @@ extension ProjectViewModel {
     }
     
     var employeeCache: [String: TeamMember] {
-        get { teamMemberCache }
+        get { teamMemberNameCache }
         set { 
             print("⚠️ Setting employeeCache is deprecated - cache is now computed from organization")
         }
     }
     
     func rebuildEmployeeCache() {
-        rebuildTeamMemberCache()
+        updateTeamMemberCaches()
     }
     
     func debouncedSaveEmployees() {
-        debouncedSaveTeamMembers()
+        debouncedSaveProjects()
     }
     
     var groupedHoursByEmployee: [String: [WorkHour]] {

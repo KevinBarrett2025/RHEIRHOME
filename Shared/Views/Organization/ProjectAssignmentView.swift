@@ -83,26 +83,32 @@ struct ProjectAssignmentView: View {
         var updatedMember = teamMember
         updatedMember.employmentStatus = .active
         
-        // Assign the team member to each selected project using the available method
-        for projectID in selectedProjects {
-            // Find the project and update its assigned users directly
-            if let projectIndex = projectVM.organizationProjects.firstIndex(where: { $0.id == projectID }) {
-                var project = projectVM.organizationProjects[projectIndex]
-                if !project.assignedUserIDs.contains(updatedMember.id.uuidString) {
-                    project.assignUser(updatedMember.id.uuidString)
-                    projectVM.updateProject(project)
-                    print("✅ Assigned \(updatedMember.name) to project: \(project.name)")
+        Task {
+            // Assign the team member to each selected project using the available method
+            for projectID in selectedProjects {
+                // Find the project and update its assigned users directly
+                if let projectIndex = projectVM.organizationProjects.firstIndex(where: { $0.id == projectID }) {
+                    var project = projectVM.organizationProjects[projectIndex]
+                    if !project.assignedUserIDs.contains(updatedMember.id.uuidString) {
+                        project.assignUser(updatedMember.id.uuidString)
+                        await projectVM.updateProject(project)
+                        print("✅ Assigned \(updatedMember.name) to project: \(project.name)")
+                    }
                 }
             }
+            
+            // Update the team member with any changes
+            await MainActor.run {
+                projectVM.updateTeamMemberInOrganization(updatedMember)
+            }
+            
+            print("✅ Successfully assigned \(teamMember.name) to \(selectedProjects.count) project(s)")
+            print("📊 Updated employment status to: \(updatedMember.employmentStatus.displayName)")
+            
+            await MainActor.run {
+                dismiss()
+            }
         }
-        
-        // Update the team member with any changes
-        projectVM.updateTeamMemberInOrganization(updatedMember)
-        
-        print("✅ Successfully assigned \(teamMember.name) to \(selectedProjects.count) project(s)")
-        print("📊 Updated employment status to: \(updatedMember.employmentStatus.displayName)")
-        
-        dismiss()
     }
 }
 

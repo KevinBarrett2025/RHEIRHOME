@@ -8,13 +8,10 @@ struct EditProjectView: View {
     
     @State private var name: String
     @State private var client: String
-    @State private var phone: String
-    @State private var email: String
-    @State private var street: String
-    @State private var city: String
-    @State private var state: String
-    @State private var zip: String
-    @State private var notes: String
+    @State private var clientPhone: String
+    @State private var clientEmail: String
+    @State private var clientAddress: String
+    @State private var description: String
     @State private var totalBudget: String
     @State private var materialCost: String
     @State private var laborCost: String
@@ -48,13 +45,10 @@ struct EditProjectView: View {
         self.project = project
         self._name = State(initialValue: project.name)
         self._client = State(initialValue: project.client)
-        self._phone = State(initialValue: project.phone)
-        self._email = State(initialValue: project.email)
-        self._street = State(initialValue: project.street)
-        self._city = State(initialValue: project.city)
-        self._state = State(initialValue: project.state)
-        self._zip = State(initialValue: project.zip)
-        self._notes = State(initialValue: project.notes)
+        self._clientPhone = State(initialValue: project.clientPhone ?? "")
+        self._clientEmail = State(initialValue: project.clientEmail ?? "")
+        self._clientAddress = State(initialValue: project.clientAddress ?? "")
+        self._description = State(initialValue: project.description)
         
         // For budget fields, show empty string if value is 0, otherwise show the actual value
         self._totalBudget = State(initialValue: project.totalBudget == 0 ? "" : String(format: "%.0f", project.totalBudget))
@@ -126,8 +120,8 @@ struct EditProjectView: View {
             VStack(spacing: 12) {
                 SemiTransparentTextField(title: "Project Name", text: $name, isRequired: true)
                 SemiTransparentTextField(title: "Client Name", text: $client, isRequired: true)
-                SemiTransparentTextField(title: "Phone", text: $phone, keyboardType: .phonePad)
-                SemiTransparentTextField(title: "Email", text: $email, keyboardType: .emailAddress, autocapitalization: .never)
+                SemiTransparentTextField(title: "Phone", text: $clientPhone, keyboardType: .phonePad)
+                SemiTransparentTextField(title: "Email", text: $clientEmail, keyboardType: .emailAddress, autocapitalization: .never)
             }
         }
         .padding()
@@ -147,15 +141,7 @@ struct EditProjectView: View {
             }
             
             VStack(spacing: 12) {
-                SemiTransparentTextField(title: "Street Address", text: $street)
-                
-                HStack(spacing: 12) {
-                    SemiTransparentTextField(title: "City", text: $city)
-                    SemiTransparentTextField(title: "State", text: $state)
-                        .frame(maxWidth: 100)
-                    SemiTransparentTextField(title: "Zip", text: $zip, keyboardType: .numberPad)
-                        .frame(maxWidth: 100)
-                }
+                SemiTransparentTextField(title: "Full Address", text: $clientAddress)
             }
         }
         .padding()
@@ -257,12 +243,12 @@ struct EditProjectView: View {
                 Image(systemName: "note.text")
                     .font(.title2) 
                     .foregroundColor(.indigo)
-                Text("Notes")
+                Text("Description")
                     .font(.headline)
                     .fontWeight(.semibold)
             }
             
-            TextField("Additional notes about the project...", text: $notes, axis: .vertical)
+            TextField("Additional description about the project...", text: $description, axis: .vertical)
                 .textFieldStyle(.plain)
                 .padding()
                 .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
@@ -293,71 +279,57 @@ struct EditProjectView: View {
             return
         }
         
-        // Preserve ALL original project data, only updating the fields that were edited
-        var updatedProject = project
+        // Create updated project using the current project as base and updating only changed fields
+        let updatedProject = Project(
+            id: project.id,
+            name: name.trimmingCharacters(in: .whitespacesAndNewlines),
+            client: client.trimmingCharacters(in: .whitespacesAndNewlines),
+            clientEmail: clientEmail.isEmpty ? nil : clientEmail.trimmingCharacters(in: .whitespacesAndNewlines),
+            clientPhone: clientPhone.isEmpty ? nil : clientPhone.trimmingCharacters(in: .whitespacesAndNewlines),
+            clientAddress: clientAddress.isEmpty ? nil : clientAddress.trimmingCharacters(in: .whitespacesAndNewlines),
+            description: description.trimmingCharacters(in: .whitespacesAndNewlines),
+            totalBudget: totalBudgetValue,
+            materialCost: materialCostValue,
+            laborCost: laborCostValue,
+            generalConditions: generalConditionsValue,
+            contingency: contingencyAmount,
+            startDate: startDate,
+            endDate: endDate,
+            status: project.status,
+            priority: project.priority,
+            assignedUserIDs: project.assignedUserIDs,
+            organizationID: project.organizationID,
+            creationDate: project.creationDate,
+            lastModifiedDate: Date(),
+            photoIDs: project.photoIDs
+        )
         
-        // Update basic info
-        updatedProject.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        updatedProject.client = client.trimmingCharacters(in: .whitespacesAndNewlines)
-        updatedProject.phone = phone.trimmingCharacters(in: .whitespacesAndNewlines)
-        updatedProject.email = email.trimmingCharacters(in: .whitespacesAndNewlines)
-        
-        // Update address
-        updatedProject.street = street.trimmingCharacters(in: .whitespacesAndNewlines)
-        updatedProject.city = city.trimmingCharacters(in: .whitespacesAndNewlines)
-        updatedProject.state = state.trimmingCharacters(in: .whitespacesAndNewlines)
-        updatedProject.zip = zip.trimmingCharacters(in: .whitespacesAndNewlines)
-        
-        // Update notes
-        updatedProject.notes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
-        
-        // Update budget values
-        updatedProject.totalBudget = totalBudgetValue
-        updatedProject.materialCost = materialCostValue
-        updatedProject.laborCost = laborCostValue
-        updatedProject.generalConditions = generalConditionsValue
-        updatedProject.contingency = contingencyAmount // Use calculated contingency
-        
-        // Update dates
-        updatedProject.startDate = startDate
-        updatedProject.endDate = endDate
+        // Copy over all child collections from original project
+        var finalProject = updatedProject
+        finalProject.tasks = project.tasks
+        finalProject.progressLogs = project.progressLogs
+        finalProject.receipts = project.receipts
+        finalProject.workHours = project.workHours
+        finalProject.communications = project.communications
+        finalProject.changeOrders = project.changeOrders
         
         print("💾 PREPARING TO SAVE PROJECT UPDATES:")
-        print("  - Project ID: \(updatedProject.id)")
-        print("  - Updated Name: '\(updatedProject.name)'")
-        print("  - Updated Client: '\(updatedProject.client)'")
-        print("  - Updated Total Budget: $\(updatedProject.totalBudget)")
-        print("  - Organization ID: \(updatedProject.organizationID ?? "none")")
-        print("  - Same ID as original? \(updatedProject.id == project.id)")
+        print("  - Project ID: \(finalProject.id)")
+        print("  - Updated Name: '\(finalProject.name)'")
+        print("  - Updated Client: '\(finalProject.client)'")
+        print("  - Updated Total Budget: $\(finalProject.totalBudget)")
+        print("  - Organization ID: \(finalProject.organizationID)")
+        print("  - Same ID as original? \(finalProject.id == project.id)")
         
         // CRITICAL: Make sure this save completes before dismissing
         Task { @MainActor in
             print("🔄 Starting async project update...")
             
             // Call updateProject and wait for it to complete
-            await updateProjectWithCompletion(updatedProject)
+            await projectVM.updateProject(finalProject)
             
             print("✅ EDIT PROJECT SAVE COMPLETED - dismissing view")
             dismiss()
-        }
-    }
-    
-    @MainActor
-    private func updateProjectWithCompletion(_ updatedProject: Project) async {
-        return await withCheckedContinuation { continuation in
-            print("🔄 Calling projectVM.updateProject...")
-            
-            // Update the project synchronously first
-            projectVM.updateProject(updatedProject)
-            
-            // Give it a moment to process
-            Task {
-                // Wait a bit for the update to process
-                try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
-                
-                print("✅ ProjectViewModel.updateProject call completed")
-                continuation.resume()
-            }
         }
     }
 }
@@ -367,14 +339,15 @@ struct EditProjectView_Previews: PreviewProvider {
         let sampleProject = Project(
             name: "Sample House",
             client: "John Doe",
-            phone: "(555) 123-4567",
-            email: "john.doe@email.com",
+            clientEmail: "john.doe@email.com",
+            clientPhone: "(555) 123-4567",
+            clientAddress: "123 Main St, Anytown, CA 12345",
+            description: "Sample renovation project",
             totalBudget: 50000,
             materialCost: 25000,
             laborCost: 15000,
             generalConditions: 5000,
             contingency: 5000,
-            
             startDate: Date(),
             endDate: Date(),
             organizationID: "sample-org-id"

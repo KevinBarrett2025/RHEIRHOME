@@ -668,4 +668,38 @@ extension ProjectViewModel {
         Status: \(materialsDiff < 0.01 && generalDiff < 0.01 && contingencyDiff < 0.01 ? "✅ VALIDATED" : "⚠️ DIFFERENCES FOUND")
         """
     }
+    
+    // MARK: - Helper Methods for Project Calculations
+    
+    /// Calculate total spent for a given project (all categories combined)
+    private func calculateTotalSpent(for project: Project) -> Double {
+        let receiptTotal = project.receipts.reduce(0.0) { total, receipt in
+            if !receipt.items.isEmpty {
+                // Use item-level totals
+                let itemsTotal = receipt.items.reduce(0.0) { itemTotal, item in
+                    let amount = receipt.isReturn ? -item.totalPrice : item.totalPrice
+                    return itemTotal + amount
+                }
+                return total + itemsTotal
+            } else {
+                // Use receipt-level amount for legacy receipts
+                let amount = receipt.isReturn ? -receipt.amount : receipt.amount
+                return total + amount
+            }
+        }
+        
+        let laborTotal = project.loggedHours.reduce(0.0) { total, hour in
+            let cost = hour.hours * hour.rate
+            guard cost.isFinite else { return total }
+            return total + cost
+        }
+        
+        let totalSpent = receiptTotal + laborTotal
+        
+        guard totalSpent.isFinite else {
+            print("⚠️ calculateTotalSpent resulted in invalid value: \(totalSpent)")
+            return 0
+        }
+        return totalSpent
+    }
 }

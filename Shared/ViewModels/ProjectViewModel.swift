@@ -25,8 +25,8 @@ class ProjectViewModel: ObservableObject {
     
     // Team member properties
     @Published var teamMembers: [TeamMember] = []
-    private var teamMembersCache: [UUID: TeamMember] = [:]
-    private var teamMemberNameCache: [String: TeamMember] = [:]
+    internal var teamMembersCache: [UUID: TeamMember] = [:]
+    internal var teamMemberNameCache: [String: TeamMember] = [:]
     
     // Receipt properties
     private var receiptVendorCache: [UUID: Vendor] = [:]
@@ -457,7 +457,7 @@ class ProjectViewModel: ObservableObject {
         // }
     }
     
-    private func updateTeamMemberCaches() {
+    internal func updateTeamMemberCaches() {
         teamMembersCache.removeAll()
         teamMemberNameCache.removeAll()
         
@@ -789,13 +789,61 @@ extension ProjectViewModel {
         // This will be properly implemented in Phase 2B
     }
     
-    func rebuildTeamMemberCache() {
-        print("PHASE 2A: Rebuilding team member cache...")
-        updateTeamMemberCaches()
-        // Note: recomputeLaborData() is already defined in ProjectViewModel+Clocking.swift
-        recomputeLaborData() // Call the existing comprehensive method
+    // MARK: - Organization Data Migration Methods (Phase 2 Stubs)
+    
+    func getOrganizationDataMigrationStatus() -> String {
+        print("TODO: getOrganizationDataMigrationStatus - Phase 2 implementation needed")
+        return "Migration status not available in Phase 1"
     }
     
+    func getOrganizationVendorSpendingAnalytics() -> [(vendor: String, amount: Double)] {
+        print("TODO: getOrganizationVendorSpendingAnalytics - Phase 2 implementation needed")
+        // Return basic analytics from current projects
+        var vendorSpending: [String: Double] = [:]
+        
+        for project in organizationProjects {
+            for receipt in project.receipts {
+                if let vendorName = receipt.vendorName {
+                    vendorSpending[vendorName, default: 0] += receipt.totalAmount
+                }
+            }
+        }
+        
+        return vendorSpending.map { (vendor: $0.key, amount: $0.value) }
+            .sorted { $0.amount > $1.amount }
+    }
+    
+    func getOrganizationPaymentMethodSpendingAnalytics() -> [(paymentMethod: String, amount: Double)] {
+        print("TODO: getOrganizationPaymentMethodSpendingAnalytics - Phase 2 implementation needed")
+        // Return basic analytics from current projects
+        var paymentMethodSpending: [String: Double] = [:]
+        
+        for project in organizationProjects {
+            for receipt in project.receipts {
+                if let paymentMethodName = receipt.paymentMethodName {
+                    paymentMethodSpending[paymentMethodName, default: 0] += receipt.totalAmount
+                }
+            }
+        }
+        
+        return paymentMethodSpending.map { (paymentMethod: $0.key, amount: $0.value) }
+            .sorted { $0.amount > $1.amount }
+    }
+    
+    func forceMigrateOrganizationDataToCloudKit() async throws {
+        print("TODO: forceMigrateOrganizationDataToCloudKit - Phase 2 implementation needed")
+        // Stub implementation for Phase 1
+        throw NSError(domain: "RHEIR", code: -1, userInfo: [NSLocalizedDescriptionKey: "CloudKit migration not available in Phase 1"])
+    }
+    
+    func updateTeamMemberInOrganization(_ teamMember: TeamMember) {
+        print("TODO: updateTeamMemberInOrganization - Phase 2 implementation needed")
+        // For Phase 1, just call the regular updateTeamMember method
+        Task {
+            await updateTeamMember(teamMember)
+        }
+    }
+
     // MARK: - PHASE 2A: UUID/String Organization ID Compatibility
     
     func organizationDidChange(_ orgID: String?) async {

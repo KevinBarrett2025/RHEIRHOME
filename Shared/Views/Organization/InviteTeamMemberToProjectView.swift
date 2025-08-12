@@ -316,42 +316,46 @@ struct InviteTeamMemberToProjectView: View {
         let selectedProjectNames = projectVM.organizationProjects.filter { selectedProjects.contains($0.id) }.map { $0.name }
         
         // Assign members to projects first
-        assignMembersToProjectsInternal()
-        
-        // Create email content
-        let emailSubject = "Project Assignment - \(authVM.currentOrg?.name ?? "Organization")"
-        let emailBody = """
-        Hello!
-        
-        You have been assigned to the following projects:
-        \(selectedProjectNames.map { "• \($0)" }.joined(separator: "\n"))
-        
-        \(inviteMessage)
-        
-        Please check the RHEIR app to view your project assignments and start collaborating with the team.
-        
-        Best regards,
-        \(authVM.currentOrg?.name ?? "Your Organization")
-        """
-        
-        // For now, we'll copy the email content to clipboard and show success
-        // In a real implementation, you would integrate with MFMailComposeViewController
-        let fullEmailContent = """
-        TO: \(membersWithEmail.map { $0.email }.joined(separator: ", "))
-        SUBJECT: \(emailSubject)
-        
-        \(emailBody)
-        """
-        
-        UIPasteboard.general.string = fullEmailContent
-        
-        successMessage = """
-        Team members assigned to projects!
-        
-        Email content copied to clipboard. Send to:
-        \(membersWithEmail.map { "\($0.name) (\($0.email))" }.joined(separator: "\n"))
-        """
-        showingSuccessAlert = true
+        Task {
+            await assignMembersToProjectsInternal()
+            
+            // Create email content
+            let emailSubject = "Project Assignment - \(authVM.currentOrg?.name ?? "Organization")"
+            let emailBody = """
+            Hello!
+            
+            You have been assigned to the following projects:
+            \(selectedProjectNames.map { "• \($0)" }.joined(separator: "\n"))
+            
+            \(inviteMessage)
+            
+            Please check the RHEIR app to view your project assignments and start collaborating with the team.
+            
+            Best regards,
+            \(authVM.currentOrg?.name ?? "Your Organization")
+            """
+            
+            // For now, we'll copy the email content to clipboard and show success
+            // In a real implementation, you would integrate with MFMailComposeViewController
+            let fullEmailContent = """
+            TO: \(membersWithEmail.map { $0.email }.joined(separator: ", "))
+            SUBJECT: \(emailSubject)
+            
+            \(emailBody)
+            """
+            
+            UIPasteboard.general.string = fullEmailContent
+            
+            await MainActor.run {
+                successMessage = """
+                Team members assigned to projects!
+                
+                Email content copied to clipboard. Send to:
+                \(membersWithEmail.map { "\($0.name) (\($0.email))" }.joined(separator: "\n"))
+                """
+                showingSuccessAlert = true
+            }
+        }
     }
     
     private func sendTextInvitations() {
@@ -366,47 +370,55 @@ struct InviteTeamMemberToProjectView: View {
         let selectedProjectNames = projectVM.organizationProjects.filter { selectedProjects.contains($0.id) }.map { $0.name }
         
         // Assign members to projects first
-        assignMembersToProjectsInternal()
-        
-        // Create text message content
-        let textMessage = """
-        Hi! You've been assigned to: \(selectedProjectNames.joined(separator: ", ")). \(inviteMessage) Check the RHEIR app for details.
-        """
-        
-        // Copy text content to clipboard
-        let fullTextContent = """
-        SEND TO: \(membersWithPhone.map { "\($0.name) (\($0.phone))" }.joined(separator: ", "))
-        
-        MESSAGE: \(textMessage)
-        """
-        
-        UIPasteboard.general.string = fullTextContent
-        
-        successMessage = """
-        Team members assigned to projects!
-        
-        Text message copied to clipboard. Send to:
-        \(membersWithPhone.map { "\($0.name) (\($0.phone))" }.joined(separator: "\n"))
-        """
-        showingSuccessAlert = true
+        Task {
+            await assignMembersToProjectsInternal()
+            
+            // Create text message content
+            let textMessage = """
+            Hi! You've been assigned to: \(selectedProjectNames.joined(separator: ", ")). \(inviteMessage) Check the RHEIR app for details.
+            """
+            
+            // Copy text content to clipboard
+            let fullTextContent = """
+            SEND TO: \(membersWithPhone.map { "\($0.name) (\($0.phone))" }.joined(separator: ", "))
+            
+            MESSAGE: \(textMessage)
+            """
+            
+            UIPasteboard.general.string = fullTextContent
+            
+            await MainActor.run {
+                successMessage = """
+                Team members assigned to projects!
+                
+                Text message copied to clipboard. Send to:
+                \(membersWithPhone.map { "\($0.name) (\($0.phone))" }.joined(separator: "\n"))
+                """
+                showingSuccessAlert = true
+            }
+        }
     }
     
     private func assignMembersToProjects() {
-        assignMembersToProjectsInternal()
-        
-        let memberNames = projectVM.teamMembers.filter { selectedTeamMembers.contains($0.id) }.map { $0.name }
-        let projectNames = projectVM.organizationProjects.filter { selectedProjects.contains($0.id) }.map { $0.name }
-        
-        successMessage = """
-        Successfully assigned team members to projects!
-        
-        Members: \(memberNames.joined(separator: ", "))
-        Projects: \(projectNames.joined(separator: ", "))
-        """
-        showingSuccessAlert = true
+        Task {
+            await assignMembersToProjectsInternal()
+            
+            let memberNames = projectVM.teamMembers.filter { selectedTeamMembers.contains($0.id) }.map { $0.name }
+            let projectNames = projectVM.organizationProjects.filter { selectedProjects.contains($0.id) }.map { $0.name }
+            
+            await MainActor.run {
+                successMessage = """
+                Successfully assigned team members to projects!
+                
+                Members: \(memberNames.joined(separator: ", "))
+                Projects: \(projectNames.joined(separator: ", "))
+                """
+                showingSuccessAlert = true
+            }
+        }
     }
     
-    private func assignMembersToProjectsInternal() {
+    private func assignMembersToProjectsInternal() async {
         // Assign each selected team member to each selected project
         for memberID in selectedTeamMembers {
             for projectID in selectedProjects {
@@ -415,7 +427,7 @@ struct InviteTeamMemberToProjectView: View {
                     var project = projectVM.organizationProjects[projectIndex]
                     if !project.assignedUserIDs.contains(memberID.uuidString) {
                         project.assignUser(memberID.uuidString)
-                        projectVM.updateProject(project)
+                        await projectVM.updateProject(project)
                         print("✅ Assigned team member \(memberID.uuidString.prefix(8))... to project: \(project.name)")
                     }
                 }

@@ -117,7 +117,7 @@ extension ProjectViewModel {
         laborTotalsByTeamMember = memberTotals
         
         // STEP 3: Rebuild team member cache to ensure consistency
-        rebuildTeamMemberCache()
+        updateTeamMemberCaches()
         
         // STEP 4: Log the computed results for verification
         print("🎯 ENTERPRISE CALCULATION RESULTS:")
