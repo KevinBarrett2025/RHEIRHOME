@@ -131,7 +131,7 @@ extension ProjectViewModel {
                 print("    - \(rate.taskType): $\(rate.rate)")
             }
         }
-        print("  Cache size: \(teamMembersCache.count)")
+        print("  Cache size: \(teamMembers.count)")
         print("  Organization: \(currentOrganizationID?.prefix(8).description ?? "None")...")
     }
     
@@ -163,7 +163,14 @@ extension ProjectViewModel {
     }
     
     var employeeCache: [String: TeamMember] {
-        get { teamMemberNameCache }
+        get { 
+            // Convert teamMembers array to dictionary by name
+            var cache: [String: TeamMember] = [:]
+            for member in teamMembers {
+                cache[member.name] = member
+            }
+            return cache
+        }
         set { 
             print("⚠️ Setting employeeCache is deprecated - cache is now computed from organization")
         }

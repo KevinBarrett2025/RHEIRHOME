@@ -684,6 +684,12 @@ class ProjectViewModel: ObservableObject {
             $0.status == .active && $0.endDate < today
         }
     }
+    
+    // MARK: - Legacy Compatibility Properties
+    
+    var allProjects: [Project] {
+        return projects
+    }
 }
 
 // MARK: - Extensions
