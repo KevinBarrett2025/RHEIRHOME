@@ -14,6 +14,47 @@ struct LogHoursView: View {
     @State private var notes = ""
     @State private var hasLunchBreak = false
     
+    // CRITICAL FIX: Use project-based team member discovery like BudgetBreakdownView
+    private var availableTeamMembers: [TeamMember] {
+        // First try to get team members from organization
+        let orgTeamMembers = projectVM.teamMembers
+        
+        // If we have organization team members, use them
+        if !orgTeamMembers.isEmpty {
+            return orgTeamMembers.filter { $0.employmentStatus.canBeAssignedToProjects }
+        }
+        
+        // FALLBACK: If no organization team members, create from project work activity
+        guard let project = projectVM.selectedProject else { return [] }
+        
+        print("🔧 FALLBACK: Creating team member options from project work activity")
+        
+        // Get unique employee names from logged hours
+        let uniqueEmployeeNames = Set(project.loggedHours.map { $0.employee })
+        
+        var virtualMembers: [TeamMember] = []
+        for employeeName in uniqueEmployeeNames {
+            let virtualMember = TeamMember(
+                name: employeeName,
+                jobTitle: "Worker",
+                organizationID: project.organizationID ?? ""
+            )
+            
+            // Add rates based on their historical work
+            let employeeHours = project.loggedHours.filter { $0.employee == employeeName }
+            let uniqueRates = Set(employeeHours.map { $0.rate })
+            
+            var memberWithRates = virtualMember
+            memberWithRates.rates = uniqueRates.map { rate in
+                EmployeeRate(taskType: "Labor", rate: rate, isDefault: rate == uniqueRates.first)
+            }
+            
+            virtualMembers.append(memberWithRates)
+        }
+        
+        return virtualMembers
+    }
+    
     private var isValidForm: Bool {
         selectedEmployee != nil && selectedRate != nil && endTime > startTime
     }
@@ -33,9 +74,10 @@ struct LogHoursView: View {
         NavigationStack {
             Form {
                 Section("Team Member") {
+                    // CRITICAL FIX: Use availableTeamMembers instead of projectVM.teamMembers
                     Picker("Select Team Member", selection: $selectedEmployee) {
                         Text("Select...").tag(TeamMember?.none)
-                        ForEach(projectVM.teamMembers) { member in
+                        ForEach(availableTeamMembers) { member in
                             Text(member.name).tag(TeamMember?.some(member))
                         }
                     }
@@ -53,6 +95,22 @@ struct LogHoursView: View {
                         } else {
                             selectedRate = nil
                         }
+                    }
+                    
+                    // DIAGNOSTIC: Show team member source info
+                    if availableTeamMembers.count != projectVM.teamMembers.count {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Team Members: \(availableTeamMembers.count) available")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            
+                            if projectVM.teamMembers.isEmpty {
+                                Text("Using project-based discovery (no organization members)")
+                                    .font(.caption2)
+                                    .foregroundColor(.orange)
+                            }
+                        }
+                        .padding(.vertical, 4)
                     }
                     
                     if let employee = selectedEmployee {
@@ -139,7 +197,7 @@ struct LogHoursView: View {
                     }
                 }
                 
-                // HELP SECTION: Show current project info
+                // HELP SECTION: Show current project info and team member diagnostics
                 if let currentProject = projectVM.selectedProject {
                     Section("Project Info") {
                         HStack {
@@ -155,6 +213,23 @@ struct LogHoursView: View {
                             Text("\(currentProject.loggedHours.count) entries")
                                 .foregroundColor(.secondary)
                         }
+                        
+                        // DIAGNOSTIC: Show team member discovery status
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Text("Team member discovery:")
+                                Spacer()
+                                Text(availableTeamMembers.isEmpty ? "❌ None found" : "✅ \(availableTeamMembers.count) found")
+                                    .foregroundColor(availableTeamMembers.isEmpty ? .red : .green)
+                            }
+                            
+                            if availableTeamMembers.isEmpty {
+                                Text("You can still log hours - a team member will be created automatically")
+                                    .font(.caption2)
+                                    .foregroundColor(.orange)
+                            }
+                        }
+                        .font(.caption)
                     }
                 } else {
                     Section {
@@ -188,12 +263,12 @@ struct LogHoursView: View {
                 endTime = startTime.addingTimeInterval(3600)
                 
                 // Auto-select first team member if only one available
-                if projectVM.teamMembers.count == 1 {
-                    selectedEmployee = projectVM.teamMembers.first
+                if availableTeamMembers.count == 1 {
+                    selectedEmployee = availableTeamMembers.first
                 }
                 
-                print("📱 LogHoursView appeared - Available team members: \(projectVM.teamMembers.count)")
-                for member in projectVM.teamMembers {
+                print("📱 LogHoursView appeared - Available team members: \(availableTeamMembers.count)")
+                for member in availableTeamMembers {
                     print("  👤 \(member.name) - \(member.rates.count) rates")
                 }
             }
@@ -237,6 +312,6 @@ struct LogHoursView: View {
 struct LogHoursView_Previews: PreviewProvider {
     static var previews: some View {
         LogHoursView(isPresented: .constant(true))
-            .environmentObject(ProjectViewModel(cloudKitService: CloudKitAuthService()))
+            .environmentObject(ProjectViewModel(offlineDataManager: OfflineDataManager()))
     }
 }

@@ -437,7 +437,7 @@ public class OrganizationZoneService: ObservableObject {
             laborCost: laborCost,
             generalConditions: 0,
             contingency: 0,
-            profit: 0,
+            
             startDate: startDate,
             endDate: endDate,
             organizationID: organizationID

@@ -5,6 +5,7 @@ struct ScannedReceiptEntryView: View {
     let project: Project
     let analysisResult: ReceiptAnalysisResult
     let scannedImage: UIImage
+    let onReceiptSaved: (() -> Void)?
     
     @EnvironmentObject var projectVM: ProjectViewModel
     @Environment(\.dismiss) private var dismiss
@@ -79,6 +80,7 @@ struct ScannedReceiptEntryView: View {
             }
             .alert("Receipt Added Successfully", isPresented: $showingSuccessAlert) {
                 Button("OK") { 
+                    onReceiptSaved?()  // Call completion callback before dismissing
                     isPresented = false
                 }
             } message: {
@@ -503,6 +505,7 @@ struct ScannedReceiptEntryView: View {
             isReturn: isReturn,
             paymentMethod: paymentMethod,
             paymentMethodID: selectedPaymentMethod?.id.uuidString,
+            paymentMethodDetails: analysisResult.paymentMethodDetails,
             taxAmount: taxAmount > 0 ? taxAmount : 0.0,
             discountAmount: discountAmount > 0 ? discountAmount : 0.0,
             receiptNumber: receiptNumber.isEmpty ? "" : receiptNumber,
@@ -526,6 +529,19 @@ struct ScannedReceiptEntryView: View {
         let confidenceText = "\(Int(analysisResult.confidence * 100))%"
         successMessage = "🤖 AI-processed receipt saved!\n\n💰 \(receipt.vendor): $\(amountText)\n📊 Category: \(receipt.category.rawValue)\n🎯 Confidence: \(confidenceText)"
         showingSuccessAlert = true
+    }
+    
+    // Add initializer for backward compatibility
+    init(isPresented: Binding<Bool>, 
+         project: Project, 
+         analysisResult: ReceiptAnalysisResult, 
+         scannedImage: UIImage, 
+         onReceiptSaved: (() -> Void)? = nil) {
+        self._isPresented = isPresented
+        self.project = project
+        self.analysisResult = analysisResult
+        self.scannedImage = scannedImage
+        self.onReceiptSaved = onReceiptSaved
     }
 }
 
@@ -623,10 +639,11 @@ struct ScannedReceiptEntryView_Previews: PreviewProvider {
             materialCost: 25000,
             laborCost: 15000,
             generalConditions: 5000,
-            contingency: 5000,
-            profit: 0,
+            contingency: 5000,  
+            
             startDate: Date(),
-            endDate: Date()
+            endDate: Date(),
+            organizationID: "sample-org-id"
         )
         
         let sampleAnalysis = ReceiptAnalysisResult(
@@ -649,9 +666,10 @@ struct ScannedReceiptEntryView_Previews: PreviewProvider {
             isPresented: .constant(true),
             project: sampleProject,
             analysisResult: sampleAnalysis,
-            scannedImage: UIImage(systemName: "photo")!
+            scannedImage: UIImage(systemName: "photo")!,
+            onReceiptSaved: nil
         )
-        .environmentObject(ProjectViewModel(cloudKitService: CloudKitAuthService()))
+        .environmentObject(ProjectViewModel(offlineDataManager: OfflineDataManager()))
     }
 }
 #endif

@@ -88,6 +88,6 @@ private struct InviteButtonView: View {
     let authVM = AuthViewModel(service: PreviewAuthService())
     
     DirectoryEmployeeRowView(employee: employee, authVM: authVM)
-        .environmentObject(ProjectViewModel())
+        .environmentObject(ProjectViewModel(offlineDataManager: OfflineDataManager()))
         .padding()
 }

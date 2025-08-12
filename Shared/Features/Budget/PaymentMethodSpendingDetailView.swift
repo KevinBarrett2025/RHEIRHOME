@@ -383,9 +383,10 @@ struct PaymentReceiptRowCard: View {
             laborCost: 3000,
             generalConditions: 1000,
             contingency: 1000,
-            profit: 0,
+            
             startDate: Date(),
-            endDate: Date().addingTimeInterval(86400 * 30)
+            endDate: Date(),
+            organizationID: "sample-org-id".addingTimeInterval(86400 * 30)
         )
     )
 }

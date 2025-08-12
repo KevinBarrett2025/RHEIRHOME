@@ -731,7 +731,7 @@ struct TasksListView_Previews: PreviewProvider {
     static var previews: some View {
         NavigationStack {
             TasksListView()
-                .environmentObject(ProjectViewModel())
+                .environmentObject(ProjectViewModel(offlineDataManager: OfflineDataManager()))
         }
     }
 }

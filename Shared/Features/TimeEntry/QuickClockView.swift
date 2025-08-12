@@ -89,6 +89,6 @@ struct QuickClockView: View {
 struct QuickClockView_Previews: PreviewProvider {
     static var previews: some View {
         QuickClockView()
-            .environmentObject(ProjectViewModel())
+            .environmentObject(ProjectViewModel(offlineDataManager: OfflineDataManager()))
     }
 }

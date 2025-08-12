@@ -571,7 +571,7 @@ struct RecentActivityCard: View {
 #Preview {
     NavigationView {
         LiveTimeTrackingView()
-            .environmentObject(ProjectViewModel())
+            .environmentObject(ProjectViewModel(offlineDataManager: OfflineDataManager()))
             .environmentObject(AuthViewModel(service: PreviewAuthService()))
     }
 }

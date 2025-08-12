@@ -419,7 +419,7 @@ struct EditEmployeeView_Previews: PreviewProvider {
                 EmployeeRate(taskType: "Project Management", rate: 65.0)
             ]
         ))
-        .environmentObject(ProjectViewModel())
+        .environmentObject(ProjectViewModel(offlineDataManager: OfflineDataManager()))
     }
 }
 #endif

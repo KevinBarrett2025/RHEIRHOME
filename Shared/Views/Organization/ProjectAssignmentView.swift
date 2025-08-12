@@ -115,5 +115,5 @@ struct ProjectAssignmentView: View {
     )
     
     ProjectAssignmentView(teamMember: sampleMember)
-        .environmentObject(ProjectViewModel(cloudKitService: CloudKitAuthService()))
+        .environmentObject(ProjectViewModel(offlineDataManager: OfflineDataManager()))
 }

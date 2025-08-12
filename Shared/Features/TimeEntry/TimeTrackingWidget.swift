@@ -205,6 +205,6 @@ struct ActiveTimerRow: View {
 
 #Preview {
     TimeTrackingWidget()
-        .environmentObject(ProjectViewModel())
+        .environmentObject(ProjectViewModel(offlineDataManager: OfflineDataManager()))
         .padding()
 }

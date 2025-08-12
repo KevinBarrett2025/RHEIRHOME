@@ -98,5 +98,5 @@ private struct FormFooterSection: View {
 #Preview {
     DirectoryAddTeamMemberView()
         .environmentObject(AuthViewModel(service: PreviewAuthService()))
-        .environmentObject(ProjectViewModel())
+        .environmentObject(ProjectViewModel(offlineDataManager: OfflineDataManager()))
 }

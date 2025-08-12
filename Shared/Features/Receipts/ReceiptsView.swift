@@ -595,6 +595,8 @@ struct EnhancedReceiptCard: View {
     let onTap: () -> Void
     let onDelete: () -> Void
     
+    @State private var showingFullImage = false
+    
     var body: some View {
         Button(action: onTap) {
             VStack(spacing: 12) {
@@ -661,20 +663,55 @@ struct EnhancedReceiptCard: View {
                     }
                 }
                 
-                // Payment method and receipt number
+                // Enhanced payment method display with card details
                 HStack {
                     if !receipt.paymentMethod.isEmpty {
-                        HStack {
-                            Image(systemName: "creditcard")
+                        HStack(spacing: 6) {
+                            Image(systemName: paymentMethodIcon(for: receipt.paymentMethod))
                                 .font(.caption)
                                 .foregroundColor(.secondary)
-                            Text(receipt.paymentMethod)
-                                .font(.caption)
-                                .foregroundColor(.secondary)
+                            
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(receipt.paymentMethod)
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                
+                                if let paymentDetails = receipt.paymentMethodDetails {
+                                    HStack(spacing: 4) {
+                                        if let cardBrand = paymentDetails.cardBrand {
+                                            Text(cardBrand)
+                                                .font(.caption2)
+                                                .foregroundColor(.blue)
+                                        }
+                                        
+                                        if let lastFour = paymentDetails.lastFourDigits, !lastFour.isEmpty {
+                                            Text("•••• \(lastFour)")
+                                                .font(.caption2)
+                                                .foregroundColor(.secondary)
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                     
                     Spacer()
+                    
+                    if receipt.hasReceiptImage {
+                        Button {
+                            showingFullImage = true
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "photo.fill")
+                                    .font(.caption)
+                                    .foregroundColor(.blue)
+                                Text("View")
+                                    .font(.caption2)
+                                    .foregroundColor(.blue)
+                            }
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                    }
                     
                     if !receipt.receiptNumber.isEmpty {
                         Text("Receipt #\(receipt.receiptNumber)")
@@ -690,12 +727,26 @@ struct EnhancedReceiptCard: View {
         }
         .buttonStyle(PlainButtonStyle())
         .contextMenu {
+            if receipt.hasReceiptImage {
+                Button("View Receipt Image") {
+                    showingFullImage = true
+                }
+            }
+            
             Button("Edit") {
                 onTap()
             }
             
             Button("Delete", role: .destructive) {
                 onDelete()
+            }
+        }
+        .sheet(isPresented: $showingFullImage) {
+            if receipt.hasReceiptImage {
+                // Temporarily disabled - ReceiptImageViewer compilation issue
+                // ReceiptImageViewer(receipt: receipt)
+                Text("Receipt Image Viewer Coming Soon")
+                    .padding()
             }
         }
     }
@@ -715,6 +766,21 @@ struct EnhancedReceiptCard: View {
         case .kitchen: return "fork.knife"
         case .bathroom: return "bathtub"
         default: return "tag"
+        }
+    }
+    
+    private func paymentMethodIcon(for paymentMethod: String) -> String {
+        let method = paymentMethod.lowercased()
+        if method.contains("credit") || method.contains("visa") || method.contains("mastercard") || method.contains("amex") || method.contains("discover") {
+            return "creditcard.fill"
+        } else if method.contains("debit") {
+            return "creditcard"
+        } else if method.contains("cash") {
+            return "dollarsign.circle.fill"
+        } else if method.contains("check") {
+            return "checkmark.rectangle.fill"
+        } else {
+            return "creditcard"
         }
     }
 }
@@ -874,6 +940,6 @@ struct VendorGroupCard: View {
 struct ReceiptsView_Previews: PreviewProvider {
     static var previews: some View {
         ReceiptsView(selectedTab: .constant(.receipts))
-            .environmentObject(ProjectViewModel())
+            .environmentObject(ProjectViewModel(offlineDataManager: OfflineDataManager()))
     }
 }

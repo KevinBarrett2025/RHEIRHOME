@@ -44,6 +44,6 @@ struct PastDueView: View {
 struct PastDueView_Previews: PreviewProvider {
     static var previews: some View {
         PastDueView()
-            .environmentObject(ProjectViewModel(cloudKitService: CloudKitAuthService()))
+            .environmentObject(ProjectViewModel(offlineDataManager: OfflineDataManager()))
     }
 }

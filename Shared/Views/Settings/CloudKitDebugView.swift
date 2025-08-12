@@ -763,7 +763,7 @@ struct CloudKitDebugView_Previews: PreviewProvider {
     static var previews: some View {
         CloudKitDebugView()
             .environmentObject(AuthViewModel(service: CloudKitAuthService()))
-            .environmentObject(ProjectViewModel())
+            .environmentObject(ProjectViewModel(offlineDataManager: OfflineDataManager()))
     }
 }
 #endif

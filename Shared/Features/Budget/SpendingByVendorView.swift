@@ -344,6 +344,6 @@ struct VendorSpendingRowView: View {
 
 #Preview {
     SpendingByVendorView()
-        .environmentObject(ProjectViewModel(cloudKitService: CloudKitAuthService()))
+        .environmentObject(ProjectViewModel(offlineDataManager: OfflineDataManager()))
         .environmentObject(AuthViewModel(service: CloudKitAuthService()))
 }

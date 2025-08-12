@@ -785,5 +785,5 @@ struct PaymentExportView: View {
 
 #Preview {
     ComprehensivePaymentDashboardView()
-        .environmentObject(ProjectViewModel(cloudKitService: CloudKitAuthService()))
+        .environmentObject(ProjectViewModel(offlineDataManager: OfflineDataManager()))
 }

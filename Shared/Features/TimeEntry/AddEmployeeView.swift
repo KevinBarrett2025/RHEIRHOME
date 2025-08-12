@@ -86,6 +86,6 @@ struct AddEmployeeView: View {
 struct AddEmployeeView_Previews: PreviewProvider {
     static var previews: some View {
         AddEmployeeView(isPresented: .constant(true))
-            .environmentObject(ProjectViewModel(cloudKitService: CloudKitAuthService()))
+            .environmentObject(ProjectViewModel(offlineDataManager: OfflineDataManager()))
     }
 }

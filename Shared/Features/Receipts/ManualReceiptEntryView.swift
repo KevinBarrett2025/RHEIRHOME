@@ -774,12 +774,12 @@ struct ManualReceiptEntryView_Previews: PreviewProvider {
             laborCost: 15000,
             generalConditions: 5000,
             contingency: 5000,
-            profit: 0,
             startDate: Date(),
-            endDate: Date()
+            endDate: Date(),
+            organizationID: "sample-org-id"
         )
         
         ManualReceiptEntryView(isPresented: .constant(true), project: sampleProject)
-            .environmentObject(ProjectViewModel(cloudKitService: CloudKitAuthService()))
+            .environmentObject(ProjectViewModel(offlineDataManager: OfflineDataManager()))
     }
 }

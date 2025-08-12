@@ -513,7 +513,7 @@ struct ReceiptItemRow: View {
 #Preview {
     NavigationView {
         EnhancedReceiptEntryView()
-            .environmentObject(ProjectViewModel(cloudKitService: CloudKitAuthService()))
+            .environmentObject(ProjectViewModel(offlineDataManager: OfflineDataManager()))
             .environmentObject(AuthViewModel(service: PreviewAuthService()))
     }
 }

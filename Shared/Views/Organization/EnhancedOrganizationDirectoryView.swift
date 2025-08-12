@@ -540,6 +540,6 @@ struct EnhancedOrganizationDirectoryView: View {
     NavigationView {
         EnhancedOrganizationDirectoryView(organization: sampleOrg)
             .environmentObject(AuthViewModel(service: PreviewAuthService()))
-            .environmentObject(ProjectViewModel(cloudKitService: CloudKitAuthService()))
+            .environmentObject(ProjectViewModel(offlineDataManager: OfflineDataManager()))
     }
 }

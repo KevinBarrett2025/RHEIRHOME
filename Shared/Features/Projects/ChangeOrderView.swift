@@ -213,7 +213,7 @@ struct ChangeOrderView_Previews: PreviewProvider {
     static var previews: some View {
         NavigationStack {
             ChangeOrderView()
-                .environmentObject(ProjectViewModel(cloudKitService: CloudKitAuthService()))
+                .environmentObject(ProjectViewModel(offlineDataManager: OfflineDataManager()))
         }
     }
 }

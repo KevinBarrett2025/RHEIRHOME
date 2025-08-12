@@ -50,5 +50,5 @@ struct EnhancedMigrationView: View {
 #Preview {
     EnhancedMigrationView()
         .environmentObject(AuthViewModel(service: PreviewAuthService()))
-        .environmentObject(ProjectViewModel(cloudKitService: CloudKitAuthService()))
+        .environmentObject(ProjectViewModel(offlineDataManager: OfflineDataManager()))
 }

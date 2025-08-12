@@ -335,6 +335,6 @@ struct PaymentMethodSpendingRowView: View {
 
 #Preview {
     SpendingByPaymentMethodView()
-        .environmentObject(ProjectViewModel(cloudKitService: CloudKitAuthService()))
+        .environmentObject(ProjectViewModel(offlineDataManager: OfflineDataManager()))
         .environmentObject(AuthViewModel(service: CloudKitAuthService()))
 }

@@ -371,5 +371,5 @@ struct SemiTransparentReceiptRow: View {
         selectedCategory: .material,
         selectedTab: .constant(.receipts)
     )
-        .environmentObject(ProjectViewModel())
+        .environmentObject(ProjectViewModel(offlineDataManager: OfflineDataManager()))
 }

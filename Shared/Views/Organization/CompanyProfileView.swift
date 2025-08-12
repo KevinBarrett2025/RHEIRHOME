@@ -498,5 +498,5 @@ struct OrganizationSettingsTabView: View {
 #Preview {
     CompanyProfileView()
         .environmentObject(AuthViewModel(service: PreviewAuthService()))
-        .environmentObject(ProjectViewModel(cloudKitService: CloudKitAuthService()))
+        .environmentObject(ProjectViewModel(offlineDataManager: OfflineDataManager()))
 }

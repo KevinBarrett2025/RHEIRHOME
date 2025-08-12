@@ -599,7 +599,7 @@ struct EditPaymentMethodServiceView: View {
 struct PaymentMethodManagementView_Previews: PreviewProvider {
     static var previews: some View {
         PaymentMethodManagementView()
-            .environmentObject(ProjectViewModel(cloudKitService: CloudKitAuthService()))
+            .environmentObject(ProjectViewModel(offlineDataManager: OfflineDataManager()))
             .environmentObject(AuthViewModel(service: PreviewAuthService()))
     }
 }

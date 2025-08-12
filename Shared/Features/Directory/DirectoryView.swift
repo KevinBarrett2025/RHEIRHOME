@@ -6,7 +6,12 @@ struct DirectoryView: View {
     @State private var showAddEmployee = false
     
     var body: some View {
-        NavigationView {
+        VStack(spacing: 0) {
+            // CRITICAL FIX: Add UniversalHeaderView for consistency
+            UniversalHeaderView()
+                .environmentObject(authVM)
+                .environmentObject(projectVM)
+            
             List {
                 // Team Members Section
                 Section(header: Text("Team Members")) {
@@ -28,20 +33,20 @@ struct DirectoryView: View {
                 // Clients Section
                 DirectoryComingSoonSection(title: "Clients", icon: "person.2")
             }
-            .navigationTitle("\(authVM.currentOrg?.name ?? "Directory") Directory")
-            .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: { showAddEmployee = true }) {
-                        Image(systemName: "plus")
-                    }
+        }
+        .navigationTitle("")
+        .navigationBarHidden(true)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button(action: { showAddEmployee = true }) {
+                    Image(systemName: "plus")
                 }
             }
-            .sheet(isPresented: $showAddEmployee) {
-                DirectoryAddTeamMemberView()
-                    .environmentObject(authVM)
-                    .environmentObject(projectVM)
-            }
+        }
+        .sheet(isPresented: $showAddEmployee) {
+            DirectoryAddTeamMemberView()
+                .environmentObject(authVM)
+                .environmentObject(projectVM)
         }
     }
     
@@ -101,5 +106,5 @@ struct DirectoryComingSoonSection: View {
 #Preview {
     DirectoryView()
         .environmentObject(AuthViewModel(service: PreviewAuthService()))
-        .environmentObject(ProjectViewModel())
+        .environmentObject(ProjectViewModel(offlineDataManager: OfflineDataManager()))
 }

@@ -107,7 +107,7 @@ struct SettingsView: View {
                 }
             }
             
-            NavigationLink(destination: TeamInviteView().environmentObject(authVM).environmentObject(ProjectViewModel())) {
+            NavigationLink(destination: TeamInviteView().environmentObject(authVM).environmentObject(ProjectViewModel(offlineDataManager: OfflineDataManager()))) {
                 HStack {
                     Image(systemName: "person.badge.plus.fill")
                         .foregroundColor(.green)
@@ -583,6 +583,6 @@ struct SettingsView_Previews: PreviewProvider {
     static var previews: some View {
         SettingsView()
             .environmentObject(AuthViewModel(service: PreviewAuthService()))
-            .environmentObject(ProjectViewModel())
+            .environmentObject(ProjectViewModel(offlineDataManager: OfflineDataManager()))
     }
 }

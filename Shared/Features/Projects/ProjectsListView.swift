@@ -106,7 +106,7 @@ struct ProjectRowView: View {
 struct ProjectsListView_Previews: PreviewProvider {
     static var previews: some View {
         ProjectsListView()
-            .environmentObject(ProjectViewModel(cloudKitService: CloudKitAuthService()))
+            .environmentObject(ProjectViewModel(offlineDataManager: OfflineDataManager()))
             .environmentObject(AuthViewModel(service: PreviewAuthService()))
     }
 }

@@ -77,7 +77,7 @@ struct EmployeeHourRowView: View {
 struct EmployeeHoursList_Previews: PreviewProvider {
     static var previews: some View {
         EmployeeHoursList()
-            .environmentObject(ProjectViewModel(cloudKitService: CloudKitAuthService()))
+            .environmentObject(ProjectViewModel(offlineDataManager: OfflineDataManager()))
             .environmentObject(AuthViewModel(service: PreviewAuthService()))
     }
 }

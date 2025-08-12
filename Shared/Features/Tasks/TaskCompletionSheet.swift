@@ -153,7 +153,7 @@ struct TaskCompletionSheet_Previews: PreviewProvider {
                 category: .plumbing
             )
         ) { _ in }
-        .environmentObject(ProjectViewModel())
+        .environmentObject(ProjectViewModel(offlineDataManager: OfflineDataManager()))
     }
 }
 #endif

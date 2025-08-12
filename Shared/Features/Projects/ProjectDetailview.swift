@@ -77,7 +77,8 @@ struct ProjectDetailView_Previews: PreviewProvider {
                 spentContingency: 0,
                 profit: 1500,
                 startDate: Date(),
-                endDate: Date().addingTimeInterval(60 * 60 * 24 * 30),
+                endDate: Date(),
+            organizationID: "sample-org-id".addingTimeInterval(60 * 60 * 24 * 30),
                 loggedHours: [],
                 tasks: [],
                 communications: [],
@@ -88,7 +89,7 @@ struct ProjectDetailView_Previews: PreviewProvider {
                 status: .active
             )
         )
-        .environmentObject(ProjectViewModel(cloudKitService: CloudKitAuthService()))
+        .environmentObject(ProjectViewModel(offlineDataManager: OfflineDataManager()))
         .environmentObject(AuthViewModel(service: CloudKitAuthService()))
     }
 }

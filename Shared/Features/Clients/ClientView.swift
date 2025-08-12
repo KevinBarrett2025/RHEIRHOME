@@ -19,7 +19,7 @@ struct ClientView_Previews: PreviewProvider {
   static var previews: some View {
     NavigationStack {
       ClientView()
-        .environmentObject(ProjectViewModel())
+        .environmentObject(ProjectViewModel(offlineDataManager: OfflineDataManager()))
     }
     .previewDevice("iPhone 14 Pro")
     .previewDisplayName("Client Dashboard")

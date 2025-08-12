@@ -144,10 +144,11 @@ enum TaskCategory: String, CaseIterable, Codable {
             laborCost: 3000,
             generalConditions: 1000,
             contingency: 1000,
-            profit: 0,
+            
             startDate: Date(),
-            endDate: Date().addingTimeInterval(30 * 24 * 60 * 60)
+            endDate: Date(),
+            organizationID: "sample-org-id".addingTimeInterval(30 * 24 * 60 * 60)
         )
     )
-    .environmentObject(ProjectViewModel())
+    .environmentObject(ProjectViewModel(offlineDataManager: OfflineDataManager()))
 }

@@ -163,6 +163,6 @@ struct DocumentWrapper: FileDocument {
 
 #Preview {
     ReportsMainView()
-        .environmentObject(ProjectViewModel(cloudKitService: CloudKitAuthService()))
+        .environmentObject(ProjectViewModel(offlineDataManager: OfflineDataManager()))
         .environmentObject(AuthViewModel(service: PreviewAuthService()))
 }

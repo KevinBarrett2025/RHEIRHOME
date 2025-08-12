@@ -1183,6 +1183,6 @@ extension ReceiptCategory {
 
 #Preview {
     BudgetIntegratedReceiptEntryView()
-        .environmentObject(ProjectViewModel(cloudKitService: CloudKitAuthService()))
+        .environmentObject(ProjectViewModel(offlineDataManager: OfflineDataManager()))
         .environmentObject(AuthViewModel(service: PreviewAuthService()))
 }

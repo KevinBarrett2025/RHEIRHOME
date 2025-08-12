@@ -110,13 +110,17 @@ struct ReceiptDetailView: View {
         updateVendorSpending(for: receipt, isRemoving: true)
         updatePaymentMethodSpending(for: receipt, isRemoving: true)
         
-        projectVM.updateProject(updatedProject)
-        projectVM.recomputeFilteredReceipts()
-        
-        // Navigate back
-        dismiss()
-        
-        print("🗑️ Deleted receipt from \(receipt.vendor) for \(receipt.amount.formatAsCurrency())")
+        Task {
+            await projectVM.updateProject(updatedProject)
+            await MainActor.run {
+                projectVM.recomputeFilteredReceipts()
+                
+                // Navigate back
+                dismiss()
+                
+                print("🗑️ Deleted receipt from \(receipt.vendor) for \(receipt.amount.formatAsCurrency())")
+            }
+        }
     }
     
     private func updateVendorSpending(for receipt: Receipt, isRemoving: Bool) {
@@ -384,7 +388,7 @@ struct ReceiptDetailView_Previews: PreviewProvider {
         
         NavigationView {
             ReceiptDetailView(receipt: sampleReceipt)
-                .environmentObject(ProjectViewModel(cloudKitService: CloudKitAuthService()))
+                .environmentObject(ProjectViewModel(offlineDataManager: OfflineDataManager()))
                 .environmentObject(AuthViewModel(service: PreviewAuthService()))
         }
     }

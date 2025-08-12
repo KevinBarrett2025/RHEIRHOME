@@ -327,7 +327,7 @@ struct PaymentMethodManagementViewSimple_Previews: PreviewProvider {
     static var previews: some View {
         PaymentMethodManagementViewSimple()
             .environmentObject(AuthViewModel(service: PreviewAuthService()))
-            .environmentObject(ProjectViewModel())
+            .environmentObject(ProjectViewModel(offlineDataManager: OfflineDataManager()))
     }
 }
 #endif

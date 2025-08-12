@@ -538,5 +538,5 @@ struct EnhancedEditTeamMemberView: View {
 
 #Preview {
     EnhancedAddTeamMemberView()
-        .environmentObject(ProjectViewModel(cloudKitService: CloudKitAuthService()))
+        .environmentObject(ProjectViewModel(offlineDataManager: OfflineDataManager()))
 }

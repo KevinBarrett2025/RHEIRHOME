@@ -2,6 +2,7 @@ import SwiftUI
 
 struct DailyProgressView: View {
     @EnvironmentObject var projectVM: ProjectViewModel
+    @EnvironmentObject var authVM: AuthViewModel
     @State private var selectedTimeframe: TimeFrame = .week
     @State private var showingProgressLogs = false
     @State private var showingTaskAnalytics = false
@@ -23,7 +24,12 @@ struct DailyProgressView: View {
     }
     
     var body: some View {
-        NavigationStack {
+        VStack(spacing: 0) {
+            // CRITICAL FIX: Add UniversalHeaderView for consistency
+            UniversalHeaderView()
+                .environmentObject(authVM)
+                .environmentObject(projectVM)
+            
             ScrollView {
                 VStack(spacing: 20) {
                     if let project = projectVM.selectedProject {
@@ -34,36 +40,36 @@ struct DailyProgressView: View {
                 }
                 .padding()
             }
-            .navigationTitle("Progress & Analytics")
-            .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItemGroup(placement: .navigationBarTrailing) {
-                    Menu {
-                        ForEach(TimeFrame.allCases, id: \.rawValue) { timeframe in
-                            Button {
-                                selectedTimeframe = timeframe
-                            } label: {
-                                HStack {
-                                    Image(systemName: timeframe.icon)
-                                    Text(timeframe.rawValue)
-                                    if selectedTimeframe == timeframe {
-                                        Spacer()
-                                        Image(systemName: "checkmark")
-                                    }
+        }
+        .navigationTitle("")
+        .navigationBarHidden(true)
+        .toolbar {
+            ToolbarItemGroup(placement: .navigationBarTrailing) {
+                Menu {
+                    ForEach(TimeFrame.allCases, id: \.rawValue) { timeframe in
+                        Button {
+                            selectedTimeframe = timeframe
+                        } label: {
+                            HStack {
+                                Image(systemName: timeframe.icon)
+                                Text(timeframe.rawValue)
+                                if selectedTimeframe == timeframe {
+                                    Spacer()
+                                    Image(systemName: "checkmark")
                                 }
                             }
                         }
-                    } label: {
-                        HStack {
-                            Image(systemName: selectedTimeframe.icon)
-                            Text(selectedTimeframe.rawValue)
-                                .font(.caption)
-                        }
                     }
-                    
-                    Button(action: { showingProgressLogs = true }) {
-                        Image(systemName: "list.bullet.below.rectangle")
+                } label: {
+                    HStack {
+                        Image(systemName: selectedTimeframe.icon)
+                        Text(selectedTimeframe.rawValue)
+                            .font(.caption)
                     }
+                }
+                
+                Button(action: { showingProgressLogs = true }) {
+                    Image(systemName: "list.bullet.below.rectangle")
                 }
             }
         }
@@ -620,6 +626,7 @@ struct TaskCategoryChart: View {
                             Text("\(count)")
                                 .font(.caption)
                                 .fontWeight(.semibold)
+                                .foregroundColor(.secondary)
                         }
                     }
                 }
@@ -748,6 +755,6 @@ struct ProjectHealth {
 struct DailyProgressView_Previews: PreviewProvider {
     static var previews: some View {
         DailyProgressView()
-            .environmentObject(ProjectViewModel(cloudKitService: CloudKitAuthService()))
+            .environmentObject(ProjectViewModel(offlineDataManager: OfflineDataManager()))
     }
 }

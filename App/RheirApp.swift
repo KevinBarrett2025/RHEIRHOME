@@ -3,7 +3,7 @@ import SwiftUI
 @main
 struct RheirApp: App {
     @StateObject private var authViewModel = AuthViewModel(service: CloudKitAuthService())
-    @StateObject private var projectViewModel = ProjectViewModel(cloudKitService: CloudKitAuthService())
+    @StateObject private var projectViewModel = ProjectViewModel(offlineDataManager: OfflineDataManager())
     
     var body: some Scene {
         WindowGroup {

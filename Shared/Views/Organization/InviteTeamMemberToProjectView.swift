@@ -567,5 +567,5 @@ struct ProjectInviteRow: View {
 #Preview {
     InviteTeamMemberToProjectView()
         .environmentObject(AuthViewModel(service: PreviewAuthService()))
-        .environmentObject(ProjectViewModel(cloudKitService: CloudKitAuthService()))
+        .environmentObject(ProjectViewModel(offlineDataManager: OfflineDataManager()))
 }

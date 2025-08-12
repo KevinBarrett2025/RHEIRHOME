@@ -162,8 +162,13 @@ struct ReceiptEditView: View {
             var updatedProject = project
             if let index = updatedProject.receipts.firstIndex(where: { $0.id == receipt.id }) {
                 updatedProject.receipts[index] = updatedReceipt
-                projectVM.updateProject(updatedProject)
-                projectVM.recomputeFilteredReceipts()
+                
+                Task {
+                    await projectVM.updateProject(updatedProject)
+                    await MainActor.run {
+                        projectVM.recomputeFilteredReceipts()
+                    }
+                }
             }
         }
         
@@ -237,6 +242,6 @@ struct ReceiptEditView_Previews: PreviewProvider {
         )
         
         ReceiptEditView(receipt: sampleReceipt, isPresented: .constant(true))
-            .environmentObject(ProjectViewModel(cloudKitService: CloudKitAuthService()))
+            .environmentObject(ProjectViewModel(offlineDataManager: OfflineDataManager()))
     }
 }

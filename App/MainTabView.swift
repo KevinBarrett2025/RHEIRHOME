@@ -21,12 +21,6 @@ struct MainTabView: View {
                 .tabItem { Label("Receipts", systemImage: "tray.full") }
                 .tag(Tab.receipts)
 
-            LaborModuleView()
-                .environmentObject(projectVM)
-                .environmentObject(authVM)
-                .tabItem { Label("Labor", systemImage: "clock") }
-                .tag(Tab.labor)
-
             NavigationStack {
                 TasksListView()
                     .environmentObject(projectVM)
@@ -35,25 +29,20 @@ struct MainTabView: View {
             .tabItem { Label("Tasks", systemImage: "checklist") }
             .tag(Tab.tasks)
 
+            LaborModuleView()
+                .environmentObject(projectVM)
+                .environmentObject(authVM)
+                .tabItem { Label("Labor", systemImage: "clock") }
+                .tag(Tab.labor)
+
             NavigationStack {
-                MoreTabView()
+                MasterCompanySettingsView()
                     .environmentObject(projectVM)
                     .environmentObject(authVM)
             }
-            .tabItem { Label("More", systemImage: "ellipsis") }
-            .tag(Tab.more)
+            .tabItem { Label("Company", systemImage: "building.2") }
+            .tag(Tab.company)
 
-            // Add this as a debug tab in your TabView (temporary)
-            #if DEBUG
-            NavigationStack {
-                OrganizationDebugView()
-                    .environmentObject(authVM)
-            }
-            .tabItem {
-                Image(systemName: "ladybug")
-                Text("Debug")
-            }
-            #endif
         }
         .onAppear(perform: selectFirstProjectIfNeeded)
     }
@@ -66,29 +55,10 @@ struct MainTabView: View {
     }
 }
 
-// MARK: - More Tab View
-struct MoreTabView: View {
-    @EnvironmentObject private var projectVM: ProjectViewModel
-    @EnvironmentObject private var authVM: AuthViewModel
-    
-    var body: some View {
-        List {
-            NavigationLink(destination: CompletedProjectsView().environmentObject(projectVM)) {
-                Label("Completed", systemImage: "checkmark.circle")
-            }
-            
-            NavigationLink(destination: DailyProgressView().environmentObject(projectVM)) {
-                Label("Reports", systemImage: "chart.bar.fill")
-            }
-        }
-        .navigationTitle("More")
-    }
-}
-
 struct MainTabView_Previews: PreviewProvider {
     static var previews: some View {
         MainTabView()
-            .environmentObject(ProjectViewModel(cloudKitService: CloudKitAuthService()))
+            .environmentObject(ProjectViewModel(offlineDataManager: OfflineDataManager()))
             .environmentObject(AuthViewModel(service: CloudKitAuthService()))
     }
 }

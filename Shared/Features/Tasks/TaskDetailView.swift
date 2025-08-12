@@ -163,5 +163,5 @@ struct DetailRow: View {
             )
         )
     }
-    .environmentObject(ProjectViewModel())
+    .environmentObject(ProjectViewModel(offlineDataManager: OfflineDataManager()))
 }

@@ -90,6 +90,6 @@ struct ProjectBudgetTabView: View {
 
 #Preview {
     ProjectBudgetTabView(selectedTab: .constant(.projects))
-        .environmentObject(ProjectViewModel(cloudKitService: CloudKitAuthService()))
+        .environmentObject(ProjectViewModel(offlineDataManager: OfflineDataManager()))
         .environmentObject(AuthViewModel(service: CloudKitAuthService()))
 }

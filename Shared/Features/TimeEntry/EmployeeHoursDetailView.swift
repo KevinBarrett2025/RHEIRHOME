@@ -105,7 +105,7 @@ struct EmployeeHoursDetailView_Previews: PreviewProvider {
         
         NavigationStack {
             EmployeeHoursDetailView(employee: sampleEmployee)
-                .environmentObject(ProjectViewModel())
+                .environmentObject(ProjectViewModel(offlineDataManager: OfflineDataManager()))
         }
     }
 }

@@ -9,11 +9,11 @@ struct ReceiptScannerView: View {
     @EnvironmentObject var authVM: AuthViewModel
     @AppStorage("hideReceiptScannerIntro") private var hideIntro = false
     
+    @State private var currentStep: ScannerStep = .info
     @State private var showingDocumentScanner = false
     @State private var showingImagePicker = false
     @State private var showingAnalysisView = false
     @State private var showingUpgradePrompt = false
-    @State private var showingIntroOverlay = false
     @State private var scannedImage: UIImage?
     @State private var analysisResult: ReceiptAnalysisResult?
     @State private var isProcessing = false
@@ -21,6 +21,14 @@ struct ReceiptScannerView: View {
     @State private var showingError = false
     @State private var selectedImageFromPicker: UIImage?
     @State private var processingStep = ""
+    @State private var receiptSaveCompleted = false
+    
+    private enum ScannerStep {
+        case info
+        case camera
+        case processing
+        case complete
+    }
     
     private var hasAIAccess: Bool {
         authVM.currentOrg?.subscriptionTier != .free
@@ -29,17 +37,19 @@ struct ReceiptScannerView: View {
     var body: some View {
         ZStack {
             if hasAIAccess {
-                // Subscribers get direct access to camera or optional intro
-                if showingIntroOverlay && !hideIntro {
-                    subscriberIntroOverlay
-                } else {
-                    // Direct camera access for subscribers
-                    Color.clear
+                // Subscribers get proper flow: Info → Camera → Processing → Manual Entry
+                switch currentStep {
+                case .info:
+                    infoPageView
+                case .camera:
+                    Color.clear // Camera will show via sheet
                         .onAppear {
-                            if !isProcessing && scannedImage == nil {
-                                showingDocumentScanner = true
-                            }
+                            showingDocumentScanner = true
                         }
+                case .processing:
+                    processingOverlay
+                case .complete:
+                    Color.clear // Analysis view will show via sheet
                 }
             } else {
                 // Free users see upgrade prompt
@@ -60,23 +70,37 @@ struct ReceiptScannerView: View {
                     isPresented: $showingAnalysisView,
                     project: project,
                     analysisResult: analysisResult,
-                    scannedImage: scannedImage
+                    scannedImage: scannedImage,
+                    onReceiptSaved: {
+                        // When receipt is successfully saved, mark completion and dismiss scanner
+                        receiptSaveCompleted = true
+                        isPresented = false
+                    }
                 )
                 .environmentObject(projectVM)
             }
         }
         .alert("Scanning Error", isPresented: $showingError) {
-            Button("OK") { }
+            Button("OK") { 
+                currentStep = .info
+            }
             Button("Try Again") {
-                showingDocumentScanner = true
+                currentStep = .camera
             }
         } message: {
             Text(errorMessage ?? "Unknown error occurred")
         }
         .onChange(of: selectedImageFromPicker) { _, newImage in
             if let image = newImage {
+                currentStep = .processing
                 handleImageSelection(image)
                 selectedImageFromPicker = nil
+            }
+        }
+        .onChange(of: showingAnalysisView) { _, isShowing in
+            // If analysis view was dismissed but no receipt was saved, return to info
+            if !isShowing && !receiptSaveCompleted && currentStep == .complete {
+                currentStep = .info
             }
         }
         .onAppear {
@@ -85,70 +109,101 @@ struct ReceiptScannerView: View {
     }
     
     private func setupInitialView() {
-        if hasAIAccess {
-            // Show intro overlay first time, then direct camera access
-            if !hideIntro {
-                showingIntroOverlay = true
-                // Auto-hide intro after 3 seconds and go to camera
-                DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                    showingIntroOverlay = false
-                    showingDocumentScanner = true
-                }
-            } else {
-                // Direct camera access for returning users
-                showingDocumentScanner = true
-            }
+        // Check if user has disabled intro - if so, go directly to camera
+        if hideIntro && hasAIAccess {
+            currentStep = .camera
+        } else {
+            currentStep = .info
         }
-        // Free users see upgrade prompt (no auto-actions)
     }
     
     @ViewBuilder
-    private var subscriberIntroOverlay: some View {
-        ZStack {
-            // Semi-transparent background
-            Color.black.opacity(0.7)
-                .ignoresSafeArea()
-            
-            VStack(spacing: 24) {
-                // AI Scanner Icon with pulse animation
-                ZStack {
-                    Circle()
-                        .fill(Color.blue.opacity(0.2))
-                        .frame(width: 120, height: 120)
-                        .scaleEffect(1.2)
-                        .opacity(0.8)
-                        .animation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true), value: showingIntroOverlay)
+    private var infoPageView: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 32) {
+                    Spacer()
                     
-                    Image(systemName: "camera.viewfinder")
-                        .font(.system(size: 48))
-                        .foregroundColor(.blue)
-                }
-                
-                VStack(spacing: 12) {
-                    Text("AI-Powered Receipt Scanner")
-                        .font(.title2)
-                        .fontWeight(.bold)
-                        .foregroundColor(.white)
+                    // AI Scanner Icon with pulse animation
+                    ZStack {
+                        Circle()
+                            .fill(Color.blue.opacity(0.2))
+                            .frame(width: 120, height: 120)
+                            .scaleEffect(1.2)
+                            .opacity(0.8)
+                            .animation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true), value: currentStep == .info)
+                        
+                        Image(systemName: "camera.viewfinder")
+                            .font(.system(size: 48))
+                            .foregroundColor(.blue)
+                    }
                     
-                    Text("Automatic categorization and data extraction ready")
-                        .font(.subheadline)
-                        .foregroundColor(.white.opacity(0.8))
-                        .multilineTextAlignment(.center)
+                    VStack(spacing: 16) {
+                        Text("AI-Powered Receipt Scanner")
+                            .font(.title2)
+                            .fontWeight(.bold)
+                            .multilineTextAlignment(.center)
+                        
+                        Text("Get automatic categorization and data extraction from your receipt photos")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
+                    }
+                    
+                    // AI Features with icons
+                    VStack(spacing: 12) {
+                        Text("What This Scanner Does:")
+                            .font(.headline)
+                            .foregroundColor(.blue)
+                        
+                        VStack(spacing: 8) {
+                            aiFeatureRow("Vendor recognition", "building.2.fill")
+                            aiFeatureRow("Smart categorization", "tag.fill")
+                            aiFeatureRow("Payment detection", "creditcard.fill")
+                            aiFeatureRow("Item breakdown", "list.bullet.rectangle.fill")
+                            aiFeatureRow("Tax & discount extraction", "percent")
+                        }
+                    }
+                    .padding()
+                    .background(Color(.systemGray6))
+                    .cornerRadius(12)
+                    
+                    // Instructions
+                    VStack(spacing: 12) {
+                        Text("How to Get Best Results:")
+                            .font(.headline)
+                            .foregroundColor(.orange)
+                        
+                        VStack(alignment: .leading, spacing: 8) {
+                            instructionRow("1.", "Make sure receipt is well-lit")
+                            instructionRow("2.", "Keep receipt flat and in frame")
+                            instructionRow("3.", "Include all text and numbers")
+                            instructionRow("4.", "Avoid shadows and reflections")
+                        }
+                    }
+                    .padding()
+                    .background(Color.orange.opacity(0.1))
+                    .cornerRadius(12)
+                    
+                    Spacer()
                 }
-                
-                // AI Features with icons
-                VStack(spacing: 8) {
-                    aiFeatureRow("Vendor recognition", "building.2.fill")
-                    aiFeatureRow("Smart categorization", "tag.fill")
-                    aiFeatureRow("Payment detection", "creditcard.fill")
-                    aiFeatureRow("Item breakdown", "list.bullet.rectangle.fill")
+                .padding()
+            }
+            .navigationTitle("Receipt Scanner")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") {
+                        isPresented = false
+                    }
                 }
-                
-                // Action buttons
+            }
+            .safeAreaInset(edge: .bottom) {
+                // Action buttons at bottom
                 VStack(spacing: 12) {
-                    Button("Start Scanning") {
-                        showingIntroOverlay = false
-                        showingDocumentScanner = true
+                    Button("Start Camera Scan") {
+                        currentStep = .camera
                     }
                     .font(.headline)
                     .foregroundColor(.white)
@@ -157,57 +212,30 @@ struct ReceiptScannerView: View {
                     .background(Color.blue)
                     .cornerRadius(12)
                     
-                    HStack(spacing: 16) {
-                        Button("Don't show again") {
-                            hideIntro = true
-                            showingIntroOverlay = false
-                            showingDocumentScanner = true
+                    HStack(spacing: 20) {
+                        if !hideIntro {
+                            Button("Don't show info again") {
+                                hideIntro = true
+                            }
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
                         }
-                        .font(.subheadline)
-                        .foregroundColor(.white.opacity(0.8))
                         
                         Spacer()
                         
                         Button("Choose from Photos") {
-                            showingIntroOverlay = false
                             showingImagePicker = true
                         }
                         .font(.subheadline)
                         .foregroundColor(.blue)
                     }
                 }
+                .padding()
+                .background(.ultraThinMaterial)
             }
-            .padding(32)
-            .background(
-                RoundedRectangle(cornerRadius: 20)
-                    .fill(.ultraThinMaterial)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 20)
-                            .stroke(Color.white.opacity(0.2), lineWidth: 1)
-                    )
-            )
-            .padding(.horizontal, 20)
-            
-            // Close button
-            VStack {
-                HStack {
-                    Spacer()
-                    Button("Close") {
-                        isPresented = false
-                    }
-                    .font(.subheadline)
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .background(Color.black.opacity(0.3))
-                    .cornerRadius(20)
-                }
-                Spacer()
-            }
-            .padding()
         }
     }
-    
+
     @ViewBuilder
     private func aiFeatureRow(_ text: String, _ icon: String) -> some View {
         HStack(spacing: 12) {
@@ -216,7 +244,22 @@ struct ReceiptScannerView: View {
                 .frame(width: 20)
             Text(text)
                 .font(.subheadline)
-                .foregroundColor(.white.opacity(0.9))
+                .foregroundColor(.primary)
+            Spacer()
+        }
+    }
+    
+    @ViewBuilder
+    private func instructionRow(_ number: String, _ text: String) -> some View {
+        HStack(spacing: 12) {
+            Text(number)
+                .font(.subheadline)
+                .fontWeight(.bold)
+                .foregroundColor(.orange)
+                .frame(width: 20)
+            Text(text)
+                .font(.subheadline)
+                .foregroundColor(.primary)
             Spacer()
         }
     }
@@ -336,44 +379,55 @@ struct ReceiptScannerView: View {
     
     @ViewBuilder
     private var processingOverlay: some View {
-        if isProcessing {
-            ZStack {
-                Color.black.opacity(0.8)
-                    .ignoresSafeArea()
+        ZStack {
+            Color.black.opacity(0.8)
+                .ignoresSafeArea()
+            
+            VStack(spacing: 20) {
+                ProgressView()
+                    .scaleEffect(1.5)
+                    .tint(.blue)
                 
-                VStack(spacing: 20) {
-                    ProgressView()
-                        .scaleEffect(1.5)
-                        .tint(.blue)
+                VStack(spacing: 8) {
+                    Text("Processing Receipt...")
+                        .font(.headline)
+                        .foregroundColor(.white)
                     
-                    VStack(spacing: 8) {
-                        Text("Processing Receipt...")
-                            .font(.headline)
-                            .foregroundColor(.white)
-                        
-                        Text(processingStep)
-                            .font(.subheadline)
-                            .foregroundColor(.white.opacity(0.8))
-                            .multilineTextAlignment(.center)
-                    }
+                    Text(processingStep)
+                        .font(.subheadline)
+                        .foregroundColor(.white.opacity(0.8))
+                        .multilineTextAlignment(.center)
                 }
-                .padding()
-                .background(
-                    RoundedRectangle(cornerRadius: 16)
-                        .fill(.ultraThinMaterial)
-                )
-                .padding(.horizontal, 40)
+                
+                Button("Cancel") {
+                    currentStep = .info
+                    isProcessing = false
+                }
+                .font(.subheadline)
+                .foregroundColor(.white.opacity(0.8))
+                .padding(.top, 20)
             }
+            .padding()
+            .background(
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(.ultraThinMaterial)
+            )
+            .padding(.horizontal, 40)
         }
     }
     
     // MARK: - Scanner Result Handling
     
     private func handleScanResult(_ result: Result<[UIImage], Error>) {
+        currentStep = .processing
+        
         switch result {
         case .success(let images):
             if let firstImage = images.first {
                 handleImageSelection(firstImage)
+            } else {
+                errorMessage = "No image captured"
+                showingError = true
             }
         case .failure(let error):
             errorMessage = error.localizedDescription
@@ -398,7 +452,7 @@ struct ReceiptScannerView: View {
                 
                 // Step 1: Extract text using OCR
                 await MainActor.run {
-                    processingStep = "Extracting text from image..."
+                    processingStep = "Extractinging text from image..."
                 }
                 
                 let ocrText = try await extractTextFromImage(image)
@@ -450,6 +504,7 @@ struct ReceiptScannerView: View {
                 
                 await MainActor.run {
                     isProcessing = false
+                    currentStep = .complete
                     self.analysisResult = analysisResult
                     showingAnalysisView = true
                 }
@@ -457,6 +512,7 @@ struct ReceiptScannerView: View {
             } catch {
                 await MainActor.run {
                     isProcessing = false
+                    currentStep = .info
                     
                     if let receiptError = error as? ReceiptAnalysisError {
                         errorMessage = receiptError.localizedDescription
@@ -521,6 +577,9 @@ struct ReceiptScannerView: View {
         // Basic vendor extraction (first non-empty line)
         let vendor = lines.first { !$0.trimmingCharacters(in: .whitespaces).isEmpty } ?? "Unknown Vendor"
         
+        // Smart category classification based on vendor name and OCR text
+        let category = classifyReceiptCategory(vendor: vendor, ocrText: ocrText)
+        
         // Basic amount extraction using regex
         let amount = extractAmountFromText(ocrText)
         
@@ -530,7 +589,7 @@ struct ReceiptScannerView: View {
         // Basic date extraction
         let receiptDate = extractDateFromText(ocrText)
         
-        // Basic payment method details extraction
+        // Enhanced payment method details extraction
         let paymentMethodDetails = extractPaymentMethodDetails(ocrText)
         
         // Create basic item if amount found
@@ -541,13 +600,13 @@ struct ReceiptScannerView: View {
                 quantity: 1.0,
                 unitPrice: amount,
                 totalPrice: amount,
-                category: "Materials"
+                category: category
             ))
         }
         
         return ReceiptAnalysisResult(
             vendor: vendor,
-            category: "Materials", // Default category
+            category: category,
             amount: amount,
             taxAmount: 0.0,
             discountAmount: 0.0,
@@ -559,6 +618,72 @@ struct ReceiptScannerView: View {
             isReturn: false,
             confidence: 0.6 // Lower confidence for basic OCR
         )
+    }
+    
+    private func classifyReceiptCategory(vendor: String, ocrText: String) -> String {
+        let vendorLower = vendor.lowercased()
+        let textLower = ocrText.lowercased()
+        
+        // Food & Beverage establishments → General Conditions
+        let foodBeverageKeywords = [
+            // Restaurant types
+            "restaurant", "cafe", "coffee", "diner", "bistro", "grill", "bar", "pub", 
+            "tavern", "brewery", "brew", "kitchen", "eatery", "food", "pizza", "burger",
+            "sandwich", "taco", "mexican", "chinese", "italian", "thai", "sushi",
+            "steakhouse", "bbq", "barbecue", "wings", "chicken", "seafood",
+            
+            // Food service chains
+            "mcdonalds", "burger king", "subway", "kfc", "taco bell", "pizza hut",
+            "dominos", "starbucks", "dunkin", "panera", "chipotle", "wendys",
+            
+            // Beverage keywords
+            "beer", "wine", "cocktail", "drink", "beverage", "juice", "smoothie",
+            
+            // Food items
+            "meal", "lunch", "dinner", "breakfast", "snack", "appetizer", "dessert"
+        ]
+        
+        for keyword in foodBeverageKeywords {
+            if vendorLower.contains(keyword) || textLower.contains(keyword) {
+                return "General Conditions"
+            }
+        }
+        
+        // Building materials & hardware → Materials
+        let materialsKeywords = [
+            "home depot", "lowes", "menards", "ace hardware", "true value", "hardware",
+            "lumber", "building supply", "supply", "materials", "hardware store",
+            "plumbing", "electrical", "roofing", "concrete", "steel", "metal",
+            "paint", "tools", "nails", "screws", "wood", "drywall", "insulation"
+        ]
+        
+        for keyword in materialsKeywords {
+            if vendorLower.contains(keyword) || textLower.contains(keyword) {
+                return "Materials"
+            }
+        }
+        
+        // Fuel & utilities → General Conditions
+        let generalConditionsKeywords = [
+            "gas station", "shell", "exxon", "bp", "chevron", "mobil", "texaco",
+            "citgo", "wawa", "sheetz", "fuel", "gasoline", "diesel",
+            "office", "supplies", "staples", "office depot", "fedex", "ups",
+            "permits", "license", "inspection", "utility", "electric", "water"
+        ]
+        
+        for keyword in generalConditionsKeywords {
+            if vendorLower.contains(keyword) || textLower.contains(keyword) {
+                return "General Conditions"
+            }
+        }
+        
+        // Default fallback based on common patterns
+        if vendorLower.contains("store") && (textLower.contains("food") || textLower.contains("grocery")) {
+            return "General Conditions"
+        }
+        
+        // Default to Materials for unknown vendors
+        return "Materials"
     }
     
     private func extractAmountFromText(_ text: String) -> Double {
@@ -661,13 +786,26 @@ struct ReceiptScannerView: View {
     private func extractPaymentMethodDetails(_ text: String) -> PaymentMethodDetails? {
         let lowercaseText = text.lowercased()
         
-        // Extract last 4 digits patterns
+        // Enhanced last 4 digits patterns with more comprehensive coverage
         let digitPatterns = [
-            "\\*\\*\\*\\*(\\d{4})",           // ****1234
-            "xxxx\\s*(\\d{4})",               // xxxx 1234
-            "ending\\s+in\\s+(\\d{4})",       // ending in 1234
-            "card\\s+ending\\s+(\\d{4})",     // card ending 1234
-            "acct\\s+ending\\s+(\\d{4})"      // acct ending 1234
+            "\\*\\*\\*\\*\\s*-?\\s*(\\d{4})",           // ****-1234 or **** 1234
+            "xxxx\\s*-?\\s*(\\d{4})",                   // xxxx-1234 or xxxx 1234
+            "ending\\s+in\\s+(\\d{4})",                 // ending in 1234
+            "ends\\s+in\\s+(\\d{4})",                   // ends in 1234
+            "card\\s+ending\\s+(\\d{4})",               // card ending 1234
+            "acct\\s+ending\\s+(\\d{4})",               // acct ending 1234
+            "account\\s+ending\\s+(\\d{4})",            // account ending 1234
+            "card\\s*:\\s*\\*+\\s*(\\d{4})",            // card: ***1234
+            "credit\\s+card\\s+ending\\s+(\\d{4})",     // credit card ending 1234
+            "debit\\s+card\\s+ending\\s+(\\d{4})",      // debit card ending 1234
+            "\\d{4}\\s+\\d{4}\\s+\\d{4}\\s+(\\d{4})",  // Full card number pattern (capture last 4)
+            "card\\s*:\\s*\\*+(\\d{4})",                // card: ***1234
+            "account\\s*:\\s*\\*+(\\d{4})",             // account: ***1234
+            "pan\\s*:\\s*\\*+(\\d{4})",                 // PAN: ***1234 (Personal Account Number)
+            "ref\\s*#\\s*\\*+(\\d{4})",                 // ref # ***1234
+            "auth\\s*:\\s*\\d+\\s*/\\s*\\*+(\\d{4})",   // auth: 123456/*1234
+            "masked\\s+card\\s+(\\d{4})",               // masked card 1234
+            "card\\s+\\d{4}\\s*\\*+(\\d{4})"            // card 1234****5678 -> get 5678
         ]
         
         var lastFourDigits: String?
@@ -683,25 +821,66 @@ struct ReceiptScannerView: View {
             }
         }
         
-        // Extract card brand
+        // Enhanced card brand detection with more patterns
         var cardBrand: String?
-        if lowercaseText.contains("visa") {
-            cardBrand = "Visa"
-        } else if lowercaseText.contains("mastercard") || lowercaseText.contains("master card") {
-            cardBrand = "Mastercard"
-        } else if lowercaseText.contains("amex") || lowercaseText.contains("american express") {
-            cardBrand = "American Express"
-        } else if lowercaseText.contains("discover") {
-            cardBrand = "Discover"
-        } else if lowercaseText.contains("chase") {
-            cardBrand = "Chase"
+        let cardBrandPatterns: [(String, [String])] = [
+            ("Visa", ["visa", "vi\\b", "visa\\s+credit", "visa\\s+debit", "v\\s+credit", "v\\s+debit"]),
+            ("Mastercard", ["mastercard", "master card", "mc\\b", "m/c", "mstr", "master"]),
+            ("American Express", ["amex", "american express", "americanexpress", "amx", "ax\\b"]),
+            ("Discover", ["discover", "disc\\b", "dsc\\b", "discover card"]),
+            ("Chase", ["chase", "jpmorgan chase", "jp morgan"]),
+            ("Capital One", ["capital one", "capitalone", "cap one"]),
+            ("Wells Fargo", ["wells fargo", "wellsfargo", "wf\\b"]),
+            ("Bank of America", ["bank of america", "bankofamerica", "boa\\b", "b of a"]),
+            ("Citi", ["citi", "citibank", "citicorp"]),
+            ("US Bank", ["us bank", "usbank", "u.s. bank"]),
+            ("PNC", ["pnc", "pnc bank"]),
+            ("TD Bank", ["td bank", "tdbank"]),
+            ("Regions", ["regions", "regions bank"]),
+            ("Fifth Third", ["fifth third", "53\\s+bank", "5/3\\s+bank"]),
+            ("Truist", ["truist", "bb&t", "suntrust"])
+        ]
+        
+        for (brand, patterns) in cardBrandPatterns {
+            for pattern in patterns {
+                if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) {
+                    let range = NSRange(text.startIndex..., in: text)
+                    if regex.firstMatch(in: text, options: [], range: range) != nil {
+                        cardBrand = brand
+                        break
+                    }
+                }
+            }
+            if cardBrand != nil { break }
         }
         
-        if cardBrand != nil || lastFourDigits != nil {
+        // Enhanced account info extraction
+        var accountInfo: String?
+        let accountPatterns = [
+            "approval\\s*[:#]?\\s*(\\w+)",              // approval: ABC123
+            "auth\\s*[:#]?\\s*(\\d+)",                  // auth: 123456
+            "reference\\s*[:#]?\\s*(\\w+)",             // reference: REF123
+            "transaction\\s*[:#]?\\s*(\\w+)",           // transaction: TXN123
+            "terminal\\s*[:#]?\\s*(\\w+)"               // terminal: T123
+        ]
+        
+        for pattern in accountPatterns {
+            if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) {
+                let range = NSRange(text.startIndex..., in: text)
+                if let match = regex.firstMatch(in: text, options: [], range: range),
+                   match.numberOfRanges > 1 {
+                    let infoRange = Range(match.range(at: 1), in: text)!
+                    accountInfo = String(text[infoRange])
+                    break
+                }
+            }
+        }
+        
+        if cardBrand != nil || lastFourDigits != nil || accountInfo != nil {
             return PaymentMethodDetails(
                 cardBrand: cardBrand,
                 lastFourDigits: lastFourDigits,
-                accountInfo: nil
+                accountInfo: accountInfo
             )
         }
         
@@ -732,7 +911,13 @@ struct ReceiptScannerView: View {
             "taxAmount": number - tax amount (0 if not found),
             "discountAmount": number - discount amount (0 if not found),
             "paymentMethod": "Credit Card|Debit Card|Cash|Check|Bank Transfer|Other",
+            "paymentMethodDetails": {
+                "cardBrand": "string - Visa, Mastercard, American Express, Discover, etc. (null if not found)",
+                "lastFourDigits": "string - last 4 digits of card (null if not found)",
+                "accountInfo": "string - approval code, auth number, or reference (null if not found)"
+            },
             "receiptNumber": "string - receipt/transaction number",
+            "receiptDate": "string - date in YYYY-MM-DD format (null if not found)",
             "items": [
                 {
                     "name": "string - item name",
@@ -750,11 +935,23 @@ struct ReceiptScannerView: View {
 
         Guidelines:
         - Materials: lumber, nails, screws, paint, tools, hardware, building supplies
-        - General Conditions: permits, insurance, utilities, office supplies, fuel
+        - General Conditions: permits, insurance, utilities, office supplies, fuel, food/meals
         - Contingency: unexpected items, misc supplies
-        - Other: food, personal items, non-construction related
-        - Extract as many individual items as possible
-        - Be conservative with confidence scores
+        - Other: personal items, non-construction related
+        
+        PAYMENT METHOD DETAILS EXTRACTION PRIORITY:
+        - Look for card last 4 digits in formats: ****1234, xxxx 1234, ending in 1234, etc.
+        - Identify card brands: Visa, Mastercard, American Express, Discover, Chase, etc.
+        - Extract approval codes, auth numbers, or transaction references
+        - If cash payment, set paymentMethodDetails to null
+        
+        BUSINESS TYPE CATEGORIZATION:
+        - Restaurants, cafes, food trucks, bars, breweries → General Conditions
+        - Building supply stores, hardware stores → Materials
+        - Gas stations → General Conditions (fuel)
+        - Office supply stores → General Conditions
+        
+        Extract as many individual items as possible and be conservative with confidence scores.
 
         Receipt text:
         \(ocrText)
@@ -836,6 +1033,30 @@ struct ReceiptScannerView: View {
             let isReturn = json["isReturn"] as? Bool ?? false
             let confidence = json["confidence"] as? Double ?? 0.8
             
+            // Enhanced payment method details parsing
+            var paymentMethodDetails: PaymentMethodDetails?
+            if let paymentDetailsDict = json["paymentMethodDetails"] as? [String: Any] {
+                let cardBrand = paymentDetailsDict["cardBrand"] as? String
+                let lastFourDigits = paymentDetailsDict["lastFourDigits"] as? String
+                let accountInfo = paymentDetailsDict["accountInfo"] as? String
+                
+                if cardBrand != nil || lastFourDigits != nil || accountInfo != nil {
+                    paymentMethodDetails = PaymentMethodDetails(
+                        cardBrand: cardBrand,
+                        lastFourDigits: lastFourDigits,
+                        accountInfo: accountInfo
+                    )
+                }
+            }
+            
+            // Enhanced date parsing
+            var receiptDate: Date?
+            if let dateString = json["receiptDate"] as? String, !dateString.isEmpty {
+                let formatter = DateFormatter()
+                formatter.dateFormat = "yyyy-MM-dd"
+                receiptDate = formatter.date(from: dateString)
+            }
+            
             var items: [ReceiptItemResult] = []
             if let itemsArray = json["items"] as? [[String: Any]] {
                 for itemDict in itemsArray {
@@ -857,7 +1078,9 @@ struct ReceiptScannerView: View {
                 taxAmount: taxAmount,
                 discountAmount: discountAmount,
                 paymentMethod: paymentMethod,
+                paymentMethodDetails: paymentMethodDetails,
                 receiptNumber: receiptNumber,
+                receiptDate: receiptDate,
                 items: items,
                 isReturn: isReturn,
                 confidence: confidence
@@ -930,13 +1153,14 @@ struct ReceiptScannerView_Previews: PreviewProvider {
             laborCost: 15000,
             generalConditions: 5000,
             contingency: 5000,
-            profit: 0,
+            
             startDate: Date(),
-            endDate: Date()
+            endDate: Date(),
+            organizationID: "sample-org-id"
         )
         
         ReceiptScannerView(isPresented: .constant(true), project: sampleProject)
-            .environmentObject(ProjectViewModel(cloudKitService: CloudKitAuthService()))
+            .environmentObject(ProjectViewModel(offlineDataManager: OfflineDataManager()))
             .environmentObject(AuthViewModel(service: PreviewAuthService()))
     }
 }

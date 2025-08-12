@@ -1,275 +1,253 @@
 import Foundation
+import CloudKit
 
-public struct Project: Identifiable, Codable, Hashable, Sendable {
+public enum ProjectPriority: String, CaseIterable, Codable {
+    case low = "Low"
+    case medium = "Medium"
+    case high = "High"
+    case urgent = "Urgent"
+}
+
+public struct Project: Identifiable, Codable, Equatable {
     public let id: UUID
     public var name: String
     public var client: String
-    public var phone: String
-    public var email: String
-
-    // Address broken out
-    public var street: String
-    public var city: String
-    public var state: String
-    public var zip: String
-
-    public var notes: String
-
+    public var clientEmail: String?
+    public var clientPhone: String?
+    public var clientAddress: String?
+    public var description: String
     public var totalBudget: Double
     public var materialCost: Double
     public var laborCost: Double
     public var generalConditions: Double
     public var contingency: Double
-    public var spentContingency: Double
-    public var profit: Double
-
     public var startDate: Date
     public var endDate: Date
-
-    public var loggedHours: [WorkHour]
-    public var tasks: [ProjectTask]
-    public var communications: [Communication]
-    public var progressLogs: [ProgressLog]
-    public var changeOrders: [ChangeOrder]
-    public var receipts: [Receipt]
-    public var taskTemplates: [TaskTemplate]
-
     public var status: ProjectStatus
-
-    public var organizationID: String?
+    public var priority: ProjectPriority
+    public var assignedUserIDs: [String] // Team member IDs
+    public var organizationID: String
+    public var creationDate: Date
+    public var lastModifiedDate: Date
+    public var photoIDs: [String] // CloudKit photo record IDs
     
-    // MARK: - Role-Based Access Control
-    /// Users with specific access to this project (contractors, external consultants)
-    public var assignedUserIDs: [String] = []
-    /// Project access level (public to all org members vs restricted)
-    public var accessLevel: ProjectAccessLevel = .organization
-    /// Project owner/manager (defaults to creator)
-    public var projectManagerID: String?
+    // Child collections
+    public var tasks: [ProjectTask] = []
+    public var progressLogs: [ProgressLog] = []
+    public var receipts: [Receipt] = []
+    public var workHours: [WorkHour] = []
+    public var communications: [Communication] = []
+    public var changeOrders: [ChangeOrder] = []
     
-    // MARK: - Team Member Assignments
-    /// Team members assigned to this project
-    public var assignedTeamMemberIDs: [String] = []
-
-    // MARK: – Codable
-
-    private enum CodingKeys: String, CodingKey {
-        case id, name, client, phone, email
-        case street, city, state, zip
-        case notes
-        case totalBudget, materialCost, laborCost, generalConditions, contingency, spentContingency, profit
-        case startDate, endDate
-        case loggedHours, tasks, communications, progressLogs, changeOrders, receipts, taskTemplates
-        case status
-        case organizationID
-        case assignedUserIDs, accessLevel, projectManagerID
-        case assignedTeamMemberIDs
-    }
-
     public init(
         id: UUID = UUID(),
         name: String,
         client: String,
-        phone: String = "",
-        email: String = "",
-        street: String = "",
-        city: String = "",
-        state: String = "",
-        zip: String = "",
-        notes: String = "",
+        clientEmail: String? = nil,
+        clientPhone: String? = nil,
+        clientAddress: String? = nil,
+        description: String = "",
         totalBudget: Double,
-        materialCost: Double,
-        laborCost: Double,
-        generalConditions: Double,
-        contingency: Double,
-        spentContingency: Double = 0,
-        profit: Double,
+        materialCost: Double = 0,
+        laborCost: Double = 0,
+        generalConditions: Double = 0,
+        contingency: Double = 0,
         startDate: Date,
         endDate: Date,
-        loggedHours: [WorkHour] = [],
-        tasks: [ProjectTask] = [],
-        communications: [Communication] = [],
-        progressLogs: [ProgressLog] = [],
-        changeOrders: [ChangeOrder] = [],
-        receipts: [Receipt] = [],
-        taskTemplates: [TaskTemplate] = [],
         status: ProjectStatus = .active,
-        organizationID: String? = nil,
+        priority: ProjectPriority = .medium,
         assignedUserIDs: [String] = [],
-        accessLevel: ProjectAccessLevel = .organization,
-        projectManagerID: String? = nil,
-        assignedTeamMemberIDs: [String] = []
+        organizationID: String,
+        creationDate: Date = Date(),
+        lastModifiedDate: Date = Date(),
+        photoIDs: [String] = []
     ) {
         self.id = id
         self.name = name
         self.client = client
-        self.phone = phone
-        self.email = email
-        self.street = street
-        self.city = city
-        self.state = state
-        self.zip = zip
-        self.notes = notes
+        self.clientEmail = clientEmail
+        self.clientPhone = clientPhone
+        self.clientAddress = clientAddress
+        self.description = description
         self.totalBudget = totalBudget
         self.materialCost = materialCost
         self.laborCost = laborCost
         self.generalConditions = generalConditions
         self.contingency = contingency
-        self.spentContingency = spentContingency
-        self.profit = profit
         self.startDate = startDate
         self.endDate = endDate
-        self.loggedHours = loggedHours
-        self.tasks = tasks
-        self.communications = communications
-        self.progressLogs = progressLogs
-        self.changeOrders = changeOrders
-        self.receipts = receipts
-        self.taskTemplates = taskTemplates
         self.status = status
-        self.organizationID = organizationID
+        self.priority = priority
         self.assignedUserIDs = assignedUserIDs
-        self.accessLevel = accessLevel
-        self.projectManagerID = projectManagerID
-        self.assignedTeamMemberIDs = assignedTeamMemberIDs
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(id)
+        self.organizationID = organizationID
+        self.creationDate = creationDate
+        self.lastModifiedDate = lastModifiedDate
+        self.photoIDs = photoIDs
     }
     
+    // MARK: - Equatable Conformance
     public static func == (lhs: Project, rhs: Project) -> Bool {
-        lhs.id == rhs.id
+        return lhs.id == rhs.id &&
+               lhs.name == rhs.name &&
+               lhs.client == rhs.client &&
+               lhs.totalBudget == rhs.totalBudget &&
+               lhs.status == rhs.status &&
+               lhs.lastModifiedDate == rhs.lastModifiedDate
     }
     
-    // MARK: - Computed Properties
+    // MARK: - CloudKit Conversion
     
-    /// Returns the full address as a formatted string
-    public var fullAddress: String {
-        let components = [street, city, state, zip].filter { !$0.isEmpty }
-        return components.joined(separator: ", ")
+    public func toCKRecord(organizationID: UUID) throws -> CKRecord {
+        let recordID = CKRecord.ID(recordName: id.uuidString)
+        let record = CKRecord(recordType: "Project", recordID: recordID)
+        
+        record["name"] = name as CKRecordValue
+        record["client"] = client as CKRecordValue
+        record["clientEmail"] = clientEmail as CKRecordValue?
+        record["clientPhone"] = clientPhone as CKRecordValue?
+        record["clientAddress"] = clientAddress as CKRecordValue?
+        record["description"] = description as CKRecordValue
+        record["totalBudget"] = totalBudget as CKRecordValue
+        record["materialCost"] = materialCost as CKRecordValue
+        record["laborCost"] = laborCost as CKRecordValue
+        record["generalConditions"] = generalConditions as CKRecordValue
+        record["contingency"] = contingency as CKRecordValue
+        record["startDate"] = startDate as CKRecordValue
+        record["endDate"] = endDate as CKRecordValue
+        record["status"] = status.rawValue as CKRecordValue
+        record["priority"] = priority.rawValue as CKRecordValue
+        record["assignedUserIDs"] = assignedUserIDs as CKRecordValue
+        record["organizationID"] = organizationID.uuidString as CKRecordValue
+        record["creationDate"] = creationDate as CKRecordValue
+        record["lastModifiedDate"] = lastModifiedDate as CKRecordValue
+        record["photoIDs"] = photoIDs as CKRecordValue
+        
+        // Serialize child collections as JSON data
+        record["fullProjectData"] = try JSONEncoder().encode(self) as CKRecordValue
+        
+        return record
     }
     
-    /// Backward compatibility - progressReports is the same as progressLogs  
+    public init(from record: CKRecord) throws {
+        id = UUID(uuidString: record.recordID.recordName) ?? UUID()
+        name = record["name"] as? String ?? ""
+        client = record["client"] as? String ?? ""
+        clientEmail = record["clientEmail"] as? String
+        clientPhone = record["clientPhone"] as? String
+        clientAddress = record["clientAddress"] as? String
+        description = record["description"] as? String ?? ""
+        totalBudget = record["totalBudget"] as? Double ?? 0
+        materialCost = record["materialCost"] as? Double ?? 0
+        laborCost = record["laborCost"] as? Double ?? 0
+        generalConditions = record["generalConditions"] as? Double ?? 0
+        contingency = record["contingency"] as? Double ?? 0
+        startDate = record["startDate"] as? Date ?? Date()
+        endDate = record["endDate"] as? Date ?? Date()
+        status = ProjectStatus(rawValue: record["status"] as? String ?? "Active") ?? .active
+        priority = ProjectPriority(rawValue: record["priority"] as? String ?? "Medium") ?? .medium
+        assignedUserIDs = record["assignedUserIDs"] as? [String] ?? []
+        organizationID = record["organizationID"] as? String ?? ""
+        creationDate = record["creationDate"] as? Date ?? Date()
+        lastModifiedDate = record["lastModifiedDate"] as? Date ?? Date()
+        photoIDs = record["photoIDs"] as? [String] ?? []
+        
+        // Try to decode full project data if available
+        if let data = record["fullProjectData"] as? Data {
+            let fullProject = try JSONDecoder().decode(Project.self, from: data)
+            tasks = fullProject.tasks
+            progressLogs = fullProject.progressLogs
+            receipts = fullProject.receipts
+            workHours = fullProject.workHours
+            communications = fullProject.communications
+            changeOrders = fullProject.changeOrders
+        }
+    }
+}
+
+// MARK: - Helper Extensions  
+
+extension Project {
+    public var totalSpent: Double {
+        return materialCost + laborCost + generalConditions
+    }
+    
+    public var remainingBudget: Double {
+        return totalBudget - totalSpent
+    }
+    
+    public var budgetUtilization: Double {
+        guard totalBudget > 0 else { return 0 }
+        return totalSpent / totalBudget
+    }
+    
+    public var daysRemaining: Int {
+        let calendar = Calendar.current
+        let components = calendar.dateComponents([.day], from: Date(), to: endDate)
+        return components.day ?? 0
+    }
+    
+    public var isPastDue: Bool {
+        return endDate < Date() && status == .active
+    }
+    
+    // PHASE 1 COMPATIBILITY - Map existing properties for backwards compatibility
+    public var loggedHours: [WorkHour] {
+        get { return workHours }
+        set { workHours = newValue }
+    }
+    
+    public var assignedTeamMemberIDs: [String] {
+        return assignedUserIDs
+    }
+    
     public var progressReports: [ProgressLog] {
         return progressLogs
     }
     
-    // MARK: - Role-Based Access Methods
-    
-    /// Check if a user has access to this project based on their role and assignments
-    public func userHasAccess(userID: String, userRole: OrganizationRole) -> Bool {
-        // Admins always have access to all projects
-        if userRole == .admin {
-            return true
-        }
-        
-        // Project manager always has access
-        if projectManagerID == userID {
-            return true
-        }
-        
-        // Organization members have access to organization-level projects
-        if userRole == .member && accessLevel == .organization {
-            return true
-        }
-        
-        // Contractors only have access to specifically assigned projects
-        if userRole == .contractor && assignedUserIDs.contains(userID) {
-            return true
-        }
-        
-        // Viewers have read-only access to organization projects
-        if userRole == .viewer && accessLevel == .organization {
-            return true
-        }
-        
-        return false
+    // PHASE 1 COMPATIBILITY - Map client properties
+    public var phone: String {
+        return clientPhone ?? ""
     }
     
-    /// Check if user can edit this project
-    public func userCanEdit(userID: String, userRole: OrganizationRole) -> Bool {
-        // Admins can always edit
-        if userRole == .admin {
-            return true
-        }
-        
-        // Project manager can edit
-        if projectManagerID == userID {
-            return true
-        }
-        
-        // Members can edit organization projects
-        if userRole == .member && accessLevel == .organization {
-            return true
-        }
-        
-        // Contractors can edit their assigned projects
-        if userRole == .contractor && assignedUserIDs.contains(userID) {
-            return true
-        }
-        
-        // Viewers cannot edit
-        return false
+    public var email: String {
+        return clientEmail ?? ""
     }
     
-    /// Assign a user to this project (for contractors)
-    public mutating func assignUser(_ userID: String) {
-        if !assignedUserIDs.contains(userID) {
-            assignedUserIDs.append(userID)
+    public var street: String {
+        // Extract street from clientAddress if available
+        return clientAddress?.components(separatedBy: ",").first?.trimmingCharacters(in: .whitespaces) ?? ""
+    }
+    
+    public var city: String {
+        // Extract city from clientAddress if available (assuming format: "street, city, state zip")
+        let components = clientAddress?.components(separatedBy: ",") ?? []
+        return components.count > 1 ? components[1].trimmingCharacters(in: .whitespaces) : ""
+    }
+    
+    public var state: String {
+        // Extract state from clientAddress if available
+        let components = clientAddress?.components(separatedBy: ",") ?? []
+        if components.count > 2 {
+            let stateZip = components[2].trimmingCharacters(in: .whitespaces).components(separatedBy: " ")
+            return stateZip.first ?? ""
         }
+        return ""
     }
     
-    /// Remove user assignment from this project
-    public mutating func removeUserAssignment(_ userID: String) {
-        assignedUserIDs.removeAll { $0 == userID }
+    public var zip: String {
+        // Extract zip from clientAddress if available
+        let components = clientAddress?.components(separatedBy: ",") ?? []
+        if components.count > 2 {
+            let stateZip = components[2].trimmingCharacters(in: .whitespaces).components(separatedBy: " ")
+            return stateZip.count > 1 ? stateZip[1] : ""
+        }
+        return ""
     }
     
-    /// Set project manager
-    public mutating func setProjectManager(_ userID: String) {
-        projectManagerID = userID
-    }
-    
-    // MARK: - Team Member Assignment Methods
-    
-    /// Assign a team member to this project
+    // PHASE 1 STUB METHODS - TODO: Implement in Phase 2
     public mutating func assignTeamMember(_ teamMemberID: String) {
-        if !assignedTeamMemberIDs.contains(teamMemberID) {
-            assignedTeamMemberIDs.append(teamMemberID)
-        }
-    }
-    
-    /// Remove team member assignment from this project
-    public mutating func removeTeamMemberAssignment(_ teamMemberID: String) {
-        assignedTeamMemberIDs.removeAll { $0 == teamMemberID }
-    }
-    
-    /// Check if a team member is assigned to this project
-    public func isTeamMemberAssigned(_ teamMemberID: String) -> Bool {
-        return assignedTeamMemberIDs.contains(teamMemberID)
-    }
-}
-
-// MARK: - Project Access Level
-
-public enum ProjectAccessLevel: String, Codable, CaseIterable, Sendable {
-    case organization = "organization"  // All org members can see
-    case restricted = "restricted"      // Only assigned users can see
-    
-    public var displayName: String {
-        switch self {
-        case .organization:
-            return "Organization Wide"
-        case .restricted:
-            return "Restricted Access"
-        }
-    }
-    
-    public var description: String {
-        switch self {
-        case .organization:
-            return "All team members can access this project"
-        case .restricted:
-            return "Only assigned users can access this project"
+        if !assignedUserIDs.contains(teamMemberID) {
+            assignedUserIDs.append(teamMemberID)
         }
     }
 }

@@ -110,7 +110,7 @@ class CloudKitCompatibilityService {
             laborCost: 0,
             generalConditions: 0,
             contingency: 0,
-            profit: 0,
+            
             startDate: startDate,
             endDate: endDate
         )

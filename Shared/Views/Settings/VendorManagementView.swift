@@ -529,7 +529,7 @@ struct VendorManagementView: View {
 struct VendorManagementView_Previews: PreviewProvider {
     static var previews: some View {
         VendorManagementView()
-            .environmentObject(ProjectViewModel(cloudKitService: CloudKitAuthService()))
+            .environmentObject(ProjectViewModel(offlineDataManager: OfflineDataManager()))
             .environmentObject(AuthViewModel(service: PreviewAuthService()))
     }
 }

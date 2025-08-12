@@ -12,25 +12,17 @@ struct MasterCompanySettingsView: View {
     @State private var selectedTeamMember: TeamMember?
     @State private var showingTeamMemberDetail = false
     
-    // Settings-related state
-    @AppStorage("preferredMapProvider") private var preferredMapProvider: MapProvider = .apple
-    @StateObject private var resetService = CompleteDataResetService()
+    // Simplified settings state
     @State private var showingStatusAlert = false
     @State private var statusMessage = ""
-    @State private var showingNuclearResetAlert = false
-    @State private var isResetting = false
-    @State private var resetProgress = ""
     @State private var showingAlert = false
     @State private var alertMessage = ""
-    @State private var showingInviteCopiedAlert = false
-    @State private var inviteCopiedMessage = ""
     
     enum CompanySettingsTab: String, CaseIterable {
         case teamMembers = "Team"
         case vendors = "Vendors"
         case clients = "Clients"
         case paymentMethods = "Payments"
-        case businessIntelligence = "Intelligence"
         case settings = "Settings"
         
         var icon: String {
@@ -39,7 +31,6 @@ struct MasterCompanySettingsView: View {
             case .vendors: return "storefront.fill"
             case .clients: return "person.crop.circle.fill"
             case .paymentMethods: return "creditcard.fill"
-            case .businessIntelligence: return "brain.head.profile"
             case .settings: return "gearshape.fill"
             }
         }
@@ -50,7 +41,6 @@ struct MasterCompanySettingsView: View {
             case .vendors: return .orange
             case .clients: return .green
             case .paymentMethods: return .purple
-            case .businessIntelligence: return .pink
             case .settings: return .gray
             }
         }
@@ -75,10 +65,6 @@ struct MasterCompanySettingsView: View {
             .navigationTitle("Company Settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Done") { dismiss() }
-                }
-                
                 ToolbarItem(placement: .navigationBarTrailing) {
                     if selectedTab == .teamMembers && authVM.canPerformAdminActions {
                         Menu {
@@ -112,28 +98,15 @@ struct MasterCompanySettingsView: View {
                 EnhancedTeamMemberDetailView(member: member)
                     .environmentObject(projectVM)
             }
-            .alert("CloudKit Status", isPresented: $showingStatusAlert) {
+            .alert("Status", isPresented: $showingStatusAlert) {
                 Button("OK") { }
             } message: {
                 Text(statusMessage)
             }
-            .alert("Nuclear Reset", isPresented: $showingNuclearResetAlert) {
-                Button("Cancel", role: .cancel) { }
-                Button("Reset All Data", role: .destructive) {
-                    performNuclearReset()
-                }
-            } message: {
-                Text("This will permanently delete ALL local data and CloudKit data including:\n\n• All organizations\n• All team members\n• All vendors & payment methods\n• All cached projects\n• All settings\n\nThe app will restart automatically after reset. This cannot be undone.")
-            }
-            .alert("Debug Action", isPresented: $showingAlert) {
+            .alert("Action Complete", isPresented: $showingAlert) {
                 Button("OK") { }
             } message: {
                 Text(alertMessage)
-            }
-            .alert("Invite Copied", isPresented: $showingInviteCopiedAlert) {
-                Button("OK") { }
-            } message: {
-                Text(inviteCopiedMessage)
             }
         }
     }
@@ -202,7 +175,7 @@ struct MasterCompanySettingsView: View {
                 .padding(.horizontal)
                 .padding(.vertical, 8)
                 .background(Color.blue.opacity(0.1))
-                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .cornerRadius(8)
             }
         }
         .padding()
@@ -261,24 +234,18 @@ struct MasterCompanySettingsView: View {
                 .environmentObject(authVM)
                 .environmentObject(projectVM)
             case .vendors:
-                CompanyVendorsTabView()
+                VendorsTabView()
                     .environmentObject(projectVM)
             case .clients:
-                CompanyClientsTabView()
+                ClientsTabView()
                     .environmentObject(projectVM)
             case .paymentMethods:
-                CompanyPaymentMethodsTabView()
-                    .environmentObject(projectVM)
-            case .businessIntelligence:
-                BusinessIntelligenceTabView()
-                    .environmentObject(authVM)
+                PaymentMethodsTabView()
                     .environmentObject(projectVM)
             case .settings:
                 MasterOrganizationSettingsTabView(
-                    preferredMapProvider: $preferredMapProvider,
                     showingStatusAlert: $showingStatusAlert,
                     statusMessage: $statusMessage,
-                    showingNuclearResetAlert: $showingNuclearResetAlert,
                     showingAlert: $showingAlert,
                     alertMessage: $alertMessage
                 )
@@ -312,650 +279,166 @@ struct MasterCompanySettingsView: View {
         }
         .padding()
     }
-    
-    private func performNuclearReset() {
-        isResetting = true
-        resetProgress = "Starting nuclear reset..."
-        
-        Task {
-            do {
-                try await resetService.performCompleteReset()
-                
-                await MainActor.run {
-                    resetProgress = "Reset complete! Restarting app..."
-                    
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                        restartApp()
-                    }
-                }
-            } catch {
-                await MainActor.run {
-                    isResetting = false
-                    statusMessage = "❌ Nuclear reset failed: \(error.localizedDescription)"
-                    showingStatusAlert = true
-                }
-            }
-        }
-    }
-    
-    private func restartApp() {
-        #if os(iOS)
-        exit(0)
-        #else
-        NSApplication.shared.terminate(nil)
-        #endif
-    }
 }
 
-// MARK: - Business Intelligence Tab (Enterprise Intelligence Dashboard)
-struct BusinessIntelligenceTabView: View {
+// MARK: - Master Team Members Tab (Single Source of Truth)
+struct MasterTeamMembersTabView: View {
     @EnvironmentObject var authVM: AuthViewModel
     @EnvironmentObject var projectVM: ProjectViewModel
     
-    @State private var selectedYear = Calendar.current.component(.year, from: Date())
-    @State private var annualReport: String? = nil
-    @State private var isLoadingReport = false
-    @State private var showingFullReport = false
-    @State private var isActivatingIntelligence = false
-    @State private var intelligenceStatus: String = ""
-    @State private var showingIntelligenceStatus = false
+    @Binding var showingAddTeamMember: Bool
+    @Binding var selectedTeamMember: TeamMember?
+    @State private var showingTerminationDialog = false
+    @State private var showingProjectAssignment = false
+    @State private var showingProjectInvite = false
+    @State private var teamMemberToTerminate: TeamMember?
+    @State private var teamMemberToAssign: TeamMember?
+    @State private var showingInviteCopiedAlert = false
+    @State private var inviteCopiedMessage = ""
+    
+    // Smart project-based team member categorization
+    private var activeTeamMembers: [TeamMember] {
+        return projectVM.teamMembers.filter { member in
+            isTeamMemberActiveOnAnyProject(member)
+        }
+    }
+    
+    private var betweenProjectsMembers: [TeamMember] {
+        return projectVM.teamMembers.filter { member in
+            member.employmentStatus.canBeAssignedToProjects && 
+            !isTeamMemberActiveOnAnyProject(member) &&
+            member.employmentStatus != .terminated &&
+            member.employmentStatus != .suspended &&
+            member.employmentStatus != .onLeave
+        }
+    }
+    
+    private var completedTeamMembers: [TeamMember] {
+        return projectVM.teamMembers.filter { member in
+            member.employmentStatus == .active &&
+            !isTeamMemberActiveOnAnyProject(member) &&
+            hasCompletedAllAssignedProjects(member)
+        }
+    }
+    
+    private var inactiveTeamMembers: [TeamMember] {
+        return projectVM.teamMembers.filter { 
+            $0.employmentStatus == .terminated || 
+            $0.employmentStatus == .suspended || 
+            $0.employmentStatus == .onLeave 
+        }
+    }
+    
+    private var appUsers: Int {
+        return activeTeamMembers.filter { $0.hasAppAccess }.count + 1 // +1 for current user
+    }
     
     var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 20) {
-                // Enterprise Intelligence Status
-                enterpriseIntelligenceStatus
+            LazyVStack(alignment: .leading, spacing: 16) {
+                // Team Status Overview
+                teamStatusOverview
                 
-                // Intelligence Activation Section (Phase 2D)
-                intelligenceActivationSection
+                // Invite section for admins
+                if authVM.canPerformAdminActions {
+                    inviteSection
+                }
                 
-                // Real-Time Organizational Metrics
-                organizationalMetrics
+                // Active Team Members
+                if !activeTeamMembers.isEmpty {
+                    teamMembersSection("Active on Projects", activeTeamMembers, .green)
+                }
                 
-                // Vendor Intelligence (Enhanced with Real Data)
-                enhancedVendorIntelligence
+                // Available Team Members
+                if !betweenProjectsMembers.isEmpty {
+                    availableTeamMembersSection
+                }
                 
-                // Payment Method Analytics (Enhanced with Real Data)
-                enhancedPaymentMethodAnalytics
+                // Completed Projects Team Members
+                if !completedTeamMembers.isEmpty {
+                    teamMembersSection("Projects Completed", completedTeamMembers, .gray)
+                }
                 
-                // Financial Intelligence
-                financialIntelligence
+                // Inactive Team Members
+                if !inactiveTeamMembers.isEmpty {
+                    inactiveTeamMembersSection
+                }
                 
-                // Annual Business Reports
-                annualReportsSection
-                
-                // Quick Actions
-                quickActionsSection
+                // Empty state if no team members
+                if projectVM.teamMembers.isEmpty {
+                    emptyTeamState
+                }
             }
             .padding()
         }
-        .navigationTitle("Business Intelligence")
-        .onAppear {
-            loadInitialIntelligenceData()
+        .alert("Terminate Employee", isPresented: $showingTerminationDialog) {
+            Button("Cancel", role: .cancel) {
+                teamMemberToTerminate = nil
+            }
+            Button("Terminate", role: .destructive) {
+                if let member = teamMemberToTerminate {
+                    selectedTeamMember = member
+                }
+                teamMemberToTerminate = nil
+            }
+        } message: {
+            if let member = teamMemberToTerminate {
+                Text("Are you sure you want to terminate \(member.name)? This will preserve all their work history for legal and tax purposes.")
+            }
         }
-        .sheet(isPresented: $showingFullReport) {
-            AnnualReportDetailView(report: annualReport ?? "No report available", year: selectedYear)
+        .sheet(isPresented: $showingProjectAssignment) {
+            if let member = teamMemberToAssign {
+                ProjectAssignmentView(teamMember: member)
+                    .environmentObject(projectVM)
+            }
         }
-        .sheet(isPresented: $showingIntelligenceStatus) {
-            IntelligenceStatusDetailView(status: intelligenceStatus)
+        .sheet(isPresented: $showingProjectInvite) {
+            InviteTeamMemberToProjectView()
+                .environmentObject(authVM)
+                .environmentObject(projectVM)
+        }
+        .alert("Invite Copied", isPresented: $showingInviteCopiedAlert) {
+            Button("OK") { }
+        } message: {
+            Text(inviteCopiedMessage)
         }
     }
     
     @ViewBuilder
-    private var enterpriseIntelligenceStatus: some View {
+    private var teamStatusOverview: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Image(systemName: "brain.head.profile")
-                    .font(.title2)
-                    .foregroundColor(.pink)
-                Text("Enterprise Intelligence")
-                    .font(.headline)
-                    .fontWeight(.semibold)
-                
-                Spacer()
-                
-                if projectVM.isEnterpriseIntelligenceReady {
-                    HStack {
-                        Circle()
-                            .fill(Color.green)
-                            .frame(width: 8, height: 8)
-                        Text("ACTIVE")
-                            .font(.caption)
-                            .fontWeight(.bold)
-                            .foregroundColor(.green)
-                    }
-                } else {
-                    HStack {
-                        Circle()
-                            .fill(Color.orange)
-                            .frame(width: 8, height: 8)
-                        Text("INITIALIZING")
-                            .font(.caption)
-                            .fontWeight(.bold)
-                            .foregroundColor(.orange)
-                    }
-                }
-            }
-            
-            if let intelligenceReport = projectVM.getBusinessIntelligenceReport() {
-                Text(intelligenceReport)
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundColor(.secondary)
-                    .padding()
-                    .background(Color(.systemGray6))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-            } else {
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Image(systemName: "info.circle")
-                            .foregroundColor(.orange)
-                        Text("Enterprise Intelligence is building your organizational knowledge...")
-                            .font(.subheadline)
-                            .foregroundColor(.orange)
-                    }
-                    
-                    Text("Add receipts and work with projects to build your business intelligence!")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-                .padding()
-                .background(Color.orange.opacity(0.1))
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-            }
-        }
-        .padding()
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
-    }
-    
-    // MARK: - Intelligence Activation Section (Phase 2D)
-    @ViewBuilder
-    private var intelligenceActivationSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Image(systemName: "bolt.fill")
-                    .font(.title2)
-                    .foregroundColor(.yellow)
-                Text("Intelligence Control Center")
-                    .font(.headline)
-                    .fontWeight(.semibold)
-            }
-            
-            VStack(spacing: 12) {
-                // Activate Intelligence Button
-                Button {
-                    activateIntelligence()
-                } label: {
-                    HStack {
-                        if isActivatingIntelligence {
-                            ProgressView()
-                                .scaleEffect(0.8)
-                        } else {
-                            Image(systemName: "brain.head.profile.fill")
-                        }
-                        Text(isActivatingIntelligence ? "Activating Intelligence..." : "Activate Real-Time Intelligence")
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.yellow.opacity(0.1))
-                    .foregroundColor(.yellow)
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                }
-                .disabled(isActivatingIntelligence)
-                .buttonStyle(PlainButtonStyle())
-                
-                // Intelligence Status Button
-                Button {
-                    viewIntelligenceStatus()
-                } label: {
-                    HStack {
-                        Image(systemName: "info.circle.fill")
-                        Text("View Detailed Intelligence Status")
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.blue.opacity(0.1))
-                    .foregroundColor(.blue)
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                }
-                .buttonStyle(PlainButtonStyle())
-                
-                // Quick intelligence stats
-                let intelligenceRecords = projectVM.getReceiptIntelligenceRecords()
-                if !intelligenceRecords.isEmpty {
-                    HStack {
-                        VStack(alignment: .leading) {
-                            Text("Intelligence Records")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                            Text("\(intelligenceRecords.count)")
-                                .font(.title3)
-                                .fontWeight(.bold)
-                                .foregroundColor(.green)
-                        }
-                        
-                        Spacer()
-                        
-                        VStack(alignment: .trailing) {
-                            Text("Last Updated")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                            
-                            if let lastRecord = intelligenceRecords.last,
-                               let timestamp = lastRecord["date"] as? Double {
-                                Text(Date(timeIntervalSince1970: timestamp).formatted(date: .abbreviated, time: .shortened))
-                                    .font(.caption)
-                                    .fontWeight(.medium)
-                                    .foregroundColor(.blue)
-                            } else {
-                                Text("Never")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
-                        }
-                    }
-                    .padding()
-                    .background(Color.green.opacity(0.1))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                }
-            }
-        }
-        .padding()
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
-    }
-    
-    @ViewBuilder
-    private var organizationalMetrics: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Image(systemName: "chart.bar.fill")
-                    .font(.title2)
-                    .foregroundColor(.blue)
-                Text("Organizational Metrics")
-                    .font(.headline)
-                    .fontWeight(.semibold)
-            }
+            Text("Team Status Overview")
+                .font(.headline)
             
             LazyVGrid(columns: [
                 GridItem(.flexible()),
                 GridItem(.flexible())
             ], spacing: 12) {
-                metricCard("Active Projects", "\(projectVM.organizationProjects.filter { $0.status == .active }.count)", "Currently running", .blue)
-                metricCard("Team Members", "\(projectVM.teamMembers.count)", "In organization", .green)
-                metricCard("Vendors", "\(projectVM.vendorService.vendorsSortedByName.count)", "Business partners", .orange)
-                metricCard("Payment Methods", "\(projectVM.paymentMethodService.paymentMethodsSortedByName.count)", "Active methods", .purple)
-            }
-        }
-        .padding()
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
-    }
-    
-    @ViewBuilder
-    private var enhancedVendorIntelligence: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Image(systemName: "storefront.fill")
-                    .font(.title2)
-                    .foregroundColor(.orange)
-                Text("Smart Vendor Intelligence")
-                    .font(.headline)
-                    .fontWeight(.semibold)
+                statusCard("Active", "\(activeTeamMembers.count)", "Currently working", .green)
+                statusCard("App Users", "\(appUsers)", "iPhone access", .purple)
                 
-                Spacer()
-                
-                Button("View All Vendors") {
-                    // This would navigate to vendor management
-                }
-                .font(.caption)
-                .buttonStyle(.bordered)
-            }
-            
-            let topVendorsBySpending = projectVM.getTopVendorsBySpending(limit: 5)
-            
-            if !topVendorsBySpending.isEmpty {
-                VStack(spacing: 8) {
-                    ForEach(Array(topVendorsBySpending.enumerated()), id: \.offset) { index, vendorData in
-                        enhancedVendorIntelligenceRow(vendorData, rank: index + 1)
-                    }
+                if !betweenProjectsMembers.isEmpty {
+                    statusCard("Available", "\(betweenProjectsMembers.count)", "Ready for projects", .blue)
                 }
                 
-                let totalIntelligenceSpending = topVendorsBySpending.reduce(0) { $0 + $1.amount }
-                HStack {
-                    Image(systemName: "brain.head.profile")
-                        .foregroundColor(.orange)
-                    Text("Intelligence tracked: \(String(format: "$%.2f", totalIntelligenceSpending)) across top vendors")
-                        .font(.caption)
-                        .foregroundColor(.orange)
+                if !completedTeamMembers.isEmpty {
+                    statusCard("Completed", "\(completedTeamMembers.count)", "All work finished", .gray)
                 }
-                .padding(.horizontal)
-            } else {
-                VStack(spacing: 8) {
-                    HStack {
-                        Image(systemName: "info.circle")
-                            .foregroundColor(.blue)
-                        Text("No vendor intelligence data available yet")
-                            .font(.subheadline)
-                            .foregroundColor(.blue)
-                    }
-                    
-                    Text("Add receipts and activate intelligence to build vendor spending insights!")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .multilineTextAlignment(.center)
-                    
-                    Button("Activate Intelligence Now") {
-                        activateIntelligence()
-                    }
-                    .font(.caption)
-                    .buttonStyle(.borderedProminent)
-                }
-                .padding()
-                .background(Color.blue.opacity(0.1))
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-            }
-        }
-        .padding()
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
-    }
-    
-    @ViewBuilder
-    private var enhancedPaymentMethodAnalytics: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Image(systemName: "creditcard.fill")
-                    .font(.title2)
-                    .foregroundColor(.purple)
-                Text("Smart Payment Analytics")
-                    .font(.headline)
-                    .fontWeight(.semibold)
-                
-                Spacer()
-                
-                Button("Manage Methods") {
-                    // This would navigate to payment method management
-                }
-                .font(.caption)
-                .buttonStyle(.bordered)
-            }
-            
-            let topPaymentMethodsByUsage = projectVM.getTopPaymentMethodsByUsage(limit: 3)
-            
-            if !topPaymentMethodsByUsage.isEmpty {
-                VStack(spacing: 8) {
-                    ForEach(Array(topPaymentMethodsByUsage.enumerated()), id: \.offset) { index, paymentData in
-                        enhancedPaymentMethodAnalyticsRow(paymentData, rank: index + 1)
-                    }
-                }
-                
-                let totalTransactions = topPaymentMethodsByUsage.reduce(0) { $0 + $1.count }
-                let totalIntelligenceAmount = topPaymentMethodsByUsage.reduce(0) { $0 + $1.amount }
-                HStack {
-                    Image(systemName: "brain.head.profile")
-                        .foregroundColor(.purple)
-                    Text("Intelligence: \(totalTransactions) transactions, \(String(format: "$%.2f", totalIntelligenceAmount)) tracked")
-                        .font(.caption)
-                        .foregroundColor(.purple)
-                }
-                .padding(.horizontal)
-            } else {
-                VStack(spacing: 8) {
-                    HStack {
-                        Image(systemName: "info.circle")
-                            .foregroundColor(.purple)
-                        Text("No payment method intelligence data available yet")
-                            .font(.subheadline)
-                            .foregroundColor(.purple)
-                    }
-                    
-                    Text("Add receipts with payment methods and activate intelligence to build usage analytics!")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .multilineTextAlignment(.center)
-                    
-                    Button("Activate Intelligence Now") {
-                        activateIntelligence()
-                    }
-                    .font(.caption)
-                    .buttonStyle(.borderedProminent)
-                }
-                .padding()
-                .background(Color.purple.opacity(0.1))
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-            }
-        }
-        .padding()
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
-    }
-    
-    @ViewBuilder
-    private var financialIntelligence: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Image(systemName: "dollarsign.circle.fill")
-                    .font(.title2)
-                    .foregroundColor(.green)
-                Text("Financial Intelligence")
-                    .font(.headline)
-                    .fontWeight(.semibold)
-            }
-            
-            let totalSpending = projectVM.organizationProjects.flatMap { $0.receipts }.reduce(0) { $0 + $1.amount }
-            let averageProjectBudget = projectVM.organizationProjects.isEmpty ? 0 : projectVM.organizationProjects.reduce(0) { $0 + $1.totalBudget } / Double(projectVM.organizationProjects.count)
-            let monthlySpending = totalSpending / 12.0 // Rough estimate
-            
-            LazyVGrid(columns: [
-                GridItem(.flexible()),
-                GridItem(.flexible())
-            ], spacing: 12) {
-                financialCard("Total Spending", "$\(String(format: "%.2f", totalSpending))", "Organization wide", .green)
-                financialCard("Avg Project Budget", "$\(String(format: "%.2f", averageProjectBudget))", "Per project", .blue)
-                financialCard("Monthly Spending", "$\(String(format: "%.2f", monthlySpending))", "Estimated average", .orange)
-                financialCard("Active Budgets", "$\(String(format: "%.2f", projectVM.organizationProjects.filter { $0.status == .active }.reduce(0) { $0 + $1.totalBudget }))", "Current projects", .purple)
-            }
-        }
-        .padding()
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
-    }
-    
-    @ViewBuilder
-    private var annualReportsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Image(systemName: "doc.text.fill")
-                    .font(.title2)
-                    .foregroundColor(.indigo)
-                Text("Annual Business Reports")
-                    .font(.headline)
-                    .fontWeight(.semibold)
-            }
-            
-            VStack(spacing: 12) {
-                HStack {
-                    Text("Generate report for year:")
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                    
-                    Spacer()
-                    
-                    Picker("Year", selection: $selectedYear) {
-                        ForEach(2020...2030, id: \.self) { year in
-                            Text("\(year)").tag(year)
-                        }
-                    }
-                    .pickerStyle(MenuPickerStyle())
-                }
-                
-                Button {
-                    generateAnnualReport()
-                } label: {
-                    HStack {
-                        if isLoadingReport {
-                            ProgressView()
-                                .scaleEffect(0.8)
-                        } else {
-                            Image(systemName: "doc.badge.gearshape")
-                        }
-                        Text(isLoadingReport ? "Generating Report..." : "Generate Annual Report")
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.indigo.opacity(0.1))
-                    .foregroundColor(.indigo)
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                }
-                .disabled(isLoadingReport)
-                .buttonStyle(PlainButtonStyle())
-                
-                if annualReport != nil {
-                    Button {
-                        showingFullReport = true
-                    } label: {
-                        HStack {
-                            Image(systemName: "doc.text.magnifyingglass")
-                            Text("View Last Generated Report (\(selectedYear))")
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color.green.opacity(0.1))
-                        .foregroundColor(.green)
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
-                    }
-                    .buttonStyle(PlainButtonStyle())
-                }
-            }
-        }
-        .padding()
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
-    }
-    
-    @ViewBuilder
-    private var quickActionsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Image(systemName: "bolt.fill")
-                    .font(.title2)
-                    .foregroundColor(.yellow)
-                Text("Quick Actions")
-                    .font(.headline)
-                    .fontWeight(.semibold)
-            }
-            
-            LazyVGrid(columns: [
-                GridItem(.flexible()),
-                GridItem(.flexible())
-            ], spacing: 12) {
-                quickActionButton("Refresh Intelligence", "arrow.clockwise", .blue) {
-                    loadInitialIntelligenceData()
-                }
-                
-                quickActionButton("Export Data", "square.and.arrow.up", .green) {
-                    // Export business intelligence data
-                }
-                
-                quickActionButton("Sync CloudKit", "icloud.and.arrow.up", .purple) {
-                    // Sync with CloudKit
-                }
-                
-                quickActionButton("View Insights", "chart.line.uptrend.xyaxis", .orange) {
-                    // Navigate to detailed insights
-                }
-            }
-        }
-        .padding()
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
-    }
-    
-    @ViewBuilder
-    private func enhancedVendorIntelligenceRow(_ vendorData: (vendor: String, amount: Double), rank: Int) -> some View {
-        HStack {
-            Text("\(rank)")
-                .font(.caption)
-                .fontWeight(.bold)
-                .foregroundColor(.white)
-                .frame(width: 20, height: 20)
-                .background(Color.orange)
-                .clipShape(Circle())
-            
-            VStack(alignment: .leading, spacing: 2) {
-                Text(vendorData.vendor)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                
-                Text("Intelligence tracked: $\(String(format: "%.2f", vendorData.amount))")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-            
-            Spacer()
-            
-            VStack(alignment: .trailing, spacing: 2) {
-                HStack {
-                    Image(systemName: "brain.head.profile")
-                        .font(.caption2)
-                    Text("AI Tracked")
-                }
-                .font(.caption2)
-                .foregroundColor(.orange)
-                
-                Text("From receipts")
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
             }
         }
         .padding()
         .background(Color(.systemGray6))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .cornerRadius(12)
     }
     
     @ViewBuilder
-    private func enhancedPaymentMethodAnalyticsRow(_ paymentData: (paymentMethod: String, count: Int, amount: Double), rank: Int) -> some View {
-        HStack {
-            Text("\(rank)")
-                .font(.caption)
-                .fontWeight(.bold)
-                .foregroundColor(.white)
-                .frame(width: 20, height: 20)
-                .background(Color.purple)
-                .clipShape(Circle())
-            
-            VStack(alignment: .leading, spacing: 2) {
-                Text(paymentData.paymentMethod)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                
-                Text("Intelligence: \(paymentData.count) uses, $\(String(format: "%.2f", paymentData.amount))")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-            
-            Spacer()
-            
-            VStack(alignment: .trailing, spacing: 2) {
-                HStack {
-                    Image(systemName: "brain.head.profile")
-                        .font(.caption2)
-                    Text("AI Tracked")
-                }
-                .font(.caption2)
-                .foregroundColor(.purple)
-                
-                Text("\(paymentData.count) transactions")
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
-            }
-        }
-        .padding()
-        .background(Color(.systemGray6))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
-    }
-    
-    @ViewBuilder
-    private func metricCard(_ title: String, _ value: String, _ subtitle: String, _ color: Color) -> some View {
+    private func statusCard(_ title: String, _ count: String, _ subtitle: String, _ color: Color) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title)
                 .font(.caption)
                 .foregroundColor(.secondary)
             
-            Text(value)
+            Text(count)
                 .font(.title2)
                 .fontWeight(.bold)
                 .foregroundColor(color)
@@ -967,290 +450,791 @@ struct BusinessIntelligenceTabView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
         .background(color.opacity(0.1))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .cornerRadius(8)
     }
     
     @ViewBuilder
-    private func financialCard(_ title: String, _ value: String, _ subtitle: String, _ color: Color) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title)
-                .font(.caption)
-                .foregroundColor(.secondary)
+    private var inviteSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Manage Team")
+                .font(.headline)
             
-            Text(value)
-                .font(.title3)
-                .fontWeight(.bold)
-                .foregroundColor(color)
-            
-            Text(subtitle)
-                .font(.caption2)
-                .foregroundColor(.secondary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding()
-        .background(color.opacity(0.1))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
-    }
-    
-    @ViewBuilder
-    private func quickActionButton(_ title: String, _ icon: String, _ color: Color, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            VStack(spacing: 8) {
-                Image(systemName: icon)
-                    .font(.title2)
-                    .foregroundColor(color)
+            VStack(spacing: 12) {
+                Button {
+                    showingAddTeamMember = true
+                } label: {
+                    HStack {
+                        Image(systemName: "person.badge.plus")
+                        Text("Add Internal Team Member")
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color.green.opacity(0.1))
+                    .foregroundColor(.green)
+                    .cornerRadius(10)
+                }
+                .buttonStyle(PlainButtonStyle())
                 
-                Text(title)
-                    .font(.caption)
-                    .fontWeight(.medium)
-                    .foregroundColor(color)
-                    .multilineTextAlignment(.center)
-            }
-            .frame(maxWidth: .infinity)
-            .padding()
-            .background(color.opacity(0.1))
-            .clipShape(RoundedRectangle(cornerRadius: 10))
-        }
-        .buttonStyle(PlainButtonStyle())
-    }
-    
-    private func activateIntelligence() {
-        isActivatingIntelligence = true
-        
-        Task {
-            print("User triggered intelligence activation from UI!")
-            await projectVM.activateRealTimeIntelligence()
-            
-            await MainActor.run {
-                isActivatingIntelligence = false
-                projectVM.objectWillChange.send()
-                print("Intelligence activation complete - UI refreshed!")
-            }
-        }
-    }
-    
-    private func viewIntelligenceStatus() {
-        intelligenceStatus = projectVM.getIntelligenceStatus()
-        showingIntelligenceStatus = true
-    }
-    
-    private func loadInitialIntelligenceData() {
-        print("Loading intelligence data for dashboard...")
-        
-        let records = projectVM.getReceiptIntelligenceRecords()
-        if records.isEmpty && !projectVM.organizationProjects.flatMap({ $0.receipts }).isEmpty {
-            print("Found receipts but no intelligence records - suggesting activation")
-        }
-        
-        projectVM.objectWillChange.send()
-        
-        print("Intelligence dashboard data loaded!")
-    }
-    
-    private func generateAnnualReport() {
-        isLoadingReport = true
-        
-        Task {
-            let report = await projectVM.getAnnualBusinessReport(year: selectedYear)
-            
-            await MainActor.run {
-                annualReport = report
-                isLoadingReport = false
-            }
-        }
-    }
-}
-
-// MARK: - Intelligence Status Detail View
-struct IntelligenceStatusDetailView: View {
-    let status: String
-    @Environment(\.dismiss) private var dismiss
-    
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    Text(status)
-                        .font(.system(.body, design: .monospaced))
+                if !projectVM.teamMembers.isEmpty {
+                    Button {
+                        showingProjectInvite = true
+                    } label: {
+                        HStack {
+                            Image(systemName: "envelope.circle")
+                            Text("Invite Team Members to Projects")
+                        }
+                        .frame(maxWidth: .infinity)
                         .padding()
-                }
-            }
-            .navigationTitle("Intelligence Status")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Done") { dismiss() }
+                        .background(Color.blue.opacity(0.1))
+                        .foregroundColor(.blue)
+                        .cornerRadius(10)
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                } else {
+                    VStack(spacing: 8) {
+                        HStack {
+                            Image(systemName: "info.circle")
+                                .foregroundColor(.orange)
+                            Text("Add team members first before you can invite them to projects")
+                                .font(.subheadline)
+                                .foregroundColor(.orange)
+                        }
+                        
+                        Text("The team invitation flow requires existing team members in your organization.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
+                    .padding()
+                    .background(Color.orange.opacity(0.1))
+                    .cornerRadius(10)
                 }
             }
         }
+        .padding()
+        .background(Color(.systemGray6))
+        .cornerRadius(12)
     }
-}
-
-struct MasterTeamMembersTabView: View {
-    @EnvironmentObject var authVM: AuthViewModel
-    @EnvironmentObject var projectVM: ProjectViewModel
     
-    @Binding var showingAddTeamMember: Bool
-    @Binding var selectedTeamMember: TeamMember?
-    
-    var body: some View {
-        ScrollView {
-            VStack(spacing: 20) {
-                Text("Master Team Members")
+    @ViewBuilder
+    private func teamMembersSection(_ title: String, _ members: [TeamMember], _ color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text(title)
                     .font(.headline)
                 
-                Text("This integrates with the enhanced team member management system")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
+                Spacer()
                 
-                if authVM.canPerformAdminActions {
-                    Button("Add Team Member") {
-                        showingAddTeamMember = true
+                Text("\(members.count) members")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            
+            LazyVStack(spacing: 8) {
+                ForEach(members) { member in
+                    MasterTeamMemberRowView(member: member, statusColor: color) {
+                        selectedTeamMember = member
+                    } onAssign: {
+                        teamMemberToAssign = member
+                        showingProjectAssignment = true
+                    } onTerminate: {
+                        teamMemberToTerminate = member
+                        showingTerminationDialog = true
                     }
-                    .buttonStyle(.borderedProminent)
+                    .environmentObject(projectVM)
                 }
             }
-            .padding()
         }
     }
-}
-
-struct CompanyVendorsTabView: View {
-    @EnvironmentObject var projectVM: ProjectViewModel
     
-    var body: some View {
-        VStack {
-            Text("Vendor Management")
-                .font(.headline)
-            Text("This will integrate with VendorManagementView")
+    @ViewBuilder
+    private var availableTeamMembersSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Available for Projects")
+                    .font(.headline)
+                
+                Spacer()
+                
+                Text("\(betweenProjectsMembers.count) members")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            
+            LazyVStack(spacing: 8) {
+                ForEach(betweenProjectsMembers) { member in
+                    AvailableTeamMemberRowView(member: member) {
+                        selectedTeamMember = member
+                    } onAssign: {
+                        teamMemberToAssign = member
+                        showingProjectAssignment = true
+                    }
+                    .environmentObject(projectVM)
+                }
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private var inactiveTeamMembersSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Inactive Team Members")
+                    .font(.headline)
+                
+                Spacer()
+                
+                Text("\(inactiveTeamMembers.count) members")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            
+            LazyVStack(spacing: 8) {
+                ForEach(inactiveTeamMembers) { member in
+                    InactiveTeamMemberRowView(member: member) {
+                        selectedTeamMember = member
+                    }
+                }
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private var emptyTeamState: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "person.2.circle")
+                .font(.system(size: 40))
+                .foregroundColor(.secondary)
+            
+            Text("No team members yet")
                 .font(.subheadline)
                 .foregroundColor(.secondary)
+            
+            Text("Add internal team members or invite external collaborators to get started")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+            
+            if authVM.canPerformAdminActions {
+                Button("Add First Team Member") {
+                    showingAddTeamMember = true
+                }
+                .buttonStyle(.borderedProminent)
+            }
         }
         .padding()
+        .frame(maxWidth: .infinity)
+        .background(Color(.systemGray6))
+        .cornerRadius(10)
+    }
+    
+    // MARK: - Team Member Project Status Helpers
+    
+    private func isTeamMemberActiveOnAnyProject(_ member: TeamMember) -> Bool {
+        return projectVM.allProjects.filter { $0.status == .active }.contains { project in
+            isTeamMemberAssignedToProject(member, project)
+        }
+    }
+    
+    private func isTeamMemberAssignedToProject(_ member: TeamMember, _ project: Project) -> Bool {
+        let memberIDString = member.id.uuidString
+        
+        // Check explicit assignment
+        if project.assignedTeamMemberIDs.contains(memberIDString) {
+            return true
+        }
+        
+        // Check if they have worked on this project (receipts, progress, hours)
+        let hasReceipts = project.receipts.contains { $0.teamMemberID == member.id }
+        let hasProgress = project.progressReports.contains { $0.employeeIDs.contains(member.id) }
+        let hasLoggedHours = project.loggedHours.contains { $0.employeeID == member.id }
+        
+        return hasReceipts || hasProgress || hasLoggedHours
+    }
+    
+    private func hasCompletedAllAssignedProjects(_ member: TeamMember) -> Bool {
+        let assignedProjects = projectVM.allProjects.filter { project in
+            isTeamMemberAssignedToProject(member, project)
+        }
+        
+        // If they have assigned projects, check if all are completed
+        if !assignedProjects.isEmpty {
+            return assignedProjects.allSatisfy { $0.status == .completed }
+        }
+        
+        // If no assigned projects but they have an active employment status, they're available
+        return false
+    }
+    
+    private func getAssignedProjectsForMember(_ member: TeamMember) -> [Project] {
+        return projectVM.allProjects.filter { project in
+            isTeamMemberAssignedToProject(member, project)
+        }
+    }
+    
+    private func getActiveProjectsForMember(_ member: TeamMember) -> [Project] {
+        return projectVM.allProjects.filter { project in
+            project.status == .active && isTeamMemberAssignedToProject(member, project)
+        }
     }
 }
 
-struct CompanyClientsTabView: View {
+// MARK: - Master Team Member Row View
+struct MasterTeamMemberRowView: View {
     @EnvironmentObject var projectVM: ProjectViewModel
+    let member: TeamMember
+    let statusColor: Color
+    let onTap: () -> Void
+    let onAssign: () -> Void
+    let onTerminate: () -> Void
+    
+    private var assignedProjects: [Project] {
+        return projectVM.allProjects.filter { project in
+            let memberIDString = member.id.uuidString
+            
+            // Check explicit assignment
+            if project.assignedTeamMemberIDs.contains(memberIDString) {
+                return true
+            }
+            
+            // Check if they have worked on this project
+            let hasReceipts = project.receipts.contains { $0.teamMemberID == member.id }
+            let hasProgress = project.progressReports.contains { $0.employeeIDs.contains(member.id) }
+            let hasLoggedHours = project.loggedHours.contains { $0.employeeID == member.id }
+            
+            return hasReceipts || hasProgress || hasLoggedHours
+        }
+    }
+    
+    private var activeProjects: [Project] {
+        return assignedProjects.filter { $0.status == .active }
+    }
     
     var body: some View {
-        VStack {
-            Text("Client Management")
-                .font(.headline)
-            Text("Client directory and project history")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-            
-            let uniqueClients = Array(Set(projectVM.organizationProjects.map { $0.client })).sorted()
-            
-            LazyVStack {
-                ForEach(uniqueClients, id: \.self) { client in
+        Button(action: onTap) {
+            HStack {
+                // Avatar
+                Circle()
+                    .fill(statusColor.gradient)
+                    .frame(width: 40, height: 40)
+                    .overlay(
+                        Text(String(member.name.prefix(1)).uppercased())
+                            .font(.headline)
+                            .fontWeight(.bold)
+                            .foregroundColor(.white)
+                    )
+                
+                VStack(alignment: .leading, spacing: 4) {
                     HStack {
-                        Text(client)
-                        Spacer()
-                        Text("\(projectVM.organizationProjects.filter { $0.client == client }.count) projects")
+                        Text(member.name)
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundColor(.primary)
+                        
+                        if member.hasAppAccess {
+                            Image(systemName: "iphone")
+                                .font(.caption2)
+                                .foregroundColor(.green)
+                        }
+                    }
+                    
+                    Text(member.jobTitle)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    HStack {
+                        Text(member.employmentType.displayName)
+                            .font(.caption2)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(statusColor.opacity(0.2))
+                            .foregroundColor(statusColor)
+                            .cornerRadius(4)
+                        
+                        // Show assigned projects
+                        if !activeProjects.isEmpty {
+                            Text("Active on \(activeProjects.count) project\(activeProjects.count == 1 ? "" : "s")")
+                                .font(.caption2)
+                                .foregroundColor(.green)
+                        } else {
+                            if !assignedProjects.isEmpty {
+                                Text("All projects completed")
+                                    .font(.caption2)
+                                    .foregroundColor(.gray)
+                            } else {
+                                Text("Not assigned to projects")
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                    }
+                }
+                
+                Spacer()
+                
+                VStack(alignment: .trailing, spacing: 2) {
+                    if let defaultRate = member.rates.first(where: { $0.isDefault }) {
+                        Text("$\(defaultRate.rate, specifier: "%.0f")/hr")
+                            .font(.caption)
+                            .fontWeight(.medium)
+                            .foregroundColor(.green)
+                    }
+                    
+                    Menu {
+                        Button("View Details") { onTap() }
+                        
+                        if !activeProjects.isEmpty {
+                            Divider()
+                            ForEach(activeProjects.prefix(3)) { project in
+                                Button("View \(project.name)") {
+                                    // Navigate to project or show project details
+                                }
+                            }
+                            if activeProjects.count > 3 {
+                                Button("View All Projects...") { onTap() }
+                            }
+                        } else {
+                            Button("Assign to Project") { onAssign() }
+                        }
+                        
+                        Divider()
+                        
+                        Button("Terminate", role: .destructive) { onTerminate() }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
-                    .padding()
-                    .background(Color(.systemGray6))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
                 }
             }
+            .padding()
+            .background(Color(.systemGray6))
+            .cornerRadius(10)
         }
-        .padding()
+        .buttonStyle(PlainButtonStyle())
     }
 }
 
-struct CompanyPaymentMethodsTabView: View {
+// MARK: - Available Team Member Row View
+struct AvailableTeamMemberRowView: View {
     @EnvironmentObject var projectVM: ProjectViewModel
+    let member: TeamMember
+    let onTap: () -> Void
+    let onAssign: () -> Void
+    
+    private var availableProjects: [Project] {
+        return projectVM.allProjects.filter { project in
+            project.status == .active && 
+            !project.assignedTeamMemberIDs.contains(member.id.uuidString) &&
+            !hasWorkedOnProject(member, project)
+        }
+    }
+    
+    private func hasWorkedOnProject(_ member: TeamMember, _ project: Project) -> Bool {
+        let hasReceipts = project.receipts.contains { $0.teamMemberID == member.id }
+        let hasProgress = project.progressReports.contains { $0.employeeIDs.contains(member.id) }
+        let hasLoggedHours = project.loggedHours.contains { $0.employeeID == member.id }
+        
+        return hasReceipts || hasProgress || hasLoggedHours
+    }
     
     var body: some View {
-        VStack {
-            Text("Payment Method Management")
-                .font(.headline)
-            Text("This will integrate with PaymentMethodManagementView")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
+        Button(action: onTap) {
+            HStack {
+                Circle()
+                    .fill(Color.blue.gradient)
+                    .frame(width: 40, height: 40)
+                    .overlay(
+                        Text(String(member.name.prefix(1)).uppercased())
+                            .font(.headline)
+                            .fontWeight(.bold)
+                            .foregroundColor(.white)
+                    )
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text(member.name)
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundColor(.primary)
+                        
+                        Text("Available")
+                            .font(.caption2)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.blue.opacity(0.2))
+                            .foregroundColor(.blue)
+                            .cornerRadius(4)
+                    }
+                    
+                    Text(member.jobTitle)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    Text("Can be assigned to \(availableProjects.count) active project\(availableProjects.count == 1 ? "" : "s")")
+                        .font(.caption2)
+                        .foregroundColor(.blue)
+                }
+                
+                Spacer()
+                
+                if !availableProjects.isEmpty {
+                    Button("Assign to Project") {
+                        onAssign()
+                    }
+                    .font(.caption)
+                    .buttonStyle(.borderedProminent)
+                } else {
+                    Text("No active projects")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+            }
+            .padding()
+            .background(Color(.systemGray6))
+            .cornerRadius(10)
         }
-        .padding()
+        .buttonStyle(PlainButtonStyle())
     }
 }
 
+// MARK: - Inactive Team Member Row View
+struct InactiveTeamMemberRowView: View {
+    let member: TeamMember
+    let onTap: () -> Void
+    
+    var body: some View {
+        Button(action: onTap) {
+            HStack {
+                Circle()
+                    .fill(Color.red.gradient)
+                    .frame(width: 40, height: 40)
+                    .overlay(
+                        Text(String(member.name.prefix(1)).uppercased())
+                            .font(.headline)
+                            .fontWeight(.bold)
+                            .foregroundColor(.white)
+                    )
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text(member.name)
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundColor(.secondary)
+                        
+                        Text(member.employmentStatus.displayName)
+                            .font(.caption2)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.red.opacity(0.2))
+                            .foregroundColor(.red)
+                            .cornerRadius(4)
+                    }
+                    
+                    Text(member.jobTitle)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    if let terminationDate = member.terminationDate {
+                        Text("Terminated: \(terminationDate.formatted(date: .abbreviated, time: .omitted))")
+                            .font(.caption2)
+                            .foregroundColor(.red)
+                    }
+                }
+                
+                Spacer()
+                
+                Button("View History") {
+                    onTap()
+                }
+                .font(.caption)
+                .buttonStyle(.bordered)
+            }
+            .padding()
+            .background(Color(.systemGray6))
+            .cornerRadius(10)
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+}
+
+// MARK: - Simplified Organization Settings Tab
 struct MasterOrganizationSettingsTabView: View {
     @EnvironmentObject var authVM: AuthViewModel
     @EnvironmentObject var projectVM: ProjectViewModel
     
-    @Binding var preferredMapProvider: MapProvider
     @Binding var showingStatusAlert: Bool
     @Binding var statusMessage: String
-    @Binding var showingNuclearResetAlert: Bool
     @Binding var showingAlert: Bool
     @Binding var alertMessage: String
     
     var body: some View {
         ScrollView {
-            VStack(spacing: 20) {
-                Text("Organization Settings")
-                    .font(.headline)
+            LazyVStack(alignment: .leading, spacing: 16) {
+                // Organization Information
+                if let currentOrg = authVM.currentOrg {
+                    organizationInfoSection(currentOrg)
+                }
                 
-                Text("Advanced organization management and preferences")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
+                // Organization Subscription
+                organizationSubscriptionSection
                 
+                // Organization Policies
+                organizationPoliciesSection
+                
+                // Essential Debug Tools (only for admins)
                 if authVM.canPerformAdminActions {
-                    VStack(spacing: 12) {
-                        Button("Debug Organization Data") {
-                            alertMessage = "Organization ID: \(authVM.currentOrg?.id ?? "None")\nTeam Members: \(projectVM.teamMembers.count)"
-                            showingAlert = true
-                        }
-                        .buttonStyle(.bordered)
-                        
-                        Button("Nuclear Reset", role: .destructive) {
-                            showingNuclearResetAlert = true
-                        }
-                        .buttonStyle(.bordered)
-                    }
+                    essentialDebugSection
                 }
             }
             .padding()
         }
     }
-}
-
-struct AnnualReportDetailView: View {
-    let report: String
-    let year: Int
-    @Environment(\.dismiss) private var dismiss
     
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    Text(report)
-                        .font(.system(.body, design: .monospaced))
-                        .padding()
-                }
-            }
-            .navigationTitle("Annual Report \(year)")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Done") { dismiss() }
+    @ViewBuilder
+    private func organizationInfoSection(_ organization: Organization) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Organization Details")
+                .font(.headline)
+            
+            VStack(spacing: 8) {
+                infoRow("Organization ID", organization.id, isMonospace: true)
+                infoRow("Total Members", "\(projectVM.teamMembers.count)")
+                infoRow("Active Projects", "\(projectVM.projects.filter { $0.status == .active }.count)")
+                infoRow("CloudKit Members", "\(organization.members.count + 1) app users")
+                
+                if let businessPhone = organization.businessPhone, !businessPhone.isEmpty {
+                    infoRow("Phone", businessPhone)
                 }
                 
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Share") {
-                        // Share the report
+                if let businessEmail = organization.businessEmail, !businessEmail.isEmpty {
+                    infoRow("Email", businessEmail)
+                }
+                
+                if let website = organization.website, !website.isEmpty {
+                    infoRow("Website", website)
+                }
+                
+                if let address = organization.formattedBusinessAddress {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Address")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                        Text(address)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
         }
+        .padding()
+        .background(Color(.systemGray6))
+        .cornerRadius(12)
+    }
+    
+    @ViewBuilder
+    private var organizationSubscriptionSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Subscription & Billing")
+                .font(.headline)
+            
+            VStack(spacing: 8) {
+                if let currentOrg = authVM.currentOrg {
+                    infoRow("Current Plan", currentOrg.subscriptionTier.displayName)
+                    infoRow("Monthly Cost", currentOrg.subscriptionTier.monthlyPrice > 0 ? "$\(String(format: "%.0f", currentOrg.subscriptionTier.monthlyPrice))" : "Free")
+                    infoRow("Features", "\(currentOrg.subscriptionTier.features.count) included")
+                }
+                
+                // Upgrade/Manage Subscription Button
+                Button("Manage Subscription") {
+                    // TODO: Navigate to subscription management
+                    print("Navigate to subscription management")
+                }
+                .frame(maxWidth: .infinity)
+                .padding()
+                .background(Color.blue.opacity(0.1))
+                .foregroundColor(.blue)
+                .cornerRadius(8)
+            }
+        }
+        .padding()
+        .background(Color(.systemGray6))
+        .cornerRadius(12)
+    }
+    
+    @ViewBuilder
+    private var organizationPoliciesSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Organization Policies")
+                .font(.headline)
+            
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Image(systemName: "shield.fill")
+                        .foregroundColor(.green)
+                        .frame(width: 24)
+                    
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Data Retention")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                        
+                        Text("Projects kept for 1 year after completion")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    Spacer()
+                }
+                
+                HStack {
+                    Image(systemName: "person.2.fill")
+                        .foregroundColor(.blue)
+                        .frame(width: 24)
+                    
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Team Access")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                        
+                        Text("Admins can manage all organization data")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    Spacer()
+                }
+                
+                HStack {
+                    Image(systemName: "icloud.fill")
+                        .foregroundColor(.cyan)
+                        .frame(width: 24)
+                    
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Cloud Sync")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                        
+                        Text("All data automatically synced to CloudKit")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    Spacer()
+                }
+            }
+        }
+        .padding()
+        .background(Color(.systemGray6))
+        .cornerRadius(12)
+    }
+    
+    @ViewBuilder
+    private func infoRow(_ label: String, _ value: String, isMonospace: Bool = false) -> some View {
+        HStack {
+            Text(label)
+                .font(.subheadline)
+                .fontWeight(.medium)
+            Spacer()
+            Text(value)
+                .font(isMonospace ? .system(.caption, design: .monospaced) : .caption)
+                .foregroundColor(.secondary)
+                .lineLimit(1)
+        }
+    }
+    
+    @ViewBuilder
+    private var essentialDebugSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("CloudKit Debug")
+                .font(.headline)
+            
+            VStack(spacing: 8) {
+                NavigationLink(destination: CloudKitDebugView()) {
+                    debugLinkRow("CloudKit Debug Console", "icloud.and.arrow.up.fill", .blue, "Diagnose zone and sharing issues")
+                }
+                
+                debugButton("Check CloudKit Status", "checkmark.icloud.fill", .green) {
+                    Task {
+                        statusMessage = await authVM.checkCloudKitStatus()
+                        showingStatusAlert = true
+                    }
+                }
+                
+                #if DEBUG
+                debugButton("Clear Local Cache", "trash.circle.fill", .orange) {
+                    // Clear local data only, keep CloudKit intact
+                    UserDefaults.standard.removeObject(forKey: "cached_projects")
+                    UserDefaults.standard.removeObject(forKey: "cached_team_members")
+                    alertMessage = "✅ Local cache cleared. CloudKit data preserved."
+                    showingAlert = true
+                }
+                #endif
+            }
+        }
+        .padding()
+        .background(Color(.systemGray6))
+        .cornerRadius(12)
+    }
+    
+    @ViewBuilder
+    private func debugLinkRow(_ title: String, _ icon: String, _ color: Color, _ subtitle: String) -> some View {
+        HStack {
+            Image(systemName: icon)
+                .foregroundColor(color)
+                .frame(width: 24)
+            
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.subheadline)
+                    .foregroundColor(.primary)
+                
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            
+            Spacer()
+            
+            Image(systemName: "chevron.right")
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+        .padding()
+        .background(Color(.systemBackground))
+        .cornerRadius(8)
+    }
+    
+    @ViewBuilder
+    private func debugButton(_ title: String, _ icon: String, _ color: Color, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack {
+                Image(systemName: icon)
+                    .foregroundColor(color)
+                    .frame(width: 24)
+                
+                Text(title)
+                    .font(.subheadline)
+                    .foregroundColor(.primary)
+                
+                Spacer()
+                
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            .padding()
+            .background(Color(.systemBackground))
+            .cornerRadius(8)
+        }
+        .buttonStyle(PlainButtonStyle())
     }
 }
 
 #Preview {
     MasterCompanySettingsView()
         .environmentObject(AuthViewModel(service: PreviewAuthService()))
-        .environmentObject(ProjectViewModel(cloudKitService: CloudKitAuthService()))
+        .environmentObject(ProjectViewModel(offlineDataManager: OfflineDataManager()))
 }

@@ -91,7 +91,7 @@ struct TeamMemberSelectionRow: View {
 struct MultiSelectTeamMembersView_Previews: PreviewProvider {
     static var previews: some View {
         MultiSelectTeamMembersView(selectedTeamMemberIDs: .constant([]))
-            .environmentObject(ProjectViewModel())
+            .environmentObject(ProjectViewModel(offlineDataManager: OfflineDataManager()))
     }
 }
 #endif

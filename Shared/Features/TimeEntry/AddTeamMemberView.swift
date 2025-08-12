@@ -649,7 +649,7 @@ struct AddTeamMemberView_Previews: PreviewProvider {
         Group {
             // New team member
             AddTeamMemberView()
-                .environmentObject(ProjectViewModel())
+                .environmentObject(ProjectViewModel(offlineDataManager: OfflineDataManager()))
                 .previewDisplayName("Add Team Member")
             
             // Edit team member
@@ -664,7 +664,7 @@ struct AddTeamMemberView_Previews: PreviewProvider {
                 organizationID: "RHEIR-LLC-MAIN-ORG",
                 role: .admin
             ))
-            .environmentObject(ProjectViewModel())
+            .environmentObject(ProjectViewModel(offlineDataManager: OfflineDataManager()))
             .previewDisplayName("Edit Team Member")
         }
     }

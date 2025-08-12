@@ -111,15 +111,16 @@ struct CompletedProjectDetailView_Previews: PreviewProvider {
             laborCost: 15000,
             generalConditions: 5000,
             contingency: 5000,
-            profit: 0,
+            
             startDate: Date(),
             endDate: Date(),
+            organizationID: "sample-org-id",
             status: .completed
         )
         
         NavigationStack {
             CompletedProjectDetailView(project: sampleProject)
-                .environmentObject(ProjectViewModel(cloudKitService: CloudKitAuthService()))
+                .environmentObject(ProjectViewModel(offlineDataManager: OfflineDataManager()))
         }
     }
 }

@@ -554,9 +554,10 @@ struct SpendingReportView_Previews: PreviewProvider {
                 laborCost: 3000,
                 generalConditions: 1000,
                 contingency: 1000,
-                profit: 0,
+                
                 startDate: Date(),
-                endDate: Date()
+                endDate: Date(),
+            organizationID: "sample-org-id"
             ),
             organization: Organization(
                 id: "sample",

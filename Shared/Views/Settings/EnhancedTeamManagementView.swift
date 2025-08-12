@@ -728,5 +728,5 @@ struct ProjectSelectionRow: View {
 #Preview {
     EnhancedTeamManagementView()
         .environmentObject(AuthViewModel(service: CloudKitAuthService()))
-        .environmentObject(ProjectViewModel(cloudKitService: CloudKitAuthService()))
+        .environmentObject(ProjectViewModel(offlineDataManager: OfflineDataManager()))
 }

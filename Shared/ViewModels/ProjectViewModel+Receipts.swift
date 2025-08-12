@@ -7,6 +7,7 @@ import Foundation
 
 @MainActor
 extension ProjectViewModel {
+    
     /// Append a new receipt to the current project with Enterprise Intelligence integration.
     func addReceipt(_ receipt: Receipt) {
         guard let sel = selectedProject,
@@ -133,6 +134,11 @@ extension ProjectViewModel {
     
     // MARK: - Enterprise Intelligence Integration (Phase 2C - Simplified)
     
+    /// Check if Enterprise Intelligence is ready for use
+    var isEnterpriseIntelligenceReady: Bool {
+        return currentOrganizationID != nil
+    }
+    
     /// Process receipt data for organizational intelligence and learning
     private func processReceiptForOrganizationIntelligence(
         vendor: String,
@@ -175,7 +181,7 @@ extension ProjectViewModel {
         amount: Double,
         projectID: String
     ) async {
-        guard let orgID = currentOrganizationID else { return }
+        guard let _ = currentOrganizationID else { return }
         
         // Create intelligence record with detailed categorization
         let intelligenceRecord = [
@@ -184,13 +190,13 @@ extension ProjectViewModel {
             "amount": amount,
             "projectID": projectID,
             "date": Date().timeIntervalSince1970,
-            "organizationID": orgID,
+            "organizationID": currentOrganizationID ?? "",
             "category": detectVendorCategory(from: vendor).rawValue,
             "paymentType": detectPaymentType(from: paymentMethod).rawValue
         ] as [String : Any]
         
         // Store in UserDefaults with organization-specific key
-        let key = "receipt_intelligence_\(orgID)"
+        let key = "receipt_intelligence_\(currentOrganizationID ?? "")"
         var existingRecords = UserDefaults.standard.array(forKey: key) as? [[String: Any]] ?? []
         existingRecords.append(intelligenceRecord)
         

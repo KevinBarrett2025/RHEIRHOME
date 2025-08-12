@@ -698,5 +698,5 @@ struct WorkHourDetailRowView: View {
 
 #Preview {
     EnhancedTeamMemberDetailView(member: TeamMember.example)
-        .environmentObject(ProjectViewModel())
+        .environmentObject(ProjectViewModel(offlineDataManager: OfflineDataManager()))
 }

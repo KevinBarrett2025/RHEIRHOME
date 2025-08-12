@@ -691,5 +691,5 @@ struct PaymentProcessingView: View {
 
 #Preview {
     LaborPaymentView(teamMember: TeamMember.example)
-        .environmentObject(ProjectViewModel())
+        .environmentObject(ProjectViewModel(offlineDataManager: OfflineDataManager()))
 }

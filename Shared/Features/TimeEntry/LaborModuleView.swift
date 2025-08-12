@@ -7,6 +7,85 @@ struct LaborModuleView: View {
     @State private var selectedTeamMember: TeamMember?
     @State private var showingPaymentView = false
     
+    // CRITICAL FIX: Use project-based team member discovery like BudgetBreakdownView
+    private var workingTeamMembers: [TeamMember] {
+        guard let project = projectVM.selectedProject else { return [] }
+        
+        // Find team members explicitly assigned to the project
+        let assignedMemberIDs = Set(project.assignedTeamMemberIDs.compactMap { UUID(uuidString: $0) })
+        
+        // Find team members who have worked on this project
+        let receiptMemberIDs = project.receipts.compactMap { $0.teamMemberID }
+        let progressMemberIDs = project.progressReports.flatMap { $0.employeeIDs }
+        
+        // CRITICAL FIX: Also check logged hours (work hours) for team member activity
+        let loggedHoursMemberIDs = project.loggedHours.compactMap { workHour in
+            workHour.employeeID
+        }
+        
+        // Also check by name matching for legacy hours without employeeID
+        let hoursEmployeeNames = project.loggedHours.compactMap { workHour in
+            workHour.employeeID == nil ? workHour.employee : nil
+        }
+        
+        // Combine all sets
+        let workingMemberIDs = Set(receiptMemberIDs + progressMemberIDs + loggedHoursMemberIDs)
+        let allRelevantMemberIDs = assignedMemberIDs.union(workingMemberIDs)
+        
+        // Get team members from organization first
+        var discoveredMembers = projectVM.teamMembers.filter { member in
+            allRelevantMemberIDs.contains(member.id) || 
+            assignedMemberIDs.contains(member.id) ||
+            hasWorkedOnProject(member, project)
+        }
+        
+        // FALLBACK: If no organization team members found, create virtual members from work hours
+        if discoveredMembers.isEmpty && !project.loggedHours.isEmpty {
+            print("🔧 FALLBACK: Creating virtual team members from logged hours")
+            let uniqueEmployeeNames = Set(project.loggedHours.map { $0.employee })
+            
+            for employeeName in uniqueEmployeeNames {
+                let virtualMember = TeamMember(
+                    name: employeeName,
+                    jobTitle: "Worker",
+                    organizationID: project.organizationID ?? ""
+                )
+                // Add a rate based on their work hours
+                let averageRate = project.loggedHours
+                    .filter { $0.employee == employeeName }
+                    .reduce(0.0) { $0 + $1.rate } / 
+                    Double(project.loggedHours.filter { $0.employee == employeeName }.count)
+                
+                var memberWithRate = virtualMember
+                memberWithRate.rates = [EmployeeRate(taskType: "Labor", rate: averageRate)]
+                discoveredMembers.append(memberWithRate)
+            }
+        }
+        
+        return discoveredMembers.filter { member in
+            // Only show active members or those who have actually worked
+            member.employmentStatus == .active ||
+            assignedMemberIDs.contains(member.id) ||
+            hasWorkedOnProject(member, project)
+        }
+    }
+    
+    private func hasWorkedOnProject(_ member: TeamMember, _ project: Project) -> Bool {
+        // Check if member has receipts, progress reports, or hours logged on this project
+        let hasReceipts = project.receipts.contains { receipt in
+            receipt.teamMemberID == member.id
+        }
+        let hasProgress = project.progressReports.contains { log in
+            log.employeeIDs.contains(member.id)
+        }
+        // CRITICAL FIX: Also check logged hours (work hours)
+        let hasLoggedHours = project.loggedHours.contains { hour in
+            hour.employeeID == member.id || hour.employee.lowercased() == member.name.lowercased()
+        }
+        
+        return hasReceipts || hasProgress || hasLoggedHours
+    }
+    
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
@@ -18,6 +97,8 @@ struct LaborModuleView: View {
                 VStack(spacing: 16) {
                     if let project = projectVM.selectedProject {
                         laborSummarySection(project)
+                        
+                        // CRITICAL FIX: Use workingTeamMembers instead of projectVM.teamMembers
                         teamMembersList
                     } else {
                         noProjectSelectedView
@@ -93,13 +174,25 @@ struct LaborModuleView: View {
     @ViewBuilder
     private var teamMembersList: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Team Members")
-                .font(.headline)
+            HStack {
+                Text("Team Members")
+                    .font(.headline)
+                
+                // DIAGNOSTIC: Show count from different sources
+                if workingTeamMembers.count != projectVM.teamMembers.count {
+                    Text("(\(workingTeamMembers.count) working, \(projectVM.teamMembers.count) org)")
+                        .font(.caption)
+                        .foregroundColor(.orange)
+                }
+                
+                Spacer()
+            }
             
-            if projectVM.teamMembers.isEmpty {
+            // CRITICAL FIX: Use workingTeamMembers instead of projectVM.teamMembers
+            if workingTeamMembers.isEmpty {
                 emptyTeamMembersView
             } else {
-                ForEach(projectVM.teamMembers) { member in
+                ForEach(workingTeamMembers) { member in
                     TeamMemberLaborRowView(member: member) {
                         selectedTeamMember = member
                     }
@@ -115,14 +208,31 @@ struct LaborModuleView: View {
                 .font(.system(size: 40))
                 .foregroundColor(.secondary)
             
-            Text("No team members")
+            Text("No team members found")
                 .font(.subheadline)
                 .foregroundColor(.secondary)
             
-            Text("Add team members to track their work hours")
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
+            VStack(spacing: 8) {
+                Text("This can happen if:")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                
+                Text("• No hours have been logged for this project")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                Text("• Organization team members need to be added")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                Text("• Team member data needs to be migrated")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+            .multilineTextAlignment(.center)
+            
+            Button("Log Hours for Team Member") {
+                showingLogHours = true
+            }
+            .buttonStyle(.borderedProminent)
         }
         .padding()
         .frame(maxWidth: .infinity)
@@ -418,6 +528,6 @@ struct SimpleWorkHourRowView: View {
 #Preview {
     NavigationStack {
         LaborModuleView()
-            .environmentObject(ProjectViewModel())
+            .environmentObject(ProjectViewModel(offlineDataManager: OfflineDataManager()))
     }
 }

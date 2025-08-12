@@ -179,11 +179,11 @@ private struct StatusBadgeView: View {
         laborCost: 8000,
         generalConditions: 1000,
         contingency: 1000,
-        profit: 0,
         startDate: Date(),
-        endDate: Calendar.current.date(byAdding: .month, value: 2, to: Date()) ?? Date()
+        endDate: Calendar.current.date(byAdding: .month, value: 2, to: Date()) ?? Date(),
+        organizationID: "sample-org-id"
     )
     
-    ProjectCardView(project: sampleProject, projectVM: ProjectViewModel(cloudKitService: CloudKitAuthService()))
+    ProjectCardView(project: sampleProject, projectVM: ProjectViewModel(offlineDataManager: OfflineDataManager()))
         .padding()
 }

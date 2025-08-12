@@ -619,6 +619,6 @@ struct SmartSuggestionRow: View {
 
 #Preview {
     SmartReceiptEntryView()
-        .environmentObject(ProjectViewModel(cloudKitService: CloudKitAuthService()))
+        .environmentObject(ProjectViewModel(offlineDataManager: OfflineDataManager()))
         .environmentObject(AuthViewModel(service: PreviewAuthService()))
 }

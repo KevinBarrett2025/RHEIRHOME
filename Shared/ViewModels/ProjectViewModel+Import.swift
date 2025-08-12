@@ -28,10 +28,8 @@ extension ProjectViewModel {
             if !organizationProjects.contains(where: { $0.id == project.id }) {
                 organizationProjects.append(project)
             }
-            // Save to CloudKit
-            Task {
-                await saveAllProjectsToCloudKit()
-            }
+            // Save to local backup
+            saveLocalBackup()
             return
         }
 
@@ -66,8 +64,8 @@ extension ProjectViewModel {
         // 5️⃣ Merge in any new team members
         for member in pkg.employees {
             if !teamMembers.contains(where: { $0.id == member.id }) {
-                // Use the existing team member management system
-                addTeamMemberToOrganization(member)
+                // Add team member directly to the array
+                teamMembers.append(member)
             }
         }
 
@@ -76,10 +74,30 @@ extension ProjectViewModel {
             organizationProjects.append(pkg.project)
         }
 
-        // 7️⃣ Save everything to CloudKit
-        Task {
-            await saveAllProjectsToCloudKit()
-            await saveTeamMembersToCloudKit()
+        // 7️⃣ Save everything to local storage
+        saveLocalBackup()
+        saveTeamMembersLocal()
+    }
+    
+    /// Save team members to local storage
+    private func saveTeamMembersLocal() {
+        do {
+            let data = try JSONEncoder().encode(teamMembers)
+            UserDefaults.standard.set(data, forKey: "teamMembers")
+            print("💾 [ProjectViewModel] Saved \(teamMembers.count) team members to local backup")
+        } catch {
+            print("❌ [ProjectViewModel] Failed to save team members locally: \(error)")
+        }
+    }
+    
+    /// Save local backup of projects
+    private func saveLocalBackup() {
+        do {
+            let data = try JSONEncoder().encode(organizationProjects)
+            UserDefaults.standard.set(data, forKey: "projects_backup")
+            print("💾 [ProjectViewModel] Saved local project backup (\(organizationProjects.count) projects)")
+        } catch {
+            print("❌ [ProjectViewModel] Failed to save local project backup: \(error)")
         }
     }
 }

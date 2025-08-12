@@ -377,7 +377,7 @@ struct NewProjectView: View {
             laborCost: laborValue,
             generalConditions: generalConditionsValue,
             contingency: contingencyAmount,
-            profit: 0, // Remove profit field per user request
+             // Remove profit field per user request
             startDate: startDate,
             endDate: endDate
         )
@@ -919,6 +919,6 @@ struct SmartProjectSuggestionsView: View {
 struct NewProjectView_Previews: PreviewProvider {
     static var previews: some View {
         NewProjectView(isPresented: .constant(true))
-            .environmentObject(ProjectViewModel(cloudKitService: CloudKitAuthService()))
+            .environmentObject(ProjectViewModel(offlineDataManager: OfflineDataManager()))
     }
 }
