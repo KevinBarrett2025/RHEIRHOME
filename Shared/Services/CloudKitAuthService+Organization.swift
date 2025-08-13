@@ -240,41 +240,87 @@ extension CloudKitAuthService {
     
     private func processOrganizationRecords(_ records: [CKRecord], forUser userID: String) -> [Organization] {
         // CRITICAL DEBUG: Log all records found before filtering
-        print("🔍 [CloudKit] DEBUGGING: Found \(records.count) total organization records")
+        print("🔍 [CloudKit] COMPREHENSIVE RECORD ANALYSIS: Found \(records.count) total organization records")
+        print("🔍 [CloudKit] Target User ID: \(userID.prefix(8))...")
+        
+        // ENHANCED DEBUGGING: Show environment distribution
+        let environmentCounts = records.reduce(into: [String: Int]()) { counts, record in
+            let env = record["environment"] as? String ?? "NONE"
+            counts[env, default: 0] += 1
+        }
+        print("🔍 [CloudKit] Environment distribution: \(environmentCounts)")
+        
         for (index, record) in records.enumerated() {
             let recordID = record["id"] as? String ?? record.recordID.recordName
             let name = record["name"] as? String ?? "Unknown"
             let environment = record["environment"] as? String ?? "NONE"
             let adminUserID = record["adminUserID"] as? String ?? "NONE"
             let teamMembers = record["teamMembers"] as? [String] ?? []
+            let createdAt = record["createdAt"] as? Date ?? Date.distantPast
             
-            print("🔍 [\(index)] ID: \(recordID.prefix(8))... | Name: \(name)")
-            print("🔍     Environment: \(environment) | Admin: \(adminUserID.prefix(8))...")
+            print("🔍 [\(index)] RECORD ANALYSIS:")
+            print("🔍     ID: \(recordID.prefix(8))... | Name: \(name)")
+            print("🔍     Environment: \(environment) | Created: \(createdAt)")
+            print("🔍     Admin: \(adminUserID.prefix(8))... | Members: \(teamMembers.count)")
             print("🔍     TeamMembers: \(teamMembers.map { $0.prefix(8) })...")
             print("🔍     Current User: \(userID.prefix(8))...")
             print("🔍     Admin Match: \(adminUserID == userID)")
             print("🔍     Member Match: \(teamMembers.contains(userID))")
+            print("🔍     User Access: \(adminUserID == userID || teamMembers.contains(userID))")
         }
         
-        // FLEXIBLE ENVIRONMENT FILTERING: Support both dev and production
+        // ENHANCED ENVIRONMENT FILTERING: Support both dev and production with better logging
         let targetEnvironment = isDebugBuild() ? "development" : "production"
-        print("🔍 [CloudKit] Looking for environment: \(targetEnvironment)")
+        print("🔍 [CloudKit] TARGET ENVIRONMENT: \(targetEnvironment.uppercased())")
+        print("🔍 [CloudKit] IS DEBUG BUILD: \(isDebugBuild())")
         
-        let filteredRecords = records.filter { record in
+        // FIRST FILTER: User access (admin or member)
+        let userAccessibleRecords = records.filter { record in
+            let adminUserID = record["adminUserID"] as? String ?? ""
+            let teamMembers = record["teamMembers"] as? [String] ?? []
+            let hasAccess = adminUserID == userID || teamMembers.contains(userID)
+            
+            if !hasAccess {
+                print("🔍 FILTERED OUT (No Access): \(record["name"] as? String ?? "Unknown")")
+            }
+            
+            return hasAccess
+        }
+        
+        print("🔍 [CloudKit] After user access filter: \(userAccessibleRecords.count) records")
+        
+        // SECOND FILTER: Environment
+        let environmentFilteredRecords = userAccessibleRecords.filter { record in
             if let environment = record["environment"] as? String {
                 let isTargetEnvironment = environment == targetEnvironment
-                print("🔍 Record \(record["name"] as? String ?? "Unknown"): \(environment) == \(targetEnvironment) ? \(isTargetEnvironment)")
+                print("🔍 ENVIRONMENT CHECK: \(record["name"] as? String ?? "Unknown"): \(environment) == \(targetEnvironment) ? \(isTargetEnvironment)")
                 return isTargetEnvironment
             } else {
                 // FALLBACK: If no environment field, check if it's a legacy record
-                print("🔍 Record \(record["name"] as? String ?? "Unknown"): NO ENVIRONMENT FIELD - treating as legacy")
-                return !isDebugBuild() // Include legacy records in production only
+                let isLegacy = !isDebugBuild() // Include legacy records in production only
+                print("🔍 LEGACY CHECK: \(record["name"] as? String ?? "Unknown"): NO ENVIRONMENT FIELD - treating as legacy, including: \(isLegacy)")
+                return isLegacy
             }
         }
         
-        print("🔍 [CloudKit] After environment filtering: \(filteredRecords.count) records")
+        print("🔍 [CloudKit] After environment filter: \(environmentFilteredRecords.count) records")
         
-        let organizations = filteredRecords.map { record in
+        // THIRD FILTER: Active status
+        let activeRecords = environmentFilteredRecords.filter { record in
+            let isActive = (record["isActiveV2"] as? Int64) == 1
+            let defaultActive = record["isActiveV2"] == nil // Legacy records without this field are considered active
+            let shouldInclude = isActive || defaultActive
+            
+            if !shouldInclude {
+                print("🔍 FILTERED OUT (Inactive): \(record["name"] as? String ?? "Unknown")")
+            }
+            
+            return shouldInclude
+        }
+        
+        print("🔍 [CloudKit] After active status filter: \(activeRecords.count) records")
+        
+        let organizations = activeRecords.map { record in
             let org = Organization(
                 id: record["id"] as? String ?? record.recordID.recordName,
                 name: record["name"] as? String ?? "Unknown Organization",
@@ -285,11 +331,22 @@ extension CloudKitAuthService {
                 cloudKitRecordID: record.recordID.recordName
             )
             
-            print("🔍 Final organization: \(org.name) | Members: \(org.members.count) | Admin: \(org.adminUserID.prefix(8))...")
+            print("🔍 FINAL ORGANIZATION: \(org.name)")
+            print("🔍     ID: \(org.id.prefix(8))...")
+            print("🔍     Members: \(org.members.count)")
+            print("🔍     Admin: \(org.adminUserID.prefix(8))...")
+            print("🔍     Created: \(org.createdAt)")
+            print("🔍     Active: \(org.isActive)")
+            
             return org
         }
         
-        print("🔍 [CloudKit] FINAL RESULT: \(organizations.count) organizations for user")
+        print("🔍 [CloudKit] FINAL ORGANIZATION COUNT: \(organizations.count)")
+        print("🔍 [CloudKit] ORGANIZATIONS RETURNED TO AUTHVIEWMODEL:")
+        for (index, org) in organizations.enumerated() {
+            print("🔍   [\(index)] \(org.name) (ID: \(org.id.prefix(8))...)")
+        }
+        
         return organizations.sorted { $0.createdAt > $1.createdAt }
     }
     

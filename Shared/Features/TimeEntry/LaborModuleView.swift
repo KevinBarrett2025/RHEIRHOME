@@ -24,7 +24,7 @@ struct LaborModuleView: View {
         }
         
         // Also check by name matching for legacy hours without employeeID
-        let hoursEmployeeNames = project.loggedHours.compactMap { workHour in
+        let _ = project.loggedHours.compactMap { workHour in
             workHour.employeeID == nil ? workHour.employee : nil
         }
         
@@ -48,7 +48,7 @@ struct LaborModuleView: View {
                 let virtualMember = TeamMember(
                     name: employeeName,
                     jobTitle: "Worker",
-                    organizationID: project.organizationID ?? ""
+                    organizationID: project.organizationID
                 )
                 // Add a rate based on their work hours
                 let averageRate = project.loggedHours

@@ -57,7 +57,7 @@ extension ProjectViewModel {
                 projectID: sel.id.uuidString
             )
             
-            await saveAllProjectsToCloudKit()
+            _ = await saveAllProjectsToCloudKit()
         }
         
         print("📝 Added receipt: \(receipt.vendor) - \(receipt.amount.formatAsCurrency()) (\(paymentMethod.displayName))")
@@ -126,7 +126,7 @@ extension ProjectViewModel {
                 projectID: sel.id.uuidString
             )
             
-            await saveAllProjectsToCloudKit()
+            _ = await saveAllProjectsToCloudKit()
         }
         
         print("✏️ Updated receipt: \(receipt.vendor) - \(receipt.amount.formatAsCurrency()) (\(paymentMethod.displayName))")

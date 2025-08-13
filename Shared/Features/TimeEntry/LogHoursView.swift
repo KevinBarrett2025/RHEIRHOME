@@ -37,7 +37,7 @@ struct LogHoursView: View {
             let virtualMember = TeamMember(
                 name: employeeName,
                 jobTitle: "Worker",
-                organizationID: project.organizationID ?? ""
+                organizationID: project.organizationID
             )
             
             // Add rates based on their historical work

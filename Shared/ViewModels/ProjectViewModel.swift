@@ -224,8 +224,91 @@ class ProjectViewModel: ObservableObject {
     }
     
     func organizationDidChange() async {
-        print("TODO: organizationDidChange - Phase 2")
-        updateOrganizationProjects()
+        print("🔄 ORGANIZATION CHANGED: Starting organization data synchronization...")
+        
+        guard let currentOrgID = currentOrganizationID else {
+            print("⚠️ ORGANIZATION CHANGED: No organization ID - clearing data")
+            await MainActor.run {
+                organizationProjects = []
+                accessibleProjects = []
+                teamMembers = []
+                selectedProject = nil
+            }
+            return
+        }
+        
+        print("🔄 ORGANIZATION CHANGED: Switching to organization: \(currentOrgID.prefix(8))...")
+        
+        // Step 1: Clear old organization data
+        await MainActor.run {
+            organizationProjects = []
+            accessibleProjects = []
+            selectedProject = nil
+            isDataLoading = true
+        }
+        
+        // Step 2: Set up CloudKit zone for the new organization
+        await setupCloudKitZoneForOrganization(currentOrgID)
+        
+        // Step 3: Load projects for the new organization
+        await loadOrganizationSpecificProjects(organizationID: currentOrgID)
+        
+        // Step 4: Load team members for the new organization
+        await loadOrganizationTeamMembers(organizationID: currentOrgID)
+        
+        // Step 5: Update organization projects and accessible projects
+        await MainActor.run {
+            updateOrganizationProjects()
+            isDataLoading = false
+        }
+        
+        // Step 6: Try to load from CloudKit for latest data
+        do {
+            let cloudKitProjects = try await loadProjectsFromCloudKit()
+            await MainActor.run {
+                mergeCloudKitProjects(cloudKitProjects)
+            }
+            print("✅ ORGANIZATION CHANGED: Loaded \(cloudKitProjects.count) projects from CloudKit")
+        } catch {
+            print("⚠️ ORGANIZATION CHANGED: CloudKit load failed, using local data: \(error)")
+        }
+        
+        print("✅ ORGANIZATION CHANGED: Successfully switched to organization \(currentOrgID.prefix(8))...")
+        print("   Organization projects: \(organizationProjects.count)")
+        print("   Team members: \(teamMembers.count)")
+        print("   CloudKit enabled: \(isUsingCloudKitForOrganizationData)")
+    }
+    
+    /// Load team members for a specific organization
+    private func loadOrganizationTeamMembers(organizationID: String) async {
+        let teamMembersKey = "team_members_\(organizationID)"
+        print("👥 TEAM LOAD: Loading team members from key: \(teamMembersKey)")
+        
+        guard let data = UserDefaults.standard.data(forKey: teamMembersKey),
+              let members = try? JSONDecoder().decode([TeamMember].self, from: data) else {
+            print("👥 TEAM LOAD: No team member data found for organization: \(organizationID.prefix(8))...")
+            
+            await MainActor.run {
+                self.teamMembers = []
+                self.updateTeamMemberCaches()
+            }
+            return
+        }
+        
+        await MainActor.run {
+            // Verify all team members belong to this organization
+            let verifiedMembers = members.filter { member in
+                member.organizationID == organizationID
+            }
+            
+            if verifiedMembers.count != members.count {
+                print("🔒 SECURITY: Filtered out \(members.count - verifiedMembers.count) team members that didn't belong to organization \(organizationID.prefix(8))...")
+            }
+            
+            self.teamMembers = verifiedMembers
+            self.updateTeamMemberCaches()
+            print("✅ TEAM LOAD: Loaded \(verifiedMembers.count) verified team members for organization \(organizationID.prefix(8))...")
+        }
     }
     
     func emergencyRecoverFromBackup() async -> Bool {
@@ -1100,8 +1183,43 @@ class ProjectViewModel: ObservableObject {
     // MARK: - Team Member Management Methods (For PHASE 2 compatibility)
     
     func saveTeamMembersToCloudKit() async {
-        print("TODO: saveTeamMembersToCloudKit - Phase 2 implementation needed")
-        // Stub implementation for Phase 1
+        print("💾 CLOUDKIT TEAM SYNC: Starting team members sync to CloudKit...")
+        
+        guard !teamMembers.isEmpty else {
+            print("⚠️ CLOUDKIT TEAM SYNC: No team members to sync")
+            return
+        }
+        
+        guard let currentOrgID = currentOrganizationID else {
+            print("❌ CLOUDKIT TEAM SYNC: No organization ID")
+            return
+        }
+        
+        let teamMembersToSync = teamMembers.filter { $0.organizationID == currentOrgID }
+        print("💾 CLOUDKIT TEAM SYNC: Syncing \(teamMembersToSync.count) team members for organization \(currentOrgID.prefix(8))...")
+        
+        var successCount = 0
+        
+        for teamMember in teamMembersToSync {
+            do {
+                try await saveTeamMemberToCloudKit(teamMember)
+                successCount += 1
+                print("✅ CLOUDKIT TEAM SYNC: Saved \(teamMember.name)")
+            } catch {
+                print("❌ CLOUDKIT TEAM SYNC: Failed to save \(teamMember.name): \(error)")
+            }
+        }
+        
+        // Also save team members to organization-specific local storage
+        let teamMembersKey = "team_members_\(currentOrgID)"
+        if let teamMembersData = try? JSONEncoder().encode(teamMembersToSync) {
+            UserDefaults.standard.set(teamMembersData, forKey: teamMembersKey)
+            print("💾 LOCAL SYNC: Saved \(teamMembersToSync.count) team members to key: \(teamMembersKey)")
+        }
+        
+        UserDefaults.standard.synchronize()
+        
+        print("✅ CLOUDKIT TEAM SYNC: Completed - \(successCount)/\(teamMembersToSync.count) team members saved")
     }
     
     // MARK: - PHASE 2A: UUID/String Organization ID Compatibility
@@ -1255,7 +1373,7 @@ class ProjectViewModel: ObservableObject {
         // Show project details if count mismatch
         if projects.count != organizationProjects.count {
             print("  ⚠️ PROJECT COUNT MISMATCH:")
-            print("    All Projects: \(projects.map { "\($0.name) (\($0.organizationID ?? "nil"))" })")
+            print("    All Projects: \(projects.map { "\($0.name) (\($0.organizationID))" })")
             print("    Org Projects: \(organizationProjects.map { "\($0.name) (\($0.organizationID))" })")
         }
     }

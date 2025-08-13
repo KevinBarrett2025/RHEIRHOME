@@ -9,25 +9,37 @@ import Foundation
 
 extension ProjectViewModel {
     
-    // MARK: - PHASE 1 STUB METHODS FOR MISSING FUNCTIONALITY
+    // MARK: - RECEIPT CACHE MANAGEMENT
     
     func invalidateReceiptCache() {
-        print("TODO: invalidateReceiptCache - Phase 2")
-        // Stub implementation
-    }
-    
-    func saveAllProjectsToCloudKit() async {
-        print("TODO: saveAllProjectsToCloudKit - Phase 2")
-        // Stub implementation - does nothing in Phase 1
+        print("🔄 CACHE: Invalidating receipt cache...")
+        // Clear receipt-related caches
+        receiptVendorCache.removeAll()
+        receiptPaymentMethodCache.removeAll()
+        print("✅ CACHE: Receipt cache invalidated")
     }
     
     func recomputeFilteredReceipts() {
-        print("TODO: recomputeFilteredReceipts - Phase 2")
-        // Stub implementation
+        print("🔄 RECEIPTS: Recomputing filtered receipts...")
+        // Trigger UI update for filtered receipts
+        objectWillChange.send()
+        print("✅ RECEIPTS: Filtered receipts recomputed")
     }
     
     func debouncedSaveProjects() {
-        print("TODO: debouncedSaveProjects - Phase 2")
-        // Stub implementation
+        print("🔄 DEBOUNCED SAVE: Starting debounced project save...")
+        
+        // Use a simple debouncing approach
+        Task {
+            // Wait briefly to batch multiple changes
+            try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
+            
+            // Save to organization-specific storage
+            await MainActor.run {
+                saveOrganizationSpecificBackup()
+            }
+            
+            print("✅ DEBOUNCED SAVE: Projects saved")
+        }
     }
 }

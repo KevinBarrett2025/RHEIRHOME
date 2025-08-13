@@ -48,7 +48,7 @@ struct AddProgressView: View {
             .sheet(isPresented: $showingCamera) {
                 ImagePicker(sourceType: .camera, image: $inputImage)
             }
-            .onChange(of: inputImage) { newImage in
+            .onChange(of: inputImage) { _, newImage in
                 if let newImage = newImage {
                     selectedPhotos.append(newImage)
                     inputImage = nil

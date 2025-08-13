@@ -6,6 +6,14 @@ struct SettingsView: View {
     @AppStorage("preferredMapProvider") private var preferredMapProvider: MapProvider = .apple
     
     @StateObject private var resetService = CompleteDataResetService()
+    @State private var showingStatusAlert = false
+    @State private var statusMessage = ""
+    @State private var showingNuclearResetAlert = false
+    @State private var isResetting = false
+    @State private var resetProgress = ""
+    @State private var showingAlert = false
+    @State private var alertMessage = ""
+    @State private var showingCacheAlert = false
     
     var body: some View {
         NavigationStack {
@@ -26,6 +34,32 @@ struct SettingsView: View {
                 
                 // Account Actions
                 accountSection
+                
+                // Development Section
+                Section("Development & Debug") {
+                    Group {
+                        NavigationLink(destination: CloudKitDebugView()) {
+                            Label("CloudKit Debug", systemImage: "icloud.and.arrow.up.and.down")
+                        }
+                        
+                        NavigationLink(destination: CloudKitConsistencyDebugView(authVM: authVM)) {
+                            Label("Data Consistency Debug", systemImage: "checkmark.shield")
+                                .foregroundColor(.orange)
+                        }
+                        
+                        NavigationLink(destination: OrganizationDebugView()) {
+                            Label("Organization Debug", systemImage: "building.2")
+                        }
+                        
+                        Button(action: {
+                            authVM.clearAllLocalCache()
+                            showingCacheAlert = true
+                        }) {
+                            Label("Nuclear Reset", systemImage: "trash.fill")
+                                .foregroundColor(.red)
+                        }
+                    }
+                }
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.large)
@@ -40,12 +74,17 @@ struct SettingsView: View {
                     performNuclearReset()
                 }
             } message: {
-                Text("This will permanently delete ALL local data and CloudKit data including:\n\n• All 26 organizations\n• All team members\n• All vendors & payment methods\n• All cached projects\n• All settings\n\nThe app will restart automatically after reset. This cannot be undone.")
+                Text("This will permanently delete ALL local data and CloudKit data including:\n\n• All organizations\n• All team members\n• All vendors & payment methods\n• All cached projects\n• All settings\n\nThe app will restart automatically after reset. This cannot be undone.")
             }
             .alert("Debug Action", isPresented: $showingAlert) {
                 Button("OK") { }
             } message: {
                 Text(alertMessage)
+            }
+            .alert("Cache Cleared", isPresented: $showingCacheAlert) {
+                Button("OK") { }
+            } message: {
+                Text("All local cache has been cleared. The app will refresh with fresh CloudKit data.")
             }
         }
     }
@@ -62,7 +101,6 @@ struct SettingsView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("\(organization.name) Directory")
                             .font(.headline)
-                        // Debug: Show both counts to identify discrepancy
                         VStack(alignment: .leading, spacing: 2) {
                             Text("CloudKit: \(organization.members.count + 1) app users")
                                 .font(.caption)
@@ -84,7 +122,6 @@ struct SettingsView: View {
                 }
             }
             
-            // Debug section to see organization members
             NavigationLink(destination: OrganizationDebugView(organization: organization)) {
                 HStack {
                     Image(systemName: "ladybug.fill")
@@ -134,7 +171,6 @@ struct SettingsView: View {
     @ViewBuilder
     private var preferencesSection: some View {
         Section("Preferences") {
-            // Map Provider
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
                     Image(systemName: "map.fill")
@@ -156,10 +192,8 @@ struct SettingsView: View {
             }
             .padding(.vertical, 4)
             
-            // Subscription Tier Testing
             subscriptionTierRow
             
-            // ChatGPT Settings
             NavigationLink(destination: ChatGPTSettingsView()) {
                 HStack {
                     Image(systemName: "brain.head.profile")
@@ -280,7 +314,6 @@ struct SettingsView: View {
                 }
             }
             
-            // MIGRATION SECTION - CRITICAL FIX
             Button("Fix Team Member Labor Hours") {
                 let migrationStatus = projectVM.getLaborHoursMigrationStatus()
                 
@@ -360,14 +393,6 @@ struct SettingsView: View {
         }
     }
     
-    @State private var showingStatusAlert = false
-    @State private var statusMessage = ""
-    @State private var showingNuclearResetAlert = false
-    @State private var isResetting = false
-    @State private var resetProgress = ""
-    @State private var showingAlert = false
-    @State private var alertMessage = ""
-    
     private func fixOrganizationIDs() {
         projectVM.fixMissingOrganizationIDs { success, message in
             statusMessage = message
@@ -381,13 +406,11 @@ struct SettingsView: View {
         
         Task {
             do {
-                // Use the complete reset service for comprehensive cleanup
                 try await resetService.performCompleteReset()
                 
                 await MainActor.run {
                     resetProgress = "Reset complete! Restarting app..."
                     
-                    // Force app restart after a short delay
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
                         restartApp()
                     }
@@ -404,181 +427,15 @@ struct SettingsView: View {
     
     private func restartApp() {
         #if os(iOS)
-        // Force terminate the app - user will need to manually restart
-        // This is the most reliable way to ensure clean state
         exit(0)
         #else
-        // On macOS
         NSApplication.shared.terminate(nil)
         #endif
     }
 }
 
-// MARK: - Supporting Views (unchanged from original)
-
-struct OrganizationDirectoryView: View {
-    let organization: Organization
-    @EnvironmentObject var authVM: AuthViewModel
-    @EnvironmentObject var projectVM: ProjectViewModel
-    @State private var showingAddMember = false
-    
-    var body: some View {
-        List {
-            teamMembersSection
-            organizationSettingsSection
-        }
-        .navigationTitle("\(organization.name) Directory")
-        .navigationBarTitleDisplayMode(.large)
-        .sheet(isPresented: $showingAddMember) {
-            AddEmployeeView(isPresented: $showingAddMember)
-                .environmentObject(projectVM)
-        }
-    }
-    
-    @ViewBuilder
-    private var teamMembersSection: some View {
-        Section("Team Members") {
-            ForEach(projectVM.teamMembers) { member in
-                teamMemberRow(member)
-            }
-            
-            addTeamMemberButton
-        }
-    }
-    
-    @ViewBuilder
-    private func teamMemberRow(_ member: TeamMember) -> some View {
-        NavigationLink(destination: TeamMemberDetailView(member: member)) {
-            HStack {
-                Image(systemName: "person.circle.fill")
-                    .foregroundColor(.blue)
-                    .font(.title2)
-                
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(member.name)
-                        .font(.headline)
-                    Text(member.jobTitle)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    if !member.email.isEmpty {
-                        Text(member.email)
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                }
-                
-                Spacer()
-                
-                if let defaultRate = member.defaultRate {
-                    Text(defaultRate.rate.formatAsCurrency())
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-            }
-            .padding(.vertical, 4)
-        }
-    }
-    
-    @ViewBuilder
-    private var addTeamMemberButton: some View {
-        Button(action: { showingAddMember = true }) {
-            HStack {
-                Image(systemName: "plus.circle.fill")
-                    .foregroundColor(.green)
-                    .font(.title2)
-                
-                Text("Add Team Member")
-                    .foregroundColor(.primary)
-                
-                Spacer()
-            }
-        }
-    }
-    
-    @ViewBuilder
-    private var organizationSettingsSection: some View {
-        Section("Organization Settings") {
-            HStack {
-                Text("Organization ID")
-                Spacer()
-                Text(organization.id)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .lineLimit(1)
-            }
-            
-            HStack {
-                Text("Members")
-                Spacer()
-                Text("\(projectVM.teamMembers.count)")
-                    .foregroundColor(.secondary)
-            }
-        }
-    }
-}
-
-struct TeamMemberDetailView: View {
-    let member: TeamMember
-    @EnvironmentObject var projectVM: ProjectViewModel
-    
-    var body: some View {
-        List {
-            Section("Contact Information") {
-                HStack {
-                    Text("Name")
-                    Spacer()
-                    Text(member.name)
-                        .foregroundColor(.secondary)
-                }
-                
-                if !member.email.isEmpty {
-                    HStack {
-                        Text("Email")
-                        Spacer()
-                        Text(member.email)
-                            .foregroundColor(.secondary)
-                    }
-                }
-                
-                HStack {
-                    Text("Job Title")
-                    Spacer()
-                    Text(member.jobTitle)
-                        .foregroundColor(.secondary)
-                }
-            }
-            
-            Section("Rates") {
-                ForEach(member.rates) { rate in
-                    HStack {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(rate.taskType)
-                                .font(.headline)
-                            if rate.isDefault {
-                                Text("Default Rate")
-                                    .font(.caption)
-                                    .foregroundColor(.blue)
-                            }
-                        }
-                        
-                        Spacer()
-                        
-                        Text(rate.rate.formatAsCurrency())
-                            .font(.headline)
-                            .fontWeight(.semibold)
-                    }
-                }
-            }
-        }
-        .navigationTitle(member.name)
-        .navigationBarTitleDisplayMode(.large)
-    }
-}
-
-struct SettingsView_Previews: PreviewProvider {
-    static var previews: some View {
-        SettingsView()
-            .environmentObject(AuthViewModel(service: PreviewAuthService()))
-            .environmentObject(ProjectViewModel(offlineDataManager: OfflineDataManager()))
-    }
+#Preview {
+    SettingsView()
+        .environmentObject(AuthViewModel(service: PreviewAuthService()))
+        .environmentObject(ProjectViewModel(offlineDataManager: OfflineDataManager()))
 }

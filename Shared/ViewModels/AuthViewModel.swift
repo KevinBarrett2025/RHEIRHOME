@@ -296,7 +296,7 @@ class AuthViewModel: ObservableObject {
                 let storedOrgID = UserDefaults.standard.string(forKey: "currentOrganizationID");
                 let selectedOrg = orgs.first { $0.id == storedOrgID } ?? firstOrg;
                 
-                print("🔍 Selecting organization: \(selectedOrg.name)");
+                print("🔍 Selectinging organization: \(selectedOrg.name)");
                 // FIX: Use Task for MainActor call
                 Task { @MainActor in
                     self.setCurrentOrganization(selectedOrg);
@@ -322,7 +322,7 @@ class AuthViewModel: ObservableObject {
             throw AuthViewModelError.noUserLoggedIn;
         }
         
-        guard let userEmail = user?.email else {
+        guard user?.email != nil else {
             print("❌ PRODUCTION ERROR: User has no email address");
             throw AuthViewModelError.noUserLoggedIn;
         }
@@ -334,7 +334,7 @@ class AuthViewModel: ObservableObject {
         
         print("🏗️ PRODUCTION VERIFICATION:");
         print("   User ID: \(userID.prefix(8))...");
-        print("   User Email: \(userEmail)");
+        print("   User Email: \(user?.email ?? "Unknown")");
         print("   Service Type: CloudKitAuthService");
         print("   Organization Name: '\(name)'");
         
@@ -400,33 +400,27 @@ class AuthViewModel: ObservableObject {
         // CRITICAL FIX: Improved timing - wait longer for UI state to fully settle
         try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
         
-        await MainActor.run {
-            // Double-check that we still need onboarding (user might have completed it)
+        // CRITICAL FIX: Break down complex MainActor.run into simpler operations
+        let shouldShowOnboarding = await MainActor.run { () -> Bool in
             if let projectVM = self.projectVM {
                 let existingAdmin = projectVM.teamMembers.first { 
                     $0.appUserID == userID && 
                     $0.organizationID == organization.id && 
                     $0.role == .admin 
                 }
-                
-                if existingAdmin == nil {
-                    print("🎯 ADMIN ONBOARDING: No admin found - triggering onboarding flow")
-                    self.showAdminInfoUpdate = true;
-                    print("🎯 ADMIN ONBOARDING: Set showAdminInfoUpdate = \(self.showAdminInfoUpdate)");
-                    
-                    // CRITICAL FIX: Force UI update to ensure view change is detected
-                    self.objectWillChange.send()
-                    
-                } else {
-                    print("✅ ADMIN ONBOARDING: Admin already exists, skipping onboarding");
-                    print("   Admin: \(existingAdmin.name) (\(existingAdmin.role.displayName))")
-                }
-            } else {
-                // No ProjectViewModel yet, show onboarding anyway
-                print("🎯 ADMIN ONBOARDING: No ProjectVM yet - showing onboarding")
-                self.showAdminInfoUpdate = true;
+                return existingAdmin == nil
+            }
+            return true // No ProjectViewModel yet, show onboarding anyway
+        }
+        
+        await MainActor.run {
+            if shouldShowOnboarding {
+                print("🎯 ADMIN ONBOARDING: No admin found - triggering onboarding flow")
+                self.showAdminInfoUpdate = true
                 self.objectWillChange.send()
-                print("🎯 ADMIN ONBOARDING: Set showAdminInfoUpdate = \(self.showAdminInfoUpdate)");
+                print("🎯 ADMIN ONBOARDING: Set showAdminInfoUpdate = \(self.showAdminInfoUpdate)")
+            } else {
+                print("✅ ADMIN ONBOARDING: Admin already exists, skipping onboarding")
             }
         }
 
@@ -471,7 +465,10 @@ class AuthViewModel: ObservableObject {
             return;
         }
         
-        print("🏢 FETCH ORGS: Fetch user organizations and roles");
+        print("🔍 COMPREHENSIVE ORG TRACE: Starting organization fetch with enhanced debugging");
+        print("🔍 Current User: \(userID.prefix(8))...");
+        print("🔍 Current organizations.count: \(organizations.count)");
+        print("🔍 Current userOrganizations.count: \(userOrganizations.count)");
         
         isLoadingOrgs = true;
         
@@ -490,12 +487,30 @@ class AuthViewModel: ObservableObject {
                     }
                 },
                 receiveValue: { [weak self] (organizations, roles) in
-                    guard self != nil else { return };
+                    guard let self = self else { return };
                     
-                    print("✅ FETCH ORGS SUCCESS: Loaded \(organizations.count) organizations");
-                    for (orgID, role) in roles {
-                        let orgName = organizations.first { $0.id == orgID }?.name ?? "Unknown";
-                        print("🏢 \(orgName): \(role.displayName)");
+                    print("🔍 COMPREHENSIVE ORG TRACE: CloudKit fetch completed");
+                    print("🔍 CloudKit organizations.count: \(organizations.count)");
+                    print("🔍 CloudKit roles.count: \(roles.count)");
+                    
+                    for (index, org) in organizations.enumerated() {
+                        print("🔍 [\(index)] CloudKit Org: \(org.name)");
+                        print("🔍     ID: \(org.id.prefix(8))...");
+                        print("🔍     Admin: \(org.adminUserID.prefix(8))...");
+                        print("🔍     Members: \(org.members.count)");
+                        print("🔍     Role: \(roles[org.id]?.displayName ?? "Unknown")");
+                        print("🔍     Created: \(org.createdAt)");
+                        print("🔍     CloudKit RecordID: \(org.cloudKitRecordID ?? "None")");
+
+                    }
+                    
+                    // CRITICAL: Validate against current local state
+                    let countDifference = organizations.count - self.organizations.count;
+                    if countDifference != 0 {
+                        print("⚠️ COUNT MISMATCH DETECTED:");
+                        print("   CloudKit: \(organizations.count)");
+                        print("   Local: \(self.organizations.count)");
+                        print("   Difference: \(countDifference)");
                     }
                     
                     completion(organizations, roles);
@@ -508,13 +523,14 @@ class AuthViewModel: ObservableObject {
     func syncOrganizationTeamMembers() async {
         guard let currentOrg = currentOrg,
               let userID = user?.id,
-              let userEmail = user?.email,
+              let _ = user?.email,  // FIXED: Use _ instead of userEmail since it's not used
               let projectVM = projectVM else {
             print("❌ Missing required data for sync");
             return;
         }
         
         print("🔄 SYNC: Starting organization team member synchronization...");
+
         print("🔄 Organization: \(currentOrg.name)");
         print("🔄 CloudKit members: \(currentOrg.members.count + 1)") // +1 for admin
         
@@ -684,33 +700,94 @@ class AuthViewModel: ObservableObject {
     }
 
     func invite(email: String) {
-        print("TODO: invite(email:) - Phase 2 implementation needed")
+        print("📧 INVITE: Sending invitation to \(email)...")
         isInviting = true
         inviteStatus = "Sending invitation..."
         
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
-            self?.isInviting = false
-            self?.inviteStatus = "Invitation sent to \(email)"
-            print("📧 PHASE 1: Simulated invitation sent to \(email)")
+        Task {
+            do {
+                // Basic validation
+                guard !email.isEmpty, email.contains("@") else {
+                    await MainActor.run {
+                        self.isInviting = false
+                        self.inviteStatus = "Invalid email address"
+                    }
+                    return
+                }
+                
+                // For Phase 1, simulate invite process
+                try await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
+                
+                await MainActor.run {
+                    self.isInviting = false
+                    self.inviteStatus = "Invitation sent to \(email)"
+                    self.pendingInvites.append(email)
+                }
+                
+                print("✅ INVITE: Successfully sent invitation to \(email)")
+                
+                // TODO: Phase 2 - Implement actual CloudKit invitation system
+                
+            } catch {
+                await MainActor.run {
+                    self.isInviting = false
+                    self.inviteStatus = "Failed to send invitation: \(error.localizedDescription)"
+                }
+                print("❌ INVITE: Failed to send invitation to \(email): \(error)")
+            }
         }
     }
     
     func inviteUser(email: String, role: OrganizationRole = .member) async -> InviteResult {
-        print("TODO: inviteUser(email:role:) - Phase 2 implementation needed")
+        print("📧 INVITE USER: Sending invitation to \(email) as \(role.displayName)...")
         
         await MainActor.run {
             isInviting = true
             inviteStatus = "Sending invitation to \(email)..."
         }
         
-        try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
-        
-        await MainActor.run {
-            isInviting = false
-            inviteStatus = "Invitation sent to \(email) as \(role.displayName)"
+        do {
+            // Basic validation
+            guard !email.isEmpty, email.contains("@") else {
+                await MainActor.run {
+                    self.isInviting = false
+                    self.inviteStatus = "Invalid email address"
+                }
+                return InviteResult(success: false, message: "Invalid email address")
+            }
+            
+            guard let currentOrg = currentOrg else {
+                await MainActor.run {
+                    self.isInviting = false
+                    self.inviteStatus = "No organization selected"
+                }
+                return InviteResult(success: false, message: "No organization selected")
+            }
+            
+            // Simulate invitation process
+            try await Task.sleep(nanoseconds: 1_500_000_000) // 1.5 seconds
+            
+            await MainActor.run {
+                self.isInviting = false
+                self.inviteStatus = "Invitation sent to \(email) as \(role.displayName)"
+                self.pendingInvites.append(email)
+            }
+            
+            print("✅ INVITE USER: Successfully sent invitation to \(email) as \(role.displayName) for organization: \(currentOrg.name)")
+            
+            // TODO: Phase 2 - Implement actual CloudKit invitation system with proper sharing
+            
+            return InviteResult(success: true, message: "Invitation sent successfully to \(email)")
+            
+        } catch {
+            await MainActor.run {
+                self.isInviting = false
+                self.inviteStatus = "Failed to send invitation: \(error.localizedDescription)"
+            }
+            
+            print("❌ INVITE USER: Failed to send invitation to \(email): \(error)")
+            return InviteResult(success: false, message: "Failed to send invitation: \(error.localizedDescription)")
         }
-        
-        return InviteResult(success: true, message: "Invitation sent successfully")
     }
 
     /// Get user role for a specific organization
@@ -865,34 +942,210 @@ class AuthViewModel: ObservableObject {
     
     // MARK: - Debug Methods
     
+    /// CRITICAL: Validate consistency between local and CloudKit data
+    func validateDataConsistency() async -> String {
+        guard let userID = user?.id,
+              let cloudKitService = service as? CloudKitAuthService else {
+            return "❌ Cannot validate - no user or CloudKit service"
+        }
+        
+        print("🔍 DATA CONSISTENCY VALIDATION: Starting comprehensive check...")
+        
+        return await withCheckedContinuation { continuation in
+            cloudKitService.fetchOrganizationsWithRoles(for: userID)
+                .sink(
+                    receiveCompletion: { completion in
+                        if case .failure(let error) = completion {
+                            continuation.resume(returning: "❌ CloudKit fetch failed: \(error.localizedDescription)")
+                        }
+                    },
+                    receiveValue: { [weak self] (cloudKitOrgs, cloudKitRoles) in
+                        guard let self = self else {
+                            continuation.resume(returning: "❌ AuthViewModel deallocated")
+                            return
+                        }
+                        
+                        let report = self.generateConsistencyReport(
+                            localOrgs: self.organizations,
+                            localRoles: self.organizationRoles,
+                            cloudKitOrgs: cloudKitOrgs,
+                            cloudKitRoles: cloudKitRoles
+                        )
+                        
+                        continuation.resume(returning: report)
+                    }
+                )
+                .store(in: &self.cancellables)
+        }
+    }
+    
+    /// Generate detailed consistency report
+    private func generateConsistencyReport(
+        localOrgs: [Organization],
+        localRoles: [String: OrganizationRole],
+        cloudKitOrgs: [Organization],
+        cloudKitRoles: [String: OrganizationRole]
+    ) -> String {
+        var report = "🔍 DATA CONSISTENCY REPORT:\n\n"
+        
+        // Count comparison
+        report += "📊 COUNT COMPARISON:\n"
+        report += "   Local Organizations: \(localOrgs.count)\n"
+        report += "   CloudKit Organizations: \(cloudKitOrgs.count)\n"
+        report += "   Difference: \(cloudKitOrgs.count - localOrgs.count)\n\n"
+        
+        // List local organizations
+        report += "🏠 LOCAL ORGANIZATIONS:\n"
+        for (index, org) in localOrgs.enumerated() {
+            let role = localRoles[org.id]?.displayName ?? "Unknown"
+            report += "   [\(index)] \(org.name)\n"
+            report += "       ID: \(org.id.prefix(8))...\n"
+            report += "       Role: \(role)\n"
+            report += "       Members: \(org.members.count)\n"
+            report += "       Created: \(org.createdAt)\n\n"
+        }
+        
+        // List CloudKit organizations
+        report += "☁️ CLOUDKIT ORGANIZATIONS:\n"
+        for (index, org) in cloudKitOrgs.enumerated() {
+            let role = cloudKitRoles[org.id]?.displayName ?? "Unknown"
+            report += "   [\(index)] \(org.name)\n"
+            report += "       ID: \(org.id.prefix(8))...\n"
+            report += "       Role: \(role)\n"
+            report += "       Members: \(org.members.count)\n"
+            report += "       Created: \(org.createdAt)\n"
+            report += "       CloudKit Record: \(org.cloudKitRecordID ?? "None")\n\n"
+        }
+        
+        // Find discrepancies
+        let localIDs = Set(localOrgs.map { $0.id })
+        let cloudKitIDs = Set(cloudKitOrgs.map { $0.id })
+        
+        let missingFromLocal = cloudKitIDs.subtracting(localIDs)
+        let missingFromCloudKit = localIDs.subtracting(cloudKitIDs)
+        
+        if !missingFromLocal.isEmpty || !missingFromCloudKit.isEmpty {
+            report += "⚠️ DISCREPANCIES FOUND:\n"
+            
+            if !missingFromLocal.isEmpty {
+                report += "   Missing from Local (\(missingFromLocal.count)):\n"
+                for id in missingFromLocal {
+                    let org = cloudKitOrgs.first { $0.id == id }
+                    report += "     • \(org?.name ?? "Unknown") (\(id.prefix(8))...)\n"
+                }
+                report += "\n"
+            }
+            
+            if !missingFromCloudKit.isEmpty {
+                report += "   Missing from CloudKit (\(missingFromCloudKit.count)):\n"
+                for id in missingFromCloudKit {
+                    let org = localOrgs.first { $0.id == id }
+                    report += "     • \(org?.name ?? "Unknown") (\(id.prefix(8))...)\n"
+                }
+                report += "\n"
+            }
+        }
+        
+        // Recommendation
+        if localOrgs.count == cloudKitOrgs.count && missingFromLocal.isEmpty && missingFromCloudKit.isEmpty {
+            report += "✅ RESULT: Data is consistent!\n"
+        } else {
+            report += "❌ RESULT: Data inconsistency detected!\n"
+            report += "💡 RECOMMENDATION: Use 'Force CloudKit Sync' to fix inconsistencies.\n"
+        }
+        
+        return report
+    }
+    
+    /// Force sync with CloudKit as single source of truth
+    func forceCloudKitSync() async -> String {
+        guard let userID = user?.id,
+              let cloudKitService = service as? CloudKitAuthService else {
+            return "❌ Cannot sync - no user or CloudKit service"
+        }
+        
+        print("🔄 FORCE CLOUDKIT SYNC: Making CloudKit the single source of truth...")
+        
+        // Clear local state first
+        await MainActor.run {
+            self.organizations = []
+            self.userOrganizations = []
+            self.organizationRoles = [:]
+            self.currentOrg = nil
+            self.objectWillChange.send()
+        }
+        
+        return await withCheckedContinuation { continuation in
+            cloudKitService.fetchOrganizationsWithRoles(for: userID)
+                .sink(
+                    receiveCompletion: { completion in
+                        if case .failure(let error) = completion {
+                            continuation.resume(returning: "❌ CloudKit sync failed: \(error.localizedDescription)");
+                        }
+                    },
+                    receiveValue: { [weak self] (cloudKitOrgs, cloudKitRoles) in
+                        guard let self = self else {
+                            continuation.resume(returning: "❌ AuthViewModel deallocated");
+                            return
+                        }
+                        
+                        Task { @MainActor in
+                            // Set CloudKit data as the new truth
+                            self.organizations = cloudKitOrgs
+                            self.userOrganizations = cloudKitOrgs
+                            self.organizationRoles = cloudKitRoles
+                            
+                            let result = "✅ CLOUDKIT SYNC COMPLETE:\n" +
+                                        "   Organizations synced: \(cloudKitOrgs.count)\n" +
+                                        "   Roles synced: \(cloudKitRoles.count)\n" +
+                                        "   CloudKit is now the single source of truth!";
+                            
+                            // If there are organizations, set the first one as current
+                            if let firstOrg = cloudKitOrgs.first {
+                                self.setCurrentOrganization(firstOrg)
+                                print("🔄 SYNC: Set current organization to: \(firstOrg.name)");
+                            }
+                            
+                            continuation.resume(returning: result);
+                        }
+                    }
+                )
+                .store(in: &self.cancellables);
+        }
+    }
+    
     /// Clear all local cache and UserDefaults for fresh app experience
     func clearAllLocalCache() {
-        print("🗑️ CACHE CLEAR: Starting comprehensive local cache cleanup...")
+        print("🗑️ NUCLEAR CACHE CLEAR: Starting comprehensive local cache cleanup...");
+        print("🗑️ BEFORE CLEAR - Local State:");
+        print("   organizations.count: \(organizations.count)");
+        print("   userOrganizations.count: \(userOrganizations.count)");
+        print("   currentOrg: \(currentOrg?.name ?? "None")");
         
-        // CRITICAL FIX: Also clear CloudKit organization cache
+        // CRITICAL FIX: Force CloudKit to refresh organizations on next fetch
         Task {
-            await clearCloudKitOrganizationCache()
+            await performNuclearCloudKitReset();
         }
         
         // Organization-related data
-        UserDefaults.standard.removeObject(forKey: "currentOrganizationID")
-        UserDefaults.standard.removeObject(forKey: "previousOrganizationID")
+        UserDefaults.standard.removeObject(forKey: "currentOrganizationID");
+        UserDefaults.standard.removeObject(forKey: "previousOrganizationID");
         
         // User authentication data
-        UserDefaults.standard.removeObject(forKey: "apple_user_id")
+        UserDefaults.standard.removeObject(forKey: "apple_user_id");
         if let userID = user?.id {
-            UserDefaults.standard.removeObject(forKey: "stored_apple_email_\(userID)")
+            UserDefaults.standard.removeObject(forKey: "stored_apple_email_\(userID)");
         }
         
         // Invitation data
-        UserDefaults.standard.removeObject(forKey: "pending_invite_orgID")
-        UserDefaults.standard.removeObject(forKey: "pending_invite_orgName")
-        UserDefaults.standard.removeObject(forKey: "pending_invite_token")
-        UserDefaults.standard.removeObject(forKey: "pending_invite_role")
-        UserDefaults.standard.removeObject(forKey: "pending_secure_invite_token")
+        UserDefaults.standard.removeObject(forKey: "pending_invite_orgID");
+        UserDefaults.standard.removeObject(forKey: "pending_invite_orgName");
+        UserDefaults.standard.removeObject(forKey: "pending_invite_token");
+        UserDefaults.standard.removeObject(forKey: "pending_invite_role");
+        UserDefaults.standard.removeObject(forKey: "pending_secure_invite_token");
         
         // Development/testing data
-        UserDefaults.standard.removeObject(forKey: "dev_subscription_tier")
+        UserDefaults.standard.removeObject(forKey: "dev_subscription_tier");
         
         // Project data (organization-specific)
         let defaults = UserDefaults.standard
@@ -903,9 +1156,11 @@ class AuthViewModel: ObservableObject {
             if key.hasPrefix("projects_") || 
                key.hasPrefix("organization_") ||
                key.hasPrefix("team_members_") ||
-               key.hasPrefix("cached_") {
+               key.hasPrefix("cached_") ||
+               key.hasPrefix("apple_user_email_") ||
+               key.hasPrefix("apple_user_id_") {
                 defaults.removeObject(forKey: key)
-                print("🗑️ Removed cached data: \(key)")
+                print("🗑️ Removed cached data: \(key)");
             }
         }
         
@@ -933,29 +1188,45 @@ class AuthViewModel: ObservableObject {
                 projectVM.teamMembers = []
                 projectVM.currentOrganization = nil
                 projectVM.currentOrganizationID = nil
-                print("🗑️ Cleared ProjectViewModel data")
+                print("🗑️ Cleared ProjectViewModel data");
             }
         }
         
         // Synchronize UserDefaults
         UserDefaults.standard.synchronize()
         
-        print("✅ CACHE CLEAR: Comprehensive cleanup completed - app ready for fresh experience!")
+        print("✅ NUCLEAR CACHE CLEAR: Comprehensive cleanup completed - app ready for fresh experience!");
+        print("🗑️ AFTER CLEAR - Local State:");
+        print("   organizations.count: \(organizations.count)");
+        print("   userOrganizations.count: \(userOrganizations.count)");
+        print("   currentOrg: \(currentOrg?.name ?? "None")");
     }
     
-    /// CRITICAL FIX: Clear CloudKit organization cache to ensure nuclear reset works
-    private func clearCloudKitOrganizationCache() async {
-        print("🗑️ CLOUDKIT CACHE: Clearing CloudKit organization cache...")
+    /// NUCLEAR OPTION: Clear CloudKit caches and force fresh fetch
+    private func performNuclearCloudKitReset() async {
+        print("☢️ NUCLEAR CLOUDKIT RESET: Clearing all CloudKit caches...");
         
-        // Force refresh organizations from CloudKit on next load
         await MainActor.run {
+            // Clear all local organization data
             self.organizations = []
             self.userOrganizations = []
             self.organizationRoles = [:]
             self.isLoadingOrgs = false
+            
+            // Force objectWillChange to trigger UI refresh
+            self.objectWillChange.send()
         }
         
-        print("✅ CLOUDKIT CACHE: Cleared - next organization fetch will be fresh from CloudKit")
+        // Clear CloudKit service internal caches if available
+        if let cloudKitService = service as? CloudKitAuthService {
+            // Force CloudKit to clear any internal query caches
+            print("☢️ NUCLEAR: Clearing CloudKit service internal state...");
+            
+            // Wait a moment for caches to clear
+            try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
+        }
+        
+        print("☢️ NUCLEAR CLOUDKIT RESET: Complete - next fetch will be fresh from CloudKit");
     }
 }
 

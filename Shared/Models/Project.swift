@@ -1,7 +1,7 @@
 import Foundation
 import CloudKit
 
-public enum ProjectPriority: String, CaseIterable, Codable {
+public enum ProjectPriority: String, CaseIterable, Codable, Sendable {
     case low = "Low"
     case medium = "Medium"
     case high = "High"

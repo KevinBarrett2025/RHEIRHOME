@@ -473,7 +473,7 @@ struct ReceiptsView: View {
             return 
         }
         
-        print("🗑️ DELETING RECEIPT: \(receipt.vendor ?? "Unknown") - \(receipt.amount.formatAsCurrency())")
+        print("🗑️ DELETING RECEIPT: \(receipt.vendor) - \(receipt.amount.formatAsCurrency())")
         
         var updatedProject = selectedProject
         updatedProject.receipts.removeAll { $0.id == receipt.id }

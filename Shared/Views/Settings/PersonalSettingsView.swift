@@ -19,10 +19,105 @@ struct PersonalSettingsView: View {
     @State private var showingTierManagement = false
     @State private var showingAccountDetails = false
     @State private var cloudKitStatus = "Checking..."
+    @State private var showingStatusAlert = false
+    @State private var statusMessage = ""
+    @State private var showingAlert = false
+    @State private var alertMessage = ""
     
     var body: some View {
         NavigationStack {
             Form {
+                // 🚨 DATA CONSISTENCY DEBUG SECTION (TOP PRIORITY)
+                Section {
+                    NavigationLink(destination: CloudKitDebugView()) {
+                        HStack {
+                            Image(systemName: "icloud.and.arrow.up.fill")
+                                .font(.title2)
+                                .foregroundColor(.blue)
+                            
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Data Consistency Debug")
+                                    .font(.headline)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.primary)
+                                
+                                Text("CloudKit sync diagnostics & repair tools")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            
+                            Spacer()
+                            
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    
+                    Button {
+                        Task {
+                            await forceCloudKitSync()
+                        }
+                    } label: {
+                        HStack {
+                            Image(systemName: "arrow.triangle.2.circlepath.circle.fill")
+                                .font(.title2)
+                                .foregroundColor(.green)
+                            
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Force CloudKit Sync")
+                                    .font(.headline)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.primary)
+                                
+                                Text("Make CloudKit the single source of truth")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            
+                            Spacer()
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    
+                    Button {
+                        Task {
+                            statusMessage = await authVM.checkCloudKitStatus()
+                            showingStatusAlert = true
+                        }
+                    } label: {
+                        HStack {
+                            Image(systemName: "checkmark.icloud.fill")
+                                .font(.title2)
+                                .foregroundColor(.cyan)
+                            
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Check CloudKit Status")
+                                    .font(.headline)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.primary)
+                                
+                                Text("Verify connectivity & permissions")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            
+                            Spacer()
+                        }
+                    }
+                    .buttonStyle(.plain)
+                } header: {
+                    HStack {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundColor(.orange)
+                        Text("CLOUDKIT CRISIS RESOLUTION")
+                            .font(.caption)
+                            .fontWeight(.bold)
+                    }
+                } footer: {
+                    Text("🎯 CRITICAL: Use these tools to resolve the '4 organizations' vs '2 organizations' CloudKit data consistency issue.")
+                }
+                
                 // Tier Management Section
                 Section {
                     Button {
@@ -193,7 +288,7 @@ struct PersonalSettingsView: View {
                             .font(.subheadline)
                             .fontWeight(.medium)
                         Spacer()
-                        Text(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Unknown")
+                        Text("1.0")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
@@ -203,7 +298,7 @@ struct PersonalSettingsView: View {
                             .font(.subheadline)
                             .fontWeight(.medium)
                         Spacer()
-                        Text(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "Unknown")
+                        Text("1")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
@@ -254,7 +349,13 @@ struct PersonalSettingsView: View {
                     
                     // CACHE CLEAR BUTTON FOR FRESH TESTING
                     Button {
-                        authVM.clearAllLocalCache()
+                        Task {
+                            await MainActor.run {
+                                authVM.clearAllLocalCache()
+                                alertMessage = "✅ Local cache cleared. CloudKit data preserved."
+                                showingAlert = true
+                            }
+                        }
                     } label: {
                         HStack {
                             Image(systemName: "trash.circle.fill")
@@ -313,23 +414,27 @@ struct PersonalSettingsView: View {
                     Button {
                         print("🗑️ NUCLEAR: Force deleting organization from memory")
                         
-                        // CRITICAL FIX: Comprehensive nuclear reset
-                        authVM.clearAllLocalCache()
-                        
-                        // Also clear from ProjectViewModel
-                        projectVM.currentOrganization = nil
-                        projectVM.currentOrganizationID = nil
-                        projectVM.teamMembers = []
-                        projectVM.projects = []
-                        projectVM.organizationProjects = []
-                        projectVM.accessibleProjects = []
-                        
-                        // Force UI state updates
-                        authVM.needsOrganizationSetup = true
-                        authVM.showOrganizationSetup = true
-                        
-                        print("✅ NUCLEAR: Complete reset - app should show organization setup")
-                        dismiss()
+                        Task {
+                            await MainActor.run {
+                                // CRITICAL FIX: Comprehensive nuclear reset
+                                authVM.clearAllLocalCache()
+                                
+                                // Also clear from ProjectViewModel
+                                projectVM.currentOrganization = nil
+                                projectVM.currentOrganizationID = nil
+                                projectVM.teamMembers = []
+                                projectVM.projects = []
+                                projectVM.organizationProjects = []
+                                projectVM.accessibleProjects = []
+                                
+                                // Force UI state updates
+                                authVM.needsOrganizationSetup = true
+                                authVM.showOrganizationSetup = true
+                                
+                                alertMessage = "✅ NUCLEAR: Complete reset - app should show organization setup"
+                                showingAlert = true
+                            }
+                        }
                     } label: {
                         HStack {
                             Image(systemName: "trash.fill")
@@ -372,6 +477,16 @@ struct PersonalSettingsView: View {
                 }
             } message: {
                 Text("Are you sure you want to sign out? Your data will remain in the cloud.")
+            }
+            .alert("CloudKit Status", isPresented: $showingStatusAlert) {
+                Button("OK") { }
+            } message: {
+                Text(statusMessage)
+            }
+            .alert("Action Complete", isPresented: $showingAlert) {
+                Button("OK") { }
+            } message: {
+                Text(alertMessage)
             }
             .sheet(isPresented: $showingTierManagement) {
                 NavigationStack {
@@ -442,6 +557,36 @@ struct PersonalSettingsView: View {
                 }
             }
         }
+    }
+    
+    @MainActor
+    private func forceCloudKitSync() async {
+        print("🔄 FORCE CLOUDKIT SYNC: Starting comprehensive sync process...")
+        
+        // Step 1: Clear all local cache using AuthViewModel's nuclear clear method
+        authVM.clearAllLocalCache()
+        
+        print("✅ Step 1: Local cache cleared using nuclear option")
+        
+        // Step 2: Force fresh fetch from CloudKit using AuthViewModel's CloudKit sync
+        let syncResult = await authVM.forceCloudKitSync()
+        print("✅ Step 2: CloudKit sync completed - \(syncResult)")
+        
+        // Step 3: Reload organization data
+        authVM.reloadOrganizationData()
+        print("✅ Step 3: Organization data reloaded")
+        
+        // Step 4: If current organization is set, trigger ProjectViewModel sync
+        if let currentOrg = authVM.currentOrg {
+            await projectVM.organizationDidChange(currentOrg.id)
+            print("✅ Step 4: ProjectViewModel synced for organization: \(currentOrg.name)")
+            
+            alertMessage = "✅ CloudKit Sync Complete!\n\nOrganizations: \(authVM.userOrganizations.count)\nCurrent: \(currentOrg.name)\nCloudKit is now the single source of truth!"
+        } else {
+            alertMessage = "⚠️ CloudKit sync completed but no organizations found.\n\nYou may need to create or join an organization."
+        }
+        
+        showingAlert = true
     }
 }
 
