@@ -111,14 +111,17 @@ struct ProjectCardView: View {
         .alert("Delete Project", isPresented: $showingDeleteAlert) {
             Button("Cancel", role: .cancel) { }
             Button("Delete", role: .destructive) {
-                projectVM.deleteProjectPermanently(project) { success, error in
-                    if !success {
-                        print("❌ Failed to delete project: \(error ?? "Unknown error")")
-                    }
-                }
+                deleteProject()
             }
         } message: {
             Text("Are you sure you want to permanently delete '\(project.name)'? This action cannot be undone.")
+        }
+    }
+    
+    private func deleteProject() {
+        Task {
+            await projectVM.deleteProjectPermanently(project)
+            // Remove the completion handler since the method is now async
         }
     }
 }

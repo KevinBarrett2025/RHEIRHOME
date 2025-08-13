@@ -1,282 +1,334 @@
-//  DashboardView.swift
-//  RheirMultiplatformApp
-
 import SwiftUI
+import Charts
 
 struct DashboardView: View {
     @EnvironmentObject private var projectVM: ProjectViewModel
     @EnvironmentObject private var authVM: AuthViewModel
-
+    @State private var selectedTimeRange = TimeRange.thisMonth
+    @State private var showingNewProjectSheet = false
+    
     var body: some View {
-        VStack(spacing: 0) {
-            // CRITICAL FIX: Add UniversalHeaderView for consistency
-            UniversalHeaderView()
-                .environmentObject(authVM)
-                .environmentObject(projectVM)
-            
+        NavigationView {
             ScrollView {
-                VStack(spacing: 16) {
-                    if let p = projectVM.selectedProject {
-                        // Enhanced project overview card
-                        projectOverviewCard(for: p)
+                LazyVStack(spacing: 20) {
+                    // Header
+                    HStack {
+                        VStack(alignment: .leading) {
+                            Text("Dashboard")
+                                .font(.largeTitle)
+                                .fontWeight(.bold)
+                            
+                            if let org = projectVM.currentOrganization {
+                                Text(org.name)
+                                    .font(.subheadline)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
                         
-                        // Key metrics grid
-                        keyMetricsGrid(for: p)
+                        Spacer()
                         
-                        // Quick actions section
-                        quickActionsSection
-                    } else {
-                        emptyDashboardState
+                        Button(action: { showingNewProjectSheet = true }) {
+                            Image(systemName: "plus.circle.fill")
+                                .font(.system(size: 28))
+                                .foregroundColor(.blue)
+                        }
                     }
+                    .padding(.horizontal)
+                    
+                    // Quick Stats
+                    quickStatsView
+                    
+                    // Recent Activity
+                    recentActivityView
+                    
+                    // Active Projects
+                    activeProjectsView
                 }
-                .padding()
+                .padding(.top)
+            }
+            .refreshable {
+                await projectVM.loadProjects()
+            }
+            .sheet(isPresented: $showingNewProjectSheet) {
+                NewProjectView(isPresented: $showingNewProjectSheet)
             }
         }
-        .navigationTitle("")
-        .navigationBarHidden(true)
+        .onAppear {
+            Task {
+                await projectVM.loadProjects()
+            }
+        }
     }
     
-    @ViewBuilder
-    private func projectOverviewCard(for project: Project) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Project Overview")
+    private var quickStatsView: some View {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 2), spacing: 16) {
+            DashboardStatCard(
+                title: "Active Projects",
+                value: "\(projectVM.organizationProjects.filter { $0.status == .active }.count)",
+                icon: "building.2.fill",
+                color: .blue
+            )
+            
+            DashboardStatCard(
+                title: "Completed",
+                value: "\(projectVM.organizationProjects.filter { $0.status == .completed }.count)",
+                icon: "checkmark.circle.fill",
+                color: .green
+            )
+            
+            DashboardStatCard(
+                title: "Total Budget",
+                value: totalBudget,
+                icon: "dollarsign.circle.fill",
+                color: .orange
+            )
+            
+            DashboardStatCard(
+                title: "Past Due",
+                value: "\(pastDueCount)",
+                icon: "exclamationmark.triangle.fill",
+                color: .red
+            )
+        }
+        .padding(.horizontal)
+    }
+    
+    private var recentActivityView: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Recent Activity")
                     .font(.headline)
                     .fontWeight(.semibold)
-                
-                Text(project.name)
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .foregroundColor(.blue)
-                
-                Text("Client: \(project.client)")
-                    .font(.subheadline)
+                Spacer()
+            }
+            .padding(.horizontal)
+            
+            if recentProjects.isEmpty {
+                Text("No recent activity")
                     .foregroundColor(.secondary)
-            }
-            
-            // Project progress bar
-            let totalSpent = projectVM.spentGeneralConditions + projectVM.spentMaterials + projectVM.spentContingency
-            let budgetProgress = project.totalBudget > 0 ? totalSpent / project.totalBudget : 0
-            
-            VStack(spacing: 8) {
-                HStack {
-                    Text("Budget Progress")
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                    
-                    Spacer()
-                    
-                    Text("\(Int(budgetProgress * 100))%")
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                        .foregroundColor(budgetProgress > 1.0 ? .red : .blue)
+                    .padding()
+            } else {
+                ForEach(recentProjects.prefix(3), id: \.id) { project in
+                    ActivityCard(project: project)
                 }
-                
-                ProgressView(value: min(budgetProgress, 1.0))
-                    .progressViewStyle(LinearProgressViewStyle(tint: budgetProgress > 1.0 ? .red : .blue))
+                .padding(.horizontal)
             }
+        }
+    }
+    
+    private var activeProjectsView: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Active Projects")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                Spacer()
+                
+                NavigationLink("View All") {
+                    ProjectsListView()
+                }
+                .font(.subheadline)
+            }
+            .padding(.horizontal)
+            
+            if activeProjects.isEmpty {
+                Text("No active projects")
+                    .foregroundColor(.secondary)
+                    .padding()
+            } else {
+                ForEach(activeProjects.prefix(5), id: \.id) { project in
+                    ProjectCard(project: project)
+                }
+                .padding(.horizontal)
+            }
+        }
+    }
+    
+    // MARK: - Computed Properties
+    
+    private var activeProjects: [Project] {
+        projectVM.organizationProjects.filter { $0.status == .active }
+    }
+    
+    private var recentProjects: [Project] {
+        let calendar = Calendar.current
+        let oneWeekAgo = calendar.date(byAdding: .day, value: -7, to: Date()) ?? Date()
+        
+        return projectVM.organizationProjects
+            .filter { $0.lastModifiedDate > oneWeekAgo }
+            .sorted { $0.lastModifiedDate > $1.lastModifiedDate }
+    }
+    
+    private var totalBudget: String {
+        let total = projectVM.organizationProjects
+            .filter { $0.status == .active }
+            .reduce(0) { $0 + $1.totalBudget }
+        return total.formatted(.currency(code: "USD"))
+    }
+    
+    private var pastDueCount: Int {
+        let today = Date()
+        return projectVM.organizationProjects.filter { 
+            $0.status == .active && $0.endDate < today 
+        }.count
+    }
+}
+
+struct DashboardStatCard: View {
+    let title: String
+    let value: String
+    let icon: String
+    let color: Color
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Image(systemName: icon)
+                    .foregroundColor(color)
+                Spacer()
+            }
+            
+            Text(value)
+                .font(.title2)
+                .fontWeight(.bold)
+            
+            Text(title)
+                .font(.caption)
+                .foregroundColor(.secondary)
         }
         .padding()
         .background(Color(.systemGray6))
         .cornerRadius(12)
     }
-    
-    @ViewBuilder
-    private func keyMetricsGrid(for project: Project) -> some View {
-        LazyVGrid(columns: [
-            GridItem(.flexible()),
-            GridItem(.flexible())
-        ], spacing: 16) {
-            DashboardMetricCard(
-                title: "Labor Budget",
-                value: project.laborCost.formatAsCurrency(),
-                subtitle: "Allocated",
-                icon: "person.2.fill",
-                color: .blue
-            )
-            
-            DashboardMetricCard(
-                title: "Material Expenses",
-                value: projectVM.spentMaterials.formatAsCurrency(),
-                subtitle: "Spent",
-                icon: "hammer.fill",
-                color: .orange
-            )
-            
-            DashboardMetricCard(
-                title: "Total Budget",
-                value: project.totalBudget.formatAsCurrency(),
-                subtitle: "Available",
-                icon: "dollarsign.circle.fill",
-                color: .green
-            )
-            
-            DashboardMetricCard(
-                title: "General Conditions",
-                value: projectVM.spentGeneralConditions.formatAsCurrency(),
-                subtitle: "Spent",
-                icon: "building.2.fill",
-                color: .purple
-            )
-        }
-    }
-    
-    @ViewBuilder
-    private var quickActionsSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Quick Actions")
-                .font(.headline)
-                .fontWeight(.semibold)
-            
-            VStack(spacing: 12) {
-                QuickActionCard(
-                    icon: "receipt.fill",
-                    title: "Add Receipt",
-                    description: "Scan or manually add a new receipt",
-                    color: .blue
-                ) {
-                    // TODO: Navigate to receipt scanner
-                }
-                
-                QuickActionCard(
-                    icon: "clock.fill",
-                    title: "Log Hours",
-                    description: "Record team member work hours",
-                    color: .green
-                ) {
-                    // TODO: Navigate to log hours
-                }
-                
-                QuickActionCard(
-                    icon: "plus.circle.fill",
-                    title: "Add Progress",
-                    description: "Log daily progress and photos",
-                    color: .orange
-                ) {
-                    // TODO: Navigate to add progress
-                }
-                
-                QuickActionCard(
-                    icon: "chart.pie.fill",
-                    title: "View Budget",
-                    description: "See detailed budget breakdown",
-                    color: .purple
-                ) {
-                    // TODO: Navigate to budget breakdown
-                }
-            }
-        }
-    }
-    
-    @ViewBuilder
-    private var emptyDashboardState: some View {
-        VStack(spacing: 20) {
-            Image(systemName: "chart.bar.fill")
-                .font(.system(size: 60))
-                .foregroundColor(.secondary)
-            
-            Text("Welcome to RHEIR")
-                .font(.title2)
-                .fontWeight(.bold)
-            
-            Text("Select a project to view your dashboard overview and key metrics.")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal)
-            
-            Button("Get Started") {
-                // TODO: Navigate to project selection or creation
-            }
-            .buttonStyle(.borderedProminent)
-        }
-        .padding(.vertical, 40)
-    }
 }
 
-// MARK: - Supporting Views
-
-struct DashboardMetricCard: View {
-    let title: String
-    let value: String
-    let subtitle: String
-    let icon: String
-    let color: Color
+struct ActivityCard: View {
+    let project: Project
     
     var body: some View {
-        VStack(spacing: 12) {
-            HStack {
-                Image(systemName: icon)
-                    .font(.title2)
-                    .foregroundColor(color)
-                
-                Spacer()
-            }
-            
+        HStack {
             VStack(alignment: .leading, spacing: 4) {
-                Text(value)
-                    .font(.headline)
-                    .fontWeight(.bold)
-                
-                Text(title)
-                    .font(.caption)
+                Text(project.name)
+                    .font(.subheadline)
                     .fontWeight(.medium)
-                    .foregroundColor(.primary)
                 
-                Text(subtitle)
-                    .font(.caption2)
+                Text("Updated \(timeAgoString(from: project.lastModifiedDate))")
+                    .font(.caption)
                     .foregroundColor(.secondary)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            
+            Spacer()
+            
+            Circle()
+                .fill(statusColor(for: project.status))
+                .frame(width: 8, height: 8)
         }
         .padding()
-        .background(color.opacity(0.1))
-        .cornerRadius(12)
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(color.opacity(0.3), lineWidth: 1)
-        )
+        .background(Color(.systemGray6))
+        .cornerRadius(10)
+    }
+    
+    private func statusColor(for status: ProjectStatus) -> Color {
+        switch status {
+        case .active: return .blue
+        case .completed: return .green
+        case .onHold: return .orange
+        case .cancelled: return .red
+        case .planning: return .gray
+        }
+    }
+    
+    private func timeAgoString(from date: Date) -> String {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .short
+        return formatter.localizedString(for: date, relativeTo: Date())
     }
 }
 
-struct DashboardView_Previews: PreviewProvider {
-    static var previews: some View {
-        // match your Project initializer exactly
-        let sampleProject = Project(
-            id: UUID(),
-            name: "Demo Project",
-            client: "Acme Corp",
-            phone: "",
-            street: "",
-            city: "",
-            state: "",
-            zip: "",
-            notes: "",
-            totalBudget: 5_000,
-            materialCost:      200,
-            laborCost:         300,
-            generalConditions: 100,
-            contingency:       50,
-            spentContingency:  25,
-            profit:            500,
-            startDate: .now.addingTimeInterval(-86_400),
-            endDate:   .now.addingTimeInterval(86_400),
-            loggedHours:    [],
-            tasks:          [],
-            communications: [],
-            progressLogs:   [],
-            changeOrders:   [],
-            receipts:       [],
-            taskTemplates:  [],
-            status: .active
-        )
-
-        let vm = ProjectViewModel(offlineDataManager: OfflineDataManager())
-        vm.organizationProjects = [sampleProject]
-        vm.selectedProject = sampleProject
-
-        return DashboardView()
-            .environmentObject(vm)
-            .environmentObject(AuthViewModel(service: PreviewAuthService()))
+struct ProjectCard: View {
+    let project: Project
+    
+    var body: some View {
+        NavigationLink(destination: ProjectDetailView(project: project)) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text(project.name)
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.primary)
+                    
+                    Spacer()
+                    
+                    Text(project.totalBudget.formatted(.currency(code: "USD")))
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundColor(.green)
+                }
+                
+                Text(project.client)
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                
+                ProgressView(value: project.budgetUtilization, total: 1.0)
+                    .progressViewStyle(LinearProgressViewStyle())
+                
+                HStack {
+                    Text("\(Int(project.budgetUtilization * 100))% Complete")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    Spacer()
+                    
+                    Text("Due: \(project.endDate.formatted(date: .abbreviated, time: .omitted))")
+                        .font(.caption)
+                        .foregroundColor(project.isPastDue ? .red : .secondary)
+                }
+            }
+            .padding()
+            .background(Color(.systemGray6))
+            .cornerRadius(12)
+        }
+        .buttonStyle(PlainButtonStyle())
     }
+}
+
+enum TimeRange: String, CaseIterable {
+    case thisWeek = "This Week"
+    case thisMonth = "This Month"
+    case thisQuarter = "This Quarter"
+    case thisYear = "This Year"
+}
+
+#Preview {
+    NavigationView {
+        DashboardView()
+    }
+    .environmentObject({
+        let projectVM = ProjectViewModel(offlineDataManager: OfflineDataManager())
+        
+        // Add sample project with correct constructor
+        let sampleProject = Project(
+            name: "Sample House",
+            client: "John Doe",
+            clientEmail: "john.doe@email.com",
+            clientPhone: "(555) 123-4567", 
+            clientAddress: "123 Main St, Anytown, CA 12345",
+            description: "Sample project for testing",
+            totalBudget: 50000,
+            materialCost: 25000,
+            laborCost: 15000,
+            generalConditions: 5000,
+            contingency: 5000,
+            startDate: Date(),
+            endDate: Date(),
+            organizationID: "sample-org-id"
+        )
+        
+        Task { @MainActor in
+            await projectVM.addProject(sampleProject)
+        }
+        
+        return projectVM
+    }())
+    .environmentObject(AuthViewModel(service: PreviewAuthService()))
 }

@@ -206,9 +206,11 @@ struct TeamManagementSection: View {
             cleanTask.photoIDs = []
             return cleanTask
         }
-        
-        projectViewModel.updateProject(cleanProject)
-        
+
+        Task {
+            await projectViewModel.updateProject(cleanProject)
+        }
+
         environmentInfo = """
         🧹 PHOTOS REMOVED!
         

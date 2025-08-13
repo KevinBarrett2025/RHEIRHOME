@@ -286,7 +286,7 @@ struct LandingPageView: View {
                             HStack {
                                 ProgressView()
                                     .scaleEffect(0.7)
-                                Text(viewModel.bulkSyncProgress)
+                                Text(viewModel.bulkSyncProgressText)
                                     .font(.caption2)
                                     .foregroundColor(.blue)
                             }
@@ -495,7 +495,8 @@ struct LandingPageView: View {
 // MARK: - Preview with Real Services
 struct LandingPageView_Previews: PreviewProvider {
     static var previews: some View {
-        let vm = ProjectViewModel()
+        let offlineDataManager = OfflineDataManager()
+        let vm = ProjectViewModel(offlineDataManager: offlineDataManager)
         let authVM = AuthViewModel(service: PreviewAuthService()) 
         return LandingPageView(selectedTab: .constant(Tab.projects))
             .environmentObject(vm)

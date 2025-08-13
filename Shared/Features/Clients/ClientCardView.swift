@@ -123,8 +123,8 @@ struct ClientCardView: View {
                 .padding(.top, 4)
             }
             
-            if !project.notes.isEmpty {
-                Text(project.notes)
+            if !project.description.isEmpty {
+                Text(project.description)
                     .font(.caption)
                     .foregroundColor(.secondary)
                     .lineLimit(3)
@@ -268,19 +268,15 @@ struct ClientCardView_Previews: PreviewProvider {
         let sampleProject = Project(
             name: "Sample House",
             client: "John Doe",
-            phone: "(555) 123-4567",
-            email: "john.doe@email.com",
-            street: "123 Main St",
-            city: "Anytown",
-            state: "CA",
-            zip: "12345",
-            notes: "This is a sample project with notes",
+            clientEmail: "john.doe@email.com",
+            clientPhone: "(555) 123-4567",
+            clientAddress: "123 Main St, Anytown, CA 12345",
+            description: "This is a sample project with notes",
             totalBudget: 50000,
             materialCost: 25000,
             laborCost: 15000,
             generalConditions: 5000,
             contingency: 5000,
-            
             startDate: Date(),
             endDate: Date(),
             organizationID: "sample-org-id"

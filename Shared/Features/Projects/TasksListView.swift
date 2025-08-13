@@ -162,7 +162,9 @@ struct TasksListView: View {
     private var newTaskSheet: some View {
         if let project = projectVM.selectedProject {
             TaskCreateEditView(project: project, onSave: { task in
-                projectVM.addTask(task)
+                Task {
+                    await projectVM.addTask(task, to: project.id)
+                }
                 showingNewTask = false
             })
             .environmentObject(projectVM)
@@ -299,15 +301,20 @@ struct TasksListView: View {
     // MARK: - Task Actions
     
     private func markTaskCompleted(_ task: ProjectTask) {
-        guard let currentUserID = getCurrentUserID() else { return }
+        guard let currentUserID = getCurrentUserID(),
+              let project = projectVM.selectedProject else { return }
         
         var completedTask = task
         completedTask.markCompleted(by: [UUID(uuidString: currentUserID) ?? UUID()], notes: "Marked complete")
         
-        projectVM.updateTask(completedTask)
+        Task {
+            await projectVM.updateTask(completedTask, in: project.id)
+        }
     }
     
     private func reopenTask(_ task: ProjectTask) {
+        guard let project = projectVM.selectedProject else { return }
+        
         var reopenedTask = task
         reopenedTask.isCompleted = false
         reopenedTask.completedDate = nil
@@ -315,11 +322,17 @@ struct TasksListView: View {
         reopenedTask.completionNotes = ""
         reopenedTask.updatedAt = Date()
         
-        projectVM.updateTask(reopenedTask)
+        Task {
+            await projectVM.updateTask(reopenedTask, in: project.id)
+        }
     }
     
     private func deleteTask(_ task: ProjectTask) {
-        projectVM.deleteTask(task)
+        guard let project = projectVM.selectedProject else { return }
+        
+        Task {
+            await projectVM.deleteTask(task, from: project.id)
+        }
     }
     
     private func getCurrentUserID() -> String? {
@@ -672,16 +685,21 @@ struct TaskDetailView: View {
     }
     
     private func markTaskCompleted() {
-        guard let currentUserID = getCurrentUserID() else { return }
+        guard let currentUserID = getCurrentUserID(),
+              let project = projectVM.selectedProject else { return }
         
         var completedTask = task
         completedTask.markCompleted(by: [UUID(uuidString: currentUserID) ?? UUID()], notes: "Marked complete")
         
-        projectVM.updateTask(completedTask)
+        Task {
+            await projectVM.updateTask(completedTask, in: project.id)
+        }
         dismiss()
     }
     
     private func reopenTask() {
+        guard let project = projectVM.selectedProject else { return }
+        
         var reopenedTask = task
         reopenedTask.isCompleted = false
         reopenedTask.completedDate = nil
@@ -689,12 +707,18 @@ struct TaskDetailView: View {
         reopenedTask.completionNotes = ""
         reopenedTask.updatedAt = Date()
         
-        projectVM.updateTask(reopenedTask)
+        Task {
+            await projectVM.updateTask(reopenedTask, in: project.id)
+        }
         dismiss()
     }
     
     private func deleteTask() {
-        projectVM.deleteTask(task)
+        guard let project = projectVM.selectedProject else { return }
+        
+        Task {
+            await projectVM.deleteTask(task, from: project.id)
+        }
         dismiss()
     }
     

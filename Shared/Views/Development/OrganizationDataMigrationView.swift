@@ -104,9 +104,9 @@ struct OrganizationDataMigrationView: View {
                 .font(.headline)
             
             let vendorAnalytics = Array(projectViewModel.getOrganizationVendorSpendingAnalytics().prefix(5))
-            ForEach(vendorAnalytics, id: \.vendor.id) { analytics in
+            ForEach(Array(vendorAnalytics.enumerated()), id: \.offset) { index, analytics in
                 HStack {
-                    Text(analytics.vendor.name)
+                    Text(analytics.vendor)
                         .font(.caption)
                     Spacer()
                     Text("$\(analytics.amount, specifier: "%.2f")")
@@ -124,9 +124,9 @@ struct OrganizationDataMigrationView: View {
                 .padding(.top)
             
             let paymentAnalytics = Array(projectViewModel.getOrganizationPaymentMethodSpendingAnalytics().prefix(5))
-            ForEach(paymentAnalytics, id: \.paymentMethod.id) { analytics in
+            ForEach(Array(paymentAnalytics.enumerated()), id: \.offset) { index, analytics in
                 HStack {
-                    Text(analytics.paymentMethod.name)
+                    Text(analytics.paymentMethod)
                         .font(.caption)
                     Spacer()
                     Text("$\(analytics.amount, specifier: "%.2f")")

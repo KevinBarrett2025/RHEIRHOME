@@ -236,112 +236,108 @@ struct SettingsView: View {
     @ViewBuilder
     private var debugSection: some View {
         Section("Debug & Testing") {
-            Group {
-                NavigationLink(destination: CloudKitDebugView()) {
-                    HStack {
-                        Image(systemName: "icloud.and.arrow.up.fill")
-                            .foregroundColor(.blue)
-                            .frame(width: 24)
-                        
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("CloudKit Debug Console")
-                                .font(.headline)
-                            Text("Test zone creation and sharing")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                        
-                        Spacer()
-                        
-                        Image(systemName: "chevron.right")
+            NavigationLink(destination: CloudKitDebugView()) {
+                HStack {
+                    Image(systemName: "icloud.and.arrow.up.fill")
+                        .foregroundColor(.blue)
+                        .frame(width: 24)
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("CloudKit Debug Console")
+                            .font(.headline)
+                        Text("Test zone creation and sharing")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
-                }
-                
-                NavigationLink(destination: CloudKitDataView()) {
-                    HStack {
-                        Image(systemName: "cylinder.fill")
-                            .foregroundColor(.green)
-                            .frame(width: 24)
-                        
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("CloudKit Data Browser")
-                                .font(.headline)
-                            Text("View raw CloudKit records")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                        
-                        Spacer()
-                        
-                        Image(systemName: "chevron.right")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
+                    
+                    Spacer()
+                    
+                    Image(systemName: "chevron.right")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                 }
             }
             
-            Group {
-                // MIGRATION SECTION - CRITICAL FIX
-                Button("Fix Team Member Labor Hours") {
-                    let migrationStatus = projectVM.getLaborHoursMigrationStatus()
+            NavigationLink(destination: CloudKitDataView()) {
+                HStack {
+                    Image(systemName: "cylinder.fill")
+                        .foregroundColor(.green)
+                        .frame(width: 24)
                     
-                    if projectVM.needsLaborHoursMigration {
-                        projectVM.migrateLaborHoursToTeamMemberIDs()
-                        alertMessage = "✅ Migration completed!\n\n" + projectVM.getLaborHoursMigrationStatus()
-                    } else {
-                        alertMessage = "ℹ️ No migration needed.\n\n" + migrationStatus
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("CloudKit Data Browser")
+                            .font(.headline)
+                        Text("View raw CloudKit records")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
                     }
                     
-                    showingAlert = true
-                }
-                .foregroundColor(.purple)
-                
-                Button("🆘 Emergency Data Recovery") {
-                    Task {
-                        let recoveryReport = await projectVM.emergencyDataRecovery()
-                        await MainActor.run {
-                            alertMessage = recoveryReport
-                            showingAlert = true
-                        }
-                    }
-                }
-                .foregroundColor(.red)
-                
-                Button("Show Labor Hours Migration Status") {
-                    alertMessage = projectVM.getLaborHoursMigrationStatus()
-                    showingAlert = true
-                }
-                .foregroundColor(.blue)
-                
-                Button("Clear Pending Invites") {
-                    UserDefaults.standard.removeObject(forKey: "pending_invite_orgID")
-                    UserDefaults.standard.removeObject(forKey: "pending_invite_orgName")
-                    UserDefaults.standard.removeObject(forKey: "pending_invite_token")
+                    Spacer()
                     
-                    alertMessage = "Cleared all pending invite data"
-                    showingAlert = true
+                    Image(systemName: "chevron.right")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                 }
-                .foregroundColor(.orange)
-                
-                Button("Show UserDefaults Keys") {
-                    let keys = UserDefaults.standard.dictionaryRepresentation().keys
-                    let rheirKeys = keys.filter { $0.contains("invite") || $0.contains("org") || $0.contains("RHEIR") }
-                    
-                    alertMessage = "RHEIR-related keys:\n\(rheirKeys.joined(separator: "\n"))"
-                    showingAlert = true
-                }
-                .foregroundColor(.blue)
-                
-                Button("Force Zone Recreation") {
-                    Task {
-                        statusMessage = await authVM.repairMissingOrganizationZones()
-                        showingStatusAlert = true
-                    }
-                }
-                .foregroundColor(.red)
             }
+            
+            // MIGRATION SECTION - CRITICAL FIX
+            Button("Fix Team Member Labor Hours") {
+                let migrationStatus = projectVM.getLaborHoursMigrationStatus()
+                
+                if projectVM.needsLaborHoursMigration {
+                    projectVM.migrateLaborHoursToTeamMemberIDs()
+                    alertMessage = "✅ Migration completed!\n\n" + projectVM.getLaborHoursMigrationStatus()
+                } else {
+                    alertMessage = "ℹ️ No migration needed.\n\n" + migrationStatus
+                }
+                
+                showingAlert = true
+            }
+            .foregroundColor(.purple)
+            
+            Button("🆘 Emergency Data Recovery") {
+                Task {
+                    let recoveryReport = await projectVM.emergencyDataRecovery()
+                    await MainActor.run {
+                        alertMessage = recoveryReport
+                        showingAlert = true
+                    }
+                }
+            }
+            .foregroundColor(.red)
+            
+            Button("Show Labor Hours Migration Status") {
+                alertMessage = projectVM.getLaborHoursMigrationStatus()
+                showingAlert = true
+            }
+            .foregroundColor(.blue)
+            
+            Button("Clear Pending Invites") {
+                UserDefaults.standard.removeObject(forKey: "pending_invite_orgID")
+                UserDefaults.standard.removeObject(forKey: "pending_invite_orgName")
+                UserDefaults.standard.removeObject(forKey: "pending_invite_token")
+                
+                alertMessage = "Cleared all pending invite data"
+                showingAlert = true
+            }
+            .foregroundColor(.orange)
+            
+            Button("Show UserDefaults Keys") {
+                let keys = UserDefaults.standard.dictionaryRepresentation().keys
+                let rheirKeys = keys.filter { $0.contains("invite") || $0.contains("org") || $0.contains("RHEIR") }
+                
+                alertMessage = "RHEIR-related keys:\n\(rheirKeys.joined(separator: "\n"))"
+                showingAlert = true
+            }
+            .foregroundColor(.blue)
+            
+            Button("Force Zone Recreation") {
+                Task {
+                    statusMessage = await authVM.repairMissingOrganizationZones()
+                    showingStatusAlert = true
+                }
+            }
+            .foregroundColor(.red)
         }
     }
     

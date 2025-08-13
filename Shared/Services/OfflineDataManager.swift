@@ -7,6 +7,14 @@ import Network
 /// Ensures full functionality even in areas with poor/no internet connectivity
 class OfflineDataManager: ObservableObject {
     
+    // MARK: - PHASE 1 BRIDGE: Published Properties for ProjectViewModel Compatibility
+    
+    /// Published properties that ProjectViewModel expects - bridging architectural gap
+    @Published var projects: [Project] = []
+    @Published var teamMembers: [TeamMember] = []
+    @Published var vendors: [Vendor] = []
+    @Published var paymentMethods: [PaymentMethod] = []
+    
     // MARK: - Offline Strategy
     /*
      OFFLINE-FIRST ARCHITECTURE:
@@ -58,8 +66,173 @@ class OfflineDataManager: ObservableObject {
         setupNetworkMonitoring()
         setupSyncQueue()
         loadOfflineState()
+        loadDataIntoPublishedProperties()
         
         print("📱 OfflineDataManager initialized - Offline-first mode active")
+        print("🔗 Bridge activated - @Published properties loaded for ProjectViewModel compatibility")
+    }
+    
+    // MARK: - PHASE 1 BRIDGE: Load Data into @Published Properties
+    
+    private func loadDataIntoPublishedProperties() {
+        // Load projects from offline storage into @Published property
+        self.projects = loadProjectsOffline()
+        
+        // Load other data types (stubs for now - will be implemented as needed)
+        self.teamMembers = loadTeamMembersOffline()
+        self.vendors = loadVendorsOffline()
+        self.paymentMethods = loadPaymentMethodsOffline()
+        
+        print("🔗 Bridge loaded: \(projects.count) projects, \(teamMembers.count) team members, \(vendors.count) vendors, \(paymentMethods.count) payment methods")
+    }
+    
+    // MARK: - PHASE 1 BRIDGE: Convenience CRUD Methods (Wrap Offline Methods)
+    
+    /// Convenience method that ProjectViewModel expects - wraps saveProjectOffline
+    func addProject(_ project: Project) {
+        // Save using existing offline method
+        let success = saveProjectOffline(project)
+        
+        if success {
+            // Update @Published property for reactive UI
+            if !projects.contains(where: { $0.id == project.id }) {
+                projects.append(project)
+            }
+            print("🔗 Bridge: addProject - Project added to @Published array")
+        }
+    }
+    
+    /// Convenience method that ProjectViewModel expects - wraps saveProjectOffline  
+    func updateProject(_ project: Project) {
+        // Save using existing offline method
+        let success = saveProjectOffline(project)
+        
+        if success {
+            // Update @Published property for reactive UI
+            if let index = projects.firstIndex(where: { $0.id == project.id }) {
+                projects[index] = project
+            } else {
+                projects.append(project)
+            }
+            print("🔗 Bridge: updateProject - Project updated in @Published array")
+        }
+    }
+    
+    /// Convenience method that ProjectViewModel expects
+    func deleteProject(_ project: Project) {
+        // Remove from @Published property for reactive UI
+        projects.removeAll { $0.id == project.id }
+        
+        // Remove from offline storage
+        deleteProjectFromOfflineStorage(project)
+        
+        print("🔗 Bridge: deleteProject - Project removed from @Published array and offline storage")
+    }
+    
+    /// Convenience method that ProjectViewModel expects
+    func deleteProjectPermanently(_ project: Project) {
+        // Same as deleteProject for offline-first architecture
+        deleteProject(project)
+        print("🔗 Bridge: deleteProjectPermanently - Project permanently deleted")
+    }
+    
+    /// Convenience method for team member management
+    func addTeamMember(_ teamMember: TeamMember) {
+        // Add to @Published property
+        if !teamMembers.contains(where: { $0.id == teamMember.id }) {
+            teamMembers.append(teamMember)
+        }
+        
+        // Save offline (stub implementation)
+        saveTeamMemberOffline(teamMember)
+        print("🔗 Bridge: addTeamMember - Team member added")
+    }
+    
+    /// Convenience method for team member management
+    func updateTeamMember(_ teamMember: TeamMember) {
+        // Update @Published property
+        if let index = teamMembers.firstIndex(where: { $0.id == teamMember.id }) {
+            teamMembers[index] = teamMember
+        } else {
+            teamMembers.append(teamMember)
+        }
+        
+        // Save offline (stub implementation)
+        saveTeamMemberOffline(teamMember)
+        print("🔗 Bridge: updateTeamMember - Team member updated")
+    }
+    
+    /// Convenience method for team member management
+    func removeTeamMember(_ teamMember: TeamMember) {
+        // Remove from @Published property
+        teamMembers.removeAll { $0.id == teamMember.id }
+        
+        // Remove from offline storage (stub implementation)
+        deleteTeamMemberFromOfflineStorage(teamMember)
+        print("🔗 Bridge: removeTeamMember - Team member removed")
+    }
+    
+    /// Convenience method for vendor/payment method updates
+    func updateVendors(_ vendors: [Vendor]) {
+        self.vendors = vendors
+        // TODO: Save to offline storage when needed
+        print("🔗 Bridge: updateVendors - \(vendors.count) vendors updated")
+    }
+    
+    /// Convenience method for vendor/payment method updates
+    func updatePaymentMethods(_ paymentMethods: [PaymentMethod]) {
+        self.paymentMethods = paymentMethods  
+        // TODO: Save to offline storage when needed
+        print("🔗 Bridge: updatePaymentMethods - \(paymentMethods.count) payment methods updated")
+    }
+    
+    /// Convenience method for project list updates
+    func updateProjects(_ projects: [Project]) {
+        self.projects = projects
+        // Save each project offline
+        for project in projects {
+            _ = saveProjectOffline(project)
+        }
+        print("🔗 Bridge: updateProjects - \(projects.count) projects updated")
+    }
+    
+    // MARK: - PHASE 1 BRIDGE: Stub Data Loading Methods
+    
+    private func loadTeamMembersOffline() -> [TeamMember] {
+        // TODO: Implement team member offline storage
+        // For now, return empty array
+        return []
+    }
+    
+    private func loadVendorsOffline() -> [Vendor] {
+        // TODO: Implement vendor offline storage  
+        // For now, return empty array
+        return []
+    }
+    
+    private func loadPaymentMethodsOffline() -> [PaymentMethod] {
+        // TODO: Implement payment method offline storage
+        // For now, return empty array
+        return []
+    }
+    
+    private func saveTeamMemberOffline(_ teamMember: TeamMember) {
+        // TODO: Implement team member offline storage
+        print("💾 TODO: saveTeamMemberOffline - \(teamMember.name)")
+    }
+    
+    private func deleteProjectFromOfflineStorage(_ project: Project) {
+        // TODO: Implement project deletion from offline storage
+        // For now, this is handled by saveProjects filtering
+        var allProjects = loadProjectsOffline()
+        allProjects.removeAll { $0.id == project.id }
+        _ = offlineStorageManager.saveProjects(allProjects)
+        print("💾 deleteProjectFromOfflineStorage - \(project.name)")
+    }
+    
+    private func deleteTeamMemberFromOfflineStorage(_ teamMember: TeamMember) {
+        // TODO: Implement team member deletion from offline storage
+        print("💾 TODO: deleteTeamMemberFromOfflineStorage - \(teamMember.name)")
     }
     
     // MARK: - Network Monitoring
@@ -377,7 +550,7 @@ class OfflineStorageManager {
         return projects
     }
     
-    private func saveProjects(_ projects: [Project]) -> Bool {
+    func saveProjects(_ projects: [Project]) -> Bool {
         guard let data = try? JSONEncoder().encode(projects) else { return false }
         
         do {

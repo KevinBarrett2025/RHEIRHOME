@@ -70,21 +70,21 @@ struct EnhancedTeamManagementView: View {
                 }
                 
                 HStack(spacing: 20) {
-                    StatCard(
+                    TeamManagementStatCard(
                         title: "Team Members",
                         value: "\(org.members.count)",
                         icon: "person.2.fill",
                         color: .blue
                     )
                     
-                    StatCard(
+                    TeamManagementStatCard(
                         title: "Projects",
                         value: "\(projectVM.projects.count)",
                         icon: "folder.fill",
                         color: .green
                     )
                     
-                    StatCard(
+                    TeamManagementStatCard(
                         title: "Pending",
                         value: "\(pendingInvites.count)",
                         icon: "clock.fill",
@@ -273,31 +273,33 @@ struct EnhancedTeamManagementView: View {
     }
 }
 
-struct StatCard: View {
+// MARK: - Team Management Statistics Card
+
+struct TeamManagementStatCard: View {
     let title: String
     let value: String
     let icon: String
     let color: Color
     
     var body: some View {
-        VStack(spacing: 8) {
-            Image(systemName: icon)
-                .font(.title2)
-                .foregroundColor(color)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Image(systemName: icon)
+                    .foregroundColor(color)
+                Spacer()
+            }
             
             Text(value)
                 .font(.title2)
                 .fontWeight(.bold)
-                .foregroundColor(color)
             
             Text(title)
                 .font(.caption)
                 .foregroundColor(.secondary)
         }
-        .frame(maxWidth: .infinity)
         .padding()
-        .background(color.opacity(0.1))
-        .cornerRadius(10)
+        .background(Color(.systemGray6))
+        .cornerRadius(12)
     }
 }
 
@@ -694,8 +696,8 @@ struct ProjectSelectionRow: View {
                             .foregroundColor(.blue)
                     }
                     
-                    if !project.fullAddress.isEmpty {
-                        Label(project.fullAddress, systemImage: "location.fill")
+                    if let address = project.clientAddress, !address.isEmpty {
+                        Label(address, systemImage: "location.fill")
                             .font(.caption)
                             .foregroundColor(.secondary)
                             .lineLimit(1)

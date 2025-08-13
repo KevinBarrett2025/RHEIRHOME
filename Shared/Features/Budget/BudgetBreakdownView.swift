@@ -479,7 +479,9 @@ struct BudgetBreakdownContentView: View {
     private func closeProject(_ project: Project) {
         var copy = project
         copy.status = .completed
-        projectVM.updateProject(copy)
+        Task {
+            await projectVM.updateProject(copy)
+        }
         selectedTab = .company
     }
 }
@@ -826,6 +828,7 @@ struct SpendingByVendorView: View {
     
     private var vendorSpending: [VendorSpendingItem] {
         guard let project = project else { return [] }
+        
         return calculateVendorSpending(for: project)
     }
     

@@ -817,9 +817,11 @@ struct OrganizationDebugView: View {
         //         showingAlert = true
         //     }
         // }
-        
-        // Temporary implementation - update organization ID directly
-        projectVM.organizationDidChange(org.id)
+
+        Task {
+            await projectVM.organizationDidChange(org.id)
+        }
+
         alertMessage = "✅ Organization ID updated to \(org.id.prefix(8))..."
         showingAlert = true
     }

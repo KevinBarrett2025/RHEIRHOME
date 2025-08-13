@@ -59,34 +59,20 @@ struct ProjectDetailView_Previews: PreviewProvider {
     static var previews: some View {
         ProjectDetailView(
             project: Project(
-                id: UUID(),
                 name: "Sample Project",
                 client: "Sample Client",
-                phone: "(555) 123-4567",
-                email: "client@example.com",
-                street: "123 Main St",
-                city: "Anytown",
-                state: "CA",
-                zip: "12345",
-                notes: "Sample project notes",
+                clientEmail: "client@example.com",
+                clientPhone: "(555) 123-4567",
+                clientAddress: "123 Main St, Anytown, CA 12345",
+                description: "Sample project notes",
                 totalBudget: 10000,
                 materialCost: 2000,
                 laborCost: 3000,
                 generalConditions: 1000,
                 contingency: 500,
-                spentContingency: 0,
-                profit: 1500,
                 startDate: Date(),
-                endDate: Date(),
-            organizationID: "sample-org-id".addingTimeInterval(60 * 60 * 24 * 30),
-                loggedHours: [],
-                tasks: [],
-                communications: [],
-                progressLogs: [],
-                changeOrders: [],
-                receipts: [],
-                taskTemplates: [],
-                status: .active
+                endDate: Calendar.current.date(byAdding: .day, value: 30, to: Date()) ?? Date(),
+                organizationID: "sample-org-id"
             )
         )
         .environmentObject(ProjectViewModel(offlineDataManager: OfflineDataManager()))

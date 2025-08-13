@@ -480,7 +480,10 @@ struct ReceiptsView: View {
         updateVendorSpending(for: receipt, isRemoving: true)
         updatePaymentMethodSpending(for: receipt, isRemoving: true)
         
-        projectVM.updateProject(updatedProject)
+        Task {
+            await projectVM.updateProject(updatedProject)
+        }
+        
         projectVM.recomputeFilteredReceipts()
         
         receiptToDelete = nil

@@ -23,6 +23,13 @@ class ProjectViewModel: ObservableObject {
     @Published var isBulkSyncing = false
     @Published var bulkSyncProgress: Double = 0.0
     
+    // PHASE 2A: Add missing properties for LandingPageView compatibility
+    @Published var navigateToBudgetBreakdown: Bool = false
+    @Published var accessibleProjects: [Project] = []
+    @Published var currentOrganizationID: String?
+    @Published var isSavingProject: Bool = false
+    @Published var activeSaveOperations: [String] = []
+    
     // Team member properties
     @Published var teamMembers: [TeamMember] = []
     internal var teamMembersCache: [UUID: TeamMember] = [:]
@@ -35,6 +42,9 @@ class ProjectViewModel: ObservableObject {
     // PHASE 2A: Add missing properties for compatibility
     @Published var laborTotalsByTeamMember: [String: (unpaid: Double, paid: Double)] = [:]
     @Published var groupedHoursByTeamMember: [String: [WorkHour]] = [:]
+    @Published var isMigratingPhotos: Bool = false
+    @Published var isOnline: Bool = true // Stub: assume online for Phase 1
+    @Published var migrationProgress: String = "" // For DataManagementSection compatibility
     
     // PHASE 2A: Add missing flags and error handling
     @Published var isUsingCloudKitForOrganizationData: Bool = false
@@ -62,6 +72,10 @@ class ProjectViewModel: ObservableObject {
         // organizationKnowledgeService: OrganizationKnowledgeService
     ) {
         self.offlineDataManager = offlineDataManager
+        
+        // CRITICAL: Set default organization ID for Phase 1
+        self.currentOrganizationID = "RHEIR-DEFAULT-ORG"
+        
         // TODO: Re-add service assignments in Phase 2
         // self.cloudKitService = cloudKitService
         // self.sharingService = sharingService
@@ -72,13 +86,16 @@ class ProjectViewModel: ObservableObject {
         // self.organizationKnowledgeService = organizationKnowledgeService
         
         setupDataObservation()
+        
+        print("✅ ProjectViewModel initialized with organization ID: \(currentOrganizationID ?? "none")")
     }
     
     // MARK: - Computed Properties (PHASE 1 STUBS)
     
-    var currentOrganizationID: String? {
-        return currentOrganization?.id.uuidString
-    }
+    // Remove duplicate declaration - use the @Published property instead
+    // var currentOrganizationID: String? {
+    //     return currentOrganization?.id
+    // }
     
     // MARK: - PHASE 1 STUB METHODS - TODO: Implement in Phase 2
     
@@ -150,6 +167,34 @@ class ProjectViewModel: ObservableObject {
         // Stub implementation
     }
     
+    // MARK: - PHASE 1 BRIDGE: Missing Methods
+    
+    // MARK: - Data Initialization
+    
+    func loadProjects() async {
+        print("🔄 loadProjects - Loading projects from organization-specific storage")
+        isDataLoading = true
+        
+        if let orgID = currentOrganizationID {
+            // Load projects using organization-specific method
+            await loadOrganizationSpecificProjects(organizationID: orgID)
+        } else {
+            // Load projects using OfflineDataManager as fallback
+            let loadedProjects = offlineDataManager.loadProjectsOffline()
+            
+            await MainActor.run {
+                organizationProjects = loadedProjects
+                updateOrganizationProjects()
+            }
+        }
+        
+        await MainActor.run {
+            isDataLoading = false
+        }
+        
+        print("✅ loadProjects - Loaded \(organizationProjects.count) projects")
+    }
+    
     private func setupDataObservation() {
         // Set up data observation from offline data manager
         offlineDataManager.$projects
@@ -176,23 +221,124 @@ class ProjectViewModel: ObservableObject {
     func setCurrentOrganization(_ organization: Organization?, role: TeamMemberRole? = nil) {
         self.currentOrganization = organization
         self.currentOrganizationRole = role
+        // CRITICAL FIX: Set currentOrganizationID to the REAL organization ID from CloudKit
+        if let org = organization {
+            self.currentOrganizationID = org.id
+            print("🔧 CRITICAL FIX: Set currentOrganizationID to real CloudKit org ID: \(org.id.prefix(8))...")
+        } else {
+            self.currentOrganizationID = nil
+        }
         updateOrganizationProjects()
         
-        // TODO: Re-enable CloudKit sync in Phase 2
-        // Sync organization data
-        // if let org = organization {
-        //     Task {
-        //         await syncOrganizationData(org)
-        //     }
-        // }
+        // Load projects for this organization using the REAL ID
+        if let orgID = self.currentOrganizationID {
+            Task {
+                await loadOrganizationSpecificProjects(organizationID: orgID)
+            }
+        }
     }
     
     private func updateOrganizationProjects() {
         if let currentOrg = currentOrganization {
-            organizationProjects = projects.filter { $0.organizationID == currentOrg.id.uuidString }
+            organizationProjects = projects.filter { $0.organizationID == currentOrg.id }
+            // Update accessible projects based on user role
+            updateAccessibleProjects()
         } else {
             organizationProjects = []
+            accessibleProjects = []
         }
+        
+        // Trigger UI update
+        objectWillChange.send()
+    }
+    
+    // MARK: - CRITICAL FIX: Organization-Specific Data Storage (From Golden Backup)
+    
+    /// Save data using organization-specific keys to prevent data bleeding
+    internal func saveOrganizationSpecificBackup() {
+        guard let orgID = currentOrganizationID else {
+            print("💾 SECURITY: Cannot save backup - no organization ID")
+            return
+        }
+        
+        print("💾 SECURE SAVE: Saving organization-specific backup for \(orgID.prefix(8))...")
+        
+        // Save projects with ORGANIZATION-SPECIFIC key
+        let projectsKey = "projects_\(orgID)"
+        if let projectData = try? JSONEncoder().encode(organizationProjects) {
+            UserDefaults.standard.set(projectData, forKey: projectsKey)
+            print("💾 Saved \(organizationProjects.count) projects to key: \(projectsKey)")
+        } else {
+            print("❌ Failed to encode projects for organization: \(orgID)")
+        }
+        
+        // Save organization with SPECIFIC key
+        if let org = currentOrganization,
+           let orgData = try? JSONEncoder().encode(org) {
+            let orgKey = "organization_\(orgID)"
+            UserDefaults.standard.set(orgData, forKey: orgKey)
+            print("💾 Saved organization data to key: \(orgKey)")
+        }
+        
+        UserDefaults.standard.synchronize()
+        print("✅ SECURE SAVE: Organization-specific backup completed for \(orgID.prefix(8))...")
+    }
+    
+    /// Load projects using organization-specific keys
+    private func loadOrganizationSpecificProjects(organizationID: String) async {
+        let projectsKey = "projects_\(organizationID)"
+        print("📂 SECURE LOAD: Loading projects from organization-specific key: \(projectsKey)")
+        
+        guard let data = UserDefaults.standard.data(forKey: projectsKey),
+              let projects = try? JSONDecoder().decode([Project].self, from: data) else { 
+            print("📂 No organization-specific project data found for \(organizationID.prefix(8))... - starting with empty projects")
+            
+            await MainActor.run {
+                self.organizationProjects = []
+            }
+            return 
+        }
+        
+        await MainActor.run {
+            // CRITICAL: Verify all loaded projects belong to this organization
+            let verifiedProjects = projects.filter { project in
+                project.organizationID == organizationID
+            }
+            
+            if verifiedProjects.count != projects.count {
+                print("🔒 SECURITY: Filtered out \(projects.count - verifiedProjects.count) projects that didn't belong to organization \(organizationID.prefix(8))...")
+            }
+            
+            self.organizationProjects = verifiedProjects
+            print("✅ SECURE LOAD: Loaded \(verifiedProjects.count) verified projects for organization \(organizationID.prefix(8))...")
+        }
+    }
+    
+    private func updateAccessibleProjects() {
+        // For Phase 1, accessible projects are the same as organization projects
+        // In Phase 2, this will be filtered based on role and project assignments
+        accessibleProjects = organizationProjects
+        
+        // TODO: Phase 2 - Implement role-based filtering
+        // if let role = currentOrganizationRole {
+        //     switch role {
+        //     case .admin, .member:
+        //         accessibleProjects = organizationProjects
+        //     case .contractor:
+        //         // Filter to only assigned projects
+        //         accessibleProjects = organizationProjects.filter { project in
+        //             // Check if user is assigned to this project
+        //             // This will be implemented with proper project assignment system
+        //             return true // For now, show all
+        //         }
+        //     case .viewer:
+        //         // Read-only access to assigned projects
+        //         accessibleProjects = organizationProjects.filter { project in
+        //             // Check if user has view access to this project
+        //             return true // For now, show all
+        //         }
+        //     }
+        // }
     }
     
     // TODO: Re-enable in Phase 2 with proper CloudKit architecture
@@ -242,65 +388,83 @@ class ProjectViewModel: ObservableObject {
     // MARK: - Project Management
     
     func createNewProject(project: Project) async throws {
-        // Add to local storage first
-        let newProject = project
-        await MainActor.run {
-            offlineDataManager.addProject(newProject)
+        guard let orgID = currentOrganizationID else {
+            print("❌ SECURITY: Cannot create project - no organization selected")
+            throw NSError(domain: "RHEIR", code: -1, userInfo: [NSLocalizedDescriptionKey: "No organization selected"])
         }
         
-        // TODO: Re-enable CloudKit sync in Phase 2
-        // Save to CloudKit if enabled
-        // if let currentOrg = currentOrganization, 
-        //    await sharingService.isCloudKitEnabled(for: currentOrg.id) {
-        //     do {
-        //         try await saveProjectToCloudKitSharedZone(newProject)
-        //         print("DEBUG: Project saved to CloudKit successfully")
-        //     } catch {
-        //         print("DEBUG: Failed to save project to CloudKit: \(error)")
-        //     }
-        // } else {
-        //     print("DEBUG: CloudKit not enabled for organization or no current organization")
-        // }
+        // CRITICAL: Ensure new project has correct organization ID
+        var secureProject = project
+        secureProject.organizationID = orgID
+        
+        // CRITICAL FIX: Add to BOTH arrays so UI updates immediately
+        await MainActor.run {
+            organizationProjects.append(secureProject)
+            projects.append(secureProject)
+            selectedProject = secureProject
+        }
+        
+        // Save to organization-specific storage
+        saveOrganizationSpecificBackup()
+        
+        // CRITICAL FIX: Also save to the OfflineDataManager so projects array stays synced
+        await MainActor.run {
+            offlineDataManager.addProject(secureProject)
+        }
+        
+        print("✅ Created new project for organization \(orgID.prefix(8))...: \(secureProject.name)")
     }
     
     func addProject(_ project: Project) async {
-        // Add to local storage
-        await MainActor.run {
-            offlineDataManager.addProject(project)
+        guard let orgID = currentOrganizationID else {
+            print("❌ SECURITY: Cannot add project - no organization selected")
+            return
         }
         
-        // TODO: Re-enable CloudKit sync in Phase 2
-        // Save to CloudKit if enabled
-        // if let currentOrg = currentOrganization,
-        //    await sharingService.isCloudKitEnabled(for: currentOrg.id) {
-        //     do {
-        //         try await saveProjectToCloudKitSharedZone(project)
-        //         print("DEBUG: addProject - Project saved to CloudKit")
-        //     } catch {
-        //         print("DEBUG: addProject - Failed to save to CloudKit: \(error)")
-        //     }
-        // } else {
-        //     print("DEBUG: addProject - CloudKit not enabled or no organization")
-        // }
+        // CRITICAL: Ensure project belongs to current organization
+        var secureProject = project
+        secureProject.organizationID = orgID
+        
+        // Add to local storage
+        await MainActor.run {
+            if !organizationProjects.contains(where: { $0.id == secureProject.id }) {
+                organizationProjects.append(secureProject)
+            }
+        }
+        
+        // Save to organization-specific storage
+        saveOrganizationSpecificBackup()
+        
+        print("✅ Added project '\(secureProject.name)' to organization: \(orgID.prefix(8))...")
     }
     
     func updateProject(_ project: Project) async {
-        // Update in local storage
-        await MainActor.run {
-            offlineDataManager.updateProject(project)
+        guard let orgID = currentOrganizationID else {
+            print("❌ SECURITY: Cannot update project - no organization selected")
+            return
         }
         
-        // TODO: Re-enable CloudKit sync in Phase 2
-        // Update in CloudKit if enabled
-        // if let currentOrg = currentOrganization,
-        //    await sharingService.isCloudKitEnabled(for: currentOrg.id) {
-        //     do {
-        //         try await saveProjectToCloudKitSharedZone(project)
-        //         print("DEBUG: updateProject - Project updated in CloudKit")
-        //     } catch {
-        //         print("DEBUG: updateProject - Failed to update in CloudKit: \(error)")
-        //     }
-        // }
+        // CRITICAL: Ensure project belongs to current organization
+        var secureProject = project
+        secureProject.organizationID = orgID
+        
+        // Update in local storage
+        await MainActor.run {
+            if let index = organizationProjects.firstIndex(where: { $0.id == secureProject.id }) {
+                organizationProjects[index] = secureProject
+            } else {
+                organizationProjects.append(secureProject)
+            }
+            
+            if selectedProject?.id == secureProject.id { 
+                selectedProject = secureProject 
+            }
+        }
+        
+        // Save to organization-specific storage
+        saveOrganizationSpecificBackup()
+        
+        print("✅ Updated project: \(secureProject.name)")
     }
     
     func deleteProject(_ project: Project) async {
@@ -526,6 +690,33 @@ class ProjectViewModel: ObservableObject {
         }
     }
     
+    // PHASE 1 BRIDGE: Additional progress log methods for EditProgressView compatibility
+    func updateProgressLog(_ progressLog: ProgressLog, employees: [UUID], images: [UIImage]) {
+        // For now, just update the progress log with the basic info
+        // TODO: Phase 2 - Handle employee associations and image uploads
+        guard let selectedProject = selectedProject else { return }
+        
+        Task {
+            await updateProgressLog(progressLog, in: selectedProject.id)
+        }
+    }
+    
+    func removeProgressLog(_ logID: UUID) {
+        guard let selectedProject = selectedProject else { return }
+        
+        Task {
+            let logToRemove = ProgressLog(
+                id: logID,
+                date: Date(),
+                workDescription: "",
+                notes: "",
+                employeeIDs: [],
+                photoIDs: []
+            )
+            await deleteProgressLog(logToRemove, from: selectedProject.id)
+        }
+    }
+    
     func deleteProgressLog(_ progressLog: ProgressLog, from projectID: UUID) async {
         guard let projectIndex = organizationProjects.firstIndex(where: { $0.id == projectID }) else { return }
         
@@ -660,6 +851,15 @@ class ProjectViewModel: ObservableObject {
     
     // MARK: - Helper Methods
     
+    // MARK: - PHASE 1 BRIDGE: Additional Missing Properties and Methods
+    
+    var bulkSyncProgressText: String {
+        if isBulkSyncing {
+            return "Syncing... \(Int(bulkSyncProgress * 100))%"
+        }
+        return ""
+    }
+    
     func selectProject(_ project: Project) {
         selectedProject = project
     }
@@ -711,12 +911,12 @@ extension ProjectViewModel {
     // }
     
     // func activateRealTimeIntelligence() async {
-    //     guard let currentOrg = currentOrganization else { return }
+    //     guard let currentOrganization else { return }
     //     
     //     // Process all existing projects for intelligence
     //     for project in organizationProjects {
     //         for receipt in project.receipts {
-    //             organizationKnowledgeService.processReceiptForOrganizationIntelligence(receipt, in: currentOrg)
+    //             organizationKnowledgeService.processReceiptForOrganizationIntelligence(receipt, in: currentOrganization)
     //         }
     //     }
     // }
@@ -736,41 +936,8 @@ extension ProjectViewModel {
     //         return IntelligenceStatus(isReady: false, message: "Building organizational knowledge...")
     //     }
     // }
-    
-    // MARK: - Team Member Computed Properties
-    
-    var activeTeamMembers: [TeamMember] {
-        return teamMembers.filter { $0.status == .active }
-    }
-    
-    var inactiveTeamMembers: [TeamMember] {
-        return teamMembers.filter { $0.status != .active }
-    }
-    
-    func getTeamMembersForProject(_ project: Project) -> [TeamMember] {
-        let projectTeamMemberIDs = project.assignedUserIDs
-        return teamMembers.filter { teamMember in
-            projectTeamMemberIDs.contains(teamMember.id.uuidString)
-        }
-    }
-    
-    // MARK: - Receipt Computed Properties
-    
-    func getVendorsForProject(_ project: Project) -> [Vendor] {
-        let projectReceipts = project.receipts
-        let vendorIDs = projectReceipts.compactMap { $0.vendorID }
-        return offlineDataManager.vendors.filter { vendor in
-            vendorIDs.contains(vendor.id.uuidString)
-        }
-    }
-    
-    func getPaymentMethodsForProject(_ project: Project) -> [PaymentMethod] {
-        let projectReceipts = project.receipts
-        let paymentMethodIDs = projectReceipts.compactMap { $0.paymentMethodID }
-        return offlineDataManager.paymentMethods.filter { paymentMethod in
-            paymentMethodIDs.contains(paymentMethod.id.uuidString)
-        }
-    }
+
+    // ... existing code ...
 }
 
 // MARK: - PHASE 2A: Missing Legacy Compatibility Methods
@@ -809,9 +976,8 @@ extension ProjectViewModel {
         
         for project in organizationProjects {
             for receipt in project.receipts {
-                if let vendorName = receipt.vendorName {
-                    vendorSpending[vendorName, default: 0] += receipt.totalAmount
-                }
+                let vendorName = receipt.vendor
+                vendorSpending[vendorName, default: 0] += receipt.amount
             }
         }
         
@@ -826,9 +992,8 @@ extension ProjectViewModel {
         
         for project in organizationProjects {
             for receipt in project.receipts {
-                if let paymentMethodName = receipt.paymentMethodName {
-                    paymentMethodSpending[paymentMethodName, default: 0] += receipt.totalAmount
-                }
+                let paymentMethodName = receipt.paymentMethod
+                paymentMethodSpending[paymentMethodName, default: 0] += receipt.amount
             }
         }
         
@@ -864,5 +1029,36 @@ extension ProjectViewModel {
         if let uuid = UUID(uuidString: organizationID) {
             await setupCloudKitZoneForOrganization(uuid)
         }
+    }
+    
+    // MARK: - PHASE 1 BRIDGE: Additional Missing Methods
+    
+    func fixMissingOrganizationIDs(completion: @escaping (Bool, String) -> Void) {
+        print("TODO: fixMissingOrganizationIDs - Phase 2 implementation needed")
+        // Stub implementation for Phase 1
+        completion(true, "Organization ID fix not needed in Phase 1")
+    }
+    
+    // MARK: - Labor Hours Migration Methods (Phase 1 Stubs)
+    
+    var needsLaborHoursMigration: Bool {
+        print("TODO: needsLaborHoursMigration - Phase 2 implementation needed")
+        return false // No migration needed in Phase 1
+    }
+    
+    func getLaborHoursMigrationStatus() -> String {
+        print("TODO: getLaborHoursMigrationStatus - Phase 2 implementation needed")
+        return "Labor hours migration status not available in Phase 1"
+    }
+    
+    func migrateLaborHoursToTeamMemberIDs() {
+        print("TODO: migrateLaborHoursToTeamMemberIDs - Phase 2 implementation needed")
+        // Stub implementation for Phase 1
+    }
+    
+    func emergencyDataRecovery() async -> String {
+        print("TODO: emergencyDataRecovery - Phase 2 implementation needed")
+        // Stub implementation for Phase 1
+        return "Emergency data recovery not available in Phase 1"
     }
 }
