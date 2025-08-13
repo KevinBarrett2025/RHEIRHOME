@@ -624,27 +624,81 @@ class AuthViewModel: ObservableObject {
         let cloudKitMemberCount = organization.members.count + 1 // +1 for admin
         
         // Access MainActor properties within MainActor context
-        let localTeamMemberCount = await MainActor.run {
-            return projectVM.teamMembers.filter { $0.organizationID == organization.id }.count;
+        let (localTeamMemberCount, projectsCount, organizationProjectsCount, filteredProjectsCount) = await MainActor.run {
+            let teamMemberCount = projectVM.teamMembers.filter { $0.organizationID == organization.id }.count
+            let allProjectsCount = projectVM.projects.count
+            let orgProjectsCount = projectVM.organizationProjects.count
+            let filteredCount = projectVM.projects.filter { $0.organizationID == organization.id }.count
+            
+            return (teamMemberCount, allProjectsCount, orgProjectsCount, filteredCount)
         }
         
         print("🛡️ ENTERPRISE VALIDATION:");
         print("   CloudKit Members: \(cloudKitMemberCount)");
         print("   Local Team Members: \(localTeamMemberCount)");
+        print("   📊 Total projects: \(projectsCount) vs Organization projects count: \(organizationProjectsCount)");
+        print("   📊 Filtered projects for org: \(filteredProjectsCount)");
         
+        var hasInconsistency = false
+        
+        // Check team member consistency
         if cloudKitMemberCount != localTeamMemberCount {
-            print("⚠️ ENTERPRISE: Data inconsistency detected - auto-fixing...");
+            print("⚠️ ENTERPRISE: Team member data inconsistency detected - auto-fixing...");
+            hasInconsistency = true
             await syncOrganizationTeamMembers();
+        }
+        
+        // PRIORITY 3: Check project data consistency
+        if organizationProjectsCount != filteredProjectsCount {
+            print("⚠️ ENTERPRISE: Project data inconsistency detected - auto-fixing...");
+            print("   Organization projects: \(organizationProjectsCount)");
+            print("   Filtered projects: \(filteredProjectsCount)");
+            hasInconsistency = true
             
-            let newLocalCount = await MainActor.run {
-                return projectVM.teamMembers.filter { $0.organizationID == organization.id }.count;
+            // Fix project data consistency
+            await MainActor.run {
+                let correctProjects = projectVM.projects.filter { $0.organizationID == organization.id }
+                projectVM.organizationProjects = correctProjects
+                projectVM.updateAccessibleProjects()
+                print("✅ PROJECT CONSISTENCY: Fixed organization projects array - now \(correctProjects.count) projects")
             }
-            print("✅ ENTERPRISE: Data integrity restored - Local Team Members: \(newLocalCount)");
+        }
+        
+        // Verify accessible projects consistency
+        let accessibleProjectsCount = await MainActor.run {
+            return projectVM.accessibleProjects.count
+        }
+        
+        if accessibleProjectsCount != organizationProjectsCount {
+            print("⚠️ ENTERPRISE: Accessible projects inconsistency detected - auto-fixing...");
+            hasInconsistency = true
+            
+            await MainActor.run {
+                projectVM.updateAccessibleProjects()
+                let newAccessibleCount = projectVM.accessibleProjects.count
+                print("✅ ACCESSIBLE PROJECTS: Fixed accessible projects array - now \(newAccessibleCount) projects")
+            }
+        }
+        
+        if hasInconsistency {
+            // Final validation after fixes
+            let (finalTeamMemberCount, finalOrgProjectsCount, finalAccessibleCount) = await MainActor.run {
+                let teamMembers = projectVM.teamMembers.filter { $0.organizationID == organization.id }.count
+                let orgProjects = projectVM.organizationProjects.count  
+                let accessibleProjects = projectVM.accessibleProjects.count
+                return (teamMembers, orgProjects, accessibleProjects)
+            }
+            
+            print("✅ ENTERPRISE: Data integrity restored:");
+            print("   Local Team Members: \(finalTeamMemberCount)");
+            print("   Organization Projects: \(finalOrgProjectsCount)");
+            print("   Accessible Projects: \(finalAccessibleCount)");
         } else {
             print("✅ ENTERPRISE: Data integrity verified - all systems synchronized");
         }
     }
 
+    /// Ensure admin team member exists
     private func ensureAdminTeamMemberExists() {
         print("🎯 ADMIN CHECK DEPRECATED: Admin creation now handled by onboarding flow")
         print("   If admin is missing, user should complete onboarding via showAdminInfoUpdate")

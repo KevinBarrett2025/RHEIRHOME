@@ -56,6 +56,9 @@ class ProjectViewModel: ObservableObject {
     // Services - Only keep the ones that exist
     private let offlineDataManager: OfflineDataManager
     
+    // Timers
+    private var savingTimer: Timer?
+    
     // Cancellables
     private var cancellables = Set<AnyCancellable>()
     
@@ -150,7 +153,7 @@ class ProjectViewModel: ObservableObject {
         
         print("✅ ADD TEAM MEMBER: Successfully added \(teamMember.name) to organization")
         print("   Total team members: \(teamMembers.count)")
-        print("   Organization team members: \(teamMembers.filter { $0.organizationID == teamMember.organizationID }.count)")
+        print("   Organization team members: \(teamMembers.filter { $0.organizationID == teamMember.organizationID }.count)");
     }
     
     /// Save team member to CloudKit using proper schema
@@ -203,14 +206,27 @@ class ProjectViewModel: ObservableObject {
     }
     
     func markProjectAsCompleted(_ project: Project) {
-        print("TODO: markProjectAsCompleted - Phase 2")
-        // Basic implementation
+        print("🎯 PROJECT COMPLETION: Marking project as completed: \(project.name)")
+        
         var updatedProject = project
         updatedProject.status = .completed
         updatedProject.lastModifiedDate = Date()
         
+        // Create a formatted date string
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateStyle = .long
+        let completionDate = dateFormatter.string(from: Date())
+        
+        // Update description to include completion info
+        if updatedProject.description.isEmpty {
+            updatedProject.description = "Project completed on \(completionDate)"
+        } else if !updatedProject.description.contains("completed on") {
+            updatedProject.description += "\n\nProject completed on \(completionDate)"
+        }
+        
         Task {
             await updateProject(updatedProject)
+            print("✅ PROJECT COMPLETION: Project '\(project.name)' marked as completed successfully")
         }
     }
     
@@ -322,8 +338,19 @@ class ProjectViewModel: ObservableObject {
     }
     
     func invalidateReceiptCache() {
-        print("TODO: invalidateReceiptCache - Phase 2")
-        // Stub implementation
+        print("🗑️ CACHE INVALIDATION: Clearing receipt cache for organization data refresh")
+        
+        // Clear internal caches
+        receiptVendorCache.removeAll()
+        receiptPaymentMethodCache.removeAll()
+        
+        // Clear team member caches as they might affect receipt processing
+        updateTeamMemberCaches()
+        
+        // Force UI update to refresh any receipt-dependent views
+        objectWillChange.send()
+        
+        print("✅ CACHE INVALIDATION: Receipt cache cleared successfully")
     }
     
     func recomputeFilteredReceipts() {
@@ -630,7 +657,7 @@ class ProjectViewModel: ObservableObject {
         objectWillChange.send()
     }
     
-    private func updateAccessibleProjects() {
+    internal func updateAccessibleProjects() {
         // CRITICAL FIX: For Phase 1, accessible projects are the same as organization projects
         // but ensure the array is properly synchronized
         accessibleProjects = organizationProjects
@@ -1045,7 +1072,7 @@ class ProjectViewModel: ObservableObject {
     func addReceipt(_ receipt: Receipt, to projectID: UUID) async {
         print("🔍 RECEEPT DEBUG: Looking for project ID: \(projectID)")
         print("🔍 RECEIPT DEBUG: Organization projects count: \(organizationProjects.count)")
-        print("🔍 RECEEPT DEBUG: All projects count: \(projects.count)")
+        print("🔍 RECEIPT DEBUG: All projects count: \(projects.count)")
         
         // CRITICAL FIX: Check BOTH organizationProjects AND all projects to handle sync issues
         var targetProject: Project?
@@ -1235,13 +1262,47 @@ class ProjectViewModel: ObservableObject {
     // MARK: - PHASE 2A: Missing Legacy Compatibility Methods
     
     func setCurrentUserRole(_ role: OrganizationRole, forOrganization organizationID: UUID) {
-        print("TODO: setCurrentUserRole - Phase 2B implementation needed")
-        // Stub implementation for compatibility
+        print("🔐 ROLE MANAGEMENT: Setting user role to \(role.displayName) for organization: \(organizationID.uuidString.prefix(8))...")
+        
+        // Convert OrganizationRole to TeamMemberRole for ProjectViewModel compatibility
+        let teamMemberRole: TeamMemberRole = {
+            switch role {
+            case .admin:
+                return .admin
+            case .member:
+                return .member  
+            case .contractor:
+                return .member // Contractors are treated as members in project context
+            case .viewer:
+                return .member // Viewers are treated as members with limited permissions
+            }
+        }()
+        
+        // Update the current organization role
+        currentOrganizationRole = teamMemberRole
+        
+        // Ensure we're working with the correct organization
+        let orgIDString = organizationID.uuidString
+        if currentOrganizationID != orgIDString {
+            print("🔐 ROLE SYNC WARNING: Role set for organization \(orgIDString.prefix(8))... but current org is \(currentOrganizationID?.prefix(8) ?? "none")")
+        }
+        
+        // Update accessible projects based on new role
+        updateAccessibleProjects()
+        
+        print("✅ ROLE MANAGEMENT: User role set to \(teamMemberRole.displayName) (converted from \(role.displayName))")
+        print("   Organization: \(orgIDString.prefix(8))...")
+        print("   Current Org Role: \(currentOrganizationRole?.displayName ?? "none")")
+        
+        // Trigger UI update
+        objectWillChange.send()
     }
     
     func setCurrentUserRole(_ role: OrganizationRole, forOrganization organizationID: String) {
         if let uuid = UUID(uuidString: organizationID) {
             setCurrentUserRole(role, forOrganization: uuid)
+        } else {
+            print("❌ ROLE MANAGEMENT: Invalid organization ID format: \(organizationID)")
         }
     }
     
