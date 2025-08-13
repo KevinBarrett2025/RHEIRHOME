@@ -93,8 +93,7 @@ class AuthViewModel: ObservableObject {
                 
                 // CRITICAL FIX: Sync user role when ProjectViewModel connects - use original OrganizationRole
                 if let userRole = self.organizationRoles[currentOrg.id] {
-                    let teamMemberRole: TeamMemberRole = userRole == .admin ? .admin : .member
-                    projectViewModel.setCurrentUserRole(teamMemberRole, forOrganization: currentOrg.id)
+                    projectViewModel.setCurrentUserRole(userRole, forOrganization: currentOrg.id)
                     print("🔐 ROLE SYNC: Set user role to \(userRole.displayName) for newly connected ProjectViewModel")
                 } else {
                     print("⚠️ ROLE SYNC WARNING: No role found for current organization during connection")
@@ -135,12 +134,20 @@ class AuthViewModel: ObservableObject {
             userOrganizations.append(organization);
         }
         
-        // CRITICAL FIX: Call ProjectViewModel's setCurrentOrganization to properly set currentOrganizationID
-        if let projectVM = self.projectVM {
-            let role = self.organizationRoles[organization.id] ?? .member
+        if let projectVM = projectVM {
+            let role = organizationRoles[organization.id] ?? .member
+            // Convert OrganizationRole to TeamMemberRole
             let teamMemberRole: TeamMemberRole = role == .admin ? .admin : .member
             projectVM.setCurrentOrganization(organization, role: teamMemberRole)
             print("🔧 CRITICAL FIX: Set ProjectViewModel organization to real CloudKit org ID: \(organization.id.prefix(8))...")
+            
+            // CRITICAL FIX: Sync user role when ProjectViewModel connects - use original OrganizationRole
+            if let userRole = self.organizationRoles[organization.id] {
+                projectVM.setCurrentUserRole(userRole, forOrganization: organization.id)
+                print("🔐 ROLE SYNC: Set user role to \(userRole.displayName) for newly connected ProjectViewModel")
+            } else {
+                print("⚠️ ROLE SYNC WARNING: No role found for current organization during connection")
+            }
             
             // CRITICAL FIX: Sync user role with ProjectViewModel
             if let userRole = self.organizationRoles[organization.id] {
@@ -164,8 +171,7 @@ class AuthViewModel: ObservableObject {
             
             // CRITICAL: Also sync role after organization change
             if let userRole = self.organizationRoles[organization.id] {
-                let teamMemberRole: TeamMemberRole = userRole == .admin ? .admin : .member
-                self.projectVM?.setCurrentUserRole(teamMemberRole, forOrganization: organization.id)
+                self.projectVM?.setCurrentUserRole(userRole, forOrganization: organization.id)
                 print("🔐 ROLE SYNC: Set user role to \(userRole.displayName) for newly connected ProjectViewModel")
             } else {
                 print("⚠️ ROLE SYNC WARNING: No role found for current organization during connection")
@@ -490,7 +496,7 @@ class AuthViewModel: ObservableObject {
                         completion([], [:]);
                     }
                 },
-                receiveValue: { [weak self] (organizations, roles) in
+                receiveValue: { [weak self] (organizations: [Organization], roles: [String: OrganizationRole]) in
                     guard let self = self else { return };
                     
                     print("🔍 COMPREHENSIVE ORG TRACE: CloudKit fetch completed");
@@ -924,10 +930,20 @@ class AuthViewModel: ObservableObject {
                 allowedProjectIDs: allowedProjectIDs
             )
             
+            await MainActor.run {
+                self.isInviting = false
+                self.inviteStatus = "Invitation sent to \(email) with access to \(allowedProjectIDs.count) projects"
+                self.pendingInvites.append(email)
+            }
+            
             print("✅ PROJECT INVITE: Sent invitation to \(email) with access to \(allowedProjectIDs.count) projects")
             return InviteResult(success: true, message: "Invitation sent with project access")
             
         } catch {
+            await MainActor.run {
+                self.isInviting = false
+                self.inviteStatus = "Failed to send invitation: \(error.localizedDescription)"
+            }
             print("❌ PROJECT INVITE: Failed to send invitation: \(error)")
             return InviteResult(success: false, message: "Failed to send invitation: \(error.localizedDescription)")
         }
@@ -1449,7 +1465,7 @@ class AuthViewModel: ObservableObject {
         }
     }
     
-    func fetchUserProjectAssignments(organizationID: String, userID: String) { 
+    func fetchUserProjectAssignments(organizationID: String, userID: String) {
         guard let cloudKitService = service as? CloudKitAuthService else {
             print("❌ PROJECT ASSIGNMENTS: CloudKit service unavailable")
             return
@@ -1471,5 +1487,137 @@ class AuthViewModel: ObservableObject {
                 print("❌ PROJECT ASSIGNMENTS: Failed to fetch assignments: \(error)")
             }
         }
+    }
+    
+    func validateDataConsistency() async -> String {
+        var report = "🔍 DATA CONSISTENCY VALIDATION\n\n"
+        
+        report += "User Authentication:\n"
+        report += "- User: \(user?.email ?? "None")\n"
+        report += "- Organizations: \(organizations.count)\n"
+        report += "- User Organizations: \(userOrganizations.count)\n"
+        report += "- Current Org: \(currentOrg?.name ?? "None")\n\n"
+        
+        report += "Organization Roles:\n"
+        for (orgID, role) in organizationRoles {
+            report += "- \(orgID.prefix(8))...: \(role.displayName)\n"
+        }
+        
+        // Check CloudKit status
+        let cloudKitStatus = await checkCloudKitStatus()
+        report += "\nCloudKit Status: \(cloudKitStatus)\n"
+        
+        // Validate current organization exists in lists
+        if let currentOrg = currentOrg {
+            let existsInOrgs = organizations.contains { $0.id == currentOrg.id }
+            let existsInUserOrgs = userOrganizations.contains { $0.id == currentOrg.id }
+            
+            report += "\nCurrent Organization Validation:\n"
+            report += "- Exists in organizations: \(existsInOrgs)\n"
+            report += "- Exists in userOrganizations: \(existsInUserOrgs)\n"
+            
+            if !existsInOrgs || !existsInUserOrgs {
+                report += "⚠️ INCONSISTENCY DETECTED\n"
+            }
+        }
+        
+        print("🔍 DATA CONSISTENCY: Validation completed")
+        return report
+    }
+    
+    func forceCloudKitSync() async -> String {
+        guard let userID = user?.id else {
+            return "❌ No user authenticated"
+        }
+        
+        var syncReport = "🔄 FORCE CLOUDKIT SYNC\n\n"
+        syncReport += "Starting forced synchronization...\n"
+        
+        // Refresh organization data
+        syncReport += "1. Refreshing organization data...\n"
+        
+        return await withCheckedContinuation { continuation in
+            fetchUserOrganizationsWithRoles { [weak self] orgs, roles in
+                guard let self = self else {
+                    continuation.resume(returning: "❌ Self reference lost")
+                    return
+                }
+                
+                Task { @MainActor in
+                    self.organizations = orgs
+                    self.userOrganizations = orgs
+                    self.organizationRoles = roles
+                    
+                    var report = syncReport
+                    report += "✅ Organizations synced: \(orgs.count)\n"
+                    report += "✅ Roles synced: \(roles.count)\n"
+                    
+                    // Sync team members if we have current org
+                    if self.currentOrg != nil {
+                        await self.syncOrganizationTeamMembers()
+                        report += "✅ Team members synced\n"
+                    }
+                    
+                    report += "\n🔄 FORCE SYNC: Completed successfully"
+                    print("🔄 FORCE SYNC: CloudKit synchronization completed")
+                    
+                    continuation.resume(returning: report)
+                }
+            }
+        }
+    }
+    
+    func clearAllLocalCache() {
+        print("🗑️ CLEAR CACHE: Clearing all local cache data")
+        
+        // Clear organization data
+        organizations = []
+        userOrganizations = []
+        organizationRoles = [:]
+        currentOrg = nil
+        
+        // Clear invite data
+        pendingInvites = []
+        inviteStatus = ""
+        assignedProjectIDs = []
+        teamProjectAssignments = [:]
+        
+        // Clear UserDefaults
+        UserDefaults.standard.removeObject(forKey: "currentOrganizationID")
+        UserDefaults.standard.removeObject(forKey: "previousOrganizationID")
+        UserDefaults.standard.removeObject(forKey: "pending_invite_orgID")
+        UserDefaults.standard.removeObject(forKey: "pending_invite_orgName")
+        UserDefaults.standard.removeObject(forKey: "pending_invite_token")
+        
+        // Clear organization-related flags
+        needsOrganizationSetup = true
+        showOrganizationSetup = false
+        showAdminInfoUpdate = false
+        
+        print("✅ CLEAR CACHE: All local cache cleared")
+    }
+    
+    var currentOrganizationRole: OrganizationRole? {
+        guard let currentOrg = currentOrg else { return nil }
+        return organizationRoles[currentOrg.id]
+    }
+    
+    // MARK: - Missing Property
+    
+    var adminOrganizations: [Organization] {
+        return userOrganizations.filter { organizationRoles[$0.id] == .admin }
+    }
+    
+    var contractorOrganizations: [Organization] {
+        return userOrganizations.filter { organizationRoles[$0.id] == .contractor }
+    }
+    
+    var canPerformAdminActions: Bool {
+        guard let currentOrg = currentOrg else { return false }
+        return organizationRoles[currentOrg.id] == .admin
+    }
+    
+    func getUserRole(for organization: Organization) -> OrganizationRole? {
+        return organizationRoles[organization.id]
     }
 }
