@@ -268,6 +268,6 @@ struct OrganizationEditView: View {
         adminUserID: "test-admin-id"
     )
     
-    return OrganizationEditView(organization: sampleOrg)
+    OrganizationEditView(organization: sampleOrg)
         .environmentObject(AuthViewModel(service: PreviewAuthService()))
 }
