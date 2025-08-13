@@ -156,7 +156,7 @@ class AuthViewModel: ObservableObject {
             // Notify ProjectViewModel of organization change AFTER setting the organization
             await self.projectVM?.organizationDidChange(organization.id)
             
-            // ENTERPRISE FEATURE: Automatic data synchronization
+            // ENTERPRISE FEATURE: Automatic data synchronization (no longer creates duplicate admins)
             print("🔄 ENTERPRISE SYNC: Starting automatic data synchronization...")
             await self.syncOrganizationTeamMembers()
             
@@ -167,9 +167,6 @@ class AuthViewModel: ObservableObject {
             } else {
                 print("⚠️ ROLE SYNC WARNING: No role found for current organization during connection")
             }
-            
-            // CRITICAL: Ensure admin team member exists after connection
-            self.ensureAdminTeamMemberExists()
             
             print("✅ Activated zone isolation with synchronized data for: \(organization.name)")
         }
@@ -395,9 +392,13 @@ class AuthViewModel: ObservableObject {
             print("🏗️ PRODUCTION: Setting as current organization...");
             self.setCurrentOrganization(organization);
             print("   Current organization set to: \(organization.name)");
+            
+            // CRITICAL: Show admin onboarding instead of ensuring admin exists
+            print("🎯 ADMIN ONBOARDING: Triggering professional admin setup...")
+            self.showAdminInfoUpdate = true
         }
         
-        print("✅ PRODUCTION COMPLETE: Organization '\(name)' created successfully with enterprise-grade data synchronization");
+        print("✅ PRODUCTION COMPLETE: Organization '\(name)' created successfully - admin onboarding ready");
         return organization;
     }
 
@@ -490,43 +491,18 @@ class AuthViewModel: ObservableObject {
             let currentTeamMemberCount = projectVM.teamMembers.filter { $0.organizationID == currentOrg.id }.count;
             print("🔄 ProjectVM team members: \(currentTeamMemberCount)");
             
-            // Check if admin team member exists in ProjectViewModel
+            // CRITICAL FIX: Only check if admin exists, don't create duplicate
             let existingAdmin = projectVM.teamMembers.first {
                 $0.appUserID == userID && $0.organizationID == currentOrg.id && $0.role == .admin
             }
             
             if existingAdmin == nil {
-                print("🎯 SYNC: Admin team member missing - creating now...");
-                
-                let adminName = userEmail.components(separatedBy: "@").first?.capitalized ?? "Administrator";
-                
-                let adminTeamMember = TeamMember(
-                    id: UUID(),
-                    name: adminName,
-                    email: userEmail,
-                    phone: "",
-                    jobTitle: "Owner/Administrator",
-                    rates: [
-                        EmployeeRate(
-                            taskType: "Administrative Work",
-                            rate: 50.0,
-                            isDefault: true
-                        )
-                    ],
-                    isArchived: false,
-                    organizationID: currentOrg.id,
-                    role: .admin,
-                    isActive: true,
-                    employmentStatus: .active,
-                    employmentType: .employee,
-                    hasAppAccess: true,
-                    appUserID: userID
-                );
-                
-                projectVM.addTeamMemberToOrganization(adminTeamMember);
-                print("✅ SYNC: Created admin team member successfully");
+                print("⚠️ SYNC: No admin team member found - this should be handled by onboarding flow")
+                print("   Organization: \(currentOrg.name)")
+                print("   Admin User ID: \(userID.prefix(8))...")
+                print("   Consider triggering admin onboarding if not completed")
             } else {
-                print("✅ SYNC: Admin team member already exists");
+                print("✅ SYNC: Admin team member exists: \(existingAdmin?.name ?? "Unknown")")
             }
             
             // Create team members for other organization members if any
@@ -562,7 +538,7 @@ class AuthViewModel: ObservableObject {
                             appUserID: memberID
                         );
                         
-                        projectVM.addTeamMemberToOrganization(memberTeamMember);
+                        projectVM.teamMembers.append(memberTeamMember)
                         print("✅ SYNC: Created team member for \(memberID.prefix(8))...");
                     }
                 }
@@ -606,86 +582,27 @@ class AuthViewModel: ObservableObject {
         }
     }
 
-    /// Ensure the admin team member exists for the current organization
     private func ensureAdminTeamMemberExists() {
+        print("🎯 ADMIN CHECK DEPRECATED: Admin creation now handled by onboarding flow")
+        print("   If admin is missing, user should complete onboarding via showAdminInfoUpdate")
+        
+        // Simple check to see if admin exists (for logging purposes only)
         Task { @MainActor in
             guard let organization = currentOrg,
-                  let userEmail = user?.email,
                   let userID = user?.id,
                   let projectVM = projectVM else {
-                print("❌ ADMIN CHECK: Missing required data for admin verification")
                 return
             }
             
-            print("🔍 ADMIN CHECK: Looking for existing admin team member...")
-            print("   Organization: \(organization.name) (\(organization.id.prefix(8))...)")
-            print("   User ID: \(userID.prefix(8))...")
-            print("   Total team members: \(projectVM.teamMembers.count)")
-            
-            // Filter team members for this organization first
-            let orgTeamMembers = projectVM.teamMembers.filter { $0.organizationID == organization.id }
-            print("   Organization team members: \(orgTeamMembers.count)")
-            
-            for member in orgTeamMembers {
-                print("   - \(member.name): Role=\(member.role.displayName), AppUserID=\(member.appUserID?.prefix(8) ?? "nil")...")
-            }
-            
-            // Check if admin team member already exists
             let existingAdmin = projectVM.teamMembers.first { 
                 $0.appUserID == userID && $0.organizationID == organization.id && $0.role == .admin 
             }
             
             if existingAdmin == nil {
-                print("🎯 ADMIN MISSING: Creating admin team member for organization owner...")
-                
-                let adminName = userEmail.components(separatedBy: "@").first?.capitalized ?? "Admin User"
-                
-                let adminTeamMember = TeamMember(
-                    id: UUID(),
-                    name: adminName,
-                    email: userEmail,
-                    phone: "",
-                    jobTitle: "Owner/Administrator",
-                    rates: [
-                        EmployeeRate(
-                            taskType: "Administrative Work",
-                            rate: 50.0,
-                            isDefault: true
-                        )
-                    ],
-                    isArchived: false,
-                    organizationID: organization.id,
-                    role: .admin,
-                    isActive: true,
-                    employmentStatus: .active,
-                    employmentType: .employee,
-                    hasAppAccess: true,
-                    appUserID: userID
-                )
-                
-                print("🎯 ADMIN DETAILS:")
-                print("   Name: \(adminName)")
-                print("   Email: \(userEmail)");
-                print("   Job Title: Owner/Administrator");
-                print("   Organization ID: \(organization.id.prefix(8))...");
-                print("   App User ID: \(userID.prefix(8))...");
-                
-                projectVM.addTeamMemberToOrganization(adminTeamMember);
-                
-                // Wait a bit and verify
-                try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
-                
-                let newCount = projectVM.teamMembers.filter { $0.organizationID == organization.id }.count
-                print("🔍 ADMIN VERIFICATION: Team members after creation: \(newCount)");
-                
-                if newCount > 0 {
-                    print("✅ ADMIN CREATED: Successfully created admin team member post-connection");
-                } else {
-                    print("❌ ADMIN FAILED: Team member was not added to organization");
-                }
+                print("⚠️ ADMIN CHECK: No admin found - onboarding may be needed")
+                print("   showAdminInfoUpdate should be true: \(showAdminInfoUpdate)")
             } else {
-                print("✅ ADMIN EXISTS: Admin team member already exists for this organization");
-                print("   Existing admin: \(existingAdmin?.name ?? "Unknown")");
+                print("✅ ADMIN CHECK: Admin exists: \(existingAdmin?.name ?? "Unknown")")
             }
         }
     }
@@ -913,6 +830,81 @@ class AuthViewModel: ObservableObject {
     private func handleJoinOrganizationError(_ error: Error) -> String { return "Error occurred" }
     func fixDataInconsistencies() { }
     func fetchUserProjectAssignments(organizationID: String, userID: String) { }
+    
+    // MARK: - Debug Methods
+    
+    /// Clear all local cache and UserDefaults for fresh app experience
+    func clearAllLocalCache() {
+        print("🗑️ CACHE CLEAR: Starting comprehensive local cache cleanup...")
+        
+        // Organization-related data
+        UserDefaults.standard.removeObject(forKey: "currentOrganizationID")
+        UserDefaults.standard.removeObject(forKey: "previousOrganizationID")
+        
+        // User authentication data
+        UserDefaults.standard.removeObject(forKey: "apple_user_id")
+        if let userID = user?.id {
+            UserDefaults.standard.removeObject(forKey: "stored_apple_email_\(userID)")
+        }
+        
+        // Invitation data
+        UserDefaults.standard.removeObject(forKey: "pending_invite_orgID")
+        UserDefaults.standard.removeObject(forKey: "pending_invite_orgName")
+        UserDefaults.standard.removeObject(forKey: "pending_invite_token")
+        UserDefaults.standard.removeObject(forKey: "pending_invite_role")
+        UserDefaults.standard.removeObject(forKey: "pending_secure_invite_token")
+        
+        // Development/testing data
+        UserDefaults.standard.removeObject(forKey: "dev_subscription_tier")
+        
+        // Project data (organization-specific)
+        let defaults = UserDefaults.standard
+        let dictionary = defaults.dictionaryRepresentation()
+        
+        for key in dictionary.keys {
+            // Remove organization-specific project data
+            if key.hasPrefix("projects_") || 
+               key.hasPrefix("organization_") ||
+               key.hasPrefix("team_members_") ||
+               key.hasPrefix("cached_") {
+                defaults.removeObject(forKey: key)
+                print("🗑️ Removed cached data: \(key)")
+            }
+        }
+        
+        // Clear in-memory state
+        user = nil
+        organizations = []
+        userOrganizations = []
+        organizationRoles = [:]
+        currentOrg = nil
+        errorMessage = nil
+        pendingInvites = []
+        inviteStatus = ""
+        needsOrganizationSetup = false
+        showOrganizationSetup = false
+        showAdminInfoUpdate = false
+        assignedProjectIDs = []
+        teamProjectAssignments = [:]
+        
+        // Clear ProjectViewModel data if available
+        if let projectVM = projectVM {
+            Task { @MainActor in
+                projectVM.projects = []
+                projectVM.organizationProjects = []
+                projectVM.selectedProject = nil
+                projectVM.teamMembers = []
+                projectVM.currentOrganization = nil
+                projectVM.currentOrganizationID = nil
+                print("🗑️ Cleared ProjectViewModel data")
+            }
+        }
+        
+        // Synchronize UserDefaults
+        UserDefaults.standard.synchronize()
+        
+        print("✅ CACHE CLEAR: Comprehensive cleanup completed - app ready for fresh experience!")
+    }
 }
 
 // MARK: - Extensions (Outside of class)

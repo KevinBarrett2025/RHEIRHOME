@@ -92,11 +92,114 @@ class ProjectViewModel: ObservableObject {
     // MARK: - PHASE 1 STUB METHODS - TODO: Implement in Phase 2
     
     func addTeamMemberToOrganization(_ teamMember: TeamMember) {
-        print("TODO: addTeamMemberToOrganization - Phase 2")
-        // For now, just add to local storage
+        print("🎯 ADD TEAM MEMBER: Adding team member to organization...")
+        print("   Name: \(teamMember.name)")
+        print("   Role: \(teamMember.role.displayName)")
+        print("   Organization: \(teamMember.organizationID.prefix(8))...")
+        print("   App User ID: \(teamMember.appUserID ?? "none")")
+        
+        // CRITICAL: Check for duplicates before adding
+        let existingMember = teamMembers.firstIndex { existing in
+            // Check by app user ID and organization ID for app users
+            if let existingAppUserID = existing.appUserID,
+               let newAppUserID = teamMember.appUserID,
+               existing.organizationID == teamMember.organizationID {
+                return existingAppUserID == newAppUserID
+            }
+            
+            // Check by name and organization for non-app users (fallback)
+            return existing.name == teamMember.name && 
+                   existing.organizationID == teamMember.organizationID
+        }
+        
+        if let existingIndex = existingMember {
+            print("⚠️ DUPLICATE PREVENTION: Team member already exists at index \(existingIndex)")
+            print("   Existing: \(teamMembers[existingIndex].name) (\(teamMembers[existingIndex].role.displayName))")
+            print("   Attempted: \(teamMember.name) (\(teamMember.role.displayName))")
+            
+            // Update existing member if new one has more complete data
+            if teamMember.rates.count > teamMembers[existingIndex].rates.count ||
+               !teamMember.email.isEmpty && teamMembers[existingIndex].email.isEmpty {
+                print("🔄 UPDATING: Existing member with more complete data")
+                teamMembers[existingIndex] = teamMember
+                updateTeamMemberCaches()
+            }
+            return
+        }
+        
+        // Add new team member
+        teamMembers.append(teamMember)
+        updateTeamMemberCaches()
+        
+        // Save to CloudKit if this is organization data
+        if isUsingCloudKitForOrganizationData {
+            Task {
+                do {
+                    try await saveTeamMemberToCloudKit(teamMember)
+                    print("✅ CLOUDKIT: Team member saved to CloudKit")
+                } catch {
+                    print("⚠️ CLOUDKIT: Failed to save team member: \(error)")
+                }
+            }
+        }
+        
+        // Also persist locally
         Task {
             await addTeamMember(teamMember)
         }
+        
+        print("✅ ADD TEAM MEMBER: Successfully added \(teamMember.name) to organization")
+        print("   Total team members: \(teamMembers.count)")
+        print("   Organization team members: \(teamMembers.filter { $0.organizationID == teamMember.organizationID }.count)")
+    }
+    
+    /// Save team member to CloudKit using proper schema
+    private func saveTeamMemberToCloudKit(_ teamMember: TeamMember) async throws {
+        let container = CKContainer(identifier: "iCloud.com.rheirhome.rheirhomeappV3")
+        let privateDatabase = container.privateCloudDatabase
+        
+        // Create TeamMember record using CloudKit schema
+        let recordID = CKRecord.ID(recordName: "team_member_\(teamMember.id.uuidString)")
+        let record = CKRecord(recordType: "TeamMember", recordID: recordID)
+        
+        // Map to CloudKit schema fields (based on provided schema)
+        record["id"] = teamMember.id.uuidString as CKRecordValue
+        record["name"] = teamMember.name as CKRecordValue
+        record["email"] = teamMember.email as CKRecordValue
+        record["phone"] = teamMember.phone as CKRecordValue
+        record["jobTitle"] = teamMember.jobTitle as CKRecordValue
+        record["organizationID"] = teamMember.organizationID as CKRecordValue
+        record["role"] = teamMember.role.rawValue as CKRecordValue
+        record["isActive"] = (teamMember.isActive ? 1 : 0) as CKRecordValue
+        record["hasAppAccess"] = (teamMember.hasAppAccess ? 1 : 0) as CKRecordValue
+        record["employmentStatus"] = teamMember.employmentStatus.rawValue as CKRecordValue
+        record["employmentType"] = teamMember.employmentType.rawValue as CKRecordValue
+        record["environment"] = "production" as CKRecordValue
+        record["dateAdded"] = Date() as CKRecordValue
+        record["lastModified"] = Date() as CKRecordValue
+        
+        // Add app user ID if available
+        if let appUserID = teamMember.appUserID {
+            record["appUserID"] = appUserID as CKRecordValue
+        }
+        
+        // Encode rates as BYTES (per CloudKit schema)
+        if let ratesData = try? JSONEncoder().encode(teamMember.rates) {
+            record["rates"] = ratesData as CKRecordValue
+        }
+        
+        // Set default rate if available
+        if let defaultRate = teamMember.rates.first(where: { $0.isDefault }) {
+            record["defaultRate"] = defaultRate.rate as CKRecordValue
+        }
+        
+        // Add notes if available
+        if !teamMember.notes.isEmpty {
+            record["notes"] = teamMember.notes as CKRecordValue
+        }
+        
+        _ = try await privateDatabase.save(record)
+        print("✅ CLOUDKIT SCHEMA: TeamMember saved with proper field mapping")
     }
     
     func markProjectAsCompleted(_ project: Project) {

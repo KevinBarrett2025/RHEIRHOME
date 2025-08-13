@@ -444,7 +444,7 @@ struct TierComparisonView: View {
                 .fontWeight(.bold)
             
             let features = [
-                ("Projects", ["Up to 3", "Unlimited", "Unlimited"]),
+                ("Projects", ["Up to 3", "Up to 25", "Unlimited"]),
                 ("Team Members", ["Up to 2", "Up to 10", "Unlimited"]),
                 ("AI Features", ["Basic", "Advanced", "Premium"]),
                 ("Support", ["Community", "Email", "Priority + Phone"]),

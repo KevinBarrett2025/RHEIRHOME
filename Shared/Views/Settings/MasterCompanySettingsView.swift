@@ -1070,7 +1070,16 @@ struct MasterOrganizationSettingsTabView: View {
                 if let currentOrg = authVM.currentOrg {
                     infoRow("Current Plan", currentOrg.subscriptionTier.displayName)
                     infoRow("Monthly Cost", currentOrg.subscriptionTier.monthlyPrice > 0 ? "$\(String(format: "%.0f", currentOrg.subscriptionTier.monthlyPrice))" : "Free")
+                    infoRow("Project Limit", currentOrg.subscriptionTier.projectLimitDisplay == "∞" ? "Unlimited" : "\(currentOrg.subscriptionTier.projectLimitDisplay) projects max")
+                    infoRow("Team Limit", currentOrg.subscriptionTier.teamMemberLimitDisplay == "∞" ? "Unlimited" : "\(currentOrg.subscriptionTier.teamMemberLimitDisplay) members max")
                     infoRow("Features", "\(currentOrg.subscriptionTier.features.count) included")
+                    
+                    // Current usage
+                    let currentProjects = projectVM.projects.count
+                    let currentTeamMembers = projectVM.teamMembers.count + 1 // +1 for admin
+                    
+                    infoRow("Projects Used", currentOrg.subscriptionTier.projectUsageDisplay(current: currentProjects))
+                    infoRow("Team Members", currentOrg.subscriptionTier.teamMemberUsageDisplay(current: currentTeamMembers))
                 }
                 
                 // Upgrade/Manage Subscription Button

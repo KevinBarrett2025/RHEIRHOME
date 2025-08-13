@@ -319,7 +319,7 @@ public enum SubscriptionTier: String, Codable, CaseIterable {
     public var maxProjects: Int {
         switch self {
         case .free, .starter: return 3
-        case .professional, .standard: return Int.max
+        case .professional, .standard: return 25
         case .enterprise, .premium: return Int.max
         }
     }
@@ -344,7 +344,7 @@ public enum SubscriptionTier: String, Codable, CaseIterable {
             ]
         case .professional, .standard:
             return [
-                "Unlimited projects",
+                "Up to 25 projects",
                 "Up to 10 team members", 
                 "Advanced reporting",
                 "1-year data retention",
@@ -560,5 +560,47 @@ public struct OrganizationPayrollSummary: Codable, Sendable {
         
         let missingDocs = needsW9 + needsI9
         return Double(totalRequiringDocs - missingDocs) / Double(totalRequiringDocs)
+    }
+}
+
+// MARK: - Subscription Display Helpers
+
+extension SubscriptionTier {
+    /// Returns a formatted string for project limits display
+    public var projectLimitDisplay: String {
+        switch maxProjects {
+        case Int.max:
+            return "∞"
+        default:
+            return "\(maxProjects)"
+        }
+    }
+    
+    /// Returns a formatted string for team member limits display
+    public var teamMemberLimitDisplay: String {
+        switch maxTeamMembers {
+        case Int.max:
+            return "∞"
+        default:
+            return "\(maxTeamMembers)"
+        }
+    }
+    
+    /// Returns a usage display string like "2 / 25" or "5 / ∞"
+    public func projectUsageDisplay(current: Int) -> String {
+        if maxProjects == Int.max {
+            return "\(current) / ∞"
+        } else {
+            return "\(current) / \(maxProjects)"
+        }
+    }
+    
+    /// Returns a usage display string like "3 / 10" or "8 / ∞"
+    public func teamMemberUsageDisplay(current: Int) -> String {
+        if maxTeamMembers == Int.max {
+            return "\(current) / ∞"
+        } else {
+            return "\(current) / \(maxTeamMembers)"
+        }
     }
 }

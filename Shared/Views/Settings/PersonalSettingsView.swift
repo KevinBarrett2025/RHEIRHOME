@@ -251,8 +251,33 @@ struct PersonalSettingsView: View {
                 #if DEBUG
                 Section {
                     Toggle("Debug Mode", isOn: $debugMode)
+                    
+                    // CACHE CLEAR BUTTON FOR FRESH TESTING
+                    Button {
+                        authVM.clearAllLocalCache()
+                    } label: {
+                        HStack {
+                            Image(systemName: "trash.circle.fill")
+                                .foregroundColor(.red)
+                                .frame(width: 24)
+                            
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Clear All Local Cache")
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                                    .foregroundColor(.red)
+                                
+                                Text("Reset app to fresh install state")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            
+                            Spacer()
+                        }
+                    }
+                    .buttonStyle(.plain)
                 } footer: {
-                    Text("Development and testing mode. Not visible in production builds.")
+                    Text("Development and testing tools. Clear cache to test fresh onboarding flow.")
                 }
                 #endif
             }

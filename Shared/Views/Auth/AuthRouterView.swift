@@ -19,9 +19,9 @@ struct AuthRouterView: View {
         if let pendingOrgName = UserDefaults.standard.string(forKey: "pending_invite_orgName") {
             // Show loading screen while processing invite
             inviteProcessingView(orgName: pendingOrgName)
-        } else if authViewModel.showAdminInfoUpdate {
-            // Show admin info update after organization creation
-            AdminInfoUpdateView()
+        } else if authViewModel.showAdminInfoUpdate, let currentOrg = authViewModel.currentOrg {
+            // Show professional admin onboarding after organization creation
+            AdminOnboardingView(organization: currentOrg)
                 .environmentObject(authViewModel)
         } else if authViewModel.currentOrg != nil {
             // User has a current organization - proceed to main app
