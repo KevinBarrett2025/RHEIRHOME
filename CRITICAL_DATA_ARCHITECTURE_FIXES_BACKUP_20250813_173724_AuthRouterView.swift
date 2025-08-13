@@ -24,22 +24,15 @@ struct AuthRouterView: View {
                 // CRITICAL FIX: Show professional admin onboarding after organization creation
                 AdminOnboardingView(organization: currentOrg)
                     .environmentObject(authViewModel)
-                    .interactiveDismissDisabled(true) // Prevent accidental dismissal
                     .onAppear {
                         print("🎯 ADMIN ONBOARDING: Showing AdminOnboardingView for organization: \(currentOrg.name)")
                         print("🎯 ADMIN ONBOARDING: showAdminInfoUpdate = \(authViewModel.showAdminInfoUpdate)")
                     }
                     .onDisappear {
-                        // CRITICAL FIX: Only allow disappearing if onboarding is actually complete
-                        print("🎯 ADMIN ONBOARDING: AdminOnboardingView attempting to disappear")
+                        // CRITICAL FIX: Ensure we don't get stuck in onboarding state
+                        print("🎯 ADMIN ONBOARDING: AdminOnboardingView disappeared")
                         if authViewModel.showAdminInfoUpdate {
-                            print("⚠️ ADMIN ONBOARDING: Disappeared but flag still true - this should not happen")
-                            // Re-trigger onboarding if it disappeared prematurely
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                                authViewModel.objectWillChange.send()
-                            }
-                        } else {
-                            print("✅ ADMIN ONBOARDING: Properly completed")
+                            print("⚠️ ADMIN ONBOARDING: Still showing admin update flag after view disappeared")
                         }
                     }
             } else if authViewModel.currentOrg != nil {

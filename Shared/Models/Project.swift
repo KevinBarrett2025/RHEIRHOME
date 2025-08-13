@@ -8,7 +8,7 @@ public enum ProjectPriority: String, CaseIterable, Codable {
     case urgent = "Urgent"
 }
 
-public struct Project: Identifiable, Codable, Equatable {
+public struct Project: Identifiable, Codable, Equatable, Sendable {
     public let id: UUID
     public var name: String
     public var client: String

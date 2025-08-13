@@ -7,6 +7,9 @@ struct LandingPageView: View {
 
     @State private var showNewProject = false
     @State private var isRefreshing = false
+    @State private var showingStatusAlert = false
+    @State private var statusMessage = ""
+    @State private var showAdminOnboardingSheet = false
     @Namespace private var animation
 
     private var activeProjects: [Project] {
@@ -85,6 +88,13 @@ struct LandingPageView: View {
             .sheet(isPresented: $showNewProject) {
                 NewProjectView(isPresented: $showNewProject)
                     .environmentObject(viewModel)
+            }
+            .sheet(isPresented: $showAdminOnboardingSheet) {
+                if let currentOrg = authVM.currentOrg {
+                    AdminOnboardingView(organization: currentOrg)
+                        .environmentObject(authVM)
+                        .environmentObject(viewModel)
+                }
             }
             .overlay(
                 FAB(icon: "plus") {
@@ -218,6 +228,17 @@ struct LandingPageView: View {
                             }
                             .buttonStyle(.borderedProminent)
                             .font(.caption2)
+                            
+                            // ADMIN ONBOARDING TEST BUTTON
+                            #if DEBUG
+                            Button("👑 Test Admin Onboarding") {
+                                print("🎯 SHEET: Opening admin onboarding as sheet")
+                                showAdminOnboardingSheet = true
+                            }
+                            .buttonStyle(.bordered)
+                            .font(.caption2)
+                            .foregroundColor(.blue)
+                            #endif
                         }
                         .padding(.top, 8)
                     }
@@ -443,9 +464,6 @@ struct LandingPageView: View {
         
         print("✅ Pull-to-refresh complete - CloudKit projects loaded")
     }
-    
-    @State private var showingStatusAlert = false
-    @State private var statusMessage = ""
     
     private func setupOrganizationSharing() {
         viewModel.fixMissingOrganizationIDs { success, message in

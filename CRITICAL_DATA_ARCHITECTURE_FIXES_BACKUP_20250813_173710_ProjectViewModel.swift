@@ -303,8 +303,7 @@ class ProjectViewModel: ObservableObject {
         // Query for projects belonging to this organization
         let predicate = NSPredicate(format: "organizationID == %@", currentOrganizationID)
         let query = CKQuery(recordType: "Project", predicate: predicate)
-        // CRITICAL FIX: Remove unsupported sort descriptor that causes CloudKit error
-        // query.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
+        query.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
         
         let result = try await privateDatabase.records(matching: query)
         
@@ -344,7 +343,7 @@ class ProjectViewModel: ObservableObject {
             }
         }
         
-        print("✅ CLOUDKIT LOAD: Loaded \(projects.count) projects from CloudKit (fixed query)")
+        print("✅ SIMPLE CLOUDKIT: Loaded \(projects.count) projects from CloudKit")
         return projects
     }
     
@@ -1232,31 +1231,5 @@ class ProjectViewModel: ObservableObject {
     
     var allProjects: [Project] {
         return projects
-    }
-    
-    // MARK: - Debug and Diagnostics
-    
-    /// Consolidated debug information for troubleshooting
-    func debugOrganizationState() {
-        print("🔍 ORGANIZATION DEBUG STATE:")
-        print("  Current Org: \(currentOrganization?.name ?? "None")")
-        print("  Current Org ID: \(currentOrganizationID ?? "None")")
-        print("  Projects Array: \(projects.count)")
-        print("  Organization Projects: \(organizationProjects.count)")
-        print("  Accessible Projects: \(accessibleProjects.count)")
-        print("  Team Members: \(teamMembers.count)")
-        print("  CloudKit Enabled: \(isUsingCloudKitForOrganizationData)")
-        print("  Data Loading: \(isDataLoading)")
-        
-        if let error = zoneSetupError {
-            print("  Zone Setup Error: \(error.localizedDescription)")
-        }
-        
-        // Show project details if count mismatch
-        if projects.count != organizationProjects.count {
-            print("  ⚠️ PROJECT COUNT MISMATCH:")
-            print("    All Projects: \(projects.map { "\($0.name) (\($0.organizationID ?? "nil"))" })")
-            print("    Org Projects: \(organizationProjects.map { "\($0.name) (\($0.organizationID))" })")
-        }
     }
 }

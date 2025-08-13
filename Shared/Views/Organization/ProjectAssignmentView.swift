@@ -8,16 +8,73 @@ struct ProjectAssignmentView: View {
     @State private var selectedProjects: Set<UUID> = []
     
     private var availableProjects: [Project] {
-        return projectVM.organizationProjects.filter { $0.status == .active }
+        // CRITICAL FIX: Use all accessible projects instead of just organizationProjects
+        // and add debug logging to identify why projects aren't showing
+        let projects = projectVM.accessibleProjects.filter { $0.status == .active }
+        
+        print("🔍 PROJECT ASSIGNMENT DEBUG:")
+        print("   Total accessible projects: \(projectVM.accessibleProjects.count)")
+        print("   Organization projects: \(projectVM.organizationProjects.count)")
+        print("   Active projects for assignment: \(projects.count)")
+        print("   Current organization ID: \(projectVM.currentOrganizationID ?? "none")")
+        
+        if projects.isEmpty {
+            print("⚠️ PROJECT ASSIGNMENT: No projects available!")
+            print("   Accessible projects: \(projectVM.accessibleProjects.map { $0.name })")
+            print("   Organization projects: \(projectVM.organizationProjects.map { $0.name })")
+            
+            // CRITICAL FIX: Try to load projects if none are available
+            Task {
+                print("🔄 PROJECT ASSIGNMENT: Attempting to load projects...")
+                await projectVM.loadProjects()
+            }
+        }
+        
+        return projects
     }
     
     var body: some View {
         NavigationView {
             Form {
                 Section(header: Text("Assign \(teamMember.name) to Projects")) {
-                    if availableProjects.isEmpty {
-                        Text("No active projects available")
-                            .foregroundColor(.secondary)
+                    // CRITICAL FIX: Add loading state and better error handling
+                    if projectVM.isDataLoading {
+                        HStack {
+                            ProgressView()
+                                .scaleEffect(0.8)
+                            Text("Loading projects...")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                        }
+                        .padding()
+                    } else if availableProjects.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("No active projects available")
+                                .foregroundColor(.secondary)
+                            
+                            // CRITICAL FIX: Add debug information to help diagnose the issue
+                            Group {
+                                Text("Debug Info:")
+                                    .font(.caption)
+                                    .fontWeight(.bold)
+                                Text("Organization ID: \(projectVM.currentOrganizationID ?? "none")")
+                                    .font(.caption2)
+                                Text("Total projects: \(projectVM.projects.count)")
+                                    .font(.caption2)
+                                Text("Org projects: \(projectVM.organizationProjects.count)")
+                                    .font(.caption2)
+                                Text("Accessible projects: \(projectVM.accessibleProjects.count)")
+                                    .font(.caption2)
+                            }
+                            .foregroundColor(.orange)
+                            
+                            Button("Reload Projects") {
+                                Task {
+                                    await projectVM.loadProjects()
+                                }
+                            }
+                            .buttonStyle(.bordered)
+                        }
                     } else {
                         ForEach(availableProjects) { project in
                             HStack {
@@ -71,6 +128,15 @@ struct ProjectAssignmentView: View {
                         assignToProjects()
                     }
                     .disabled(selectedProjects.isEmpty)
+                }
+            }
+            .onAppear {
+                // CRITICAL FIX: Load projects when view appears to ensure data is available
+                Task {
+                    if projectVM.accessibleProjects.isEmpty {
+                        print("🔄 PROJECT ASSIGNMENT: Loading projects on view appear...")
+                        await projectVM.loadProjects()
+                    }
                 }
             }
         }

@@ -17,14 +17,26 @@ struct EnhancedOrganizationDirectoryView: View {
     // Smart project-based team member categorization
     private var activeTeamMembers: [TeamMember] {
         return projectVM.teamMembers.compactMap { member in
+            // CRITICAL FIX: Filter by organization first, then update status
+            guard member.organizationID == organization.id else { return nil }
+            
             var updatedMember = member
             updatedMember.updateStatusFromProjects(projectVM.allProjects)
-            return updatedMember.employmentStatus == .active ? updatedMember : nil
+            
+            // CRITICAL FIX: Show truly active members (working on active projects or employed but available)
+            if updatedMember.employmentStatus == .active || 
+               (updatedMember.isActive && updatedMember.employmentStatus != .terminated) {
+                return updatedMember
+            }
+            return nil
         }
     }
     
     private var betweenProjectsMembers: [TeamMember] {
         return projectVM.teamMembers.compactMap { member in
+            // CRITICAL FIX: Filter by organization first
+            guard member.organizationID == organization.id else { return nil }
+            
             var updatedMember = member
             updatedMember.updateStatusFromProjects(projectVM.allProjects)
             return updatedMember.employmentStatus == .betweenProjects ? updatedMember : nil
@@ -33,6 +45,9 @@ struct EnhancedOrganizationDirectoryView: View {
     
     private var completedTeamMembers: [TeamMember] {
         return projectVM.teamMembers.compactMap { member in
+            // CRITICAL FIX: Filter by organization first
+            guard member.organizationID == organization.id else { return nil }
+            
             var updatedMember = member
             updatedMember.updateStatusFromProjects(projectVM.allProjects)
             return updatedMember.employmentStatus == .completed ? updatedMember : nil
@@ -41,9 +56,12 @@ struct EnhancedOrganizationDirectoryView: View {
     
     private var inactiveTeamMembers: [TeamMember] {
         return projectVM.teamMembers.filter { 
-            $0.employmentStatus == .terminated || 
-            $0.employmentStatus == .suspended || 
-            $0.employmentStatus == .onLeave 
+            // CRITICAL FIX: Filter by organization first
+            guard $0.organizationID == organization.id else { return false }
+            
+            return $0.employmentStatus == .terminated || 
+                   $0.employmentStatus == .suspended || 
+                   $0.employmentStatus == .onLeave 
         }
     }
     

@@ -397,8 +397,8 @@ class AuthViewModel: ObservableObject {
             print("🎯 ADMIN ONBOARDING: Triggering professional admin setup...");
         }
         
-        // CRITICAL FIX: Improved timing - wait longer for UI state to fully settle
-        try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
+        // CRITICAL FIX: Improved timing - wait for UI state to settle before showing onboarding
+        try? await Task.sleep(nanoseconds: 200_000_000) // 0.2 seconds
         
         await MainActor.run {
             // Double-check that we still need onboarding (user might have completed it)
@@ -410,23 +410,15 @@ class AuthViewModel: ObservableObject {
                 }
                 
                 if existingAdmin == nil {
-                    print("🎯 ADMIN ONBOARDING: No admin found - triggering onboarding flow")
                     self.showAdminInfoUpdate = true;
                     print("🎯 ADMIN ONBOARDING: Set showAdminInfoUpdate = \(self.showAdminInfoUpdate)");
-                    
-                    // CRITICAL FIX: Force UI update to ensure view change is detected
-                    self.objectWillChange.send()
-                    
                 } else {
                     print("✅ ADMIN ONBOARDING: Admin already exists, skipping onboarding");
-                    print("   Admin: \(existingAdmin.name) (\(existingAdmin.role.displayName))")
                 }
             } else {
                 // No ProjectViewModel yet, show onboarding anyway
-                print("🎯 ADMIN ONBOARDING: No ProjectVM yet - showing onboarding")
                 self.showAdminInfoUpdate = true;
-                self.objectWillChange.send()
-                print("🎯 ADMIN ONBOARDING: Set showAdminInfoUpdate = \(self.showAdminInfoUpdate)");
+                print("🎯 ADMIN ONBOARDING: Set showAdminInfoUpdate = \(self.showAdminInfoUpdate) (no ProjectVM yet)");
             }
         }
 
@@ -869,11 +861,6 @@ class AuthViewModel: ObservableObject {
     func clearAllLocalCache() {
         print("🗑️ CACHE CLEAR: Starting comprehensive local cache cleanup...")
         
-        // CRITICAL FIX: Also clear CloudKit organization cache
-        Task {
-            await clearCloudKitOrganizationCache()
-        }
-        
         // Organization-related data
         UserDefaults.standard.removeObject(forKey: "currentOrganizationID")
         UserDefaults.standard.removeObject(forKey: "previousOrganizationID")
@@ -941,21 +928,6 @@ class AuthViewModel: ObservableObject {
         UserDefaults.standard.synchronize()
         
         print("✅ CACHE CLEAR: Comprehensive cleanup completed - app ready for fresh experience!")
-    }
-    
-    /// CRITICAL FIX: Clear CloudKit organization cache to ensure nuclear reset works
-    private func clearCloudKitOrganizationCache() async {
-        print("🗑️ CLOUDKIT CACHE: Clearing CloudKit organization cache...")
-        
-        // Force refresh organizations from CloudKit on next load
-        await MainActor.run {
-            self.organizations = []
-            self.userOrganizations = []
-            self.organizationRoles = [:]
-            self.isLoadingOrgs = false
-        }
-        
-        print("✅ CLOUDKIT CACHE: Cleared - next organization fetch will be fresh from CloudKit")
     }
 }
 

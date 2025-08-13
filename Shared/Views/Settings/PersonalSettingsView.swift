@@ -276,6 +276,81 @@ struct PersonalSettingsView: View {
                         }
                     }
                     .buttonStyle(.plain)
+                    
+                    // ADMIN ONBOARDING TRIGGER BUTTON
+                    Button {
+                        print("🎯 DEBUG: Triggering admin onboarding manually")
+                        print("   Current showAdminInfoUpdate: \(authVM.showAdminInfoUpdate)")
+                        print("   Current org: \(authVM.currentOrg?.name ?? "nil")")
+                        
+                        authVM.showAdminInfoUpdate = true
+                        
+                        print("   Set showAdminInfoUpdate to: \(authVM.showAdminInfoUpdate)")
+                        dismiss()
+                    } label: {
+                        HStack {
+                            Image(systemName: "crown.fill")
+                                .foregroundColor(.blue)
+                                .frame(width: 24)
+                            
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Trigger Admin Onboarding")
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                                    .foregroundColor(.blue)
+                                
+                                Text("Test the professional admin setup flow")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            
+                            Spacer()
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    
+                    // FORCE DELETE ORGANIZATION (for testing)
+                    Button {
+                        print("🗑️ NUCLEAR: Force deleting organization from memory")
+                        
+                        // CRITICAL FIX: Comprehensive nuclear reset
+                        authVM.clearAllLocalCache()
+                        
+                        // Also clear from ProjectViewModel
+                        projectVM.currentOrganization = nil
+                        projectVM.currentOrganizationID = nil
+                        projectVM.teamMembers = []
+                        projectVM.projects = []
+                        projectVM.organizationProjects = []
+                        projectVM.accessibleProjects = []
+                        
+                        // Force UI state updates
+                        authVM.needsOrganizationSetup = true
+                        authVM.showOrganizationSetup = true
+                        
+                        print("✅ NUCLEAR: Complete reset - app should show organization setup")
+                        dismiss()
+                    } label: {
+                        HStack {
+                            Image(systemName: "trash.fill")
+                                .foregroundColor(.orange)
+                                .frame(width: 24)
+                            
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Nuclear Delete Organization")
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                                    .foregroundColor(.orange)
+                                
+                                Text("Complete reset including CloudKit cache")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            
+                            Spacer()
+                        }
+                    }
+                    .buttonStyle(.plain)
                 } footer: {
                     Text("Development and testing tools. Clear cache to test fresh onboarding flow.")
                 }
