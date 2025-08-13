@@ -18,7 +18,56 @@ struct LandingPageView: View {
         NavigationStack {
             ZStack {
                 VStack {
-                    organizationHeader
+                    // Use UniversalHeaderView instead of custom header to get tier switcher
+                    UniversalHeaderView(
+                        showSettingsGear: true,
+                        showProjectContext: false
+                    )
+                    
+                    // Additional context info below header
+                    if authVM.currentOrg != nil {
+                        HStack {
+                            // Multi-org indicator and quick stats  
+                            if authVM.userOrganizations.count > 1 {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "building.2.crop.circle")
+                                            .font(.caption2)
+                                            .foregroundColor(.blue)
+                                        Text("\(authVM.userOrganizations.count) organizations")
+                                            .font(.caption2)
+                                            .foregroundColor(.blue)
+                                    }
+                                    
+                                    if let role = authVM.currentOrganizationRole {
+                                        Text("Role: \(role.displayName)")
+                                            .font(.caption2)
+                                            .foregroundColor(.secondary)
+                                    }
+                                }
+                            }
+                            
+                            Spacer()
+                            
+                            // Show refresh indicator if needed
+                            if isRefreshing {
+                                ProgressView()
+                                    .scaleEffect(0.7)
+                            }
+                            
+                            // Refresh button
+                            Button {
+                                refreshProjects()
+                            } label: {
+                                Image(systemName: "arrow.clockwise")
+                                    .font(.title3)
+                                    .foregroundColor(.blue)
+                            }
+                            .disabled(isRefreshing)
+                        }
+                        .padding(.horizontal)
+                        .padding(.bottom, 8)
+                    }
                     
                     logoSection
                     
@@ -67,68 +116,6 @@ struct LandingPageView: View {
                 Button("OK") { }
             } message: {
                 Text(statusMessage)
-            }
-        }
-    }
-    
-    private var organizationHeader: some View {
-        Group {
-            if authVM.currentOrg != nil {
-                HStack {
-                    // Replace the simple text with the organization selector
-                    OrganizationSelectorView()
-                        .environmentObject(authVM)
-                    
-                    Spacer()
-                    
-                    // Multi-org indicator and quick stats
-                    if authVM.userOrganizations.count > 1 {
-                        VStack(alignment: .trailing, spacing: 2) {
-                            HStack(spacing: 4) {
-                                Image(systemName: "building.2.crop.circle")
-                                    .font(.caption2)
-                                    .foregroundColor(.blue)
-                                Text("\(authVM.userOrganizations.count) orgs")
-                                    .font(.caption2)
-                                    .foregroundColor(.blue)
-                            }
-                            
-                            if let role = authVM.currentOrganizationRole {
-                                Text(role.displayName)
-                                    .font(.caption2)
-                                    .foregroundColor(.secondary)
-                            }
-                        }
-                    }
-                    
-                    // Show refresh indicator if needed
-                    if isRefreshing {
-                        ProgressView()
-                            .scaleEffect(0.7)
-                    }
-                    
-                    // Refresh button
-                    Button {
-                        refreshProjects()
-                    } label: {
-                        Image(systemName: "arrow.clockwise")
-                            .font(.title3)
-                            .foregroundColor(.blue)
-                    }
-                    .disabled(isRefreshing)
-                    
-                    NavigationLink {
-                        MasterCompanySettingsView()
-                            .environmentObject(viewModel)
-                            .environmentObject(authVM)
-                    } label: {
-                        Image(systemName: "gearshape.fill")
-                            .font(.title2)
-                            .foregroundColor(.secondary)
-                    }
-                }
-                .padding(.horizontal)
-                .padding(.top, 8)
             }
         }
     }

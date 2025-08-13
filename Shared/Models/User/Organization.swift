@@ -52,7 +52,7 @@ public struct Organization: Identifiable, Codable, Hashable {
     public var tenantIsolationLevel: String = "ZONE_ISOLATED"
     public var maxMembers: Int = 50
     public var storageQuotaMB: Double = 10000 // 10GB default
-    public var subscriptionTier: SubscriptionTier = .free
+    public var subscriptionTier: SubscriptionTier = .enterprise
     
     // CloudKit integration
     public var cloudKitRecordID: String?
@@ -84,6 +84,10 @@ public struct Organization: Identifiable, Codable, Hashable {
         self.isActive = isActive
         self.createdAt = createdAt
         self.cloudKitRecordID = cloudKitRecordID
+        
+        // ENTERPRISE DEFAULT: Set enterprise-level limits by default
+        self.maxMembers = Int.max
+        self.storageQuotaMB = 50000 // 50GB
         
         // Generate CloudKit zone ID based on organization ID
         self.cloudKitZoneID = "org_\(id)_\(isDebugMode() ? "dev" : "prod")"

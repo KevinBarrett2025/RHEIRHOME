@@ -520,10 +520,97 @@ struct ScannedReceiptEntryView: View {
             receiptImageData: scannedImage.jpegData(compressionQuality: 0.8)
         )
         
-        projectVM.addReceipt(receipt)
-        showSuccessMessage(receipt: receipt)
+        // CRITICAL FIX: Use the correct async method with project ID
+        Task {
+            await projectVM.addReceipt(receipt, to: project.id)
+            
+            // CRITICAL FIX: Sync vendor and payment method to organization settings
+            await syncReceiptDataToCompanySettings(receipt: receipt)
+            
+            // Save organization-specific backup to ensure persistence
+            projectVM.saveOrganizationSpecificBackup()
+            
+            await MainActor.run {
+                showSuccessMessage(receipt: receipt)
+            }
+        }
     }
     
+    // MARK: - Company Settings Integration
+    
+    private func syncReceiptDataToCompanySettings(receipt: Receipt) async {
+        // Sync vendor to organization's vendor directory
+        if !receipt.vendor.isEmpty {
+            let vendor = projectVM.vendorService.findOrCreateVendor(
+                name: receipt.vendor,
+                category: mapReceiptCategoryToVendorCategory(receipt.category)
+            )
+            
+            // Update vendor spending
+            let amount = receipt.isReturn ? -receipt.amount : receipt.amount
+            if let index = projectVM.vendorService.vendors.firstIndex(where: { $0.id == vendor.id }) {
+                projectVM.vendorService.vendors[index].totalSpent += amount
+                projectVM.vendorService.vendors[index].totalSpent = max(0, projectVM.vendorService.vendors[index].totalSpent)
+            }
+            
+            print("✅ AI-Enhanced vendor synced: \(vendor.name) with \(analysisResult.items.count) items detected")
+        }
+        
+        // Sync payment method to organization's payment method directory
+        if !receipt.paymentMethod.isEmpty {
+            let paymentMethod = projectVM.paymentMethodService.findOrCreatePaymentMethod(
+                name: receipt.paymentMethod,
+                type: mapReceiptPaymentMethodToType(receipt.paymentMethod)
+            )
+            
+            // Update payment method spending
+            let amount = receipt.isReturn ? -receipt.amount : receipt.amount
+            if let index = projectVM.paymentMethodService.paymentMethods.firstIndex(where: { $0.id == paymentMethod.id }) {
+                projectVM.paymentMethodService.paymentMethods[index].totalSpent += amount
+                projectVM.paymentMethodService.paymentMethods[index].totalSpent = max(0, projectVM.paymentMethodService.paymentMethods[index].totalSpent)
+            }
+            
+            print("✅ AI-Enhanced payment method synced: \(paymentMethod.displayName)")
+        }
+        
+        print("🤖 AI-Powered receipt data synced to company settings - Confidence: \(Int(analysisResult.confidence * 100))%")
+    }
+    
+    private func mapReceiptCategoryToVendorCategory(_ receiptCategory: ReceiptCategory) -> VendorCategory {
+        switch receiptCategory {
+        case .material: return .hardware
+        case .electrical: return .electrical
+        case .plumbing: return .plumbing
+        case .paint: return .paint
+        case .general: return .other
+        case .kitchen: return .other
+        case .bathroom: return .other
+        case .flooring: return .other
+        case .hvac: return .other
+        case .demolition: return .other
+        case .permits: return .professional
+        case .contingency: return .other
+        default: return .other
+        }
+    }
+    
+    private func mapReceiptPaymentMethodToType(_ paymentMethodName: String) -> PaymentType {
+        let lowercased = paymentMethodName.lowercased()
+        if lowercased.contains("credit") || lowercased.contains("visa") || lowercased.contains("mastercard") || lowercased.contains("amex") {
+            return .creditCard
+        } else if lowercased.contains("debit") {
+            return .debitCard
+        } else if lowercased.contains("cash") {
+            return .cash
+        } else if lowercased.contains("check") {
+            return .check
+        } else if lowercased.contains("transfer") || lowercased.contains("bank") {
+            return .bankTransfer
+        } else {
+            return .other
+        }
+    }
+
     private func showSuccessMessage(receipt: Receipt) {
         let amountText = String(format: "%.2f", receipt.amount)
         let confidenceText = "\(Int(analysisResult.confidence * 100))%"

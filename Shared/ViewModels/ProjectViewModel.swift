@@ -239,11 +239,31 @@ class ProjectViewModel: ObservableObject {
     }
     
     private func updateOrganizationProjects() {
-        if let currentOrg = currentOrganization {
-            organizationProjects = projects.filter { $0.organizationID == currentOrg.id }
+        print("🔄 UPDATING ORGANIZATION PROJECTS")
+        print("📊 Current organization: \(currentOrganization?.name ?? "None")")
+        print("📊 Current organization ID: \(currentOrganizationID ?? "None")")
+        print("📊 Total projects: \(projects.count)")
+        
+        if let currentOrgID = currentOrganizationID {
+            let filteredProjects = projects.filter { project in
+                let matches = project.organizationID == currentOrgID
+                if !matches {
+                    print("🔍 PROJECT FILTER: Excluding '\(project.name)' - OrgID: \(project.organizationID) vs Current: \(currentOrgID)")
+                }
+                return matches
+            }
+            
+            organizationProjects = filteredProjects
+            print("✅ FILTERED PROJECTS: \(organizationProjects.count) projects for organization \(currentOrgID.prefix(8))...")
+            
+            for (i, project) in organizationProjects.enumerated() {
+                print("  \(i): \(project.name) - ID: \(project.id)")
+            }
+            
             // Update accessible projects based on user role
             updateAccessibleProjects()
         } else {
+            print("⚠️ NO ORGANIZATION: Clearing organization projects")
             organizationProjects = []
             accessibleProjects = []
         }
@@ -729,12 +749,84 @@ class ProjectViewModel: ObservableObject {
     // MARK: - Receipt Management
     
     func addReceipt(_ receipt: Receipt, to projectID: UUID) async {
-        guard let projectIndex = organizationProjects.firstIndex(where: { $0.id == projectID }) else { return }
+        print("🔍 RECEIPT DEBUG: Looking for project ID: \(projectID)")
+        print("🔍 RECEIPT DEBUG: Organization projects count: \(organizationProjects.count)")
+        print("🔍 RECEIPT DEBUG: All projects count: \(projects.count)")
         
-        var updatedProject = organizationProjects[projectIndex]
+        // CRITICAL FIX: Check BOTH organizationProjects AND all projects to handle sync issues
+        var targetProject: Project?
+        var projectIndex: Int?
+        var isInOrganizationProjects = false
+        
+        // First, try to find in organizationProjects (preferred)
+        if let orgIndex = organizationProjects.firstIndex(where: { $0.id == projectID }) {
+            targetProject = organizationProjects[orgIndex]
+            projectIndex = orgIndex
+            isInOrganizationProjects = true
+            print("✅ RECEIPT DEBUG: Found project in organizationProjects at index \(orgIndex)")
+        }
+        // If not found, try all projects (fallback for sync issues)
+        else if let allIndex = projects.firstIndex(where: { $0.id == projectID }) {
+            targetProject = projects[allIndex]
+            projectIndex = allIndex
+            isInOrganizationProjects = false
+            print("⚠️ RECEIPT DEBUG: Found project in all projects (not in org projects) at index \(allIndex)")
+            print("🔧 RECEIPT DEBUG: This indicates a data sync issue - adding to organizationProjects")
+            
+            // CRITICAL FIX: Add project to organizationProjects if it belongs to current org
+            let foundProject = projects[allIndex]
+            if let currentOrgID = currentOrganizationID, foundProject.organizationID == currentOrgID {
+                await MainActor.run {
+                    organizationProjects.append(foundProject)
+                    print("✅ RECEIPT DEBUG: Added project to organizationProjects to fix sync issue")
+                }
+                isInOrganizationProjects = true
+                projectIndex = organizationProjects.count - 1
+            }
+        }
+        
+        guard let project = targetProject, let index = projectIndex else { 
+            print("❌ RECEIPT ADD FAILED: Project not found with ID: \(projectID)")
+            print("💡 AVAILABLE ORGANIZATION PROJECTS:")
+            for (i, proj) in organizationProjects.enumerated() {
+                print("  \(i): \(proj.name) (ID: \(proj.id))")
+            }
+            print("💡 AVAILABLE ALL PROJECTS:")
+            for (i, proj) in projects.enumerated() {
+                print("  \(i): \(proj.name) (ID: \(proj.id)) - OrgID: \(proj.organizationID)")
+            }
+            return 
+        }
+        
+        print("💾 ADDING RECEIPT: \(receipt.vendor ?? "Unknown vendor") - \(receipt.amount.formatAsCurrency()) to project: \(project.name)")
+        
+        var updatedProject = project
         updatedProject.receipts.append(receipt)
+        updatedProject.lastModifiedDate = Date()
         
-        await updateProject(updatedProject)
+        // Update the project in the correct array
+        if isInOrganizationProjects {
+            await MainActor.run {
+                organizationProjects[index] = updatedProject
+            }
+        } else {
+            await MainActor.run {
+                projects[index] = updatedProject
+            }
+        }
+        
+        // CRITICAL: Also update the selectedProject if it matches
+        await MainActor.run {
+            if selectedProject?.id == projectID {
+                selectedProject = updatedProject
+                print("✅ RECEIPT ADDED: Updated selected project with new receipt")
+            }
+        }
+        
+        // Save to organization-specific storage
+        saveOrganizationSpecificBackup()
+        
+        print("✅ RECEIPT PERSISTENCE: Receipt added and project updated successfully")
         
         // TODO: Re-enable in Phase 2
         // Process receipt for organization intelligence

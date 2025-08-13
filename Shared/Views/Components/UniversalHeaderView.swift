@@ -95,9 +95,9 @@ struct UniversalHeaderView: View {
     @ViewBuilder
     private var headerControls: some View {
         HStack(spacing: 16) {
-            // Subscription tier indicator (optimized with caching)
+            // Subscription tier dropdown (optimized with caching)
             if let tier = currentTier {
-                tierIndicator(tier)
+                tierDropdown(tier)
             }
             
             // Multi-org indicator
@@ -130,27 +130,77 @@ struct UniversalHeaderView: View {
     }
     
     @ViewBuilder
-    private func tierIndicator(_ tier: SubscriptionTier) -> some View {
-        HStack(spacing: 4) {
-            Image(systemName: tierIcon(tier))
-                .font(.caption2)
-                .foregroundColor(tierColor(tier))
+    private func tierDropdown(_ tier: SubscriptionTier) -> some View {
+        Menu {
+            // Quick tier switching options
+            ForEach([SubscriptionTier.free, .professional, .enterprise], id: \.self) { tierOption in
+                Button {
+                    switchToTier(tierOption)
+                } label: {
+                    HStack {
+                        Image(systemName: tierIcon(tierOption))
+                        Text(tierDisplayName(tierOption))
+                        
+                        if tierOption == tier {
+                            Spacer()
+                            Image(systemName: "checkmark")
+                                .foregroundColor(.blue)
+                        }
+                    }
+                }
+            }
             
-            Text(tierDisplayName(tier))
-                .font(.caption2)
-                .fontWeight(.medium)
-                .foregroundColor(tierColor(tier))
+            Divider()
+            
+            // Link to full subscription settings
+            NavigationLink {
+                PersonalSettingsView()
+                    .environmentObject(projectVM)
+                    .environmentObject(authVM)
+            } label: {
+                HStack {
+                    Image(systemName: "gear")
+                    Text("Subscription Settings")
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: tierIcon(tier))
+                    .font(.caption2)
+                    .foregroundColor(tierColor(tier))
+                
+                Text(tierDisplayName(tier))
+                    .font(.caption2)
+                    .fontWeight(.medium)
+                    .foregroundColor(tierColor(tier))
+                
+                Image(systemName: "chevron.down")
+                    .font(.caption2)
+                    .foregroundColor(tierColor(tier).opacity(0.7))
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(tierColor(tier).opacity(0.1))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(tierColor(tier).opacity(0.3), lineWidth: 1)
+            )
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(tierColor(tier).opacity(0.1))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(tierColor(tier).opacity(0.3), lineWidth: 1)
-        )
+    }
+    
+    private func switchToTier(_ newTier: SubscriptionTier) {
+        guard authVM.currentOrg != nil else { return }
+        
+        // Update organization subscription tier
+        authVM.updateSubscriptionTier(newTier)
+        
+        // Update cache immediately for responsive UI
+        cachedTierInfo = (tier: newTier, timestamp: Date())
+        
+        print("🔄 HEADER SUBSCRIPTION: Switched to \(tierDisplayName(newTier))")
     }
     
     private func tierIcon(_ tier: SubscriptionTier) -> String {

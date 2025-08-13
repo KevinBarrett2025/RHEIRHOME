@@ -468,13 +468,16 @@ struct ReceiptsView: View {
     }
     
     private func deleteReceipt(_ receipt: Receipt) {
-        guard projectVM.selectedProject != nil else { 
+        guard let selectedProject = projectVM.selectedProject else { 
             receiptToDelete = nil
             return 
         }
         
-        var updatedProject = projectVM.selectedProject!
+        print("🗑️ DELETING RECEIPT: \(receipt.vendor ?? "Unknown") - \(receipt.amount.formatAsCurrency())")
+        
+        var updatedProject = selectedProject
         updatedProject.receipts.removeAll { $0.id == receipt.id }
+        updatedProject.lastModifiedDate = Date()
         
         // Update vendor and payment method spending totals
         updateVendorSpending(for: receipt, isRemoving: true)
@@ -482,13 +485,18 @@ struct ReceiptsView: View {
         
         Task {
             await projectVM.updateProject(updatedProject)
+            
+            // CRITICAL: Save organization-specific backup to ensure persistence
+            projectVM.saveOrganizationSpecificBackup()
+            
+            await MainActor.run {
+                projectVM.recomputeFilteredReceipts()
+            }
         }
-        
-        projectVM.recomputeFilteredReceipts()
         
         receiptToDelete = nil
         
-        print("🗑️ Deleted receipt from \(receipt.vendor) for \(receipt.amount.formatAsCurrency())")
+        print("✅ RECEIPT DELETED: Receipt removed and changes persisted")
     }
     
     private func updateVendorSpending(for receipt: Receipt, isRemoving: Bool) {
