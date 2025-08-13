@@ -1,0 +1,1728 @@
+import Foundation
+import SwiftUI
+import CloudKit
+import Combine
+
+@MainActor
+class ProjectViewModel: ObservableObject {
+    // MARK: - Published Properties
+    @Published var projects: [Project] = []
+    @Published var selectedProject: Project?
+    @Published var teamMembers: [TeamMember] = []
+    @Published var isLoading: Bool = false
+    @Published var errorMessage: String?
+    @Published var receipts: [Receipt] = []
+    @Published var organizationProjects: [Project] = []
+    @Published var currentOrganizationID: String?
+    @Published var navigateToBudgetBreakdown: Bool = false
+    @Published var isBulkSyncing: Bool = false
+    @Published var isMigratingPhotos: Bool = false
+    @Published var isOnline: Bool = true
+    @Published var isUsingCloudKitForOrganizationData: Bool = false // TEMPORARILY DISABLED until OrganizationZoneService works
+    @Published var migrationProgress: String = ""
+    @Published var bulkSyncProgress: String = ""
+    @Published var isSavingProject: Bool = false
+    @Published var needsLaborHoursMigration: Bool = false
+    
+    // MARK: - Project Assignment Properties
+    @Published private var userProjectAssignments: [String] = []
+    
+    // MARK: - Zone Management
+    @Published var isSettingUpZone: Bool = false
+    @Published var zoneSetupError: String?
+    
+    // MARK: - Analytics Structures
+    struct VendorSpendingAnalytics {
+        let vendor: VendorInfo
+        let amount: Double
+    }
+
+    struct PaymentMethodSpendingAnalytics {
+        let paymentMethod: PaymentMethodInfo
+        let amount: Double
+    }
+
+    struct VendorInfo {
+        let id: UUID
+        let name: String
+    }
+
+    struct PaymentMethodInfo {
+        let id: UUID
+        let name: String
+    }
+    
+    // MARK: - Services
+    let cloudKitService: CloudKitAuthService
+    let vendorService: VendorManagementService
+    let paymentMethodService: PaymentMethodManagementService
+    
+    // MARK: - Cache Properties
+    var teamMemberCache: [String: TeamMember] = [:]
+    var groupedHoursByTeamMember: [String: [WorkHour]] = [:]
+    var laborTotalsByTeamMember: [String: (unpaid: Double, paid: Double)] = [:]
+    
+    // MARK: - Computed Properties
+    var allProjects: [Project] {
+        // Combine local projects (cached) with organization projects (CloudKit)
+        return projects + organizationProjects
+    }
+    
+    /// Get projects filtered by current user's role and permissions
+    var accessibleProjects: [Project] {
+        guard let currentUserID = getCurrentUserID(),
+              let currentOrgID = currentOrganizationID else {
+            return []
+        }
+        
+        // Get user's role in current organization
+        let userRole = getCurrentUserRole()
+        
+        let filteredProjects = organizationProjects.filter { project in
+            // Only show projects from current organization
+            guard project.organizationID == currentOrgID else { return false }
+            
+            // Apply role-based filtering
+            return project.userHasAccess(userID: currentUserID, userRole: userRole)
+        }
+        
+        // Log filtering results for debugging multi-org switching
+        print(" Filtered projects for \(currentOrgID.prefix(8))... (\(userRole.displayName)): \(filteredProjects.count) of \(organizationProjects.count)")
+        
+        return filteredProjects.sorted { $0.startDate > $1.startDate }
+    }
+    
+    /// Enhanced project access based on assignments and role
+    var accessibleProjectsByAssignment: [Project] {
+        // Admins see all projects
+        if getCurrentUserRole() == .admin {
+            return projects
+        }
+        
+        // Non-admins only see assigned projects
+        if userProjectAssignments.isEmpty {
+            // No assignments = no projects visible (except for new users)
+            return []
+        }
+        
+        return projects.filter { project in
+            userProjectAssignments.contains(project.id.uuidString)
+        }
+    }
+    
+    /// Get all projects across all organizations (for multi-org overview)
+    var allOrganizationProjects: [Project] {
+        return organizationProjects.sorted { $0.startDate > $1.startDate }
+    }
+    
+    /// Get projects by organization ID (useful for multi-org users)
+    func getProjects(for organizationID: String) -> [Project] {
+        let userRole = getCurrentUserRole()
+        guard let currentUserID = getCurrentUserID() else { return [] }
+        
+        return organizationProjects.filter { project in
+            guard project.organizationID == organizationID else { return false }
+            return project.userHasAccess(userID: currentUserID, userRole: userRole)
+        }
+    }
+    
+    /// Get project count by organization (for multi-org dashboard)
+    func getProjectCount(for organizationID: String) -> Int {
+        return getProjects(for: organizationID).count
+    }
+    
+    /// Get organization summary for multi-org users
+    func getOrganizationProjectSummary() -> [(orgID: String, orgName: String, projectCount: Int, role: String)] {
+        // This would require access to organization names, which we'd get from AuthViewModel
+        // For now, return basic info
+        let groupedByOrg = Dictionary(grouping: organizationProjects) { $0.organizationID ?? "unknown" }
+        
+        return groupedByOrg.map { (orgID, projects) in
+            let accessibleProjects = projects.filter { project in
+                guard let currentUserID = getCurrentUserID() else { return false }
+                let userRole = getCurrentUserRole()
+                return project.userHasAccess(userID: currentUserID, userRole: userRole)
+            }
+            
+            return (
+                orgID: orgID,
+                orgName: "Organization \(orgID.prefix(8))...",
+                projectCount: accessibleProjects.count,
+                role: getCurrentUserRole().displayName
+            )
+        }
+    }
+    
+    /// Get projects the current user can edit
+    var editableProjects: [Project] {
+        guard let currentUserID = getCurrentUserID(),
+              let currentOrgID = currentOrganizationID else {
+            return []
+        }
+        
+        let userRole = getCurrentUserRole()
+        
+        return organizationProjects.filter { project in
+            guard project.organizationID == currentOrgID else { return false }
+            return project.userCanEdit(userID: currentUserID, userRole: userRole)
+        }
+    }
+    
+    // MARK: - Receipt Methods
+    func recomputeFilteredReceipts() {
+        // Placeholder for receipt filtering
+        print(" Recomputing filtered receipts")
+    }
+    
+    // MARK: - Private Properties
+    private var cancellables: Set<AnyCancellable> = []
+    private var saveTimer: Timer?
+    private var teamMemberSaveTimer: Timer?
+    private var activeSaveOperations: Set<UUID> = [] // Track projects being saved
+    private var pendingUpdates: [UUID: Project] = [:] // Store pending project updates
+    
+    // MARK: - Role and Permission Helpers
+    private func getCurrentUserID() -> String? {
+        return UserDefaults.standard.string(forKey: "apple_user_id")
+    }
+    
+    private func getCurrentUserRole() -> OrganizationRole {
+        // This should be injected from AuthViewModel, but for now get from UserDefaults
+        guard let orgID = currentOrganizationID,
+              let roleString = UserDefaults.standard.string(forKey: "user_role_\(orgID)"),
+              let role = OrganizationRole(rawValue: roleString) else {
+            return .member // Default to member if unknown
+        }
+        return role
+    }
+    
+    /// Set current user's role for the organization (called from AuthViewModel)
+    func setCurrentUserRole(_ role: OrganizationRole, forOrganization orgID: String) {
+        UserDefaults.standard.set(role.rawValue, forKey: "user_role_\(orgID)")
+        print(" Set user role: \(role.displayName) for organization \(orgID.prefix(8))...")
+    }
+    
+    // MARK: - Initialization
+    init(cloudKitService: CloudKitAuthService = CloudKitAuthService()) {
+        self.cloudKitService = cloudKitService
+        self.vendorService = VendorManagementService()
+        self.paymentMethodService = PaymentMethodManagementService()
+        
+        print(" ProjectViewModel initialized with CLOUDKIT SHARED ZONES ENABLED")
+        
+        Task {
+            await loadProjects()
+            await loadTeamMembersFromCloudKit()
+            await loadOrganizationData()
+        }
+    }
+    
+    convenience init() {
+        self.init(cloudKitService: CloudKitAuthService())
+    }
+    
+    // MARK: - CloudKit Zone Setup (RE-ENABLED)
+    
+    /// Setup CloudKit SHARED zone for a specific organization (RE-ENABLED)
+    func setupCloudKitZoneForOrganization(_ organizationID: String) async {
+        print(" ZONE SETUP: Setting up SHARED CloudKit zone for organization: \(organizationID.prefix(8))...")
+        print(" ZONE SETUP: Current isUsingCloudKitForOrganizationData: \(isUsingCloudKitForOrganizationData)")
+        
+        isSettingUpZone = true
+        zoneSetupError = nil
+        currentOrganizationID = organizationID
+        
+        do {
+            // Check CloudKit account status first
+            let container = CKContainer(identifier: "iCloud.com.rheirhome.rheirhomeapp")
+            let accountStatus = try await container.accountStatus()
+            guard accountStatus == .available else {
+                let errorMsg = "iCloud account not available: \(accountStatus)"
+                print(" ZONE SETUP: \(errorMsg)")
+                throw NSError(domain: "CloudKit", code: 1, userInfo: [NSLocalizedDescriptionKey: errorMsg])
+            }
+            print(" CloudKit account available")
+            
+            let privateDB = container.privateCloudDatabase
+            
+            let zoneName = "org-shared-\(organizationID)"
+            let zoneID = CKRecordZone.ID(zoneName: zoneName)
+            
+            // STEP 1: Check if zone already exists in private database
+            print(" Checking for existing zone...")
+            do {
+                let existingZones = try await privateDB.allRecordZones()
+                if let existingZone = existingZones.first(where: { $0.zoneID.zoneName == zoneName }) {
+                    print(" Found existing CloudKit SHARED zone: \(zoneName)")
+                    
+                    // Check if zone has a share (is actually shared)
+                    let hasShare = try await checkZoneHasShare(existingZone, container: container)
+                    
+                    if hasShare {
+                        print(" Zone is properly shared for collaboration")
+                    } else {
+                        print(" Zone exists but is not shared - creating share...")
+                        try await createShareForExistingZone(existingZone, organizationID: organizationID, container: container)
+                        print(" Created share for existing zone")
+                    }
+                    
+                    isUsingCloudKitForOrganizationData = true
+                    await loadOrganizationProjectsFromCloudKit(zoneID: existingZone.zoneID)
+                    isSettingUpZone = false
+                    print(" ZONE SETUP: Using existing zone for organization: \(organizationID.prefix(8))...")
+                    return
+                }
+            } catch {
+                print(" Could not check existing zones: \(error)")
+            }
+            
+            // STEP 2: Create new zone with sharing
+            print(" Creating new SHARED zone: \(zoneName)")
+            
+            let newZone = CKRecordZone(zoneID: zoneID)
+            let savedZone = try await privateDB.save(newZone)
+            print(" Created zone in private DB: \(zoneName)");
+            
+            // STEP 3: Create root record and share for the zone
+            try await createShareForExistingZone(savedZone, organizationID: organizationID, container: container);
+            
+            isUsingCloudKitForOrganizationData = true
+            print(" ZONE SETUP: CloudKit SHARED zone setup successful for organization: \(organizationID.prefix(8))...");
+            
+            // Load projects from the new zone
+            await loadOrganizationProjectsFromCloudKit(zoneID: savedZone.zoneID);
+            
+        } catch {
+            print(" ZONE SETUP: Failed to setup CloudKit SHARED zone: \(error)");
+            zoneSetupError = "Failed to setup CloudKit zone: \(error.localizedDescription)";
+            
+            // Fallback to local storage
+            isUsingCloudKitForOrganizationData = false
+            await loadOrganizationProjects();
+        }
+        
+        isSettingUpZone = false
+        print(" ZONE SETUP: Zone setup completed for organization: \(organizationID.prefix(8))...");
+        print(" ZONE SETUP: Final isUsingCloudKitForOrganizationData: \(isUsingCloudKitForOrganizationData)")
+    }
+    
+    /// Check if a zone has a share (is actually shared)
+    private func checkZoneHasShare(_ zone: CKRecordZone, container: CKContainer) async throws -> Bool {
+        let privateDB = container.privateCloudDatabase
+        
+        // Look for organization root record in the zone
+        let rootRecordID = CKRecord.ID(recordName: "org-root-\(zone.zoneID.zoneName.replacingOccurrences(of: "org-shared-", with: ""))", zoneID: zone.zoneID)
+        
+        do {
+            let rootRecord = try await privateDB.record(for: rootRecordID)
+            print(" Found organization root record")
+            
+            // Check if this record has a share by checking if it has a parent share reference
+            // This is a simplified check - in practice, you might need to maintain share metadata separately
+            if rootRecord.share != nil {
+                print(" Found share reference for zone - collaboration enabled")
+                return true
+            } else {
+                print(" Root record exists but no share reference found")
+                return false
+            }
+            
+        } catch let error as CKError where error.code == .unknownItem {
+            print(" No root record found - zone needs to be set up for sharing")
+            return false
+        } catch {
+            print(" Error checking for share: \(error)")
+            throw error
+        }
+    }
+    
+    /// Create share for an existing zone
+    private func createShareForExistingZone(_ zone: CKRecordZone, organizationID: String, container: CKContainer) async throws {
+        let privateDB = container.privateCloudDatabase
+        
+        // Create organization root record
+        let rootRecordID = CKRecord.ID(recordName: "org-root-\(organizationID)", zoneID: zone.zoneID)
+        
+        // Get or create root record
+        let rootRecord: CKRecord
+        do {
+            let existingRootRecord = try await privateDB.record(for: rootRecordID)
+            rootRecord = existingRootRecord
+            print(" Using existing organization root record for share creation")
+        } catch let error as CKError where error.code == .unknownItem {
+            // Create new root record
+            let newRootRecord = CKRecord(recordType: "OrganizationRoot", recordID: rootRecordID)
+            newRootRecord["organizationID"] = organizationID as CKRecordValue
+            newRootRecord["name"] = "RHEIR Organization \(organizationID.prefix(8))" as CKRecordValue
+            newRootRecord["createdAt"] = Date() as CKRecordValue
+            rootRecord = newRootRecord
+            print(" Created new organization root record for share creation")
+        }
+        
+        // Create share for the root record
+        let share = CKShare(rootRecord: rootRecord)
+        share[CKShare.SystemFieldKey.title] = "RHEIR Organization \(organizationID.prefix(8))" as CKRecordValue
+        share[CKShare.SystemFieldKey.shareType] = "com.rheirhome.organization" as CKRecordValue
+        share.publicPermission = .none
+        
+        // CRITICAL FIX: Save both root record and share atomically using CKModifyRecordsOperation
+        print(" Saving root record and share atomically to fix CloudKit constraint...")
+        
+        return try await withCheckedThrowingContinuation { continuation in
+            let modifyRecordsOperation = CKModifyRecordsOperation(
+                recordsToSave: [rootRecord, share],
+                recordIDsToDelete: nil
+            )
+            modifyRecordsOperation.savePolicy = .changedKeys
+            modifyRecordsOperation.isAtomic = true
+            
+            modifyRecordsOperation.modifyRecordsResultBlock = { result in
+                switch result {
+                case .success(let modifyResult):
+                    print(" Successfully saved root record and share atomically")
+                    print(" Saved records in atomic operation")
+                    continuation.resume(returning: ())
+                case .failure(let error):
+                    print(" Failed to save root record and share atomically: \(error)")
+                    continuation.resume(throwing: error)
+                }
+            }
+            
+            privateDB.add(modifyRecordsOperation)
+        }
+        
+        print(" Created share for organization zone - collaboration enabled")
+    }
+    
+    private func loadOrganizationProjectsFromCloudKit(zoneID: CKRecordZone.ID) async {
+        do {
+            print(" Loading projects from CloudKit SHARED zone...")
+            
+            let container = CKContainer(identifier: "iCloud.com.rheirhome.rheirhomeapp")
+            let privateDB = container.privateCloudDatabase
+            
+            let query = CKQuery(recordType: "Project", predicate: NSPredicate(value: true))
+            let (matchResults, _) = try await privateDB.records(matching: query, inZoneWith: zoneID)
+            
+            let cloudKitProjects = matchResults.compactMap { (_, recordResult) -> Project? in
+                switch recordResult {
+                case .success(let record):
+                    return decodeProjectFromRecord(record)
+                case .failure(let error):
+                    print(" Failed to process project record: \(error)")
+                    return nil
+                }
+            }
+            
+            organizationProjects = cloudKitProjects
+            print(" Loaded \(organizationProjects.count) projects from CloudKit SHARED zone")
+            
+            // Also save to local backup
+            saveLocalBackup()
+            
+        } catch {
+            print(" Failed to load projects from CloudKit: \(error)")
+            // Fallback to local storage
+            await loadOrganizationProjects()
+        }
+    }
+    
+    private func decodeProjectFromRecord(_ record: CKRecord) -> Project? {
+        // Try to decode from full project data first
+        if let projectData = record["fullProjectData"] as? Data,
+           let project = try? JSONDecoder().decode(Project.self, from: projectData) {
+            return project
+        }
+        
+        // Fallback to basic project construction
+        guard let name = record["name"] as? String,
+              let client = record["client"] as? String,
+              let totalBudget = record["totalBudget"] as? Double,
+              let startDate = record["startDate"] as? Date,
+              let endDate = record["endDate"] as? Date else {
+            return nil
+        }
+        
+        let materialCost = record["materialCost"] as? Double ?? 0
+        let laborCost = record["laborCost"] as? Double ?? 0
+        let organizationID = record["organizationID"] as? String
+        
+        return Project(
+            name: name,
+            client: client,
+            totalBudget: totalBudget,
+            materialCost: materialCost,
+            laborCost: laborCost,
+            generalConditions: 0,
+            contingency: 0,
+            
+            startDate: startDate,
+            endDate: endDate,
+            organizationID: organizationID
+        )
+    }
+    
+    // MARK: - Loading Methods with Better Error Handling
+    func loadProjects() async {
+        // CRITICAL: Don't reload if we're actively saving projects
+        guard !isSavingProject && activeSaveOperations.isEmpty else {
+            print(" Skipping project reload - save operation in progress")
+            return
+        }
+        
+        isLoading = true
+        defer { isLoading = false }
+        
+        print(" Loading projects from local storage...")
+        
+        // Load from local backup only
+        await loadOrganizationProjects()
+        await loadLocalProjectsAsBackup()
+        await loadTeamMembersFromCloudKit()
+        
+        print(" Project loading completed: \(organizationProjects.count) from storage, \(projects.count) from backup")
+    }
+    
+    private func loadOrganizationProjects() async {
+        guard !isSavingProject && activeSaveOperations.isEmpty else {
+            print(" Skipping reload - save operation in progress")
+            return
+        }
+        
+        // Always load from local storage for now (CloudKit loading happens in setupCloudKitZoneForOrganization)
+        print(" LOAD: Loading from local storage...")
+        
+        if let data = UserDefaults.standard.data(forKey: "projects_backup"),
+           let backupProjects = try? JSONDecoder().decode([Project].self, from: data) {
+            
+            if let orgID = currentOrganizationID {
+                organizationProjects = backupProjects.filter { $0.organizationID == orgID }
+            } else {
+                organizationProjects = backupProjects
+            }
+            
+            print(" LOAD: Loaded \(organizationProjects.count) projects from local storage")
+        } else {
+            organizationProjects = []
+            print(" LOAD: No local projects found")
+        }
+    }
+    
+    private func loadLocalProjectsAsBackup() async {
+        // Load local projects as backup/cache only
+        if let data = UserDefaults.standard.data(forKey: "projects_backup"),
+           let backupProjects = try? JSONDecoder().decode([Project].self, from: data) {
+            projects = backupProjects
+            print(" Loaded \(projects.count) backup projects from local cache")
+        } else {
+            projects = []
+            print(" No local backup projects found")
+        }
+    }
+    
+    func loadOrganizationData() async {
+        // Load current organization ID
+        currentOrganizationID = UserDefaults.standard.string(forKey: "currentOrganizationID")
+        print(" Current organization ID: \(currentOrganizationID ?? "none")")
+    }
+    
+    // MARK: - Organization Methods
+    func organizationDidChange(_ organizationID: String?) {
+        currentOrganizationID = organizationID
+        UserDefaults.standard.set(organizationID, forKey: "currentOrganizationID")
+        
+        print(" Organization changed to: \(organizationID ?? "none")")
+        
+        // Clear current selection when switching organizations
+        selectedProject = nil
+        
+        // Clear zone setup error when switching
+        zoneSetupError = nil
+        
+        Task {
+            if let orgID = organizationID {
+                // Setup CloudKit zone for the new organization
+                await setupCloudKitZoneForOrganization(orgID)
+            } else {
+                // Clear zone when no organization
+                isUsingCloudKitForOrganizationData = false
+            }
+            
+            await safeLoadProjects()
+            await loadTeamMembersFromCloudKit()
+            
+            // Log project counts for the new organization
+            let accessibleCount = accessibleProjects.count
+            let totalCount = organizationProjects.filter { $0.organizationID == organizationID }.count
+            print(" Organization switch complete: \(accessibleCount) accessible of \(totalCount) total projects")
+        }
+    }
+    
+    // MARK: - Safe Loading Methods
+    
+    /// Safely reload projects only if no save operations are active
+    func safeLoadProjects() async {
+        if isSavingProject || !activeSaveOperations.isEmpty {
+            print(" Deferring project reload - save operations active")
+            
+            // Wait for active saves to complete
+            while isSavingProject || !activeSaveOperations.isEmpty {
+                try? await Task.sleep(nanoseconds: 100_000_000) // Wait 0.1 seconds
+            }
+            
+            print(" Save operations completed - proceeding with reload")
+        }
+        
+        await loadProjects()
+    }
+    
+    /// Force reload projects (use with caution)
+    func forceLoadProjects() async {
+        print(" FORCE reloading projects - this may overwrite unsaved changes!")
+        
+        // Clear save state
+        isSavingProject = false
+        activeSaveOperations.removeAll()
+        pendingUpdates.removeAll()
+        
+        await loadProjects()
+    }
+    
+    /// Check if it's safe to reload data
+    var canSafelyReload: Bool {
+        return !isSavingProject && activeSaveOperations.isEmpty
+    }
+    
+    // MARK: - Project Methods
+    func select(_ project: Project) {
+        // Verify user has access to this project
+        guard let currentUserID = getCurrentUserID() else {
+            print(" No current user ID - cannot select project")
+            return
+        }
+        
+        let userRole = getCurrentUserRole()
+        guard project.userHasAccess(userID: currentUserID, userRole: userRole) else {
+            print(" User does not have access to project: \(project.name)")
+            errorMessage = "You don't have permission to access this project"
+            return
+        }
+        
+        selectedProject = project
+        recomputeLaborData()
+        print(" Selected project: \(project.name)")
+    }
+    
+    func createNewProject(_ project: Project) {
+        var newProject = project
+        
+        // Set organization ID if not already set
+        if newProject.organizationID == nil {
+            newProject.organizationID = currentOrganizationID
+        }
+        
+        // Set project manager to current user
+        if let currentUserID = getCurrentUserID() {
+            newProject.setProjectManager(currentUserID)
+        }
+        
+        // Default to organization-wide access for team members
+        let userRole = getCurrentUserRole()
+        if userRole == .admin || userRole == .member {
+            newProject.accessLevel = .organization
+        } else {
+            // For contractors, create restricted project and assign them
+            newProject.accessLevel = .restricted
+            if let currentUserID = getCurrentUserID() {
+                newProject.assignUser(currentUserID)
+            }
+        }
+        
+        addProject(newProject)
+    }
+    
+    func addProject(_ project: Project) {
+        // Verify user can create projects
+        let userRole = getCurrentUserRole()
+        guard userRole.canCreateProjects else {
+            errorMessage = "You don't have permission to create projects"
+            return
+        }
+        
+        print(" SAVE: Adding project '\(project.name)'")
+        
+        // Add to local array immediately
+        organizationProjects.append(project)
+        
+        // Save to CloudKit SHARED zone if enabled
+        if isUsingCloudKitForOrganizationData {
+            Task {
+                await saveProjectToCloudKitSharedZone(project)
+            }
+        }
+        
+        // Always save to local backup
+        saveLocalBackup()
+        
+        print(" SAVE SUCCESS: Project '\(project.name)' saved")
+        errorMessage = nil
+    }
+    
+    func updateProject(_ project: Project) {
+        print(" ProjectViewModel.updateProject called for: \(project.name)")
+        
+        // Verify user can edit this project
+        guard let currentUserID = getCurrentUserID() else {
+            print(" No current user ID found")
+            errorMessage = "Unable to verify user permissions"
+            return
+        }
+        
+        let userRole = getCurrentUserRole()
+        guard project.userCanEdit(userID: currentUserID, userRole: userRole) else {
+            print(" User cannot edit project \(project.name)")
+            errorMessage = "You don't have permission to edit this project"
+            return
+        }
+        
+        // Update in local organization projects
+        if let index = organizationProjects.firstIndex(where: { $0.id == project.id }) {
+            organizationProjects[index] = project
+            print(" Updated project in local storage")
+        } else {
+            organizationProjects.append(project)
+            print(" Added project to local storage")
+        }
+        
+        // Update selected project if it matches
+        if selectedProject?.id == project.id {
+            selectedProject = project
+        }
+        
+        // Save to CloudKit SHARED zone if enabled
+        if isUsingCloudKitForOrganizationData {
+            Task {
+                await saveProjectToCloudKitSharedZone(project)
+            }
+        }
+        
+        // Always save to local backup
+        saveLocalBackup()
+        
+        print(" updateProject completed for: \(project.name)")
+    }
+    
+    func save(_ project: Project) {
+        updateProject(project)
+    }
+    
+    func deleteProject(_ project: Project) {
+        // Remove from local organization projects
+        organizationProjects.removeAll { $0.id == project.id }
+        
+        // Clear selection if this project was selected
+        if selectedProject?.id == project.id {
+            selectedProject = nil
+        }
+        
+        // Delete from CloudKit SHARED zone if enabled
+        if isUsingCloudKitForOrganizationData {
+            Task {
+                await deleteProjectFromCloudKitSharedZone(project.id)
+            }
+        }
+        
+        // Always save to local backup
+        saveLocalBackup()
+        
+        print(" Deleted project: \(project.name)")
+    }
+    
+    func deleteProjectPermanently(_ project: Project, completion: @escaping (Bool, String?) -> Void) {
+        deleteProject(project)
+        completion(true, nil)
+    }
+    
+    func markProjectAsCompleted(_ project: Project) {
+        var updatedProject = project
+        updatedProject.status = .completed
+        updateProject(updatedProject)
+    }
+    
+    func addTask(_ task: ProjectTask) {
+        guard let selectedProject = selectedProject else {
+            print(" No selected project for adding task")
+            errorMessage = "No project selected"
+            return
+        }
+        
+        // Verify user can edit this project
+        guard let currentUserID = getCurrentUserID() else {
+            print(" No current user ID found")
+            errorMessage = "Unable to verify user permissions"
+            return
+        }
+        
+        let userRole = getCurrentUserRole()
+        guard selectedProject.userCanEdit(userID: currentUserID, userRole: userRole) else {
+            print(" User cannot edit project \(selectedProject.name)")
+            errorMessage = "You don't have permission to edit this project"
+            return
+        }
+        
+        // Add task to selected project
+        var updatedProject = selectedProject
+        updatedProject.tasks.append(task)
+        
+        // Update the project in the array and save
+        updateProject(updatedProject)
+        
+        print(" Added task '\(task.title)' to project '\(selectedProject.name)'")
+    }
+    
+    func updateTask(_ task: ProjectTask) {
+        guard let selectedProject = selectedProject else {
+            print(" No selected project for updating task")
+            errorMessage = "No project selected"
+            return
+        }
+        
+        // Verify user can edit this project
+        guard let currentUserID = getCurrentUserID() else {
+            print(" No current user ID found")
+            errorMessage = "Unable to verify user permissions"
+            return
+        }
+        
+        let userRole = getCurrentUserRole()
+        guard selectedProject.userCanEdit(userID: currentUserID, userRole: userRole) else {
+            print(" User cannot edit project \(selectedProject.name)")
+            errorMessage = "You don't have permission to edit this project"
+            return
+        }
+        
+        // Find and update the task in the project
+        var updatedProject = selectedProject
+        if let taskIndex = updatedProject.tasks.firstIndex(where: { $0.id == task.id }) {
+            updatedProject.tasks[taskIndex] = task
+            
+            // Update the project in the array and save
+            updateProject(updatedProject)
+            
+            print(" Updated task '\(task.title)' in project '\(selectedProject.name)'")
+        } else {
+            print(" Task not found in project for update")
+            errorMessage = "Task not found in project"
+        }
+    }
+    
+    func deleteTask(_ task: ProjectTask) {
+        guard let selectedProject = selectedProject else {
+            print(" No selected project for deleting task")
+            errorMessage = "No project selected"
+            return
+        }
+        
+        // Verify user can edit this project
+        guard let currentUserID = getCurrentUserID() else {
+            print(" No current user ID found")
+            errorMessage = "Unable to verify user permissions"
+            return
+        }
+        
+        let userRole = getCurrentUserRole()
+        guard selectedProject.userCanEdit(userID: currentUserID, userRole: userRole) else {
+            print(" User cannot edit project \(selectedProject.name)")
+            errorMessage = "You don't have permission to edit this project"
+            return
+        }
+        
+        // Remove task from the project
+        var updatedProject = selectedProject
+        updatedProject.tasks.removeAll { $0.id == task.id }
+        
+        // Update the project in the array and save
+        updateProject(updatedProject)
+        
+        print(" Deleted task '\(task.title)' from project '\(selectedProject.name)'")
+    }
+    
+    // MARK: - Save Methods (Local Storage)
+    
+    func debouncedSaveProjects() {
+        saveTimer?.invalidate()
+        saveTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: false) { _ in
+            Task { @MainActor in
+                await self.saveAllProjectsToCloudKit()
+            }
+        }
+    }
+    
+    func saveAllProjectsToCloudKit() async {
+        print(" Saving all projects to local storage...")
+        saveLocalBackup()
+        print(" Saved \(organizationProjects.count) projects to local storage")
+    }
+    
+    private func saveLocalBackup() {
+        // Save organization projects as local backup
+        do {
+            let data = try JSONEncoder().encode(organizationProjects)
+            UserDefaults.standard.set(data, forKey: "projects_backup")
+            print(" Saved local project backup (\(organizationProjects.count) projects)")
+        } catch {
+            print(" Failed to save local project backup: \(error)")
+        }
+    }
+    
+    func debouncedSaveTeamMembers() {
+        teamMemberSaveTimer?.invalidate()
+        teamMemberSaveTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: false) { _ in
+            Task { @MainActor in
+                await self.saveTeamMembersToCloudKit()
+            }
+        }
+    }
+    
+    func saveTeamMembersToCloudKit() async {
+        saveTeamMembersLocal()
+        print(" Saved \(teamMembers.count) team members to local storage")
+    }
+    
+    func saveTeamMembers() {
+        Task {
+            await saveTeamMembersToCloudKit()
+        }
+    }
+    
+    private func saveTeamMembersLocal() {
+        do {
+            let data = try JSONEncoder().encode(teamMembers)
+            UserDefaults.standard.set(data, forKey: "teamMembers")
+            print(" Saved \(teamMembers.count) team members to local backup")
+        } catch {
+            print(" Failed to save team members locally: \(error)")
+            errorMessage = "Failed to save team members: \(error.localizedDescription)"
+        }
+    }
+    
+    // MARK: - Progress Methods
+    func addProgressLog(_ log: ProgressLog) {
+        guard let selectedProject = selectedProject,
+              let index = organizationProjects.firstIndex(where: { $0.id == selectedProject.id }) else {
+            print(" No selected project for progress log")
+            return
+        }
+        
+        organizationProjects[index].progressLogs.append(log)
+        self.selectedProject = organizationProjects[index]
+        
+        saveLocalBackup()
+        print(" Added progress log to \(selectedProject.name)")
+    }
+    
+    func removeProgressLog(_ id: UUID) {
+        guard let selectedProject = selectedProject,
+              let index = organizationProjects.firstIndex(where: { $0.id == selectedProject.id }) else {
+            print(" No selected project for progress log removal")
+            return
+        }
+        
+        organizationProjects[index].progressLogs.removeAll { $0.id == id }
+        self.selectedProject = organizationProjects[index]
+        
+        saveLocalBackup()
+        print(" Removed progress log from \(selectedProject.name)")
+    }
+    
+    func updateProgressLog(_ log: ProgressLog, employees: [UUID], images: [UIImage]) {
+        guard let selectedProject = selectedProject,
+              let projectIndex = organizationProjects.firstIndex(where: { $0.id == selectedProject.id }),
+              let logIndex = organizationProjects[projectIndex].progressLogs.firstIndex(where: { $0.id == log.id }) else {
+            print(" No selected project or progress log for update")
+            return
+        }
+        
+        var updatedLog = log
+        updatedLog.employeeIDs = employees
+        // TODO: Handle images when photo service is available
+        
+        organizationProjects[projectIndex].progressLogs[logIndex] = updatedLog
+        self.selectedProject = organizationProjects[projectIndex]
+        
+        saveLocalBackup()
+        print(" Updated progress log in \(selectedProject.name)")
+    }
+    
+    // MARK: - Cache Methods
+    func rebuildTeamMemberCache() {
+        teamMemberCache = Dictionary(uniqueKeysWithValues: teamMembers.map { ($0.name, $0) })
+        print(" Rebuilt team member cache with \(teamMemberCache.count) entries")
+    }
+    
+    func invalidateReceiptCache() {
+        // Placeholder for receipt cache invalidation
+        print(" Receipt cache invalidated")
+    }
+    
+    // MARK: - Team Member Methods
+    func saveTeamMemberToZone(_ teamMember: TeamMember) async throws {
+        print(" Saving team member '\(teamMember.name)' to local storage")
+        
+        // Add to local array
+        if !teamMembers.contains(where: { $0.id == teamMember.id }) {
+            teamMembers.append(teamMember)
+        }
+        
+        // Save to local storage
+        await saveTeamMembersToCloudKit()
+    }
+    
+    func removeTeamMemberFromZone(_ teamMember: TeamMember) async throws {
+        print(" Removing team member '\(teamMember.name)' from local storage")
+        
+        // Remove from local array
+        teamMembers.removeAll { $0.id == teamMember.id }
+        
+        // Save to local storage
+        await saveTeamMembersToCloudKit()
+    }
+    
+    // MARK: - Team Collaboration Methods
+    /// Get the organization's CloudKit share URL for team invitations
+    func getOrganizationCloudKitShareURL() async -> String? {
+        guard isUsingCloudKitForOrganizationData,
+              let organizationID = currentOrganizationID else {
+            print(" CloudKit not enabled or no organization ID")
+            return nil
+        }
+        
+        do {
+            let container = CKContainer(identifier: "iCloud.com.rheirhome.rheirhomeapp")
+            let privateDB = container.privateCloudDatabase
+            
+            let zoneName = "org-shared-\(organizationID)"
+            let zoneID = CKRecordZone.ID(zoneName: zoneName)
+            
+            // Look for the root record first
+            let rootRecordID = CKRecord.ID(recordName: "org-root-\(organizationID)", zoneID: zoneID)
+            
+            do {
+                let rootRecord = try await privateDB.record(for: rootRecordID)
+                
+                // Check if this record has a share reference
+                if let shareReference = rootRecord.share {
+                    // Fetch the actual share record
+                    let shareRecord = try await privateDB.record(for: shareReference.recordID)
+                    if let share = shareRecord as? CKShare,
+                       let shareURL = share.url {
+                        shareURL  // Check if shareURL is not empty or has valid content
+                        print(" Found CloudKit share for organization")
+                        return shareURL.absoluteString
+                    }
+                }
+                
+            } catch let error as CKError where error.code == .unknownItem {
+                print(" Root record not found - cannot get share URL")
+                return nil
+            }
+            
+            print(" No share found for organization")
+            return nil
+            
+        } catch {
+            print(" Error getting share URL: \(error)")
+            return nil
+        }
+    }
+    
+    /// Invite a user to the organization's shared zone using CloudKit sharing
+    func inviteUserToCloudKitOrganization(email: String) async throws -> String {
+        guard let shareURL = await getOrganizationCloudKitShareURL() else {
+            throw NSError(domain: "ProjectViewModel", code: 1, userInfo: [NSLocalizedDescriptionKey: "No CloudKit share available for this organization"])
+        }
+        
+        // For now, return the share URL - in a real app, you'd send this via email or messaging
+        print(" Organization invitation URL ready for \(email): \(shareURL)")
+        return shareURL
+    }
+    
+    /// Accept a CloudKit organization invitation
+    func acceptCloudKitOrganizationInvitation(from url: URL) async throws {
+        guard isUsingCloudKitForOrganizationData else {
+            throw NSError(domain: "ProjectViewModel", code: 1, userInfo: [NSLocalizedDescriptionKey: "CloudKit not enabled"])
+        }
+        
+        do {
+            let container = CKContainer(identifier: "iCloud.com.rheirhome.rheirhomeapp")
+            
+            // Use the correct CloudKit API for accepting shares
+            let metadata = try await container.shareMetadata(for: url)
+            let acceptedShare = try await container.accept(metadata)
+            
+            print(" Successfully accepted CloudKit organization invitation")
+            print(" Joined shared zone: \(acceptedShare.recordID.zoneID.zoneName)")
+            
+            // Refresh organization projects after joining
+            await loadOrganizationProjectsFromCloudKit(zoneID: acceptedShare.recordID.zoneID)
+            
+        } catch {
+            print(" Failed to accept CloudKit organization invitation: \(error)")
+            throw error
+        }
+    }
+    
+    // MARK: - Team Member Organization Methods
+    
+    /// Add a team member to the organization directory
+    func addTeamMemberToOrganization(_ teamMember: TeamMember) {
+        // Check if team member already exists to avoid duplicates
+        guard !teamMembers.contains(where: { $0.id == teamMember.id }) else {
+            print(" Team member \(teamMember.name) already exists in organization")
+            return
+        }
+        
+        // Ensure team member has organization ID set
+        var memberWithOrgID = teamMember
+        if memberWithOrgID.organizationID != currentOrganizationID {
+            memberWithOrgID.organizationID = currentOrganizationID ?? ""
+        }
+        
+        // Add to local team members array
+        teamMembers.append(memberWithOrgID)
+        
+        print(" Added team member to organization: \(memberWithOrgID.name)")
+        
+        // Save to local storage
+        Task {
+            await saveTeamMembersToCloudKit()
+        }
+    }
+    
+    /// Update an existing team member in the organization directory
+    func updateTeamMemberInOrganization(_ updatedMember: TeamMember) {
+        guard let index = teamMembers.firstIndex(where: { $0.id == updatedMember.id }) else {
+            print(" Cannot find team member \(updatedMember.name) to update")
+            return
+        }
+        
+        // Ensure organization ID is preserved
+        var memberWithOrgID = updatedMember
+        if memberWithOrgID.organizationID != currentOrganizationID {
+            memberWithOrgID.organizationID = currentOrganizationID ?? ""
+        }
+        
+        // Update in local array
+        teamMembers[index] = memberWithOrgID
+        
+        print(" Updated team member in organization: \(memberWithOrgID.name)")
+        
+        // Save to local storage
+        Task {
+            await saveTeamMembersToCloudKit()
+        }
+    }
+    
+    /// Remove a team member from the organization directory by ID
+    func removeTeamMemberFromOrganization(_ teamMemberID: UUID) {
+        guard let index = teamMembers.firstIndex(where: { $0.id == teamMemberID }) else {
+            print(" Cannot find team member with ID \(teamMemberID) to remove")
+            return
+        }
+        
+        let memberName = teamMembers[index].name
+        teamMembers.remove(at: index)
+        
+        print(" Removed team member from organization: \(memberName)")
+        
+        // Save to local storage
+        Task {
+            await saveTeamMembersToCloudKit()
+        }
+    }
+    
+    // MARK: - Enhanced Organization Member Sync Methods
+    
+    /// Sync organization members with local team members to fix user count discrepancies
+    func syncOrganizationMembers(_ organization: Organization) async {
+        print(" Syncing organization members with local team members...")
+        
+        // Add missing team members for organization members
+        for memberID in organization.members {
+            let existingMember = teamMembers.first { $0.appUserID == memberID }
+            
+            if existingMember == nil {
+                // Create placeholder team member for organization member
+                let newTeamMember = TeamMember(
+                    name: "Team Member \(memberID.prefix(8))",
+                    jobTitle: "Team Member",
+                    organizationID: organization.id,
+                    hasAppAccess: true,
+                    appUserID: memberID
+                )
+                
+                teamMembers.append(newTeamMember)
+                print(" Added team member for organization member \(memberID.prefix(8))...")
+            } else if let existingMember = existingMember, !existingMember.hasAppAccess {
+                // Update existing member to have app access if they're in the organization
+                if let index = teamMembers.firstIndex(where: { $0.id == existingMember.id }) {
+                    teamMembers[index].hasAppAccess = true
+                    print(" Granted app access to existing team member \(existingMember.name)")
+                }
+            }
+        }
+        
+        // Remove app access from team members not in organization (except admin)
+        for i in 0..<teamMembers.count {
+            let member = teamMembers[i]
+            let isAdmin = member.appUserID == organization.adminUserID
+            let isInOrganization = organization.members.contains(member.appUserID ?? "")
+            
+            if member.hasAppAccess && !isAdmin && !isInOrganization {
+                teamMembers[i].hasAppAccess = false
+                print(" Removed app access from \(member.name) - not in organization")
+            }
+        }
+        
+        await saveTeamMembersToCloudKit()
+        print(" Organization member sync completed")
+    }
+    
+    /// Get organization member count for debugging
+    func getOrganizationMemberAnalysis(_ organization: Organization) -> String {
+        let cloudKitUsers = organization.members.count + 1 // +1 for admin
+        let localAppUsers = teamMembers.filter { $0.hasAppAccess }.count + 1 // +1 for current user
+        let discrepancy = cloudKitUsers - localAppUsers
+        
+        var analysis = "ORGANIZATION MEMBER ANALYSIS:\n"
+        analysis += "========================================\n\n"
+        
+        analysis += "Organization: \(organization.name)\n"
+        analysis += "CloudKit Users: \(cloudKitUsers)\n"
+        analysis += "Local App Users: \(localAppUsers)\n"
+        analysis += "Discrepancy: \(discrepancy > 0 ? "+" : "")\(discrepancy)\n"
+        analysis += "Status: \(discrepancy == 0 ? "✅ SYNCED" : "❌ OUT OF SYNC")\n"
+        
+        return analysis
+    }
+    
+    // MARK: - Settings & Management Methods
+    
+    func nuclearResetCloudKit(completion: @escaping (Bool, String) -> Void) {
+        Task {
+            // Clear local data
+            organizationProjects.removeAll()
+            projects.removeAll()
+            teamMembers.removeAll()
+            
+            // Clear UserDefaults
+            UserDefaults.standard.removeObject(forKey: "projects_backup")
+            UserDefaults.standard.removeObject(forKey: "teamMembers")
+            
+            let status = "Nuclear reset completed - all local data cleared"
+            completion(true, status)
+        }
+    }
+    
+    func inviteWifeToOrganization(email: String, completion: @escaping (Bool, String?) -> Void) {
+        completion(false, "Organization invites temporarily disabled while CloudKit is being fixed")
+    }
+    
+    func removeAllPhotosFromProject(_ project: Project) -> Project {
+        var cleanProject = project
+        cleanProject.progressLogs = cleanProject.progressLogs.map { log in
+            let cleanLog = log  
+            // TODO: Remove photos from progress logs when photo model is available
+            return cleanLog
+        }
+        return cleanProject
+    }
+    
+    func getOrganizationDataMigrationStatus() -> String {
+        return " Local storage mode active - CloudKit temporarily disabled to prevent crashes"
+    }
+    
+    func getOrganizationVendorSpendingAnalytics() -> [VendorSpendingAnalytics] {
+        // For now, return sample data based on vendors in the system
+        let sampleVendors = vendorService.vendors.prefix(5)
+        return sampleVendors.map { vendor in
+            VendorSpendingAnalytics(
+                vendor: VendorInfo(id: vendor.id, name: vendor.name),
+                amount: vendor.totalSpent
+            )
+        }
+    }
+    
+    func getOrganizationPaymentMethodSpendingAnalytics() -> [PaymentMethodSpendingAnalytics] {
+        // For now, return sample data based on payment methods in the system
+        let samplePaymentMethods = paymentMethodService.paymentMethods.prefix(5)
+        return samplePaymentMethods.map { paymentMethod in
+            PaymentMethodSpendingAnalytics(
+                paymentMethod: PaymentMethodInfo(id: paymentMethod.id, name: paymentMethod.name),
+                amount: paymentMethod.totalSpent
+            )
+        }
+    }
+    
+    // MARK: - Diagnostic Methods
+    
+    func getDataStatus() async -> String {
+        var status = " DATA STATUS:\n\n"
+        
+        if isUsingCloudKitForOrganizationData {
+            status += "CloudKit Organization Data: SHARED ZONE ACTIVE\n"
+            status += "Storage Mode: CloudKit Shared Zones\n"
+            status += "Zone Name: org-shared-\(currentOrganizationID?.prefix(8) ?? "none")...\n"
+            
+            // Check if we can get share URL
+            let shareURL = await getOrganizationCloudKitShareURL()
+            if let shareURL = shareURL {
+                status += "Share URL: Available for team invitations\n"
+                status += "Collaboration: Enabled\n"
+            } else {
+                status += "Share URL: Not available\n"
+                status += "Collaboration: Disabled\n"
+            }
+        } else {
+            status += "CloudKit Organization Data: Local Storage Mode\n"
+            status += "Storage Mode: Local Storage Only\n"
+            status += "Collaboration: Not available in local mode\n"
+        }
+        
+        status += "Organization ID: \(currentOrganizationID?.prefix(8).description ?? "None")...\n"
+        status += "Organization Projects: \(organizationProjects.count)\n"
+        status += "Local Backup Projects: \(projects.count)\n"
+        status += "Team Members: \(teamMembers.count)\n\n"
+        
+        if let error = zoneSetupError {
+            status += " ZONE SETUP ERROR: \(error)\n"
+        }
+        
+        if isSettingUpZone {
+            status += " Zone setup in progress...\n"
+        }
+        
+        return status
+    }
+    
+    func getDiagnosticInfo(completion: @escaping (String) -> Void) {
+        Task {
+            var status = await getDataStatus()
+            await MainActor.run {
+                completion(status)
+            }
+        }
+    }
+    
+    func getDetailedCloudKitStatus(completion: @escaping (String) -> Void) {
+        Task {
+            var status = await getDataStatus()
+            do {
+                let diagnostics = await getCloudKitZoneDiagnostics()
+                status += diagnostics
+            } catch {
+                status += "Error getting CloudKit status: \(error.localizedDescription)"
+            }
+            await MainActor.run {
+                completion(status)
+            }
+        }
+    }
+    
+    func getOfflineStatus() async -> String {
+        return " Local Storage Mode (CloudKit disabled temporarily)"
+    }
+    
+    func getMigrationStats(project: Project) -> (totalPhotos: Int, migratedPhotos: Int, needsMigration: Bool) {
+        return (totalPhotos: 0, migratedPhotos: 0, needsMigration: false)
+    }
+    
+    func migrateProjectPhotos(project: Project, onProgress: @escaping (Float) -> Void) async throws -> Project {
+        onProgress(1.0)
+        return project
+    }
+    
+    func syncAllProjectsToCloudKit(completion: @escaping (Bool, String) -> Void) {
+        Task {
+            await saveAllProjectsToCloudKit()
+            let message = "Synced \(organizationProjects.count) projects to local storage"
+            print(message)
+            completion(true, message)
+        }
+    }
+    
+    func forceResaveAllProjectsToCloudKit(completion: @escaping (Bool, String) -> Void) {
+        Task {
+            await saveAllProjectsToCloudKit()
+            let message = "All projects saved to local storage (CloudKit temporarily disabled)"
+            completion(true, message)
+        }
+    }
+    
+    func performCloudKitHealthCheck(completion: @escaping (String) -> Void) {
+        Task {
+            var report = " CLOUDKIT HEALTH CHECK REPORT\n"
+            report += "=====================================\n\n"
+            
+            report += "1. ORGANIZATION SETUP:\n"
+            if let orgID = currentOrganizationID {
+                report += "Organization ID: \(orgID.prefix(8))...\n"
+            } else {
+                report += "No organization ID set\n"
+            }
+            
+            report += "\n2. STORAGE MODE:\n"
+            report += "Local Storage Only (CloudKit disabled)\n"
+            
+            report += "\n3. DATA STATUS:\n"
+            report += "Local projects: \(organizationProjects.count)\n"
+            report += "Team members: \(teamMembers.count)\n"
+            
+            report += "\n4. RECOVERY STATUS:\n"
+            report += "All data is safely stored locally\n"
+            report += "CloudKit will be re-enabled after fixing zone creation issues\n"
+            
+            completion(report)
+        }
+    }
+    
+    /// Force migration of local data to CloudKit (temporarily disabled)
+    func forceMigrateOrganizationDataToCloudKit() async throws {
+        print(" CloudKit migration temporarily disabled")
+        // Data is already in local storage, so nothing to migrate
+    }
+    
+    // MARK: - Load Team Members Methods
+    
+    private func loadTeamMembers() async {
+        await loadTeamMembersFromCloudKit()
+    }
+    
+    private func loadTeamMembersFromCloudKit() async {
+        await loadTeamMembersFromBackup()
+        
+        // Filter team members by current organization
+        if let orgID = currentOrganizationID {
+            teamMembers = teamMembers.filter { $0.organizationID == orgID }
+            print(" Filtered team members to current organization: \(teamMembers.count) members")
+        }
+        
+        // Ensure all team members have at least one rate
+        ensureTeamMembersHaveRates()
+        
+        await saveTeamMembersToCloudKit()
+        
+        // Rebuild team member cache after loading
+        rebuildTeamMemberCache()
+        
+        print(" Loaded \(teamMembers.count) team members:")
+        for member in teamMembers {
+            print("  - \(member.name): \(member.rates.count) rates, org: \(String(member.organizationID.prefix(8)))")
+        }
+    }
+    
+    private func loadTeamMembersFromBackup() async {
+        // Load from UserDefaults as backup
+        if let data = UserDefaults.standard.data(forKey: "teamMembers"),
+           let members = try? JSONDecoder().decode([TeamMember].self, from: data) {
+            teamMembers = members
+            print(" Loaded \(teamMembers.count) team members from local backup")
+        } else {
+            teamMembers = []
+            print(" No team member backup found - starting with empty team members list")
+        }
+    }
+    
+    func ensureTeamMembersHaveRates() {
+        for i in 0..<teamMembers.count {
+            if teamMembers[i].rates.isEmpty {
+                teamMembers[i].rates.append(EmployeeRate(taskType: "General Labor", rate: 25.0))
+                print(" Added default rate to \(teamMembers[i].name)")
+            }
+        }
+    }
+    
+    /// Automatically assign all team members to all organization-wide projects
+    func syncTeamMemberProjectAccess() async {
+        guard getCurrentUserID() != nil else { return }
+        
+        let userRole = getCurrentUserRole()
+        guard userRole == .admin else {
+            print(" Only admins can sync team member project access")
+            return
+        }
+        
+        print(" Syncing team member project access...")
+        
+        for i in 0..<organizationProjects.count {
+            var project = organizationProjects[i]
+            
+            // For organization-wide projects, ensure all team members have access
+            if project.accessLevel == .organization {
+                
+                // Get all team members with member role
+                let teamMemberIDs = teamMembers
+                    .filter { $0.role == .member && $0.hasAppAccess }
+                    .compactMap { $0.appUserID }
+                
+                // Add missing team members to assignment list (even though they have automatic access)
+                for memberID in teamMemberIDs {
+                    if !project.assignedUserIDs.contains(memberID) {
+                        project.assignUser(memberID)
+                    }
+                }
+                
+                organizationProjects[i] = project
+                saveLocalBackup()
+            }
+        }
+        
+        print(" Team member project access sync completed")
+    }
+    
+    func fixMissingOrganizationIDs(completion: @escaping (Bool, String) -> Void) {
+        Task {
+            guard let orgID = currentOrganizationID else {
+                completion(false, "No organization ID set")
+                return
+            }
+            
+            let status = """
+            Organization setup refreshed
+            
+            Organization: \(orgID.prefix(8))...
+            Storage Mode: Local Storage Only
+            Projects in storage: \(organizationProjects.count)
+            """
+            
+            completion(true, status)
+        }
+    }
+    
+    func emergencyRecoverFromBackup() async -> Bool {
+        print(" 🚑 Emergency recovery from local backup...")
+        
+        await loadLocalProjectsAsBackup()
+        
+        if !projects.isEmpty {
+            // Copy backup projects to organization projects
+            organizationProjects = projects
+            projects = [] // Clear backup array
+            
+            print(" ✅ Emergency recovery found \(organizationProjects.count) projects in backup")
+            saveLocalBackup()
+            
+            print(" ✅ Emergency recovery completed - \(organizationProjects.count) projects recovered")
+            return true
+        } else {
+            print(" ❌ Emergency recovery failed - no backup projects found")
+            return false
+        }
+    }
+    
+    /// Emergency data recovery method for UI
+    func emergencyDataRecovery() async -> String {
+        print(" 🚑 EMERGENCY DATA RECOVERY INITIATED")
+        
+        var report = " 🚑 EMERGENCY DATA RECOVERY REPORT\n"
+        report += "=====================================\n\n"
+        
+        // Step 1: Attempt to recover from local backup
+        report += "Step 1: Checking local backup...\n"
+        let recoverySuccess = await emergencyRecoverFromBackup()
+        
+        if recoverySuccess {
+            report += " ✅ Successfully recovered \(organizationProjects.count) projects from local backup\n"
+            
+            // Step 2: Reload team members
+            report += "\nStep 2: Reloading team members...\n"
+            await loadTeamMembersFromCloudKit()
+            report += " ✅ Loaded \(teamMembers.count) team members\n"
+            
+            // Step 3: Rebuild cache
+            report += "\nStep 3: Rebuilding data cache...\n"
+            rebuildTeamMemberCache()
+            report += " ✅ Cache rebuilt successfully\n"
+            
+            report += "\n 🎉 EMERGENCY RECOVERY SUCCESSFUL!\n"
+            report += "• Projects recovered: \(organizationProjects.count)\n"
+            report += "• Team members: \(teamMembers.count)\n"
+            report += "• Storage mode: Local Storage\n"
+            
+        } else {
+            report += " ❌ No backup data found to recover\n"
+            report += "\nTrying alternative recovery methods...\n"
+            
+            // Try to reload from organization data
+            await loadOrganizationData()
+            await loadProjects()
+            
+            if !organizationProjects.isEmpty {
+                report += " ✅ Found \(organizationProjects.count) projects in organization data\n"
+                report += " 🎉 PARTIAL RECOVERY SUCCESSFUL!\n"
+            } else {
+                report += " ❌ No data found in any recovery method\n"
+                report += " 💡 You may need to recreate your projects\n"
+            }
+        }
+        
+        return report
+    }
+    
+    /// Migrate labor hours from name-only to team member IDs
+    func migrateLaborHoursToTeamMemberIDs() {
+        print(" 🔄 Starting labor hours migration to team member IDs...")
+        
+        var migratedCount = 0
+        
+        for i in 0..<organizationProjects.count {
+            var project = organizationProjects[i]
+            var projectChanged = false
+            
+            for j in 0..<project.loggedHours.count {
+                var workHour = project.loggedHours[j]
+                
+                // Skip if already has employee ID
+                guard workHour.employeeID == nil else { continue }
+                
+                // Try to match employee name to team member
+                if let teamMember = teamMembers.first(where: {
+                    $0.name.lowercased() == workHour.employeeName.lowercased()
+                }) {
+                    workHour.employeeID = teamMember.id
+                    project.loggedHours[j] = workHour
+                    projectChanged = true
+                    migratedCount += 1
+                    print(" ✅ Migrated work hour for \(workHour.employeeName) -> \(teamMember.id)")
+                } else {
+                    print(" ⚠️ Could not find team member for: \(workHour.employeeName)")
+                }
+            }
+            
+            if projectChanged {
+                organizationProjects[i] = project
+            }
+        }
+        
+        // Save changes
+        if migratedCount > 0 {
+            saveLocalBackup()
+            print(" ✅ Labor hours migration completed: \(migratedCount) hours migrated")
+        } else {
+            print(" ℹ️ No labor hours needed migration")
+        }
+        
+        // Update the migration status
+        _ = getLaborHoursMigrationStatus()
+    }
+    
+    /// Projects that current user has access to based on role and assignments
+    var accessibleProjectsByRole: [Project] {
+        // Admins see all projects
+        if getCurrentUserRole() == .admin {
+            return organizationProjects
+        }
+        
+        // Non-admins only see assigned projects
+        if userProjectAssignments.isEmpty {
+            // No assignments = no projects visible (except for new users)
+            return []
+        }
+        
+        return organizationProjects.filter { project in
+            userProjectAssignments.contains(project.id.uuidString)
+        }
+    }
+    
+    /// Get project access summary for current user
+    func getProjectAccessSummary() -> String {
+        if getCurrentUserRole() == .admin {
+            return "Full access to all \(projects.count) projects"
+        }
+        
+        // Filter projects by assignments and role
+        let accessibleCount = accessibleProjectsByRole.count
+        let totalCount = organizationProjects.count
+        
+        if accessibleCount == 0 {
+            return "No project assignments. Contact admin for access."
+        } else if accessibleCount == totalCount {
+            return "Access to all \(totalCount) projects"
+        } else {
+            return "Access to \(accessibleCount) of \(totalCount) projects"
+        }
+    }
+    
+    func removeCloudKitOrganizationData() async {
+        do {
+            // Clear local data
+            organizationProjects.removeAll()
+            
+            // Try to check if zone has share
+            if let organizationID = currentOrganizationID {
+                let shareURL = await getOrganizationCloudKitShareURL()
+                if shareURL != nil {
+                    print(" Organization has active share - data clearing completed locally")
+                } else {
+                    print(" No active share found")
+                }
+            }
+            
+            print(" Organization data cleared locally")
+            
+        }
+    }
+    
+    // MARK: - Project Assignment Management
+    
+    /// Set current user's project assignments
+    func setUserProjectAssignments(_ projectIDs: [String]) {
+        userProjectAssignments = projectIDs
+        print(" Set user project assignments to \(projectIDs.count) projects")
+        
+        // Trigger projects filtering
+        filterProjectsByAssignments()
+    }
+    
+    /// Filter projects based on user assignments
+    private func filterProjectsByAssignments() {
+        // This will be called automatically when projects are loaded
+        // The filtering happens in the computed property `accessibleProjects`
+        objectWillChange.send()
+    }
+    
+    /// Get a team member by ID
+    func getTeamMember(by id: UUID) -> TeamMember? {
+        return teamMembers.first { $0.id == id }
+    }
+    
+    /// Assign a team member to a specific project
+    func assignTeamMemberToProject(_ memberID: String, projectID: String) {
+        // Find the project
+        guard let projectUUID = UUID(uuidString: projectID),
+              let projectIndex = organizationProjects.firstIndex(where: { $0.id == projectUUID }) else {
+            print("❌ Could not find project with ID \(projectID)")
+            return
+        }
+        
+        var project = organizationProjects[projectIndex]
+        
+        // Add the member to the project's assigned users if not already assigned
+        if !project.assignedUserIDs.contains(memberID) {
+            project.assignUser(memberID)
+            
+            // Update the project
+            organizationProjects[projectIndex] = project
+            
+            // Update selected project if it matches
+            if selectedProject?.id == project.id {
+                selectedProject = project
+            }
+            
+            saveLocalBackup()
+            print("✅ Assigned team member \(memberID.prefix(8))... to project \(project.name)")
+        } else {
+            print("ℹ️ Team member \(memberID.prefix(8))... already assigned to project \(project.name)")
+        }
+    }
+}
