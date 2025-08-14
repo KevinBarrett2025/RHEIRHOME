@@ -413,13 +413,34 @@ class AuthViewModel: ObservableObject {
         
         if let projectViewModel = self.projectVM {
             await self.createImmediateAdminTeamMember(organization: organization, userID: userID, projectViewModel: projectViewModel)
+            print("🎯 ADMIN CREATION: Basic admin created - ready for onboarding enhancement")
         } else {
             print("🎯 ADMIN CREATION: No ProjectViewModel available - will create admin when ProjectViewModel connects")
         }
         
+        // CRITICAL FIX: Set admin onboarding flag with enhanced debugging
+        print("🎯 ADMIN ONBOARDING TRIGGER: Setting showAdminInfoUpdate flag...")
+        print("   Current showAdminInfoUpdate value: \(self.showAdminInfoUpdate)")
+        print("   Organization: \(organization.name)")
+        print("   Organization ID: \(organization.id.prefix(8))...")
+        
         self.showAdminInfoUpdate = true
+        
+        // CRITICAL FIX: Force UI update and add verification
         self.objectWillChange.send()
-        print("🎯 ADMIN ONBOARDING: Set showAdminInfoUpdate = \(self.showAdminInfoUpdate)")
+        
+        print("🎯 ADMIN ONBOARDING TRIGGER: Flag set successfully!")
+        print("   New showAdminInfoUpdate value: \(self.showAdminInfoUpdate)")
+        print("   UI update forced via objectWillChange.send()")
+        
+        // CRITICAL FIX: Add small delay to ensure state propagation
+        try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
+        
+        print("🎯 ADMIN ONBOARDING VERIFICATION:")
+        print("   Final showAdminInfoUpdate: \(self.showAdminInfoUpdate)")
+        print("   Current organization: \(self.currentOrg?.name ?? "nil")")
+        print("   Organizations count: \(self.organizations.count)")
+        print("   Ready for admin onboarding flow!")
         
         print("🔧 PRODUCTION COMPLETE: Organization '\(name)' created successfully - admin onboarding ready");
         return organization;

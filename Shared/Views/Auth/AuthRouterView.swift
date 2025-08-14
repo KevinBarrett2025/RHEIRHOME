@@ -26,20 +26,30 @@ struct AuthRouterView: View {
                     .environmentObject(authViewModel)
                     .interactiveDismissDisabled(true) // Prevent accidental dismissal
                     .onAppear {
-                        print("🎯 ADMIN ONBOARDING: Showing AdminOnboardingView for organization: \(currentOrg.name)")
-                        print("🎯 ADMIN ONBOARDING: showAdminInfoUpdate = \(authViewModel.showAdminInfoUpdate)")
+                        print("🎯 ADMIN ONBOARDING VIEW: Successfully displaying AdminOnboardingView")
+                        print("   Organization: \(currentOrg.name)")
+                        print("   Organization ID: \(currentOrg.id.prefix(8))...")
+                        print("   showAdminInfoUpdate: \(authViewModel.showAdminInfoUpdate)")
+                        print("   User: \(authViewModel.user?.email ?? "Unknown")")
+                        print("✅ ROUTING SUCCESS: Admin onboarding flow triggered correctly")
                     }
                     .onDisappear {
-                        // CRITICAL FIX: Only allow disappearing if onboarding is actually complete
-                        print("🎯 ADMIN ONBOARDING: AdminOnboardingView attempting to disappear")
+                        print("🎯 ADMIN ONBOARDING VIEW: AdminOnboardingView disappearing")
+                        print("   showAdminInfoUpdate flag: \(authViewModel.showAdminInfoUpdate)")
+                        
                         if authViewModel.showAdminInfoUpdate {
-                            print("⚠️ ADMIN ONBOARDING: Disappeared but flag still true - this should not happen")
-                            // Re-trigger onboarding if it disappeared prematurely
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                                authViewModel.objectWillChange.send()
+                            print("⚠️ CRITICAL: Onboarding disappeared but flag still true!")
+                            print("   This suggests premature dismissal - investigating...")
+                            
+                            // CRITICAL FIX: Add recovery mechanism
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                                if authViewModel.showAdminInfoUpdate {
+                                    print("🔧 RECOVERY: Re-triggering admin onboarding after premature dismissal")
+                                    authViewModel.objectWillChange.send()
+                                }
                             }
                         } else {
-                            print("✅ ADMIN ONBOARDING: Properly completed")
+                            print("✅ ONBOARDING COMPLETE: Properly finished - proceeding to MainTabView")
                         }
                     }
             } else if authViewModel.currentOrg != nil {
@@ -47,39 +57,53 @@ struct AuthRouterView: View {
                 MainTabView()
                     .environmentObject(authViewModel)
                     .onAppear {
-                        print("🚀 ROUTING: User authenticated with organization - showing MainTabView")
+                        print("🚀 MAIN APP: Showing MainTabView for authenticated user")
+                        print("   Current organization: \(authViewModel.currentOrg?.name ?? "nil")")
+                        print("   Organization ID: \(authViewModel.currentOrg?.id.prefix(8) ?? "nil")...")
                         print("   showAdminInfoUpdate: \(authViewModel.showAdminInfoUpdate)")
-                        print("   currentOrg: \(authViewModel.currentOrg?.name ?? "nil")")
+                        print("   User: \(authViewModel.user?.email ?? "Unknown")")
                         
-                        // CRITICAL FIX: Debug if we should be showing admin onboarding instead
+                        // CRITICAL FIX: Enhanced debug - check if we should be in onboarding instead
                         if authViewModel.showAdminInfoUpdate {
-                            print("⚠️ ROUTING ISSUE: showAdminInfoUpdate is true, but showing MainTabView")
-                            print("   This indicates a timing/state management issue")
+                            print("⚠️ ROUTING ERROR: showAdminInfoUpdate is true but showing MainTabView!")
+                            print("   This indicates a critical state management bug")
+                            print("   Expected: AdminOnboardingView")
+                            print("   Actual: MainTabView")
+                            print("   Organization available: \(authViewModel.currentOrg != nil)")
                             
-                            // EMERGENCY FIX: Force show admin onboarding if flag is still true
+                            // CRITICAL FIX: Emergency recovery - force return to onboarding
+                            print("🚨 EMERGENCY RECOVERY: Forcing return to admin onboarding")
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                                if authViewModel.showAdminInfoUpdate {
-                                    print("🔧 EMERGENCY FIX: Detected stuck admin onboarding state - forcing refresh")
-                                    authViewModel.objectWillChange.send()
-                                }
+                                authViewModel.objectWillChange.send()
+                                print("🔧 EMERGENCY: UI state refresh triggered")
                             }
+                        } else {
+                            print("✅ ROUTING CORRECT: MainTabView shown for completed admin profile")
                         }
                     }
             } else if authViewModel.isLoadingOrgs {
                 // Loading organizations - show inline loading
                 organizationLoadingView
+                    .onAppear {
+                        print("⏳ LOADING: Showing organization loading view")
+                        print("   isLoadingOrgs: \(authViewModel.isLoadingOrgs)")
+                    }
             } else if !authViewModel.organizations.isEmpty {
                 // User has organizations but no current org selected
                 OrgListView(vm: authViewModel)
                     .onAppear {
-                        print("🏢 User has \(authViewModel.organizations.count) organizations - showing selection")
+                        print("🏢 ORG SELECTION: User has \(authViewModel.organizations.count) organizations")
+                        print("   Showing organization selection view")
+                        print("   showAdminInfoUpdate: \(authViewModel.showAdminInfoUpdate)")
                     }
             } else if authViewModel.needsOrganizationSetup || authViewModel.showOrganizationSetup {
                 // User has no organizations - show setup
                 OrganizationSetupView()
                     .environmentObject(authViewModel)
                     .onAppear {
-                        print("🏢 No organizations found - showing setup")
+                        print("🏢 ORG SETUP: No organizations found - showing setup")
+                        print("   needsOrganizationSetup: \(authViewModel.needsOrganizationSetup)")
+                        print("   showOrganizationSetup: \(authViewModel.showOrganizationSetup)")
                         // Ensure we're not showing duplicate setup views
                         authViewModel.showOrganizationSetup = false
                     }
@@ -88,25 +112,48 @@ struct AuthRouterView: View {
                 OrganizationSetupView()
                     .environmentObject(authViewModel)
                     .onAppear {
-                        print("🏢 Fallback - showing organization setup")
+                        print("🏢 FALLBACK: Showing organization setup as fallback")
+                        print("   This should rarely be triggered")
                         authViewModel.showOrganizationSetup = false
                     }
             }
         }
-        // CRITICAL FIX: Improve animation timing and add debug logging
-        .animation(.easeInOut(duration: 0.3), value: authViewModel.showAdminInfoUpdate)
-        .animation(.easeInOut(duration: 0.3), value: authViewModel.currentOrg?.id)
+        // CRITICAL FIX: Improve animation timing and add comprehensive state tracking
+        .animation(.easeInOut(duration: 0.25), value: authViewModel.showAdminInfoUpdate)
+        .animation(.easeInOut(duration: 0.25), value: authViewModel.currentOrg?.id)
         .onChange(of: authViewModel.showAdminInfoUpdate) { oldValue, newValue in
-            print("🎯 ADMIN ONBOARDING STATE CHANGE: \(oldValue) → \(newValue)")
+            print("🎯 STATE CHANGE: showAdminInfoUpdate \(oldValue) → \(newValue)")
+            print("   Timestamp: \(Date().timeIntervalSince1970)")
+            print("   Current Org: \(authViewModel.currentOrg?.name ?? "nil")")
+            print("   Organizations count: \(authViewModel.organizations.count)")
+            
             if newValue && authViewModel.currentOrg == nil {
-                print("⚠️ ADMIN ONBOARDING: Flag set to true but no current organization!")
+                print("⚠️ INCONSISTENT STATE: showAdminInfoUpdate=true but no currentOrg!")
+                print("   This should not happen - investigating...")
+            } else if newValue && authViewModel.currentOrg != nil {
+                print("✅ VALID STATE: Admin onboarding triggered with organization ready")
+            } else if !newValue {
+                print("✅ ONBOARDING COMPLETE: showAdminInfoUpdate set to false")
             }
         }
         .onChange(of: authViewModel.currentOrg) { oldValue, newValue in
-            print("🏢 CURRENT ORG CHANGE: \(oldValue?.name ?? "nil") → \(newValue?.name ?? "nil")")
+            print("🏢 STATE CHANGE: currentOrg \(oldValue?.name ?? "nil") → \(newValue?.name ?? "nil")")
+            print("   Timestamp: \(Date().timeIntervalSince1970)")
+            print("   showAdminInfoUpdate: \(authViewModel.showAdminInfoUpdate)")
+            
             if newValue != nil && authViewModel.showAdminInfoUpdate {
-                print("✅ ADMIN ONBOARDING: Organization set with pending onboarding")
+                print("✅ PERFECT TIMING: Organization set with pending admin onboarding")
+            } else if newValue != nil && !authViewModel.showAdminInfoUpdate {
+                print("✅ NORMAL FLOW: Organization change for existing admin")
             }
+        }
+        .onAppear {
+            print("🎯 AUTH ROUTER: ProductionUserFlow appeared")
+            print("   User: \(authViewModel.user?.email ?? "nil")")
+            print("   showAdminInfoUpdate: \(authViewModel.showAdminInfoUpdate)")
+            print("   currentOrg: \(authViewModel.currentOrg?.name ?? "nil")")
+            print("   Organizations: \(authViewModel.organizations.count)")
+            print("   isLoadingOrgs: \(authViewModel.isLoadingOrgs)")
         }
     }
     
