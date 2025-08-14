@@ -10,7 +10,6 @@ struct LoginView: View {
 
     @State private var showErrorAlert = false
     @State private var lastErrorMessage = ""
-    @State private var showNuclearResetAlert = false
 
     var body: some View {
         VStack(spacing: 40) {
@@ -31,20 +30,6 @@ struct LoginView: View {
                 guard let appleID = credential else { return }
                 vm.signInWithApple(using: appleID)
             }
-
-            // ──────────────────────────────────────────────────────────
-            // DEVELOPMENT NUCLEAR RESET BUTTON - CRITICAL FOR TESTING
-            // ──────────────────────────────────────────────────────────
-            #if DEBUG
-            Button("🚨 NUCLEAR RESET (DEV ONLY)") {
-                showNuclearResetAlert = true
-            }
-            .foregroundColor(.red)
-            .font(.caption)
-            .padding()
-            .background(Color.black.opacity(0.1))
-            .cornerRadius(8)
-            #endif
 
             // ──────────────────────────────────────────────────────────
             // Show any AuthViewModel error message (red text) as well
@@ -80,16 +65,6 @@ struct LoginView: View {
                     appleCoordinator.coordinatorError = nil
                 }
             )
-        }
-        .alert("Nuclear Reset", isPresented: $showNuclearResetAlert) {
-            Button("Cancel", role: .cancel) { }
-            Button("RESET EVERYTHING", role: .destructive) {
-                Task {
-                    await vm.performNuclearReset()
-                }
-            }
-        } message: {
-            Text("This will completely reset all onboarding state and CloudKit data. Use only for development testing.")
         }
     }
 }

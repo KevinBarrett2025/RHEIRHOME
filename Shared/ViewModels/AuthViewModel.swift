@@ -1018,4 +1018,24 @@ extension AuthViewModel {
         
         print("NUCLEAR CLEAR CACHE: All local cache data cleared successfully")
     }
+
+    /// DEVELOPMENT: Perform nuclear reset - clears all data and signs out user
+    func performNuclearReset() async {
+        print("🚨 NUCLEAR RESET: Starting complete application reset...")
+        
+        await MainActor.run {
+            // Clear all local cache data
+            clearAllLocalCache()
+            
+            // Sign out the user completely
+            signOut()
+            
+            // Reset error states
+            errorMessage = nil
+            isLoadingAuth = false
+            isLoadingOrgs = false
+            
+            print("🚨 NUCLEAR RESET: Complete application reset finished")
+        }
+    }
 }
