@@ -515,7 +515,7 @@ class AuthViewModel: ObservableObject {
                         print("     ID: \(org.id.prefix(8))...");
                         print("     Admin: \(org.adminUserID.prefix(8))...");
                         print("     Members: \(org.members.count)");
-                        print("     Role: \(roles[org.id]?.displayName ?? "Unknown")");
+                        print("     Your Role: \(roles[org.id]?.displayName ?? "Unknown")");
                         print("     Created: \(org.createdAt)");
                         print("     CloudKit RecordID: \(org.cloudKitRecordID ?? "None")");
 
@@ -567,6 +567,12 @@ class AuthViewModel: ObservableObject {
             print("   Organization: \(currentOrg.name)")
             print("   Admin User ID: \(userID.prefix(8))...")
             print("   Consider triggering admin onboarding if not completed")
+            
+            // CRITICAL FIX: Trigger admin onboarding when no admin team member exists
+            print("🎯 ADMIN ONBOARDING FIX: Setting showAdminInfoUpdate = true for missing admin")
+            self.showAdminInfoUpdate = true
+            self.objectWillChange.send() // Force UI update
+            print("🎯 ADMIN ONBOARDING FIX: Admin onboarding triggered successfully!")
         } else {
             print("✅ SYNC: Admin team member exists: \(existingAdmin?.name ?? "Unknown")")
         }
@@ -904,8 +910,8 @@ class AuthViewModel: ObservableObject {
                 try await cloudKitService.inviteUserToOrganization(
                     email: email, 
                     organizationID: currentOrg.id,
-                    role: OrganizationRole.member
-                )
+                    role: OrganizationRole.member)
+                
                 
                 await MainActor.run {
                     self.isInviting = false
@@ -963,8 +969,8 @@ class AuthViewModel: ObservableObject {
             try await cloudKitService.inviteUserToOrganization(
                 email: email, 
                 organizationID: currentOrg.id,
-                role: role
-            )
+                role: role)
+            
             
             await MainActor.run {
                 self.isInviting = false
@@ -1294,7 +1300,7 @@ class AuthViewModel: ObservableObject {
         }
         
         if let user = user {
-            checkUserOrganizationStatus(for: user)
+            self.checkUserOrganizationStatus(for: user)
         }
     }
 
@@ -1573,7 +1579,7 @@ class AuthViewModel: ObservableObject {
         
         Task {
             if let user = user {
-                checkUserOrganizationStatus(for: user)
+                self.checkUserOrganizationStatus(for: user)
             }
             
             if let currentOrg = currentOrg {

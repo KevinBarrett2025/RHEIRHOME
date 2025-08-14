@@ -1040,6 +1040,9 @@ class ProjectViewModel: ObservableObject {
             organizationProjects.append(secureProject)
             projects.append(secureProject)
             selectedProject = secureProject
+            
+            // CRITICAL FIX: Update accessible projects after adding new project
+            updateAccessibleProjects()
         }
         
         // Save to organization-specific storage

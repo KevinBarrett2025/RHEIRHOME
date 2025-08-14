@@ -113,7 +113,7 @@ struct UniversalHeaderView: View {
                     }
                 }
             }
-            
+
             // Settings gear
             if showSettingsGear {
                 NavigationLink {
@@ -206,7 +206,7 @@ struct UniversalHeaderView: View {
     private func tierIcon(_ tier: SubscriptionTier) -> String {
         switch tier {
         case .builder, .free, .starter: return "hammer.fill"
-        case .professional, .standard: return "hardhat.fill"
+        case .professional, .standard: return "shield.fill"
         case .enterprise, .premium: return "crown.fill"
         }
     }

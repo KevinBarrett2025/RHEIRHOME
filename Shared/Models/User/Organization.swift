@@ -376,7 +376,7 @@ public enum SubscriptionTier: String, Codable, CaseIterable {
     public var badgeIcon: String {
         switch self {
         case .builder, .free, .starter: return "hammer.fill"
-        case .professional, .standard: return "hardhat.fill"
+        case .professional, .standard: return "shield.fill"
         case .enterprise, .premium: return "crown.fill"
         }
     }
