@@ -12,6 +12,11 @@ struct UniversalHeaderView: View {
     @State private var cachedTierInfo: (tier: SubscriptionTier, timestamp: Date)?
     private let cacheInterval: TimeInterval = 30 // Cache for 30 seconds
     
+    // Hidden debug panel state
+    @State private var showingHiddenDebugPanel = false
+    @State private var tapCount = 0
+    @State private var lastTapTime = Date()
+    
     init(
         showSettingsGear: Bool = true,
         showProjectContext: Bool = true
@@ -46,6 +51,11 @@ struct UniversalHeaderView: View {
         .onChange(of: authVM.currentOrg?.subscriptionTier) { _, _ in
             updateTierCache()
         }
+        .sheet(isPresented: $showingHiddenDebugPanel) {
+            HiddenDebugPanelView()
+                .environmentObject(authVM)
+                .environmentObject(projectVM)
+        }
     }
     
     private func updateTierCache() {
@@ -69,17 +79,23 @@ struct UniversalHeaderView: View {
     @ViewBuilder
     private var organizationBranding: some View {
         VStack(alignment: .leading, spacing: 4) {
-            // Simple organization name display - no dropdown
+            // Simple organization name display with secret triple-tap gesture
             if let org = authVM.currentOrg {
                 Text(org.name.uppercased())
                     .font(.title2)
                     .fontWeight(.bold)
                     .foregroundColor(.primary)
+                    .onTapGesture {
+                        handleSecretTap()
+                    }
             } else {
                 Text("RHEIR HOME")
                     .font(.title2)
                     .fontWeight(.bold)
                     .foregroundColor(.primary)
+                    .onTapGesture {
+                        handleSecretTap()
+                    }
             }
             
             // Role indicator for multi-org users
@@ -89,6 +105,28 @@ struct UniversalHeaderView: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
+        }
+    }
+    
+    // MARK: - Secret Debug Panel Access
+    
+    private func handleSecretTap() {
+        let now = Date()
+        
+        // Reset tap count if too much time has passed (more than 1 second between taps)
+        if now.timeIntervalSince(lastTapTime) > 1.0 {
+            tapCount = 1
+        } else {
+            tapCount += 1
+        }
+        
+        lastTapTime = now
+        
+        // Triple-tap detected - show debug panel
+        if tapCount >= 3 {
+            print("🤫 SECRET: Triple-tap detected - opening hidden debug panel")
+            showingHiddenDebugPanel = true
+            tapCount = 0 // Reset
         }
     }
     

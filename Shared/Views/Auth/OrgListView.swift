@@ -1,10 +1,14 @@
 import SwiftUI
 
 struct OrgListView: View {
-    @ObservedObject var vm: AuthViewModel
+    @ObservedObject private var vm: AuthViewModel
     @State private var showingCreateOrg = false
     @State private var newOrgName = ""
     @State private var isCreating = false
+    
+    init(vm: AuthViewModel) {
+        self.vm = vm
+    }
     
     var body: some View {
         NavigationStack {

@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct MasterCompanySettingsView: View {
-    @EnvironmentObject var authVM: AuthViewModel
+    @EnvironmentObject private var authVM: AuthViewModel
     @EnvironmentObject var projectVM: ProjectViewModel
     @Environment(\.dismiss) private var dismiss
     
@@ -309,7 +309,7 @@ struct MasterCompanySettingsView: View {
 
 // MARK: - Master Team Members Tab (Single Source of Truth)
 struct MasterTeamMembersTabView: View {
-    @EnvironmentObject var authVM: AuthViewModel
+    @EnvironmentObject private var authVM: AuthViewModel
     @EnvironmentObject var projectVM: ProjectViewModel
     
     @Binding var showingAddTeamMember: Bool
@@ -987,7 +987,7 @@ struct InactiveTeamMemberRowView: View {
 
 // MARK: - Simplified Organization Settings Tab
 struct MasterOrganizationSettingsTabView: View {
-    @EnvironmentObject var authVM: AuthViewModel
+    @EnvironmentObject private var authVM: AuthViewModel
     @EnvironmentObject var projectVM: ProjectViewModel
     
     @Binding var showingStatusAlert: Bool
@@ -1183,61 +1183,29 @@ struct MasterOrganizationSettingsTabView: View {
     @ViewBuilder
     private var essentialDebugSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundColor(.orange)
-                Text("CLOUDKIT CRISIS RESOLUTION")
-                    .font(.headline)
-                    .fontWeight(.bold)
-            }
+            Text("Organization Management")
+                .font(.headline)
             
             VStack(spacing: 12) {
-                NavigationLink(destination: CloudKitDebugView()) {
-                    HStack {
-                        Image(systemName: "icloud.and.arrow.up.fill")
-                            .font(.title2)
-                            .foregroundColor(.blue)
-                        
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Data Consistency Debug Console")
-                                .font(.headline)
-                                .fontWeight(.semibold)
-                                .foregroundColor(.primary)
-                            
-                            Text("Full CloudKit diagnostics & repair tools")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                        
-                        Spacer()
-                        
-                        Image(systemName: "chevron.right")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                    .padding()
-                    .background(Color.blue.opacity(0.1))
-                    .cornerRadius(12)
-                }
-                .buttonStyle(PlainButtonStyle())
-                
+                // Only keep essential production features
                 Button {
                     Task {
-                        await forceCloudKitSync()
+                        statusMessage = await authVM.checkCloudKitStatus()
+                        showingStatusAlert = true
                     }
                 } label: {
                     HStack {
-                        Image(systemName: "arrow.triangle.2.circlepath.circle.fill")
+                        Image(systemName: "checkmark.icloud.fill")
                             .font(.title2)
                             .foregroundColor(.green)
                         
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("Force CloudKit Sync")
-                                .font(.headline)
-                                .fontWeight(.semibold)
+                            Text("Check CloudKit Status")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
                                 .foregroundColor(.primary)
                             
-                            Text("Make CloudKit the single source of truth")
+                            Text("Verify connectivity & permissions")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                         }
@@ -1246,40 +1214,9 @@ struct MasterOrganizationSettingsTabView: View {
                     }
                     .padding()
                     .background(Color.green.opacity(0.1))
-                    .cornerRadius(12)
+                    .cornerRadius(8)
                 }
                 .buttonStyle(PlainButtonStyle())
-                
-                debugButton("Check CloudKit Status", "checkmark.icloud.fill", .cyan) {
-                    Task {
-                        statusMessage = await authVM.checkCloudKitStatus()
-                        showingStatusAlert = true
-                    }
-                }
-                
-                #if DEBUG
-                debugButton("Clear Local Cache", "trash.circle.fill", .orange) {
-                    // Clear local data only, keep CloudKit intact  
-                    authVM.clearAllLocalCache()
-                    alertMessage = "✅ Local cache cleared. CloudKit data preserved."
-                    showingAlert = true
-                }
-                #endif
-                
-                // Critical status info
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("🎯 CRITICAL ISSUE: '4 organizations' vs '2 organizations' discrepancy")
-                        .font(.caption)
-                        .fontWeight(.medium)
-                        .foregroundColor(.orange)
-                    
-                    Text("Use the Force CloudKit Sync button to resolve this immediately.")
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-                }
-                .padding()
-                .background(Color.orange.opacity(0.1))
-                .cornerRadius(8)
             }
         }
         .padding()
@@ -1297,25 +1234,27 @@ struct MasterOrganizationSettingsTabView: View {
         
         print("✅ Step 1: Local cache cleared using nuclear option")
         
-        // Step 2: Force fresh fetch from CloudKit using AuthViewModel's CloudKit sync
-        let syncResult = await authVM.forceCloudKitSync()
-        print("✅ Step 2: CloudKit sync completed - \(syncResult)")
-        
-        // Step 3: Reload organization data
-        authVM.reloadOrganizationData()
-        print("✅ Step 3: Organization data reloaded")
-        
-        // Step 4: If current organization is set, trigger ProjectViewModel sync
-        if let currentOrg = authVM.currentOrg {
-            await projectVM.organizationDidChange(currentOrg.id)
-            print("✅ Step 4: ProjectViewModel synced for organization: \(currentOrg.name)")
+        // Step 2: Force comprehensive CloudKit sync  
+        Task {
+            let syncResult = await authVM.forceCloudKitSync()
+            print("✅ Step 2: CloudKit sync completed - \(syncResult)")
             
-            alertMessage = "✅ CloudKit Sync Complete!\n\nOrganizations: \(authVM.userOrganizations.count)\nCurrent: \(currentOrg.name)\nCloudKit is now the single source of truth!"
-        } else {
-            alertMessage = "⚠️ CloudKit sync completed but no organizations found.\n\nYou may need to create or join an organization."
+            // Step 3: Reload organization data
+            authVM.reloadOrganizationData()
+            print("✅ Step 3: Organization data reloaded")
+            
+            // Step 4: If current organization is set, trigger ProjectViewModel sync
+            if let currentOrg = authVM.currentOrg {
+                await projectVM.organizationDidChange(currentOrg.id)
+                print("✅ Step 4: ProjectViewModel synced for organization: \(currentOrg.name)")
+                
+                alertMessage = "✅ CloudKit Sync Complete!\n\nOrganizations: \(authVM.userOrganizations.count)\nCurrent: \(currentOrg.name)\nCloudKit is now the single source of truth!"
+            } else {
+                alertMessage = "⚠️ CloudKit sync completed but no organizations found.\n\nYou may need to create or join an organization."
+            }
+            
+            showingAlert = true
         }
-        
-        showingAlert = true
     }
     
     @ViewBuilder

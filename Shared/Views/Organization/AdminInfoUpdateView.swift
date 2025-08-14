@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct AdminInfoUpdateView: View {
-    @EnvironmentObject var authVM: AuthViewModel
+    @EnvironmentObject private var authVM: AuthViewModel
     @EnvironmentObject var projectVM: ProjectViewModel
     @Environment(\.dismiss) private var dismiss
     

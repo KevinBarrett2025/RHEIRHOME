@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct OrganizationSelectorView: View {
-    @EnvironmentObject var authVM: AuthViewModel
+    @EnvironmentObject private var authVM: AuthViewModel
     @State private var showingOrganizationMenu = false
     @State private var showingEditOrganization = false
     @State private var showingDeleteConfirmation = false
@@ -165,7 +165,7 @@ struct OrganizationSelectorView: View {
 }
 
 struct OrganizationMenuView: View {
-    @EnvironmentObject var authVM: AuthViewModel
+    @EnvironmentObject private var authVM: AuthViewModel
     @Environment(\.dismiss) private var dismiss
     @Binding var showingEditOrganization: Bool
     @Binding var showingDeleteConfirmation: Bool

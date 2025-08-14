@@ -187,10 +187,6 @@ struct LandingPageView: View {
                             .padding(.top, 8)
                         }
                         
-                        Text("Accessible: \(viewModel.accessibleProjects.count) • Total: \(viewModel.organizationProjects.count)")
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-                        
                         Button {
                             refreshProjects()
                         } label: {
@@ -202,45 +198,6 @@ struct LandingPageView: View {
                         }
                         .buttonStyle(.bordered)
                         .disabled(isRefreshing)
-                        
-                        // DEBUG: Show current organization status
-                        VStack(spacing: 4) {
-                            if let orgID = viewModel.currentOrganizationID {
-                                Text("Org ID: \(orgID.prefix(8))...")
-                                    .font(.caption2)
-                                    .foregroundColor(.blue)
-                            }
-                            
-                            if let userID = UserDefaults.standard.string(forKey: "apple_user_id") {
-                                Text("Apple ID: \(userID.prefix(8))...")
-                                    .font(.caption2)
-                                    .foregroundColor(.green)
-                            }
-                            
-                            Button("🔄 Emergency Data Recovery") {
-                                Task {
-                                    let result = await viewModel.emergencyDataRecovery()
-                                    print("🆘 RECOVERY: \(result)")
-                                    statusMessage = "Recovery attempted - check console"
-                                    showingStatusAlert = true
-                                    refreshProjects()
-                                }
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .font(.caption2)
-                            
-                            // ADMIN ONBOARDING TEST BUTTON
-                            #if DEBUG
-                            Button("👑 Test Admin Onboarding") {
-                                print("🎯 SHEET: Opening admin onboarding as sheet")
-                                showAdminOnboardingSheet = true
-                            }
-                            .buttonStyle(.bordered)
-                            .font(.caption2)
-                            .foregroundColor(.blue)
-                            #endif
-                        }
-                        .padding(.top, 8)
                     }
                 } else {
                     Text("Join an organization to see shared projects")
@@ -304,33 +261,20 @@ struct LandingPageView: View {
                     Spacer()
                     
                     Menu {
-                        ForEach(activeProjects) { project in
-                            Button("Complete '\(project.name)'") {
-                                viewModel.markProjectAsCompleted(project)
+                        // Multi-org actions
+                        if authVM.userOrganizations.count > 1 {
+                            Button("Switch Organization") {
+                                // This would trigger the organization selector
                             }
                         }
                         
                         if !activeProjects.isEmpty {
                             Divider()
                             
-                            if viewModel.isBulkSyncing {
-                                HStack {
-                                    ProgressView()
-                                        .scaleEffect(0.8)
-                                    Text("Syncing...")
+                            ForEach(activeProjects) { project in
+                                Button("Complete '\(project.name)'") {
+                                    viewModel.markProjectAsCompleted(project)
                                 }
-                            } else {
-                                Button("🔄 Sync All Projects to CloudKit") {
-                                    syncAllProjectsToCloudKit()
-                                }
-                            }
-                        }
-                        
-                        // Multi-org actions
-                        if authVM.userOrganizations.count > 1 {
-                            Divider()
-                            Button("Switch Organization") {
-                                // This would trigger the organization selector
                             }
                         }
                     } label: {
