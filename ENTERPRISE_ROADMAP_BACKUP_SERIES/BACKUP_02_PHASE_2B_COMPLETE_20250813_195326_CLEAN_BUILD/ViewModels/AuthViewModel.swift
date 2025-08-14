@@ -1,17 +1,14 @@
 import Foundation
-import SwiftUI
 import Combine
-import CloudKit
 import AuthenticationServices
+import CloudKit
 
 // MARK: - AuthViewModel Error Types
-enum AuthViewModelError: Error {
+enum AuthViewModelError: LocalizedError {
     case noUserLoggedIn
     case cloudKitServiceNotAvailable
     case organizationNameTaken(String)
-}
-
-extension AuthViewModelError: LocalizedError {
+    
     var errorDescription: String? {
         switch self {
         case .noUserLoggedIn:
@@ -72,15 +69,15 @@ class AuthViewModel: ObservableObject {
     @MainActor
     init(service: AuthService) {
         self.service = service
-        print("🔧 AuthViewModel initializing...")
+        print("🔐 AuthViewModel initializing...")
         
         self.user = service.currentUser
         
         if let user = user {
-            print("🔧 Found existing authentication for user: \(user.email)")
+            print("🔐 Found existing authentication for user: \(user.email)")
             checkUserOrganizationStatus(for: user)
         } else {
-            print("🔧 No existing authentication - user needs to sign in")
+            print("🔐 No existing authentication - user needs to sign in")
         }
     }
     
@@ -94,24 +91,6 @@ class AuthViewModel: ObservableObject {
                 print("🔗 IMMEDIATE ZONE SETUP: Setting up zone for current organization: \(currentOrg.name)")
                 await self.setupCloudKitZoneForOrganization(currentOrg.id)
                 
-                // CRITICAL FIX: Create admin team member if it doesn't exist (handles late ProjectViewModel connection)
-                if let userID = self.user?.id {
-                    let existingAdmin = projectViewModel.teamMembers.first { 
-                        $0.appUserID == userID && 
-                        $0.organizationID == currentOrg.id && 
-                        $0.role == .admin 
-                    }
-                    
-                    if existingAdmin == nil {
-                        print("🎯 LATE ADMIN CREATION: No admin found after ProjectViewModel connection - creating now...")
-                        await self.createImmediateAdminTeamMember(organization: currentOrg, userID: userID, projectViewModel: projectViewModel)
-                        
-                        // Also trigger onboarding to enhance the profile
-                        self.showAdminInfoUpdate = true
-                        print("🎯 LATE ADMIN ONBOARDING: Triggered onboarding for profile enhancement")
-                    }
-                }
-                
                 // CRITICAL FIX: Sync user role when ProjectViewModel connects - use original OrganizationRole
                 if let userRole = self.organizationRoles[currentOrg.id] {
                     projectViewModel.setCurrentUserRole(userRole, forOrganization: currentOrg.id)
@@ -122,6 +101,9 @@ class AuthViewModel: ObservableObject {
                 
                 // Call organization change directly
                 await projectViewModel.organizationDidChange(currentOrg.id)
+                
+                // CRITICAL: Ensure admin team member exists after connection
+                self.ensureAdminTeamMemberExists()
                 
                 print("✅ Activated zone isolation for: \(currentOrg.name)")
             }
@@ -134,14 +116,18 @@ class AuthViewModel: ObservableObject {
     
     @MainActor
     func setCurrentOrganization(_ organization: Organization) {
-        UserDefaults.standard.set(organization.id, forKey: "previousOrganizationID")
+        // Store previous organization for quick switching
+        if let currentOrgID = currentOrg?.id {
+            UserDefaults.standard.set(currentOrgID, forKey: "previousOrganizationID");
+        }
+        
         currentOrg = organization;
         needsOrganizationSetup = false;
         showOrganizationSetup = false;
         
         if !organizations.contains(where: { $0.id == organization.id }) {
             organizations.append(organization);
-            print("🔧 Added organization to local list: \(organization.name)");
+            print("✅ Added organization to local list: \(organization.name)");
         }
         
         if !userOrganizations.contains(where: { $0.id == organization.id }) {
@@ -150,10 +136,12 @@ class AuthViewModel: ObservableObject {
         
         if let projectVM = projectVM {
             let role = organizationRoles[organization.id] ?? .member
+            // Convert OrganizationRole to TeamMemberRole
             let teamMemberRole: TeamMemberRole = role == .admin ? .admin : .member
-            projectVM.setCurrentOrganization(organization)
-            print("🔗 CRITICAL FIX: Set ProjectViewModel organization to real CloudKit org ID: \(organization.id.prefix(8))...");
+            projectVM.setCurrentOrganization(organization, role: teamMemberRole)
+            print("🔧 CRITICAL FIX: Set ProjectViewModel organization to real CloudKit org ID: \(organization.id.prefix(8))...")
             
+            // CRITICAL FIX: Sync user role when ProjectViewModel connects - use original OrganizationRole
             if let userRole = self.organizationRoles[organization.id] {
                 projectVM.setCurrentUserRole(userRole, forOrganization: organization.id)
                 print("🔐 ROLE SYNC: Set user role to \(userRole.displayName) for newly connected ProjectViewModel")
@@ -161,6 +149,7 @@ class AuthViewModel: ObservableObject {
                 print("⚠️ ROLE SYNC WARNING: No role found for current organization during connection")
             }
             
+            // CRITICAL FIX: Sync user role with ProjectViewModel
             if let userRole = self.organizationRoles[organization.id] {
                 projectVM.setCurrentUserRole(userRole, forOrganization: organization.id)
                 print("🔐 ROLE SYNC: Set user role to \(userRole.displayName) for ProjectViewModel")
@@ -170,25 +159,29 @@ class AuthViewModel: ObservableObject {
         }
         
         Task { @MainActor in
-            print("🔧 ORGANIZATION SWITCH: Setting up zone for: \(organization.name)")
+            print("🔄 ORGANIZATION SWITCH: Setting up zone for: \(organization.name)")
             await self.setupCloudKitZoneForOrganization(organization.id)
             
+            // Notify ProjectViewModel of organization change AFTER setting the organization
             await self.projectVM?.organizationDidChange(organization.id)
             
+            // ENTERPRISE FEATURE: Automatic data synchronization (no longer creates duplicate admins)
+            print("🔄 ENTERPRISE SYNC: Starting automatic data synchronization...")
             await self.syncOrganizationTeamMembers()
             
+            // CRITICAL: Also sync role after organization change
             if let userRole = self.organizationRoles[organization.id] {
                 self.projectVM?.setCurrentUserRole(userRole, forOrganization: organization.id)
-                print("🔧 ROLE SYNC: Set user role to \(userRole.displayName) for newly connected ProjectViewModel")
+                print("🔐 ROLE SYNC: Set user role to \(userRole.displayName) for newly connected ProjectViewModel")
             } else {
-                print("🔧 ROLE SYNC WARNING: No role found for current organization during connection")
+                print("⚠️ ROLE SYNC WARNING: No role found for current organization during connection")
             }
             
-            print("🔧 Activated zone isolation with synchronized data for: \(organization.name)")
+            print("✅ Activated zone isolation with synchronized data for: \(organization.name)")
         }
         
         UserDefaults.standard.set(organization.id, forKey: "currentOrganizationID");
-        print("🔧 Current organization set with enterprise-grade synchronization: \(organization.name)");
+        print("✅ Current organization set with enterprise-grade synchronization: \(organization.name)");
     }
 
     // MARK: - Apple Sign-In
@@ -197,26 +190,23 @@ class AuthViewModel: ObservableObject {
         Task { @MainActor in
             self.errorMessage = nil
             self.isLoadingAuth = true
-            print("🔧 Starting Apple Sign-In...")
+            print("🔐 Starting Apple Sign-In...")
             
             guard let cloudKitService = self.service as? CloudKitAuthService else {
-                print("🔧 CloudKit service not available")
+                print("❌ CloudKit service not available")
                 self.errorMessage = "CloudKit service not available"
                 self.isLoadingAuth = false
                 return
             }
             
             if cloudKitService.currentUser != nil {
+                print("✓ Already authenticated with CloudKit")
                 if let user = self.user {
+                    // ENHANCEMENT: Try to restore actual email from stored data if available
                     if user.email == "user.email.not.available@rheir.com" {
                         self.tryRestoreActualEmail(for: user)
                     }
-                    if cloudKitService.currentUser != nil {
-                        print("🔧 Already authenticated with CloudKit")
-                        if let user = self.user {
-                            self.checkUserOrganizationStatus(for: user)
-                        }
-                    }
+                    self.checkUserOrganizationStatus(for: user)
                 }
             } else {
                 cloudKitService.signInWithApple(with: appleCred)
@@ -227,28 +217,30 @@ class AuthViewModel: ObservableObject {
                         self.isLoadingAuth = false
                         
                         if case .failure(let error) = completion {
-                            print("🔧 Apple Sign-In failed: \(error)")
+                            print("❌ Apple Sign-In failed: \(error)")
                             self.errorMessage = "Sign-in failed. Please try again."
                         }
                     },
                     receiveValue: { [weak self] user in
                         guard let self = self else { return }
                         
+                        // ENHANCEMENT: Store actual email if this is first-time auth
                         if let email = appleCred.email, !email.isEmpty {
-                            print("🔧 FIRST TIME AUTH: Storing actual email: \(email)")
+                            print("🔐 FIRST TIME AUTH: Storing actual email: \(email)")
                             UserDefaults.standard.set(email, forKey: "stored_apple_email_\(user.id)")
                             
+                            // Create new user object with real email
                             let updatedUser = User(id: user.id, email: email)
                             self.user = updatedUser
                         } else {
                             self.user = user
-                            if user.email == "user.email.not_available@rheir.com" {
+                            // Try to restore email from storage
+                            if user.email == "user.email.not.available@rheir.com" {
                                 self.tryRestoreActualEmail(for: user)
                             }
                         }
                         
-                        print("🔧 Apple Sign-In successful for: \(self.user?.email ?? "unknown")")
-                        print("🔧 Apple Sign-In successful for: \(self.user?.email ?? "unknown")")
+                        print("✅ Apple Sign-In successful for: \(self.user?.email ?? "unknown")")
                         if let currentUser = self.user {
                             self.checkUserOrganizationStatus(for: currentUser)
                         }
@@ -266,35 +258,35 @@ class AuthViewModel: ObservableObject {
            !storedEmail.isEmpty,
            storedEmail != "user.email.not.available@rheir.com" {
             
-            print("🔧 RESTORED EMAIL: Found stored email for user: \(storedEmail)");
+            print("🔄 RESTORED EMAIL: Found stored email for user: \(storedEmail)");
             let updatedUser = User(id: user.id, email: storedEmail);
             self.user = updatedUser;
         } else {
-            print("🔧 NO STORED EMAIL: Using placeholder email for user: \(user.id.prefix(8))...");
+            print("⚠️ NO STORED EMAIL: Using placeholder email for user: \(user.id.prefix(8))...");
         }
     }
 
     // MARK: - Organization Status Check
     
     private func checkUserOrganizationStatus(for user: User) {
-        print("🔧 ENHANCED ORG STATUS CHECK for: \(user.email)");
-        print("🔧 User ID: \(user.id.prefix(8))...");
+        print("🔍 ENHANCED ORG STATUS CHECK for: \(user.email)");
+        print("🔍 User ID: \(user.id.prefix(8))...");
         
         self.checkForPendingInvites();
         
         fetchUserOrganizationsWithRoles { [weak self] orgs, roles in
             guard let self else { return };
             
-            print("🔧 ORGANIZATION FETCH RESULT:");
+            print("🔍 ORGANIZATION FETCH RESULT:");
             print("   Found Organizations: \(orgs.count)");
             print("   Roles Mapping: \(roles.count)");
             
             for org in orgs {
-                print("🔧 [\(orgs.firstIndex(of: org)!)] CloudKit Org: \(org.name)");
-                print("     ID: \(org.id.prefix(8))...");
-                print("     Admin: \(org.adminUserID.prefix(8))...");
-                print("     Members: \(org.members.count)");
-                print("     Your Role: \(roles[org.id]?.displayName ?? "Unknown")");
+                print("🔍 [\(orgs.firstIndex(of: org)!)] CloudKit Org: \(org.name)");
+                print("🔍     ID: \(org.id.prefix(8))...");
+                print("🔍     Admin: \(org.adminUserID.prefix(8))...");
+                print("🔍     Members: \(org.members.count)");
+                print("🔍     Your Role: \(roles[org.id]?.displayName ?? "Unknown")");
             }
             
             self.organizations = orgs;
@@ -302,65 +294,61 @@ class AuthViewModel: ObservableObject {
             self.organizationRoles = roles;
             
             if orgs.isEmpty && !self.hasPendingInvite() {
-                print("🔧 NO ORGANIZATIONS - Showing setup");
+                print("🔍 NO ORGANIZATIONS - Showing setup");
                 self.needsOrganizationSetup = true;
                 self.showOrganizationSetup = true;
                 
+                // Notify ProjectViewModel that no organization is selected
                 self.notifyProjectViewModelOrganizationChange(nil);
             } else if let firstOrg = orgs.first {
-                print("🔧 FOUND ORGANIZATIONS - Setting up with enterprise synchronization");
+                print("🔍 FOUND ORGANIZATIONS - Setting up with enterprise synchronization");
                 
                 let storedOrgID = UserDefaults.standard.string(forKey: "currentOrganizationID");
                 let selectedOrg = orgs.first { $0.id == storedOrgID } ?? firstOrg;
                 
-                print("🔧 Selectinging organization: \(selectedOrg.name)");
+                print("🔍 Selectinging organization: \(selectedOrg.name)");
+                // FIX: Use Task for MainActor call
                 Task { @MainActor in
                     self.setCurrentOrganization(selectedOrg);
                 }
                 self.needsOrganizationSetup = false;
                 
+                // ENTERPRISE: Automatic background data validation
                 Task { @MainActor in
                     await self.validateOrganizationDataIntegrity(selectedOrg);
-                }
-            } else {
-                if let organization = self.userOrganizations.first {
-                    Task { @MainActor in
-                        self.setCurrentOrganization(organization)
-                    }
                 }
             }
         }
     }
 
     /// Create organization using CloudKit with proper timeout and error handling
-    @MainActor
     func createOrganization(named name: String, industry: String? = nil) async throws -> Organization {
-        print("🔧 PRODUCTION ORG CREATION: Starting comprehensive organization creation process...");
-        print("🔧 Input Name: '\(name)'");
-        print("🔧 Industry: \(industry ?? "None")");
+        print("🏗️ PRODUCTION ORG CREATION: Starting comprehensive organization creation process...");
+        print("🏗️ Input Name: '\(name)'");
+        print("🏗️ Industry: \(industry ?? "None")");
         
         guard let userID = user?.id else {
-            print("🔧 PRODUCTION ERROR: No user logged in during organization creation");
+            print("❌ PRODUCTION ERROR: No user logged in during organization creation");
             throw AuthViewModelError.noUserLoggedIn;
         }
         
         guard user?.email != nil else {
-            print("🔧 PRODUCTION ERROR: User has no email address");
+            print("❌ PRODUCTION ERROR: User has no email address");
             throw AuthViewModelError.noUserLoggedIn;
         }
         
         guard let cloudKitService = service as? CloudKitAuthService else {
-            print("🔧 PRODUCTION ERROR: CloudKit service not available");
+            print("❌ PRODUCTION ERROR: CloudKit service not available");
             throw AuthViewModelError.cloudKitServiceNotAvailable;
         }
         
-        print("🔧 PRODUCTION VERIFICATION:");
+        print("🏗️ PRODUCTION VERIFICATION:");
         print("   User ID: \(userID.prefix(8))...");
         print("   User Email: \(user?.email ?? "Unknown")");
         print("   Service Type: CloudKitAuthService");
         print("   Organization Name: '\(name)'");
         
-        print("🔧 PRODUCTION: Calling CloudKit organization creation...")
+        print("🏗️ PRODUCTION: Calling CloudKit organization creation...")
         
         let organization: Organization = try await withCheckedThrowingContinuation { continuation in
             cloudKitService.createOrganization(orgName: name, adminUserID: userID)
@@ -368,14 +356,14 @@ class AuthViewModel: ObservableObject {
                     receiveCompletion: { completion in
                         switch completion {
                         case .finished:
-                            print("🔧 CloudKit organization creation publisher completed successfully")
+                            print("🏗️ CloudKit organization creation publisher completed successfully")
                         case .failure(let error):
-                            print("🔧 CloudKit organization creation failed: \(error)")
+                            print("❌ CloudKit organization creation failed: \(error)")
                             continuation.resume(throwing: error)
                         }
                     },
                     receiveValue: { org in
-                        print("🔧 PRODUCTION SUCCESS: Organization created via CloudKit")
+                        print("✅ PRODUCTION SUCCESS: Organization created via CloudKit")
                         print("   Organization ID: \(org.id.prefix(8))...");
                         print("   Organization Name: \(org.name)")
                         print("   Admin User ID: \(org.adminUserID.prefix(8))...");
@@ -386,42 +374,67 @@ class AuthViewModel: ObservableObject {
                 .store(in: &self.cancellables)
         }
         
-        print("🔧 PRODUCTION: Setting up CloudKit zone for new organization...");
+        await MainActor.run {
+            print("🏗️ PRODUCTION: Updating local organization state...")
+            
+            if !self.organizations.contains(where: { $0.id == organization.id }) {
+                self.organizations.append(organization);
+                print("   Added to organizations array: \(self.organizations.count) total");
+            }
+            if !self.userOrganizations.contains(where: { $0.id == organization.id }) {
+                self.userOrganizations.append(organization);
+                print("   Added to userOrganizations array: \(self.userOrganizations.count) total");
+            }
+            
+            self.organizationRoles[organization.id] = .admin;
+            print("   Set admin role for user in organization");
+        }
+        
+        print("🏗️ PRODUCTION: Setting up CloudKit zone for new organization...");
         if let projectViewModel = self.projectVM {
             await projectViewModel.setupCloudKitZoneForOrganization(organization.id);
-            print("🔧 PRODUCTION: Zone setup completed for new organization");
+            print("✅ PRODUCTION: Zone setup completed for new organization");
         } else {
-            print("🔧 PRODUCTION WARNING: No ProjectViewModel available yet - zone will be created when ProjectViewModel connects");
+            print("⚠️ PRODUCTION WARNING: No ProjectViewModel available yet - zone will be created when ProjectViewModel connects");
         }
         
-        print("🔧 PRODUCTION: Updating local organization state...")
-        
-        if !self.organizations.contains(where: { $0.id == organization.id }) {
-            self.organizations.append(organization);
-            print("   Added to organizations array: \(self.organizations.count) total");
-        }
-        if !self.userOrganizations.contains(where: { $0.id == organization.id }) {
-            self.userOrganizations.append(organization);
-            print("   Added to userOrganizations array: \(self.userOrganizations.count) total");
+        await MainActor.run {
+            print("🏗️ PRODUCTION: Setting as current organization...");
+            self.setCurrentOrganization(organization);
+            print("   Current organization set to: \(organization.name)");
+            
+            // CRITICAL FIX: Show admin onboarding with proper timing
+            print("🎯 ADMIN ONBOARDING: Triggering professional admin setup...");
         }
         
-        self.organizationRoles[organization.id] = .admin;
-        print("   Set admin role for user in organization");
+        // CRITICAL FIX: Improved timing - wait longer for UI state to fully settle
+        try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
         
-        self.setCurrentOrganization(organization)
-        print("   Current organization set to: \(organization.name)")
-        
-        if let projectViewModel = self.projectVM {
-            await self.createImmediateAdminTeamMember(organization: organization, userID: userID, projectViewModel: projectViewModel)
-        } else {
-            print("🎯 ADMIN CREATION: No ProjectViewModel available - will create admin when ProjectViewModel connects")
+        // CRITICAL FIX: Break down complex MainActor.run into simpler operations
+        let shouldShowOnboarding = await MainActor.run { () -> Bool in
+            if let projectVM = self.projectVM {
+                let existingAdmin = projectVM.teamMembers.first { 
+                    $0.appUserID == userID && 
+                    $0.organizationID == organization.id && 
+                    $0.role == .admin 
+                }
+                return existingAdmin == nil
+            }
+            return true // No ProjectViewModel yet, show onboarding anyway
         }
         
-        self.showAdminInfoUpdate = true
-        self.objectWillChange.send()
-        print("🎯 ADMIN ONBOARDING: Set showAdminInfoUpdate = \(self.showAdminInfoUpdate)")
-        
-        print("🔧 PRODUCTION COMPLETE: Organization '\(name)' created successfully - admin onboarding ready");
+        await MainActor.run {
+            if shouldShowOnboarding {
+                print("🎯 ADMIN ONBOARDING: No admin found - triggering onboarding flow")
+                self.showAdminInfoUpdate = true
+                self.objectWillChange.send()
+                print("🎯 ADMIN ONBOARDING: Set showAdminInfoUpdate = \(self.showAdminInfoUpdate)")
+            } else {
+                print("✅ ADMIN ONBOARDING: Admin already exists, skipping onboarding")
+            }
+        }
+
+        print("✅ PRODUCTION COMPLETE: Organization '\(name)' created successfully - admin onboarding ready");
         return organization;
     }
 
@@ -437,6 +450,7 @@ class AuthViewModel: ObservableObject {
     private func setupCloudKitZoneForOrganization(_ organizationID: String) async {
         print("🔧 CRITICAL: Setting up CloudKit zone for organization: \(organizationID.prefix(8))...");
         
+        // Call ProjectViewModel's setupCloudKitZoneForOrganization method directly
         if let projectViewModel = self.projectVM {
             print("🔧 CRITICAL: Found ProjectViewModel reference - calling zone setup directly")
             await projectViewModel.setupCloudKitZoneForOrganization(organizationID)
@@ -450,21 +464,21 @@ class AuthViewModel: ObservableObject {
     /// Fetch user organizations with their roles (ENTERPRISE-GRADE DATA MANAGEMENT)
     private func fetchUserOrganizationsWithRoles(completion: @escaping ([Organization], [String: OrganizationRole]) -> Void) {
         guard let userID = user?.id else {
-            print("🔧 FETCH ORGS: No user logged in");
+            print("❌ FETCH ORGS: No user logged in");
             completion([], [:]);
             return;
         }
         
         guard let cloudKitService = service as? CloudKitAuthService else {
-            print("🔧 FETCH ORGS: CloudKit service not available");
+            print("❌ FETCH ORGS: CloudKit service not available");
             completion([], [:]);
             return;
         }
         
-        print("🔧 COMPREHENSIVE ORG TRACE: Starting organization fetch with enhanced debugging");
-        print("🔧 Current User: \(userID.prefix(8))...");
-        print("🔧 Current organizations.count: \(organizations.count)");
-        print("🔧 Current userOrganizations.count: \(userOrganizations.count)");
+        print("🔍 COMPREHENSIVE ORG TRACE: Starting organization fetch with enhanced debugging");
+        print("🔍 Current User: \(userID.prefix(8))...");
+        print("🔍 Current organizations.count: \(organizations.count)");
+        print("🔍 Current userOrganizations.count: \(userOrganizations.count)");
         
         isLoadingOrgs = true;
         
@@ -477,7 +491,7 @@ class AuthViewModel: ObservableObject {
                     self.isLoadingOrgs = false;
                     
                     if case .failure(let error) = publisherCompletion {
-                        print("🔧 FETCH ORGS FAILED: \(error.localizedDescription)");
+                        print("❌ FETCH ORGS FAILED: \(error.localizedDescription)");
                         self.errorMessage = "Failed to load organizations. Please try again.";
                         completion([], [:]);
                     }
@@ -485,24 +499,25 @@ class AuthViewModel: ObservableObject {
                 receiveValue: { [weak self] (organizations: [Organization], roles: [String: OrganizationRole]) in
                     guard let self = self else { return };
                     
-                    print("🔧 COMPREHENSIVE ORG TRACE: CloudKit fetch completed");
-                    print("🔧 CloudKit organizations.count: \(organizations.count)");
-                    print("🔧 CloudKit roles.count: \(roles.count)");
+                    print("🔍 COMPREHENSIVE ORG TRACE: CloudKit fetch completed");
+                    print("🔍 CloudKit organizations.count: \(organizations.count)");
+                    print("🔍 CloudKit roles.count: \(roles.count)");
                     
                     for (index, org) in organizations.enumerated() {
-                        print("🔧 [\(index)] CloudKit Org: \(org.name)");
-                        print("     ID: \(org.id.prefix(8))...");
-                        print("     Admin: \(org.adminUserID.prefix(8))...");
-                        print("     Members: \(org.members.count)");
-                        print("     Role: \(roles[org.id]?.displayName ?? "Unknown")");
-                        print("     Created: \(org.createdAt)");
-                        print("     CloudKit RecordID: \(org.cloudKitRecordID ?? "None")");
+                        print("🔍 [\(index)] CloudKit Org: \(org.name)");
+                        print("🔍     ID: \(org.id.prefix(8))...");
+                        print("🔍     Admin: \(org.adminUserID.prefix(8))...");
+                        print("🔍     Members: \(org.members.count)");
+                        print("🔍     Role: \(roles[org.id]?.displayName ?? "Unknown")");
+                        print("🔍     Created: \(org.createdAt)");
+                        print("🔍     CloudKit RecordID: \(org.cloudKitRecordID ?? "None")");
 
                     }
                     
+                    // CRITICAL: Validate against current local state
                     let countDifference = organizations.count - self.organizations.count;
                     if countDifference != 0 {
-                        print("🔧 COUNT MISMATCH DETECTED:");
+                        print("⚠️ COUNT MISMATCH DETECTED:");
                         print("   CloudKit: \(organizations.count)");
                         print("   Local: \(self.organizations.count)");
                         print("   Difference: \(countDifference)");
@@ -519,7 +534,7 @@ class AuthViewModel: ObservableObject {
         return UserDefaults.standard.string(forKey: "pending_invite_orgID") != nil
     }
 
-    @MainActor
+    /// Fix data synchronization between CloudKit organization and ProjectViewModel team members
     func syncOrganizationTeamMembers() async {
         guard let currentOrg = currentOrg,
               let userID = user?.id,
@@ -534,163 +549,161 @@ class AuthViewModel: ObservableObject {
         print("🔄 Organization: \(currentOrg.name)");
         print("🔄 CloudKit members: \(currentOrg.members.count + 1)") // +1 for admin
         
-        let currentTeamMemberCount = projectVM.teamMembers.filter { $0.organizationID == currentOrg.id }.count;
-        print("🔄 ProjectVM team members: \(currentTeamMemberCount)");
-        
-        let existingAdmin = projectVM.teamMembers.first {
-            $0.appUserID == userID && $0.organizationID == currentOrg.id && $0.role == .admin
-        }
-        
-        if existingAdmin == nil {
-            print("⚠️ SYNC: No admin team member found - this should be handled by onboarding flow")
-            print("   Organization: \(currentOrg.name)")
-            print("   Admin User ID: \(userID.prefix(8))...")
-            print("   Consider triggering admin onboarding if not completed")
-        } else {
-            print("✅ SYNC: Admin team member exists: \(existingAdmin?.name ?? "Unknown")")
-        }
-        
-        for memberID in currentOrg.members {
-            if memberID != userID {
-                let existingMember = projectVM.teamMembers.first {
-                    $0.appUserID == memberID && $0.organizationID == currentOrg.id
-                }
-                
-                if existingMember == nil {
-                    print("🎯 SYNC: Creating team member for organization member \(memberID.prefix(8))...");
+        // Access MainActor properties within MainActor context
+        await MainActor.run {
+            let currentTeamMemberCount = projectVM.teamMembers.filter { $0.organizationID == currentOrg.id }.count;
+            print("🔄 ProjectVM team members: \(currentTeamMemberCount)");
+            
+            // CRITICAL FIX: Only check if admin exists, don't create duplicate
+            let existingAdmin = projectVM.teamMembers.first {
+                $0.appUserID == userID && $0.organizationID == currentOrg.id && $0.role == .admin
+            }
+            
+            if existingAdmin == nil {
+                print("⚠️ SYNC: No admin team member found - this should be handled by onboarding flow")
+                print("   Organization: \(currentOrg.name)")
+                print("   Admin User ID: \(userID.prefix(8))...")
+                print("   Consider triggering admin onboarding if not completed")
+            } else {
+                print("✅ SYNC: Admin team member exists: \(existingAdmin?.name ?? "Unknown")")
+            }
+            
+            // Create team members for other organization members if any
+            for memberID in currentOrg.members {
+                if memberID != userID {
+                    let existingMember = projectVM.teamMembers.first {
+                        $0.appUserID == memberID && $0.organizationID == currentOrg.id
+                    }
                     
-                    let memberTeamMember = TeamMember(
-                        id: UUID(),
-                        name: "Team Member \(memberID.prefix(8))",
-                        email: "member@example.com",
-                        phone: "",
-                        jobTitle: "Team Member",
-                        rates: [
-                            EmployeeRate(
-                                taskType: "General Labor",
-                                rate: 25.0,
-                                isDefault: true
-                            )
-                        ],
-                        isArchived: false,
-                        organizationID: currentOrg.id,
-                        role: .member,
-                        isActive: true,
-                        employmentStatus: .active,
-                        employmentType: .employee,
-                        hasAppAccess: true,
-                        appUserID: memberID
-                    );
-                    
-                    projectVM.teamMembers.append(memberTeamMember)
-                    print("✅ SYNC: Created team member for \(memberID.prefix(8))...");
+                    if existingMember == nil {
+                        print("🎯 SYNC: Creating team member for organization member \(memberID.prefix(8))...");
+                        
+                        let memberTeamMember = TeamMember(
+                            id: UUID(),
+                            name: "Team Member \(memberID.prefix(8))",
+                            email: "member@example.com",
+                            phone: "",
+                            jobTitle: "Team Member",
+                            rates: [
+                                EmployeeRate(
+                                    taskType: "General Labor",
+                                    rate: 25.0,
+                                    isDefault: true
+                                )
+                            ],
+                            isArchived: false,
+                            organizationID: currentOrg.id,
+                            role: .member,
+                            isActive: true,
+                            employmentStatus: .active,
+                            employmentType: .employee,
+                            hasAppAccess: true,
+                            appUserID: memberID
+                        );
+                        
+                        projectVM.teamMembers.append(memberTeamMember)
+                        print("✅ SYNC: Created team member for \(memberID.prefix(8))...");
+                    }
                 }
             }
+            
+            let finalCount = projectVM.teamMembers.filter { $0.organizationID == currentOrg.id }.count;
+            print("✅ SYNC: Synchronization completed - \(finalCount) team members in ProjectVM");
         }
-        
-        let finalCount = projectVM.teamMembers.filter { $0.organizationID == currentOrg.id }.count;
-        print("✅ SYNC: Synchronization completed - \(finalCount) team members in ProjectVM");
     }
     
     /// ENTERPRISE: Validate organization data integrity
     private func validateOrganizationDataIntegrity(_ organization: Organization) async {
-        print("🔧 ENTERPRISE: Validating data integrity for organization: \(organization.name)");
+        print("🛡️ ENTERPRISE: Validating data integrity for organization: \(organization.name)");
         
         guard let projectVM = self.projectVM else {
-            print("🔧 ENTERPRISE: ProjectViewModel not available for validation");
+            print("⚠️ ENTERPRISE: ProjectViewModel not available for validation");
             return;
         }
         
         let cloudKitMemberCount = organization.members.count + 1 // +1 for admin
         
-        let localTeamMemberCount = await MainActor.run {
-            return projectVM.teamMembers.filter { $0.organizationID == organization.id }.count
+        // Access MainActor properties within MainActor context
+        let (localTeamMemberCount, projectsCount, organizationProjectsCount, filteredProjectsCount) = await MainActor.run {
+            let teamMemberCount = projectVM.teamMembers.filter { $0.organizationID == organization.id }.count
+            let allProjectsCount = projectVM.projects.count
+            let orgProjectsCount = projectVM.organizationProjects.count
+            let filteredCount = projectVM.projects.filter { $0.organizationID == organization.id }.count
+            
+            return (teamMemberCount, allProjectsCount, orgProjectsCount, filteredCount)
         }
         
-        let projectsCount = await MainActor.run {
-            return projectVM.projects.count
-        }
-        
-        let organizationProjectsCount = await MainActor.run {
-            return projectVM.organizationProjects.count
-        }
-        
-        let filteredProjectsCount = await MainActor.run {
-            return projectVM.projects.filter { $0.organizationID == organization.id }.count
-        }
-        
-        print("🔧 ENTERPRISE VALIDATION:");
+        print("🛡️ ENTERPRISE VALIDATION:");
         print("   CloudKit Members: \(cloudKitMemberCount)");
         print("   Local Team Members: \(localTeamMemberCount)");
-        print("   Total projects: \(projectsCount) vs Organization projects count: \(organizationProjectsCount)");
-        print("   Filtered projects for org: \(filteredProjectsCount)");
+        print("   📊 Total projects: \(projectsCount) vs Organization projects count: \(organizationProjectsCount)");
+        print("   📊 Filtered projects for org: \(filteredProjectsCount)");
         
         var hasInconsistency = false
         
+        // Check team member consistency
         if cloudKitMemberCount != localTeamMemberCount {
-            print("🔧 ENTERPRISE: Team member data inconsistency detected - auto-fixing...");
+            print("⚠️ ENTERPRISE: Team member data inconsistency detected - auto-fixing...");
             hasInconsistency = true
             await syncOrganizationTeamMembers();
         }
         
+        // PRIORITY 3: Check project data consistency
         if organizationProjectsCount != filteredProjectsCount {
-            print("🔧 ENTERPRISE: Project data inconsistency detected - auto-fixing...");
+            print("⚠️ ENTERPRISE: Project data inconsistency detected - auto-fixing...");
             print("   Organization projects: \(organizationProjectsCount)");
             print("   Filtered projects: \(filteredProjectsCount)");
             hasInconsistency = true
             
-            let correctProjects = await MainActor.run {
-                return projectVM.projects.filter { $0.organizationID == organization.id }
-            }
-            
+            // Fix project data consistency
             await MainActor.run {
+                let correctProjects = projectVM.projects.filter { $0.organizationID == organization.id }
                 projectVM.organizationProjects = correctProjects
                 projectVM.updateAccessibleProjects()
-                print("🔧 PROJECT CONSISTENCY: Fixed organization projects array - now \(correctProjects.count) projects")
+                print("✅ PROJECT CONSISTENCY: Fixed organization projects array - now \(correctProjects.count) projects")
             }
         }
         
+        // Verify accessible projects consistency
         let accessibleProjectsCount = await MainActor.run {
             return projectVM.accessibleProjects.count
         }
         
         if accessibleProjectsCount != organizationProjectsCount {
-            print("🔧 ENTERPRISE: Accessible projects inconsistency detected - auto-fixing...");
+            print("⚠️ ENTERPRISE: Accessible projects inconsistency detected - auto-fixing...");
             hasInconsistency = true
             
             await MainActor.run {
                 projectVM.updateAccessibleProjects()
                 let newAccessibleCount = projectVM.accessibleProjects.count
-                print("🔧 ACCESSIBLE PROJECTS: Fixed accessible projects array - now \(newAccessibleCount) projects")
+                print("✅ ACCESSIBLE PROJECTS: Fixed accessible projects array - now \(newAccessibleCount) projects")
             }
         }
         
         if hasInconsistency {
-            let finalTeamMemberCount = await MainActor.run {
-                return projectVM.teamMembers.filter { $0.organizationID == organization.id }.count
+            // Final validation after fixes
+            let (finalTeamMemberCount, finalOrgProjectsCount, finalAccessibleCount) = await MainActor.run {
+                let teamMembers = projectVM.teamMembers.filter { $0.organizationID == organization.id }.count
+                let orgProjects = projectVM.organizationProjects.count  
+                let accessibleProjects = projectVM.accessibleProjects.count
+                return (teamMembers, orgProjects, accessibleProjects)
             }
             
-            let finalOrgProjectsCount = await MainActor.run {
-                return projectVM.organizationProjects.count  
-            }
-            
-            let finalAccessibleCount = await MainActor.run {
-                return projectVM.accessibleProjects.count
-            }
-            
-            print("🔧 ENTERPRISE: Data integrity restored:");
+            print("✅ ENTERPRISE: Data integrity restored:");
             print("   Local Team Members: \(finalTeamMemberCount)");
             print("   Organization Projects: \(finalOrgProjectsCount)");
             print("   Accessible Projects: \(finalAccessibleCount)");
         } else {
-            print("🔧 ENTERPRISE: Data integrity verified - all systems synchronized");
+            print("✅ ENTERPRISE: Data integrity verified - all systems synchronized");
         }
     }
 
     /// Ensure admin team member exists
     private func ensureAdminTeamMemberExists() {
-        print("🔧 ADMIN CHECK: Checking for admin team member...")
+        print("🎯 ADMIN CHECK DEPRECATED: Admin creation now handled by onboarding flow")
+        print("   If admin is missing, user should complete onboarding via showAdminInfoUpdate")
         
+        // Simple check to see if admin exists (for logging purposes only)
         Task { @MainActor in
             guard let organization = currentOrg,
                   let userID = user?.id,
@@ -698,128 +711,26 @@ class AuthViewModel: ObservableObject {
                 return
             }
             
-            let existingAdmin = projectVM.teamMembers.first {
-                $0.appUserID == userID && $0.organizationID == organization.id && $0.role == .admin
+            let existingAdmin = projectVM.teamMembers.first { 
+                $0.appUserID == userID && $0.organizationID == organization.id && $0.role == .admin 
             }
             
             if existingAdmin == nil {
-                print("🔧 ADMIN CHECK: No admin found - onboarding may be needed")
-                print("   Organization: \(organization.name)")
-                print("   Admin User ID: \(userID.prefix(8))...")
-                print("   Consider triggering admin onboarding if not completed")
+                print("⚠️ ADMIN CHECK: No admin found - onboarding may be needed")
+                print("   showAdminInfoUpdate should be true: \(showAdminInfoUpdate)")
             } else {
-                print("🔧 ADMIN CHECK: Admin exists: \(existingAdmin?.name ?? "Unknown")")
+                print("✅ ADMIN CHECK: Admin exists: \(existingAdmin?.name ?? "Unknown")")
             }
         }
-    }
-
-    /// Create immediate basic admin team member to prevent "No admin found" warnings
-    private func createImmediateAdminTeamMember(organization: Organization, userID: String, projectViewModel: ProjectViewModel) async {
-        print("🔧 IMMEDIATE ADMIN: Creating basic admin team member...")
-        
-        let existingAdmin = await MainActor.run {
-            return projectViewModel.teamMembers.first { 
-                $0.appUserID == userID && 
-                $0.organizationID == organization.id && 
-                $0.role == .admin 
-            }
-        }
-        
-        if existingAdmin != nil {
-            print("🔧 IMMEDIATE ADMIN: Admin already exists - skipping creation")
-            return
-        }
-        
-        let adminEmail = user?.email ?? "admin@company.com"
-        let adminName = adminEmail.components(separatedBy: "@").first?.capitalized ?? "Administrator"
-        
-        let basicAdmin = TeamMember(
-            id: UUID(),
-            name: adminName,
-            email: adminEmail,
-            phone: "",
-            jobTitle: "Owner/Administrator",
-            rates: [
-                EmployeeRate(
-                    taskType: "Administrative Work",
-                    rate: 75.0,
-                    isDefault: true
-                )
-            ],
-            isArchived: false,
-            organizationID: organization.id,
-            role: .admin,
-            isActive: true,
-            employmentStatus: .active,
-            employmentType: .employee,
-            hasAppAccess: true,
-            appUserID: userID
-        );
-        
-        await MainActor.run {
-            projectViewModel.teamMembers.append(basicAdmin)
-            print("🔧 IMMEDIATE ADMIN: Added basic admin to ProjectViewModel: \(adminName)")
-        }
-        
-        Task {
-            do {
-                try await self.saveBasicAdminToCloudKit(basicAdmin)
-                print("🔧 IMMEDIATE ADMIN: Saved basic admin to CloudKit")
-            } catch {
-                print("🔧 IMMEDIATE ADMIN: Failed to save to CloudKit (will retry): \(error)")
-            }
-        }
-        
-        print("🔧 IMMEDIATE ADMIN: Basic admin creation completed - onboarding can now enhance profile")
-    }
-    
-    /// Save basic admin team member to CloudKit
-    private func saveBasicAdminToCloudKit(_ teamMember: TeamMember) async throws {
-        let container = CKContainer(identifier: "iCloud.com.rheirhome.rheirhomeappV3")
-        let privateDatabase = container.privateCloudDatabase
-        
-        let recordID = CKRecord.ID(recordName: "team_member_\(teamMember.id.uuidString)")
-        let record = CKRecord(recordType: "TeamMember", recordID: recordID)
-        
-        record["id"] = teamMember.id.uuidString as CKRecordValue
-        record["name"] = teamMember.name as CKRecordValue
-        record["email"] = teamMember.email as CKRecordValue
-        record["phone"] = teamMember.phone as CKRecordValue
-        record["jobTitle"] = teamMember.jobTitle as CKRecordValue
-        record["organizationID"] = teamMember.organizationID as CKRecordValue
-        record["role"] = teamMember.role.rawValue as CKRecordValue
-        record["isActive"] = (teamMember.isActive ? 1 : 0) as CKRecordValue
-        record["hasAppAccess"] = (teamMember.hasAppAccess ? 1 : 0) as CKRecordValue
-        record["employmentStatus"] = teamMember.employmentStatus.rawValue as CKRecordValue
-        record["employmentType"] = teamMember.employmentType.rawValue as CKRecordValue
-        record["environment"] = "production" as CKRecordValue
-        record["dateAdded"] = Date() as CKRecordValue
-        record["lastModified"] = Date() as CKRecordValue
-        
-        // Add app user ID if available
-        if let appUserID = teamMember.appUserID {
-            record["appUserID"] = appUserID as CKRecordValue
-        }
-        
-        if let ratesData = try? JSONEncoder().encode(teamMember.rates) {
-            record["rates"] = ratesData as CKRecordValue
-        }
-        
-        if let defaultRate = teamMember.rates.first(where: { $0.isDefault }) {
-            record["defaultRate"] = defaultRate.rate as CKRecordValue
-        }
-        
-        _ = try await privateDatabase.save(record)
-        print("🔧 CLOUDKIT: Basic admin TeamMember saved successfully")
     }
 
     // MARK: - Sign Out
     
     func signOut() {
-        print("🔧 Signing out user");
+        print("🔐 Signing out user");
         
         UserDefaults.standard.removeObject(forKey: "pending_invite_orgID");
-        UserDefaults.standard.removeObject(forKey: "pending_invite_orgName");
+        UserDefaults.standard.removeObject(forKey: "pending_invite_orgName") 
         UserDefaults.standard.removeObject(forKey: "pending_invite_token");
         UserDefaults.standard.removeObject(forKey: "currentOrganizationID");
         
@@ -836,8 +747,9 @@ class AuthViewModel: ObservableObject {
         assignedProjectIDs = [];
         teamProjectAssignments = [:];
         
+        // Notify ProjectViewModel that no organization is selected
         notifyProjectViewModelOrganizationChange(nil);
-        print("🔧 Zone isolation cleared");
+        print("🔐 Zone isolation cleared");
         
         service.signOut();
     }
@@ -847,20 +759,23 @@ class AuthViewModel: ObservableObject {
     /// Check for pending invites (public method)
     func checkForPendingInvites() {
         if UserDefaults.standard.string(forKey: "pending_invite_orgID") != nil {
-            print("🔧 PENDING INVITE: Found pending invitation - will process after authentication");
+            print("📧 PENDING INVITE: Found pending invitation - will process after authentication");
             
+            // If already authenticated, process immediately
             if user != nil {
+                // processStoredInvitation();
             }
         }
     }
 
     func invite(email: String) {
-        print("🔧 INVITE: Sending invitation to \(email)...")
+        print("📧 INVITE: Sending invitation to \(email)...")
         isInviting = true
         inviteStatus = "Sending invitation..."
         
         Task {
             do {
+                // Basic validation
                 guard !email.isEmpty, email.contains("@") else {
                     await MainActor.run {
                         self.isInviting = false
@@ -878,8 +793,9 @@ class AuthViewModel: ObservableObject {
                     return
                 }
                 
-                print("🔧 INVITE: Using CloudKit sharing for organization: \(currentOrg.name)")
+                print("📧 INVITE: Using CloudKit sharing for organization: \(currentOrg.name)")
                 
+                // Use CloudKit sharing service to create actual invitation
                 try await cloudKitService.inviteUserToOrganization(
                     email: email, 
                     organizationID: currentOrg.id,
@@ -892,20 +808,20 @@ class AuthViewModel: ObservableObject {
                     self.pendingInvites.append(email)
                 }
                 
-                print("🔧 INVITE: Successfully sent CloudKit invitation to \(email)")
+                print("✅ INVITE: Successfully sent CloudKit invitation to \(email)")
                 
             } catch {
                 await MainActor.run {
                     self.isInviting = false
                     self.inviteStatus = "Failed to send invitation: \(error.localizedDescription)"
                 }
-                print("🔧 INVITE: Failed to send invitation to \(email): \(error)")
+                print("❌ INVITE: Failed to send invitation to \(email): \(error)")
             }
         }
     }
     
     func inviteUser(email: String, role: OrganizationRole = .member) async -> InviteResult {
-        print("🔧 INVITE USER: Sending invitation to \(email) as \(role.displayName)...")
+        print("📧 INVITE USER: Sending invitation to \(email) as \(role.displayName)...")
         
         await MainActor.run {
             isInviting = true
@@ -913,6 +829,7 @@ class AuthViewModel: ObservableObject {
         }
         
         do {
+            // Basic validation
             guard !email.isEmpty, email.contains("@") else {
                 await MainActor.run {
                     self.isInviting = false
@@ -937,8 +854,9 @@ class AuthViewModel: ObservableObject {
                 return InviteResult(success: false, message: "CloudKit service unavailable")
             }
             
-            print("🔧 INVITE USER: Using CloudKit sharing for organization: \(currentOrg.name)")
+            print("📧 INVITE USER: Using CloudKit sharing for organization: \(currentOrg.name)")
             
+            // Use CloudKit sharing service to create actual invitation
             try await cloudKitService.inviteUserToOrganization(
                 email: email, 
                 organizationID: currentOrg.id,
@@ -951,7 +869,7 @@ class AuthViewModel: ObservableObject {
                 self.pendingInvites.append(email)
             }
             
-            print("🔧 INVITE USER: Successfully sent CloudKit invitation to \(email) as \(role.displayName) for organization: \(currentOrg.name)")
+            print("✅ INVITE USER: Successfully sent CloudKit invitation to \(email) as \(role.displayName) for organization: \(currentOrg.name)")
             
             return InviteResult(success: true, message: "Invitation sent successfully to \(email)")
             
@@ -961,7 +879,7 @@ class AuthViewModel: ObservableObject {
                 self.inviteStatus = "Failed to send invitation: \(error.localizedDescription)"
             }
             
-            print("🔧 INVITE USER: Failed to send invitation to \(email): \(error)")
+            print("❌ INVITE USER: Failed to send invitation to \(email): \(error)")
             return InviteResult(success: false, message: "Failed to send invitation: \(error.localizedDescription)")
         }
     }
@@ -976,6 +894,7 @@ class AuthViewModel: ObservableObject {
     func getTeamMemberInviteLink() -> String? { 
         guard let currentOrg = currentOrg else { return nil }
         
+        // Generate invite link with organization information
         let baseURL = "https://rheir.app/invite"
         let orgParam = "org=\(currentOrg.id)"
         let nameParam = "name=\(currentOrg.name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")"
@@ -990,6 +909,7 @@ class AuthViewModel: ObservableObject {
             return []
         }
         
+        // Return project IDs that contractor has access to
         return assignedProjectIDs
     }
     
@@ -1000,25 +920,26 @@ class AuthViewModel: ObservableObject {
         }
         
         do {
+            // Fetch invites from CloudKit
             let invites = try await cloudKitService.fetchPendingInvitesForUser(userID)
-            print("🔧 FETCH INVITES: Found \(invites.count) pending invites")
+            print("📧 FETCH INVITES: Found \(invites.count) pending invites")
             return invites
         } catch {
-            print("🔧 FETCH INVITES: Failed to fetch pending invites: \(error)")
+            print("❌ FETCH INVITES: Failed to fetch pending invites: \(error)")
             return []
         }
     }
     
     func clearPendingInvite() {
         UserDefaults.standard.removeObject(forKey: "pending_invite_orgID");
-        UserDefaults.standard.removeObject(forKey: "pending_invite_orgName");
+        UserDefaults.standard.removeObject(forKey: "pending_invite_orgName") 
         UserDefaults.standard.removeObject(forKey: "pending_invite_token");
-        print("🔧 CLEAR INVITE: Cleared pending invite data")
+        print("🗑️ CLEAR INVITE: Cleared pending invite data")
     }
     
     func dismissAdminInfoUpdate() { 
         showAdminInfoUpdate = false
-        print("🔧 DISMISS ADMIN: Admin info update dismissed")
+        print("✅ DISMISS ADMIN: Admin info update dismissed")
     }
     
     func getShareURLForCopying() -> String? { 
@@ -1029,7 +950,7 @@ class AuthViewModel: ObservableObject {
         let nameParam = "name=\(currentOrg.name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")"
         
         let shareURL = "\(baseURL)?\(orgParam)&\(nameParam)"
-        print("🔧 SHARE URL: Generated share URL for \(currentOrg.name)")
+        print("🔗 SHARE URL: Generated share URL for \(currentOrg.name)")
         return shareURL
     }
     
@@ -1041,7 +962,7 @@ class AuthViewModel: ObservableObject {
         let nameParam = "name=\(currentOrg.name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")"
         
         let contractorURL = "\(baseURL)?\(orgParam)&\(nameParam)"
-        print("🔧 CONTRACTOR URL: Generated contractor invite URL for \(currentOrg.name)")
+        print("🔗 CONTRACTOR URL: Generated contractor invite URL for \(currentOrg.name)")
         return contractorURL
     }
     
@@ -1052,10 +973,12 @@ class AuthViewModel: ObservableObject {
         }
         
         do {
+            // Store project assignments for this user
             teamProjectAssignments[email] = allowedProjectIDs
             
+            // Send invitation with project-specific permissions
             try await cloudKitService.inviteUserToOrganizationWithProjects(
-                email: email, 
+                email: email,
                 organizationID: currentOrg.id,
                 role: role,
                 allowedProjectIDs: allowedProjectIDs
@@ -1067,7 +990,7 @@ class AuthViewModel: ObservableObject {
                 self.pendingInvites.append(email)
             }
             
-            print("🔧 PROJECT INVITE: Sent invitation to \(email) with access to \(allowedProjectIDs.count) projects")
+            print("✅ PROJECT INVITE: Sent invitation to \(email) with access to \(allowedProjectIDs.count) projects")
             return InviteResult(success: true, message: "Invitation sent with project access")
             
         } catch {
@@ -1075,7 +998,7 @@ class AuthViewModel: ObservableObject {
                 self.isInviting = false
                 self.inviteStatus = "Failed to send invitation: \(error.localizedDescription)"
             }
-            print("🔧 PROJECT INVITE: Failed to send invitation: \(error)")
+            print("❌ PROJECT INVITE: Failed to send invitation: \(error)")
             return InviteResult(success: false, message: "Failed to send invitation: \(error.localizedDescription)")
         }
     }
@@ -1083,7 +1006,7 @@ class AuthViewModel: ObservableObject {
     func repairMissingOrganizationZones() async -> String { 
         guard let userID = user?.id,
               let cloudKitService = service as? CloudKitAuthService else {
-            return "🔧 No user or CloudKit service available"
+            return "❌ No user or CloudKit service available"
         }
         
         var repairReport = "🔧 ZONE REPAIR: Checking organization zones...\n\n"
@@ -1092,18 +1015,19 @@ class AuthViewModel: ObservableObject {
             repairReport += "Checking: \(organization.name)\n"
             
             do {
+                // Check if organization zone exists and repair if needed
                 let zoneExists = try await cloudKitService.checkOrganizationZoneExists(organization.id)
                 
                 if !zoneExists {
-                    repairReport += "  Zone missing - creating...\n"
+                    repairReport += "  ❌ Zone missing - creating...\n"
                     try await cloudKitService.createOrganizationZone(organization.id)
-                    repairReport += "  Zone created successfully\n"
+                    repairReport += "  ✅ Zone created successfully\n"
                 } else {
-                    repairReport += "  Zone exists\n"
+                    repairReport += "  ✅ Zone exists\n"
                 }
                 
             } catch {
-                repairReport += "  Repair failed: \(error.localizedDescription)\n"
+                repairReport += "  ❌ Repair failed: \(error.localizedDescription)\n"
             }
             
             repairReport += "\n"
@@ -1116,10 +1040,10 @@ class AuthViewModel: ObservableObject {
     func getOrganizationZoneStatus() async -> String { 
         guard let userID = user?.id,
               let cloudKitService = service as? CloudKitAuthService else {
-            return "🔧 No user or CloudKit service available"
+            return "❌ No user or CloudKit service available"
         }
         
-        var statusReport = "🔧 ZONE STATUS: Organization CloudKit zones\n\n"
+        var statusReport = "📊 ZONE STATUS: Organization CloudKit zones\n\n"
         
         for organization in userOrganizations {
             statusReport += "Organization: \(organization.name)\n"
@@ -1129,11 +1053,11 @@ class AuthViewModel: ObservableObject {
                 let zoneExists = try await cloudKitService.checkOrganizationZoneExists(organization.id)
                 let recordCount = try await cloudKitService.getOrganizationRecordCount(organization.id)
                 
-                statusReport += "Zone Status: \(zoneExists ? "🔧 Exists" : "🔧 Missing")\n"
+                statusReport += "Zone Status: \(zoneExists ? "✅ Exists" : "❌ Missing")\n"
                 statusReport += "Records: \(recordCount)\n"
                 
             } catch {
-                statusReport += "Status: Error checking zone\n"
+                statusReport += "Status: ❌ Error checking zone\n"
                 statusReport += "Error: \(error.localizedDescription)\n"
             }
             
@@ -1146,7 +1070,7 @@ class AuthViewModel: ObservableObject {
     func fixCurrentOrganizationZone() async -> String { 
         guard let currentOrg = currentOrg,
               let cloudKitService = service as? CloudKitAuthService else {
-            return "🔧 No current organization or CloudKit service"
+            return "❌ No current organization or CloudKit service"
         }
         
         var fixReport = "🔧 ZONE FIX: Repairing current organization zone\n\n"
@@ -1154,25 +1078,27 @@ class AuthViewModel: ObservableObject {
         fixReport += "ID: \(currentOrg.id.prefix(8))...\n\n"
         
         do {
+            // Check current zone status
             let zoneExists = try await cloudKitService.checkOrganizationZoneExists(currentOrg.id)
-            fixReport += "Current Status: \(zoneExists ? "🔧 Zone exists" : "🔧 Zone missing")\n"
+            fixReport += "Current Status: \(zoneExists ? "✅ Zone exists" : "❌ Zone missing")\n"
             
             if !zoneExists {
                 fixReport += "Creating zone...\n"
                 try await cloudKitService.createOrganizationZone(currentOrg.id)
-                fixReport += "🔧 Zone created successfully\n"
+                fixReport += "✅ Zone created successfully\n"
             }
             
+            // Trigger ProjectViewModel zone setup
             if let projectVM = projectVM {
                 fixReport += "Setting up ProjectViewModel zone isolation...\n"
                 await projectVM.setupCloudKitZoneForOrganization(currentOrg.id)
-                fixReport += "🔧 ProjectViewModel zone isolation configured\n"
+                fixReport += "✅ ProjectViewModel zone isolation configured\n"
             }
             
-            fixReport += "\n🔧 ZONE FIX: Current organization zone repair completed"
+            fixReport += "\n✅ ZONE FIX: Current organization zone repair completed"
             
         } catch {
-            fixReport += "🔧 ZONE FIX: Failed to fix zone: \(error.localizedDescription)"
+            fixReport += "❌ ZONE FIX: Failed to fix zone: \(error.localizedDescription)"
         }
         
         return fixReport
@@ -1180,16 +1106,13 @@ class AuthViewModel: ObservableObject {
     
     func switchToOrganization(_ organization: Organization) { 
         Task { @MainActor in
-            print("🔧 SWITCH ORG: Switching to organization: \(organization.name)")
-            UserDefaults.standard.removeObject(forKey: "previousOrganizationID")
-            UserDefaults.standard.removeObject(forKey: "pending_invite_orgID")
-            UserDefaults.standard.removeObject(forKey: "pending_invite_orgName")
-            UserDefaults.standard.removeObject(forKey: "pending_invite_token")
+            print("🔄 SWITCH ORG: Switching to organization: \(organization.name)")
             setCurrentOrganization(organization)
         }
     }
     
     func createOrganizationWithValidation(named name: String, industry: String? = nil) async throws -> Organization {
+        // Add name validation before creating
         guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw AuthViewModelError.organizationNameTaken("Organization name cannot be empty")
         }
@@ -1198,21 +1121,27 @@ class AuthViewModel: ObservableObject {
             throw AuthViewModelError.organizationNameTaken("Organization name must be at least 3 characters")
         }
         
-        print("🔧 VALIDATED CREATION: Creating organization '\(name)' with validation")
+        // Check if name is already taken (if we implement this check later)
+        // For now, proceed with creation
+        
+        print("🏗️ VALIDATED CREATION: Creating organization '\(name)' with validation")
         return try await createOrganization(named: name, industry: industry)
     }
     
     func retryPendingInvite() { 
-        print("🔧 RETRY INVITE: Checking for pending invites to retry")
+        print("🔄 RETRY INVITE: Checking for pending invites to retry")
         checkForPendingInvites()
         
+        // If there's a pending invite, try to process it
         if let pendingOrgID = UserDefaults.standard.string(forKey: "pending_invite_orgID"),
            let pendingOrgName = UserDefaults.standard.string(forKey: "pending_invite_orgName") {
             
-            print("🔧 RETRY INVITE: Found pending invite for organization: \(pendingOrgName)")
+            print("🔄 RETRY INVITE: Found pending invite for organization: \(pendingOrgName)")
+            // Process the invitation
             inviteStatus = "Processing pending invitation..."
             
             Task {
+                // Simulate processing
                 try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
                 
                 await MainActor.run {
@@ -1226,27 +1155,23 @@ class AuthViewModel: ObservableObject {
         if let previousOrgID = UserDefaults.standard.string(forKey: "previousOrganizationID"),
            let previousOrg = userOrganizations.first(where: { $0.id == previousOrgID }) {
             
-            print("🔧 SWITCH PREVIOUS: Switching to previous organization: \(previousOrg.name)")
+            print("🔄 SWITCH PREVIOUS: Switching to previous organization: \(previousOrg.name)")
             
             Task { @MainActor in
-                UserDefaults.standard.removeObject(forKey: "previousOrganizationID")
-                UserDefaults.standard.removeObject(forKey: "pending_invite_orgID")
-                UserDefaults.standard.removeObject(forKey: "pending_invite_orgName")
-                UserDefaults.standard.removeObject(forKey: "pending_invite_token")
                 setCurrentOrganization(previousOrg)
             }
         } else {
-            print("🔧 SWITCH PREVIOUS: No previous organization found")
+            print("⚠️ SWITCH PREVIOUS: No previous organization found")
         }
     }
 
     func updateSubscriptionTier(_ newTier: SubscriptionTier) {
         guard var org = currentOrg else {
-            print("🔧 No current organization to update subscription tier");
+            print("❌ No current organization to update subscription tier");
             return;
         }
         
-        print("🔧 SUBSCRIPTION UPDATE: Changing from \(org.subscriptionTier.displayName) to \(newTier.displayName)");
+        print("🔄 SUBSCRIPTION UPDATE: Changing from \(org.subscriptionTier.displayName) to \(newTier.displayName)");
         
         org.upgradeSubscription(to: newTier);
         
@@ -1262,16 +1187,17 @@ class AuthViewModel: ObservableObject {
         
         notifyProjectViewModelOrganizationChange(org.id);
         
-        print("🔧 SUBSCRIPTION: Updated organization subscription tier to \(newTier.displayName)");
+        print("💾 SUBSCRIPTION: Updated organization subscription tier to \(newTier.displayName)");
     }
 
     func reloadOrganizationData() {
-        print("🔧 RELOAD ORG: Reloading organization data")
+        print("🔄 RELOAD ORG: Reloading organization data")
         
         if let currentOrgID = currentOrg?.id {
             notifyProjectViewModelOrganizationChange(currentOrgID)
         }
         
+        // Refresh organization list from CloudKit
         if let user = user {
             checkUserOrganizationStatus(for: user)
         }
@@ -1318,8 +1244,10 @@ class AuthViewModel: ObservableObject {
         
         Task {
             do {
+                // Simulate API call to check name availability
                 try await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
                 
+                // Simple check - in production this would query CloudKit
                 let unavailableNames = ["test", "demo", "sample", "example"]
                 let isAvailable = !unavailableNames.contains(name.lowercased())
                 
@@ -1327,9 +1255,9 @@ class AuthViewModel: ObservableObject {
                     self.isCheckingNameAvailability = false
                     
                     if isAvailable {
-                        self.nameAvailabilityMessage = "🔧 '\(name)' is available"
+                        self.nameAvailabilityMessage = "✅ '\(name)' is available"
                     } else {
-                        self.nameAvailabilityMessage = "🔧 '\(name)' is not available"
+                        self.nameAvailabilityMessage = "❌ '\(name)' is not available"
                         self.getSuggestedOrganizationNames(baseName: name)
                     }
                 }
@@ -1347,7 +1275,8 @@ class AuthViewModel: ObservableObject {
         isLoadingSuggestions = true
         
         Task {
-            try await Task.sleep(nanoseconds: 300_000_000) 
+            // Simulate API call for suggestions
+            try await Task.sleep(nanoseconds: 300_000_000) // 0.3 seconds
             
             let suggestions = generateBasicSuggestions(for: baseName)
             
@@ -1364,19 +1293,22 @@ class AuthViewModel: ObservableObject {
         
         var suggestions: [String] = []
         
+        // Add suffix variations
         for suffix in suffixes {
             suggestions.append("\(baseName) \(suffix)")
         }
         
+        // Add prefix variations
         for prefix in prefixes {
             suggestions.append("\(prefix) \(baseName)")
         }
         
+        // Add numbered variations
         for i in 2...5 {
             suggestions.append("\(baseName) \(i)")
         }
         
-        return Array(suggestions.prefix(8)) 
+        return Array(suggestions.prefix(8)) // Return up to 8 suggestions
     }
     
     func joinOrganization(with organizationID: String, role: OrganizationRole, completion: @escaping (Bool, String?) -> Void) { 
@@ -1386,7 +1318,7 @@ class AuthViewModel: ObservableObject {
             return
         }
         
-        print("🔧 JOIN ORG: Attempting to join organization \(organizationID.prefix(8))... as \(role.displayName)")
+        print("🔗 JOIN ORG: Attempting to join organization \(organizationID.prefix(8))... as \(role.displayName)")
         
         Task {
             do {
@@ -1397,12 +1329,12 @@ class AuthViewModel: ObservableObject {
                     completion(true, "Successfully joined \(organization.name)")
                 }
                 
-                print("🔧 JOIN ORG: Successfully joined organization: \(organization.name)")
+                print("✅ JOIN ORG: Successfully joined organization: \(organization.name)")
                 
             } catch {
                 let errorMessage = handleJoinOrganizationError(error)
                 completion(false, errorMessage)
-                print("🔧 JOIN ORG: Failed to join organization: \(error)")
+                print("❌ JOIN ORG: Failed to join organization: \(error)")
             }
         }
     }
@@ -1414,12 +1346,13 @@ class AuthViewModel: ObservableObject {
             return
         }
         
+        // Only admin can delete organization
         guard organizationRoles[organization.id] == .admin else {
             completion(false, "Only organization admin can delete the organization")
             return
         }
         
-        print("🔧 DELETE ORG: Attempting to delete organization: \(organization.name)")
+        print("🗑️ DELETE ORG: Attempting to delete organization: \(organization.name)")
         
         cloudKitService.deleteOrganization(organizationID: organization.id)
             .sink(
@@ -1429,16 +1362,18 @@ class AuthViewModel: ObservableObject {
                         break
                     case .failure(let error):
                         completion(false, "Failed to delete organization: \(error.localizedDescription)")
-                        print("🔧 DELETE ORG: Failed to delete organization: \(error)")
+                        print("❌ DELETE ORG: Failed to delete organization: \(error)")
                     }
                 },
                 receiveValue: { success in
                     if success {
                         Task { @MainActor in
+                            // Remove from local state
                             self.organizations.removeAll { $0.id == organization.id }
                             self.userOrganizations.removeAll { $0.id == organization.id }
                             self.organizationRoles.removeValue(forKey: organization.id)
                             
+                            // If this was current org, clear it
                             if self.currentOrg?.id == organization.id {
                                 self.currentOrg = nil
                                 self.needsOrganizationSetup = self.organizations.isEmpty
@@ -1446,7 +1381,7 @@ class AuthViewModel: ObservableObject {
                         }
                         
                         completion(true, "Organization '\(organization.name)' deleted successfully")
-                        print("🔧 DELETE ORG: Successfully deleted organization: \(organization.name)")
+                        print("✅ DELETE ORG: Successfully deleted organization: \(organization.name)")
                     } else {
                         completion(false, "Failed to delete organization")
                     }
@@ -1462,12 +1397,13 @@ class AuthViewModel: ObservableObject {
             return
         }
         
-        guard organizationRoles[organization.id] != .admin || organization.adminUserID != userID else {
+        // Admin cannot leave if they're the only admin
+        if organizationRoles[organization.id] == .admin && organization.adminUserID == userID {
             completion(false, "Admin cannot leave organization. Transfer admin role first or delete the organization.")
             return
         }
         
-        print("🔧 LEAVE ORG: Attempting to leave organization: \(organization.name)")
+        print("🚪 LEAVE ORG: Attempting to leave organization: \(organization.name)")
         
         cloudKitService.leaveOrganization(organizationID: organization.id, userID: userID)
             .sink(
@@ -1477,16 +1413,18 @@ class AuthViewModel: ObservableObject {
                         break
                     case .failure(let error):
                         completion(false, "Failed to leave organization: \(error.localizedDescription)")
-                        print("🔧 LEAVE ORG: Failed to leave organization: \(error)")
+                        print("❌ LEAVE ORG: Failed to leave organization: \(error)")
                     }
                 },
                 receiveValue: { success in
                     if success {
                         Task { @MainActor in
+                            // Remove from local state
                             self.organizations.removeAll { $0.id == organization.id }
                             self.userOrganizations.removeAll { $0.id == organization.id }
                             self.organizationRoles.removeValue(forKey: organization.id)
                             
+                            // If this was current org, switch to another or show setup
                             if self.currentOrg?.id == organization.id {
                                 if let nextOrg = self.organizations.first {
                                     self.setCurrentOrganization(nextOrg)
@@ -1498,7 +1436,7 @@ class AuthViewModel: ObservableObject {
                         }
                         
                         completion(true, "Left organization '\(organization.name)' successfully")
-                        print("🔧 LEAVE ORG: Successfully left organization: \(organization.name)")
+                        print("✅ LEAVE ORG: Successfully left organization: \(organization.name)")
                     } else {
                         completion(false, "Failed to leave organization")
                     }
@@ -1508,6 +1446,7 @@ class AuthViewModel: ObservableObject {
     }
     
     private func updateOrganizationState(_ organization: Organization, role: OrganizationRole, userID: String) { 
+        // Add to local state
         if !organizations.contains(where: { $0.id == organization.id }) {
             organizations.append(organization)
         }
@@ -1518,6 +1457,7 @@ class AuthViewModel: ObservableObject {
         
         organizationRoles[organization.id] = role
         
+        // Set as current if no current org
         if currentOrg == nil {
             Task { @MainActor in
                 self.setCurrentOrganization(organization)
@@ -1548,38 +1488,40 @@ class AuthViewModel: ObservableObject {
     }
     
     func fixDataInconsistencies() { 
-        print("🔧 FIX DATA: Starting data inconsistency repair...");
+        print("🛠️ FIX DATA: Starting data inconsistency repair...")
         
         Task {
+            // Refresh organization data from CloudKit
             if let user = user {
                 checkUserOrganizationStatus(for: user)
             }
             
-            if let currentOrg = currentOrg {
-                if !organizations.contains(where: { $0.id == currentOrg.id }) {
-                    
-                    print("🔧 FIX DATA: Current organization no longer exists, switching to first available")
-                    
-                    await MainActor.run {
-                        if let firstOrg = self.organizations.first {
-                            self.setCurrentOrganization(firstOrg)
-                        } else {
-                            self.currentOrg = nil
-                            self.needsOrganizationSetup = true
-                        }
+            // Validate current organization still exists
+            if let currentOrg = currentOrg,
+               !organizations.contains(where: { $0.id == currentOrg.id }) {
+                
+                print("⚠️ FIX DATA: Current organization no longer exists, switching to first available")
+                
+                await MainActor.run {
+                    if let firstOrg = self.organizations.first {
+                        self.setCurrentOrganization(firstOrg)
+                    } else {
+                        self.currentOrg = nil
+                        self.needsOrganizationSetup = true
                     }
                 }
             }
             
+            // Sync team members
             await syncOrganizationTeamMembers()
             
-            print("🔧 FIX DATA: Data inconsistency repair completed")
+            print("✅ FIX DATA: Data inconsistency repair completed")
         }
     }
     
     func fetchUserProjectAssignments(organizationID: String, userID: String) {
         guard let cloudKitService = service as? CloudKitAuthService else {
-            print("🔧 PROJECT ASSIGNMENTS: CloudKit service unavailable")
+            print("❌ PROJECT ASSIGNMENTS: CloudKit service unavailable")
             return
         }
         
@@ -1592,17 +1534,17 @@ class AuthViewModel: ObservableObject {
                 
                 await MainActor.run {
                     self.assignedProjectIDs = assignments
-                    print("🔧 PROJECT ASSIGNMENTS: Loaded \(assignments.count) project assignments")
+                    print("✅ PROJECT ASSIGNMENTS: Loaded \(assignments.count) project assignments")
                 }
                 
             } catch {
-                print("🔧 PROJECT ASSIGNMENTS: Failed to fetch assignments: \(error)")
+                print("❌ PROJECT ASSIGNMENTS: Failed to fetch assignments: \(error)")
             }
         }
     }
     
     func validateDataConsistency() async -> String {
-        var report = "🔧 DATA CONSISTENCY VALIDATION\n\n"
+        var report = "🔍 DATA CONSISTENCY VALIDATION\n\n"
         
         report += "User Authentication:\n"
         report += "- User: \(user?.email ?? "None")\n"
@@ -1615,9 +1557,11 @@ class AuthViewModel: ObservableObject {
             report += "- \(orgID.prefix(8))...: \(role.displayName)\n"
         }
         
+        // Check CloudKit status
         let cloudKitStatus = await checkCloudKitStatus()
         report += "\nCloudKit Status: \(cloudKitStatus)\n"
         
+        // Validate current organization exists in lists
         if let currentOrg = currentOrg {
             let existsInOrgs = organizations.contains { $0.id == currentOrg.id }
             let existsInUserOrgs = userOrganizations.contains { $0.id == currentOrg.id }
@@ -1627,28 +1571,29 @@ class AuthViewModel: ObservableObject {
             report += "- Exists in userOrganizations: \(existsInUserOrgs)\n"
             
             if !existsInOrgs || !existsInUserOrgs {
-                report += "🔧 INCONSISTENCY DETECTED\n"
+                report += "⚠️ INCONSISTENCY DETECTED\n"
             }
         }
         
-        print("🔧 DATA CONSISTENCY: Validation completed")
+        print("🔍 DATA CONSISTENCY: Validation completed")
         return report
     }
     
     func forceCloudKitSync() async -> String {
         guard let userID = user?.id else {
-            return "🔧 No user authenticated"
+            return "❌ No user authenticated"
         }
         
-        var syncReport = "🔧 FORCE CLOUDKIT SYNC\n\n"
+        var syncReport = "🔄 FORCE CLOUDKIT SYNC\n\n"
         syncReport += "Starting forced synchronization...\n"
         
+        // Refresh organization data
         syncReport += "1. Refreshing organization data...\n"
         
         return await withCheckedContinuation { continuation in
             fetchUserOrganizationsWithRoles { [weak self] orgs, roles in
                 guard let self = self else {
-                    continuation.resume(returning: "🔧 Self reference lost")
+                    continuation.resume(returning: "❌ Self reference lost")
                     return
                 }
                 
@@ -1658,16 +1603,17 @@ class AuthViewModel: ObservableObject {
                     self.organizationRoles = roles
                     
                     var report = syncReport
-                    report += "🔧 Organizations synced: \(orgs.count)\n"
-                    report += "🔧 Roles synced: \(roles.count)\n"
+                    report += "✅ Organizations synced: \(orgs.count)\n"
+                    report += "✅ Roles synced: \(roles.count)\n"
                     
+                    // Sync team members if we have current org
                     if self.currentOrg != nil {
                         await self.syncOrganizationTeamMembers()
-                        report += "🔧 Team members synced\n"
+                        report += "✅ Team members synced\n"
                     }
                     
-                    report += "\n🔧 FORCE SYNC: Completed successfully"
-                    print("🔧 FORCE SYNC: CloudKit synchronization completed")
+                    report += "\n🔄 FORCE SYNC: Completed successfully"
+                    print("🔄 FORCE SYNC: CloudKit synchronization completed")
                     
                     continuation.resume(returning: report)
                 }
@@ -1676,35 +1622,41 @@ class AuthViewModel: ObservableObject {
     }
     
     func clearAllLocalCache() {
-        print("🔧 CLEAR CACHE: Clearing all local cache data")
+        print("🗑️ CLEAR CACHE: Clearing all local cache data")
         
+        // Clear organization data
         organizations = []
         userOrganizations = []
         organizationRoles = [:]
         currentOrg = nil
         
+        // Clear invite data
         pendingInvites = []
         inviteStatus = ""
         assignedProjectIDs = []
         teamProjectAssignments = [:]
         
+        // Clear UserDefaults
         UserDefaults.standard.removeObject(forKey: "currentOrganizationID")
         UserDefaults.standard.removeObject(forKey: "previousOrganizationID")
         UserDefaults.standard.removeObject(forKey: "pending_invite_orgID")
         UserDefaults.standard.removeObject(forKey: "pending_invite_orgName")
         UserDefaults.standard.removeObject(forKey: "pending_invite_token")
         
+        // Clear organization-related flags
         needsOrganizationSetup = true
         showOrganizationSetup = false
         showAdminInfoUpdate = false
         
-        print("🔧 CLEAR CACHE: All local cache cleared")
+        print("✅ CLEAR CACHE: All local cache cleared")
     }
     
     var currentOrganizationRole: OrganizationRole? {
         guard let currentOrg = currentOrg else { return nil }
         return organizationRoles[currentOrg.id]
     }
+    
+    // MARK: - Missing Property
     
     var adminOrganizations: [Organization] {
         return userOrganizations.filter { organizationRoles[$0.id] == .admin }

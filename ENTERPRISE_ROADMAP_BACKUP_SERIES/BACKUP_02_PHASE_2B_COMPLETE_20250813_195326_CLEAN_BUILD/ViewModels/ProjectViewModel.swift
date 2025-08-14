@@ -35,8 +35,8 @@ class ProjectViewModel: ObservableObject {
     internal var teamMemberNameCache: [String: TeamMember] = [:]
     
     // Receipt properties
-    private var receiptVendorCache: [String: Vendor] = [:]
-    private var receiptPaymentMethodCache: [String: PaymentMethod] = [:]
+    private var receiptVendorCache: [UUID: Vendor] = [:]
+    private var receiptPaymentMethodCache: [UUID: PaymentMethod] = [:]
     
     // PHASE 2A: Add missing properties for compatibility
     @Published var laborTotalsByTeamMember: [String: (unpaid: Double, paid: Double)] = [:]
@@ -493,170 +493,13 @@ class ProjectViewModel: ObservableObject {
     }
     
     func recomputeFilteredReceipts() {
-        print(" RECEIPT FILTERING: Starting comprehensive receipt recomputation...")
-        
-        guard let currentOrgID = currentOrganizationID else {
-            print(" RECEIPT FILTERING: No organization selected - clearing caches")
-            receiptVendorCache.removeAll()
-            receiptPaymentMethodCache.removeAll()
-            return
-        }
-        
-        // Clear existing caches
-        receiptVendorCache.removeAll()
-        receiptPaymentMethodCache.removeAll()
-        
-        let startTime = Date()
-        var totalReceipts = 0
-        var processedReceipts = 0
-        var vendorCacheHits = 0
-        var paymentMethodCacheHits = 0
-        
-        // Process all receipts in organization projects
-        for project in organizationProjects {
-            totalReceipts += project.receipts.count
-            
-            for receipt in project.receipts {
-                processedReceipts += 1
-                
-                // Cache vendor information for quick lookup
-                let vendor = vendorService.findOrCreateVendor(name: receipt.vendor)
-                receiptVendorCache[receipt.vendor] = vendor
-                vendorCacheHits += 1
-                
-                // Cache payment method information for quick lookup
-                let paymentMethod = paymentMethodService.findOrCreatePaymentMethod(name: receipt.paymentMethod)
-                receiptPaymentMethodCache[receipt.paymentMethod] = paymentMethod
-                paymentMethodCacheHits += 1
-            }
-        }
-        
-        let processingTime = Date().timeIntervalSince(startTime)
-        
-        print(" RECEIPT FILTERING: Recomputation completed successfully")
-        print("   Organization: \(currentOrgID.prefix(8))...")
-        print("   Projects processed: \(organizationProjects.count)")
-        print("   Total receipts: \(totalReceipts)")
-        print("   Processed receipts: \(processedReceipts)")
-        print("   Vendor cache entries: \(receiptVendorCache.count)")
-        print("   Payment method cache entries: \(receiptPaymentMethodCache.count)")
-        print("   Processing time: \(String(format: "%.3f", processingTime))s")
-        
-        // Trigger UI update if significant changes
-        if processedReceipts > 0 {
-            objectWillChange.send()
-            print(" RECEIPT FILTERING: UI refresh triggered for \(processedReceipts) receipt updates")
-        }
+        print("TODO: recomputeFilteredReceipts - Phase 2")
+        // Stub implementation
     }
     
     func debouncedSaveProjects() {
-        print(" DEBOUNCED SAVE: Initiating smart project save operation...")
-        
-        // Cancel any existing timer to prevent duplicate saves
-        savingTimer?.invalidate()
-        
-        guard let currentOrgID = currentOrganizationID else {
-            print(" DEBOUNCED SAVE: No organization selected - skipping save")
-            return
-        }
-        
-        guard !organizationProjects.isEmpty else {
-            print(" DEBOUNCED SAVE: No projects to save")
-            return
-        }
-        
-        // Set up debounced save timer (500ms delay)
-        savingTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: false) { [weak self] _ in
-            guard let self = self else { return }
-            
-            Task { @MainActor in
-                await self.performBatchedProjectSave()
-            }
-        }
-        
-        print(" DEBOUNCED SAVE: Save operation scheduled with 500ms debounce")
-    }
-    
-    /// Perform the actual batched save operation
-    private func performBatchedProjectSave() async {
-        guard let currentOrgID = currentOrganizationID else {
-            print(" BATCHED SAVE: No organization ID - aborting save")
-            return
-        }
-        
-        guard !isBulkSyncing else {
-            print(" BATCHED SAVE: Bulk sync already in progress - skipping")
-            return
-        }
-        
-        let startTime = Date()
-        let projectsToSave = organizationProjects
-        
-        print(" BATCHED SAVE: Starting comprehensive save operation...")
-        print("   Organization: \(currentOrgID.prefix(8))...")
-        print("   Projects to save: \(projectsToSave.count)")
-        
-        // Step 1: Save to local organization-specific storage
-        saveOrganizationSpecificBackup()
-        
-        // Step 2: Save to OfflineDataManager for cross-organization sync
-        for project in projectsToSave {
-            // Update the main projects array if this project exists there
-            if let existingIndex = projects.firstIndex(where: { $0.id == project.id }) {
-                projects[existingIndex] = project
-            } else {
-                // Add new project to main array
-                projects.append(project)
-            }
-            
-            // Update in OfflineDataManager
-            offlineDataManager.updateProject(project)
-        }
-        
-        // Step 3: Save to CloudKit if enabled (with error handling)
-        var cloudKitSuccess = false
-        if isUsingCloudKitForOrganizationData {
-            print(" BATCHED SAVE: Syncing \(projectsToSave.count) projects to CloudKit...")
-            cloudKitSuccess = await saveAllProjectsToCloudKit()
-        }
-        
-        // Step 4: Save team members if they've been updated
-        if !teamMembers.isEmpty {
-            let teamMembersToSave = teamMembers.filter { $0.organizationID == currentOrgID }
-            if !teamMembersToSave.isEmpty {
-                let teamMembersKey = "team_members_\(currentOrgID)"
-                if let teamMembersData = try? JSONEncoder().encode(teamMembersToSave) {
-                    UserDefaults.standard.set(teamMembersData, forKey: teamMembersKey)
-                    print(" BATCHED SAVE: Saved \(teamMembersToSave.count) team members")
-                }
-                
-                // Save team members to CloudKit if enabled
-                if isUsingCloudKitForOrganizationData {
-                    await saveTeamMembersToCloudKit()
-                }
-            }
-        }
-        
-        // Step 5: Force UserDefaults synchronization
-        UserDefaults.standard.synchronize()
-        
-        let saveTime = Date().timeIntervalSince(startTime)
-        
-        print(" BATCHED SAVE: Save operation completed successfully")
-        print("   Projects saved locally: \(projectsToSave.count)")
-        print("   CloudKit sync: \(cloudKitSuccess ? "SUCCESS" : "FAILED/DISABLED")")
-        print("   Team members updated: \(teamMembers.filter { $0.organizationID == currentOrgID }.count)")
-        print("   Total save time: \(String(format: "%.3f", saveTime))s")
-        print("   Organization: \(currentOrgID.prefix(8))...")
-        
-        // Trigger final UI update to reflect save state
-        await MainActor.run {
-            objectWillChange.send()
-        }
-        
-        // Clean up timer
-        savingTimer?.invalidate()
-        savingTimer = nil
+        print("TODO: debouncedSaveProjects - Phase 2")
+        // Stub implementation
     }
     
     // MARK: - Data Initialization
