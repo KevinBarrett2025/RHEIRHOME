@@ -52,7 +52,7 @@ public struct Organization: Identifiable, Codable, Hashable {
     public var tenantIsolationLevel: String = "ZONE_ISOLATED"
     public var maxMembers: Int = 50
     public var storageQuotaMB: Double = 10000 // 10GB default
-    public var subscriptionTier: SubscriptionTier = .enterprise
+    public var subscriptionTier: SubscriptionTier = .builder // Updated from .enterprise to .builder
     
     // CloudKit integration
     public var cloudKitRecordID: String?
@@ -166,14 +166,17 @@ public struct Organization: Identifiable, Codable, Hashable {
         subscriptionTier = tier
         
         // Update limits based on subscription tier
-        switch tier {
-        case .free, .starter:
+        let isBuilderTier = tier == .builder || tier == .free || tier == .starter
+        let isProfessionalTier = tier == .professional || tier == .standard
+        let isEnterpriseTier = tier == .enterprise || tier == .premium
+        
+        if isBuilderTier {
             maxMembers = 2
             storageQuotaMB = 500 // 500MB
-        case .professional, .standard:
+        } else if isProfessionalTier {
             maxMembers = 10
             storageQuotaMB = 5000 // 5GB
-        case .enterprise, .premium:
+        } else if isEnterpriseTier {
             maxMembers = Int.max
             storageQuotaMB = 50000 // 50GB
         }
@@ -287,22 +290,23 @@ public struct Organization: Identifiable, Codable, Hashable {
 // MARK: - Subscription Tiers
 
 public enum SubscriptionTier: String, Codable, CaseIterable {
-    case free = "free"
+    case builder = "builder"      // Renamed from "free" to match badges
     case professional = "professional"
     case enterprise = "enterprise"
     
     // Legacy support - map old tiers to new ones
-    case starter = "starter" // Maps to free
+    case free = "free"         // Maps to builder
+    case starter = "starter"   // Maps to builder
     case standard = "standard" // Maps to professional
-    case premium = "premium" // Maps to enterprise
+    case premium = "premium"   // Maps to enterprise
     
     public static var modernTiers: [SubscriptionTier] {
-        return [.free, .professional, .enterprise]
+        return [.builder, .professional, .enterprise]
     }
     
     public var displayName: String {
         switch self {
-        case .free, .starter: return "Free"
+        case .builder, .free, .starter: return "Builder"
         case .professional, .standard: return "Professional"
         case .enterprise, .premium: return "Enterprise"
         }
@@ -310,7 +314,7 @@ public enum SubscriptionTier: String, Codable, CaseIterable {
     
     public var monthlyPrice: Double {
         switch self {
-        case .free, .starter: return 0.0
+        case .builder, .free, .starter: return 0.0
         case .professional, .standard: return 29.0
         case .enterprise, .premium: return 99.0
         }
@@ -318,7 +322,7 @@ public enum SubscriptionTier: String, Codable, CaseIterable {
     
     public var maxProjects: Int {
         switch self {
-        case .free, .starter: return 3
+        case .builder, .free, .starter: return 3
         case .professional, .standard: return 25
         case .enterprise, .premium: return Int.max
         }
@@ -326,7 +330,7 @@ public enum SubscriptionTier: String, Codable, CaseIterable {
     
     public var maxTeamMembers: Int {
         switch self {
-        case .free, .starter: return 2
+        case .builder, .free, .starter: return 2
         case .professional, .standard: return 10
         case .enterprise, .premium: return Int.max
         }
@@ -334,7 +338,7 @@ public enum SubscriptionTier: String, Codable, CaseIterable {
     
     public var features: [String] {
         switch self {
-        case .free, .starter:
+        case .builder, .free, .starter:
             return [
                 "Up to 3 projects",
                 "Up to 2 team members",
@@ -366,8 +370,52 @@ public enum SubscriptionTier: String, Codable, CaseIterable {
         }
     }
     
+    // MARK: - Badge and Visual Properties
+    
+    /// Returns the system image name for the tier badge
+    public var badgeIcon: String {
+        switch self {
+        case .builder, .free, .starter: return "hammer.fill"
+        case .professional, .standard: return "hardhat.fill"
+        case .enterprise, .premium: return "crown.fill"
+        }
+    }
+    
+    /// Returns the badge color
+    public var badgeColor: Color {
+        switch self {
+        case .builder, .free, .starter: return .orange
+        case .professional, .standard: return .blue
+        case .enterprise, .premium: return .purple
+        }
+    }
+    
+    /// Returns the gradient colors for enhanced badges
+    public var badgeGradient: LinearGradient {
+        switch self {
+        case .builder, .free, .starter:
+            return LinearGradient(
+                colors: [Color.orange, Color.orange.opacity(0.8)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        case .professional, .standard:
+            return LinearGradient(
+                colors: [Color.blue, Color.blue.opacity(0.8)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        case .enterprise, .premium:
+            return LinearGradient(
+                colors: [Color.purple, Color.purple.opacity(0.8)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
+    }
+    
     public var isFreeTier: Bool {
-        return self == .free || self == .starter
+        return self == .builder || self == .free || self == .starter
     }
     
     public var hasFreeTrialAvailable: Bool {

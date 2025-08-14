@@ -14,6 +14,7 @@ struct SettingsView: View {
     @State private var showingAlert = false
     @State private var alertMessage = ""
     @State private var showingCacheAlert = false
+    @State private var showingSubscriptionSheet = false
     
     var body: some View {
         NavigationStack {
@@ -22,6 +23,9 @@ struct SettingsView: View {
                 if let org = authVM.currentOrg {
                     organizationSection(org)
                 }
+                
+                // Enhanced Subscription Management
+                subscriptionSection
                 
                 // Preferences Section
                 preferencesSection
@@ -36,33 +40,22 @@ struct SettingsView: View {
                 accountSection
                 
                 // Development Section
-                Section("Development & Debug") {
-                    Group {
-                        NavigationLink(destination: CloudKitDebugView()) {
-                            Label("CloudKit Debug", systemImage: "icloud.and.arrow.up.and.down")
-                        }
-                        
-                        NavigationLink(destination: CloudKitConsistencyDebugView(authVM: authVM)) {
-                            Label("Data Consistency Debug", systemImage: "checkmark.shield")
-                                .foregroundColor(.orange)
-                        }
-                        
-                        NavigationLink(destination: OrganizationDebugView()) {
-                            Label("Organization Debug", systemImage: "building.2")
-                        }
-                        
-                        Button(action: {
-                            authVM.clearAllLocalCache()
-                            showingCacheAlert = true
-                        }) {
-                            Label("Nuclear Reset", systemImage: "trash.fill")
-                                .foregroundColor(.red)
-                        }
-                    }
+                developmentSection
+            }
+            .navigationTitle("Personal App Toolbox")
+            .navigationBarTitleDisplayMode(.large)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    // New Toolbox Icon
+                    Image(systemName: "case.fill")
+                        .font(.title2)
+                        .foregroundColor(.secondary)
                 }
             }
-            .navigationTitle("Settings")
-            .navigationBarTitleDisplayMode(.large)
+            .sheet(isPresented: $showingSubscriptionSheet) {
+                SubscriptionTierSelectionView()
+                    .environmentObject(authVM)
+            }
             .alert("CloudKit Status", isPresented: $showingStatusAlert) {
                 Button("OK") { }
             } message: {
@@ -99,8 +92,16 @@ struct SettingsView: View {
                         .frame(width: 24)
                     
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("\(organization.name) Directory")
-                            .font(.headline)
+                        HStack {
+                            Text("\(organization.name) Directory")
+                                .font(.headline)
+                            
+                            Spacer()
+                            
+                            // Organization Subscription Badge
+                            InlineSubscriptionBadge(tier: organization.subscriptionTier)
+                        }
+                        
                         VStack(alignment: .leading, spacing: 2) {
                             Text("CloudKit: \(organization.members.count + 1) app users")
                                 .font(.caption)
@@ -113,8 +114,6 @@ struct SettingsView: View {
                                 .foregroundColor(.secondary)
                         }
                     }
-                    
-                    Spacer()
                     
                     Image(systemName: "chevron.right")
                         .font(.caption)
@@ -169,13 +168,71 @@ struct SettingsView: View {
     }
     
     @ViewBuilder
+    private var subscriptionSection: some View {
+        if let org = authVM.currentOrg {
+            Section("Subscription Management") {
+                Button(action: {
+                    showingSubscriptionSheet = true
+                }) {
+                    HStack(spacing: 16) {
+                        // Large subscription badge
+                        SubscriptionBadgeView(tier: org.subscriptionTier, size: .medium, showLabel: false)
+                        
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Text("Current Plan")
+                                    .font(.headline)
+                                    .foregroundColor(.primary)
+                                
+                                Spacer()
+                                
+                                InlineSubscriptionBadge(tier: org.subscriptionTier)
+                            }
+                            
+                            if org.subscriptionTier.monthlyPrice == 0 {
+                                Text("Free • \(org.subscriptionTier.projectUsageDisplay(current: projectVM.projects.count)) projects")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            } else {
+                                Text("$\(Int(org.subscriptionTier.monthlyPrice))/month • \(org.subscriptionTier.projectUsageDisplay(current: projectVM.projects.count)) projects")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            
+                            Text(org.subscriptionTier.teamMemberUsageDisplay(current: projectVM.teamMembers.count) + " team members")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        
+                        Image(systemName: "chevron.right")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                .buttonStyle(PlainButtonStyle())
+                
+                Text("Manage your subscription tier and test features. This affects all organizations you belong to.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 4)
+            }
+        }
+    }
+    
+    @ViewBuilder
     private var preferencesSection: some View {
-        Section("Preferences") {
+        Section("App Preferences") {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    Image(systemName: "map.fill")
-                        .foregroundColor(.green)
-                        .frame(width: 24)
+                    // Updated Map Icon
+                    Circle()
+                        .fill(Color.green.opacity(0.2))
+                        .frame(width: 32, height: 32)
+                        .overlay(
+                            Image(systemName: "map.fill")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundColor(.green)
+                        )
                     
                     Text("Default Map App")
                         .font(.headline)
@@ -192,13 +249,16 @@ struct SettingsView: View {
             }
             .padding(.vertical, 4)
             
-            subscriptionTierRow
-            
             NavigationLink(destination: ChatGPTSettingsView()) {
                 HStack {
-                    Image(systemName: "brain.head.profile")
-                        .foregroundColor(.purple)
-                        .frame(width: 24)
+                    Circle()
+                        .fill(Color.purple.opacity(0.2))
+                        .frame(width: 32, height: 32)
+                        .overlay(
+                            Image(systemName: "brain.head.profile")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundColor(.purple)
+                        )
                     
                     VStack(alignment: .leading, spacing: 4) {
                         Text("ChatGPT Integration")
@@ -219,50 +279,27 @@ struct SettingsView: View {
     }
     
     @ViewBuilder
-    private var subscriptionTierRow: some View {
-        if let org = authVM.currentOrg {
+    private var appInfoSection: some View {
+        Section("App Information") {
             HStack {
-                Image(systemName: "crown.fill")
-                    .foregroundColor(.purple)
-                    .frame(width: 24)
+                Circle()
+                    .fill(Color.blue.opacity(0.2))
+                    .frame(width: 32, height: 32)
+                    .overlay(
+                        Image(systemName: "info.circle.fill")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(.blue)
+                    )
                 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Subscription Tier (Testing)")
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Version & Build")
                         .font(.headline)
-                    Text("Current: \(org.subscriptionTier.displayName) - $\(String(format: "%.0f", org.subscriptionTier.monthlyPrice))/month")
+                    Text("v1.0.0 (2025.1) • Enterprise Ready")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
                 
                 Spacer()
-                
-                Menu("Change") {
-                    ForEach(SubscriptionTier.allCases, id: \.self) { tier in
-                        Button("\(tier.displayName) - $\(String(format: "%.0f", tier.monthlyPrice))/month") {
-                            authVM.updateSubscriptionTier(tier)
-                        }
-                    }
-                }
-                .font(.caption)
-            }
-        }
-    }
-    
-    @ViewBuilder
-    private var appInfoSection: some View {
-        Section("App Information") {
-            HStack {
-                Text("Version")
-                Spacer()
-                Text("1.0.0")
-                    .foregroundColor(.secondary)
-            }
-            
-            HStack {
-                Text("Build")
-                Spacer()
-                Text("2025.1")
-                    .foregroundColor(.secondary)
             }
         }
     }
@@ -272,9 +309,14 @@ struct SettingsView: View {
         Section("Debug & Testing") {
             NavigationLink(destination: CloudKitDebugView()) {
                 HStack {
-                    Image(systemName: "icloud.and.arrow.up.fill")
-                        .foregroundColor(.blue)
-                        .frame(width: 24)
+                    Circle()
+                        .fill(Color.blue.opacity(0.2))
+                        .frame(width: 32, height: 32)
+                        .overlay(
+                            Image(systemName: "icloud.and.arrow.up.fill")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundColor(.blue)
+                        )
                     
                     VStack(alignment: .leading, spacing: 4) {
                         Text("CloudKit Debug Console")
@@ -294,9 +336,14 @@ struct SettingsView: View {
             
             NavigationLink(destination: CloudKitDataView()) {
                 HStack {
-                    Image(systemName: "cylinder.fill")
-                        .foregroundColor(.green)
-                        .frame(width: 24)
+                    Circle()
+                        .fill(Color.green.opacity(0.2))
+                        .frame(width: 32, height: 32)
+                        .overlay(
+                            Image(systemName: "cylinder.fill")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundColor(.green)
+                        )
                     
                     VStack(alignment: .leading, spacing: 4) {
                         Text("CloudKit Data Browser")
@@ -379,10 +426,24 @@ struct SettingsView: View {
         Section("Account") {
             if let user = authVM.user {
                 HStack {
-                    Text("Signed in as")
+                    Circle()
+                        .fill(Color.gray.opacity(0.2))
+                        .frame(width: 32, height: 32)
+                        .overlay(
+                            Image(systemName: "person.circle.fill")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundColor(.gray)
+                        )
+                    
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Signed in as")
+                            .font(.headline)
+                        Text(user.email)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    
                     Spacer()
-                    Text(user.email)
-                        .foregroundColor(.secondary)
                 }
             }
             
@@ -392,6 +453,36 @@ struct SettingsView: View {
             .foregroundColor(.red)
         }
     }
+    
+    @ViewBuilder
+    private var developmentSection: some View {
+        Section("Development & Debug") {
+            Group {
+                NavigationLink(destination: CloudKitDebugView()) {
+                    Label("CloudKit Debug", systemImage: "icloud.and.arrow.up.and.down")
+                }
+                
+                NavigationLink(destination: CloudKitConsistencyDebugView(authVM: authVM)) {
+                    Label("Data Consistency Debug", systemImage: "checkmark.shield")
+                        .foregroundColor(.orange)
+                }
+                
+                NavigationLink(destination: OrganizationDebugView()) {
+                    Label("Organization Debug", systemImage: "building.2")
+                }
+                
+                Button(action: {
+                    authVM.clearAllLocalCache()
+                    showingCacheAlert = true
+                }) {
+                    Label("Nuclear Reset", systemImage: "trash.fill")
+                        .foregroundColor(.red)
+                }
+            }
+        }
+    }
+    
+    // MARK: - Legacy Methods (keep for compatibility)
     
     private func fixOrganizationIDs() {
         projectVM.fixMissingOrganizationIDs { success, message in

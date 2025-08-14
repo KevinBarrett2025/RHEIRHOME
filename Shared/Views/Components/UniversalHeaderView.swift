@@ -133,7 +133,7 @@ struct UniversalHeaderView: View {
     private func tierDropdown(_ tier: SubscriptionTier) -> some View {
         Menu {
             // Quick tier switching options
-            ForEach([SubscriptionTier.free, .professional, .enterprise], id: \.self) { tierOption in
+            ForEach([SubscriptionTier.builder, .professional, .enterprise], id: \.self) { tierOption in
                 Button {
                     switchToTier(tierOption)
                 } label: {
@@ -205,15 +205,15 @@ struct UniversalHeaderView: View {
     
     private func tierIcon(_ tier: SubscriptionTier) -> String {
         switch tier {
-        case .free, .starter: return "person.fill"
-        case .professional, .standard: return "briefcase.fill"
+        case .builder, .free, .starter: return "hammer.fill"
+        case .professional, .standard: return "hardhat.fill"
         case .enterprise, .premium: return "crown.fill"
         }
     }
     
     private func tierColor(_ tier: SubscriptionTier) -> Color {
         switch tier {
-        case .free, .starter: return .gray
+        case .builder, .free, .starter: return .orange
         case .professional, .standard: return .blue
         case .enterprise, .premium: return .purple
         }
@@ -221,6 +221,7 @@ struct UniversalHeaderView: View {
     
     private func tierDisplayName(_ tier: SubscriptionTier) -> String {
         switch tier {
+        case .builder: return "Builder"
         case .free: return "Free"
         case .starter: return "Starter"
         case .professional: return "Pro"

@@ -285,7 +285,7 @@ struct TierSwitcherView: View {
     
     private func tierColor(_ tier: SubscriptionTier) -> Color {
         switch tier {
-        case .free, .starter: return .gray
+        case .builder, .free, .starter: return .orange
         case .professional, .standard: return .blue
         case .enterprise, .premium: return .purple
         }
@@ -293,8 +293,8 @@ struct TierSwitcherView: View {
     
     private func tierIcon(_ tier: SubscriptionTier) -> String {
         switch tier {
-        case .free, .starter: return "person.fill"
-        case .professional, .standard: return "briefcase.fill"
+        case .builder, .free, .starter: return "hammer.fill"
+        case .professional, .standard: return "hardhat.fill"
         case .enterprise, .premium: return "crown.fill"
         }
     }
@@ -505,7 +505,7 @@ struct TierComparisonView: View {
     
     private func tierColor(_ tier: SubscriptionTier) -> Color {
         switch tier {
-        case .free, .starter: return .gray
+        case .builder, .free, .starter: return .orange
         case .professional, .standard: return .blue
         case .enterprise, .premium: return .purple
         }
@@ -513,8 +513,8 @@ struct TierComparisonView: View {
     
     private func tierIcon(_ tier: SubscriptionTier) -> String {
         switch tier {
-        case .free, .starter: return "person.fill"
-        case .professional, .standard: return "briefcase.fill"
+        case .builder, .free, .starter: return "hammer.fill"
+        case .professional, .standard: return "hardhat.fill"
         case .enterprise, .premium: return "crown.fill"
         }
     }
