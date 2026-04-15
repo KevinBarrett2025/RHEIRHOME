@@ -53,6 +53,7 @@
 - `ReceiptOCRService` structured logging
 - `Core/UserService` structured logging
 - `Core/CloudKitService` structured logging
+- `Core/AuthenticationService` structured logging
 - `CloudKitSharingService` structured logging
 - `TeamMemberService` structured logging
 - `VendorKnowledgeService` structured logging
@@ -63,12 +64,12 @@
 - `SignInWithAppleCoordinator` structured logging
 
 ## Current Validation Baseline
-- Simulator build path: `mcp__xcodebuildmcp__build_sim` with `extraArgs=["-derivedDataPath","/tmp/rheir_gateA_phase1ak_mcp_dd"]`
-- Focused parity path: `mcp__xcodebuildmcp__test_sim` with `extraArgs=["-derivedDataPath","/tmp/rheir_parity_phase1ak_mcp_dd","-only-testing:RHEIRTests"]`
+- Simulator build path: `mcp__xcodebuildmcp__build_sim` with `extraArgs=["-derivedDataPath","/tmp/rheir_gateA_phase1al_mcp_dd"]`
+- Focused parity path: `mcp__xcodebuildmcp__test_sim` with `extraArgs=["-derivedDataPath","/tmp/rheir_parity_phase1al_mcp_dd","-only-testing:RHEIRTests"]`
 - Latest focused parity count: `27/27`
 
 ## Known Residual Risks
-- Remaining raw `print(...)` statements still exist in `Shared/Services/Core/AuthenticationService.swift`, `ReceiptScannerView.swift`, and other non-hardened seams.
+- Remaining raw `print(...)` statements still exist in `Shared/Services/EnhancedReceiptService.swift`, `ReceiptScannerView.swift`, and other non-hardened seams.
 - `ProjectViewModel` is still oversized even after the extracted stores, though organization/project synchronization is now isolated behind `OrganizationProjectSyncStore`.
 - `CompanyStore` now lives in the compiled state layer rather than the settings view, but the broader company/project coordination flow still spans multiple UI files.
 - Direct CLI `xcodebuild` evidence remains less stable than the MCP simulator path in the local CoreSimulator environment.

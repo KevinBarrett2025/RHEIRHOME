@@ -2,6 +2,7 @@ import Foundation
 import Combine
 import CloudKit
 import AuthenticationServices
+import OSLog
 
 /// Core authentication service responsible for Apple Sign-In and session management
 protocol AuthenticationServiceProtocol {
@@ -39,7 +40,9 @@ final class AuthenticationService: AuthenticationServiceProtocol {
     // MARK: - Public Methods
     
     func signInWithApple(using credential: ASAuthorizationAppleIDCredential) -> AnyPublisher<User, Error> {
-        print("🍎 [Auth] Starting Apple Sign-In with credential: \(credential.user)")
+        Logger.auth.info(
+            "Starting Apple Sign-In in AuthenticationService [user=\(credential.user, privacy: .private(mask: .hash))]"
+        )
         
         return cloudKitService.checkAccountStatus()
             .flatMap { [weak self] _ -> AnyPublisher<User, Error> in
@@ -61,7 +64,9 @@ final class AuthenticationService: AuthenticationServiceProtocol {
                         return self.jwtService.createAppSpecificJWT(for: user)
                             .map { jwt in
                                 self.jwtService.storeJWT(jwt)
-                                print("✅ [Auth] Apple Sign-In complete - JWT stored")
+                                Logger.auth.notice(
+                                    "Completed Apple Sign-In in AuthenticationService and stored JWT [user=\(user.id, privacy: .private(mask: .hash))]"
+                                )
                                 return user
                             }
                             .eraseToAnyPublisher()
@@ -75,7 +80,9 @@ final class AuthenticationService: AuthenticationServiceProtocol {
     }
     
     func signInSilently(userID: String, email: String?) -> AnyPublisher<User, Error> {
-        print("🔄 [Auth] Silent sign-in attempt for userID: \(userID)")
+        Logger.auth.info(
+            "Starting silent AuthenticationService sign-in [user=\(userID, privacy: .private(mask: .hash)), hasEmail=\(email != nil, privacy: .public)]"
+        )
         
         return cloudKitService.checkAccountStatus()
             .flatMap { [weak self] _ -> AnyPublisher<User, Error> in
@@ -89,7 +96,9 @@ final class AuthenticationService: AuthenticationServiceProtocol {
                     .flatMap { user -> AnyPublisher<User, Error> in
                         // Check if we need to refresh JWT
                         if !self.jwtService.hasValidJWT() {
-                            print("🔄 [Auth] Refreshing JWT during silent login")
+                            Logger.auth.info(
+                                "Refreshing missing JWT during silent AuthenticationService sign-in [user=\(user.id, privacy: .private(mask: .hash))]"
+                            )
                             return self.jwtService.createAppSpecificJWT(for: user)
                                 .map { jwt in
                                     self.jwtService.storeJWT(jwt)
@@ -97,7 +106,9 @@ final class AuthenticationService: AuthenticationServiceProtocol {
                                 }
                                 .eraseToAnyPublisher()
                         } else {
-                            print("✅ [Auth] Using existing valid JWT")
+                            Logger.auth.debug(
+                                "Reusing existing valid JWT during silent AuthenticationService sign-in [user=\(user.id, privacy: .private(mask: .hash))]"
+                            )
                             return Just(user)
                                 .setFailureType(to: Error.self)
                                 .eraseToAnyPublisher()
@@ -112,7 +123,13 @@ final class AuthenticationService: AuthenticationServiceProtocol {
     }
     
     func signOut() {
-        print("🚪 [Auth] Signing out user")
+        if let currentUser {
+            Logger.auth.notice(
+                "Signing out AuthenticationService user [user=\(currentUser.id, privacy: .private(mask: .hash))]"
+            )
+        } else {
+            Logger.auth.notice("Signing out AuthenticationService with no current user.")
+        }
         currentUser = nil
         clearStoredAppleUserID()
         jwtService.clearJWT()
@@ -139,13 +156,17 @@ final class AuthenticationService: AuthenticationServiceProtocol {
         if let appleID = getStoredAppleUserID(),
            jwtService.hasValidJWT() {
             currentUser = User(id: appleID, email: "")
-            print("✅ [Auth] Restored persisted user: \(appleID)")
+            Logger.auth.notice(
+                "Restored persisted AuthenticationService user [user=\(appleID, privacy: .private(mask: .hash))]"
+            )
         }
     }
     
     private func storeAppleUserID(_ userID: String) {
         UserDefaults.standard.set(userID, forKey: "appleUserID")
-        print("💾 [Auth] Stored Apple ID for persistence: \(userID)")
+        Logger.auth.info(
+            "Stored Apple user identifier for AuthenticationService persistence [user=\(userID, privacy: .private(mask: .hash))]"
+        )
     }
     
     private func getStoredAppleUserID() -> String? {
@@ -154,7 +175,7 @@ final class AuthenticationService: AuthenticationServiceProtocol {
     
     private func clearStoredAppleUserID() {
         UserDefaults.standard.removeObject(forKey: "appleUserID")
-        print("🗑 [Auth] Cleared stored Apple ID")
+        Logger.auth.info("Cleared persisted Apple user identifier for AuthenticationService.")
     }
 }
 
