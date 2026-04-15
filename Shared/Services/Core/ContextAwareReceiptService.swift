@@ -1,6 +1,7 @@
 import Foundation
 import UIKit
 import Vision
+import OSLog
 
 /// Centralized receipt processing service that automatically detects project context
 /// and manages both organization-wide and project-specific data
@@ -22,7 +23,9 @@ actor ContextAwareReceiptService {
     func setProjectContext(_ projectId: String, organizationId: String) {
         self.currentProjectId = projectId
         self.currentOrganizationId = organizationId
-        print("📍 Context updated: Project \(projectId) in Organization \(organizationId)")
+        Logger.receiptWorkflow.info(
+            "Updated receipt-processing context [project=\(projectId, privacy: .private(mask: .hash)) organization=\(organizationId, privacy: .private(mask: .hash))]"
+        )
     }
     
     /// Processes a receipt with automatic project context awareness
@@ -37,7 +40,9 @@ actor ContextAwareReceiptService {
             )
         }
         
-        print("🔍 Processing receipt for Project: \(projectId)")
+        Logger.receiptWorkflow.notice(
+            "Processing receipt for active project [project=\(projectId, privacy: .private(mask: .hash))]"
+        )
         
         do {
             // Step 1: Extract text using OCR

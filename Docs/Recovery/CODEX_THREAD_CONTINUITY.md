@@ -7,8 +7,8 @@
 - Last Commit: `45c3876 Phase 1: replace enhanced organization service print tracing`
 
 ## Current Objective
-- Preserve the repo-tracked ship-readiness checklist and checkpoint the `Shared/Services/GlobalChatGPTService.swift` logging cleanup slice.
-- Queue the next highest-value remaining production service seam in `Shared/Services/Core/ContextAwareReceiptService.swift` after this checkpoint lands.
+- Preserve the repo-tracked ship-readiness checklist and checkpoint the `Shared/Services/Core/ContextAwareReceiptService.swift` logging cleanup slice.
+- Queue the next highest-value remaining production seam in `Shared/Features/Receipts/ReceiptScannerView.swift` after this checkpoint lands.
 
 ## Current Working Set
 - Session flow now routes through `Shared/Views/Auth/AppSessionSupport.swift`.
@@ -71,13 +71,15 @@
 - `Shared/Services/CloudKitAuthService+User.swift` now uses structured `Logger.auth` calls instead of raw `print(...)` tracing.
 - `Shared/Services/Organization/EnhancedOrganizationService.swift` now uses structured `Logger.organizationService` calls instead of raw `print(...)` tracing.
 - `Shared/Services/GlobalChatGPTService.swift` now uses structured `Logger.globalChatGPT` calls instead of raw `print(...)` tracing.
-- `Shared/Services/Core/ContextAwareReceiptService.swift` is the next highest-value remaining production service seam by fresh raw `print(...)` residue count after excluding stub and development-only files.
+- `Shared/Services/Core/ContextAwareReceiptService.swift` now uses structured `Logger.receiptWorkflow` calls instead of raw `print(...)` tracing.
+- The active production service layer is now down to non-production residue in `StubServices.swift`, `DevelopmentDataManager.swift`, and `PreviewAuthService.swift`.
+- `Shared/Features/Receipts/ReceiptScannerView.swift` is the next highest-value remaining production seam by fresh raw `print(...)` residue count.
 - Other non-hardened seams still contain raw `print(...)` tracing.
 - Focused tests for invite parsing, cache migration, project-store persistence, receipt-intelligence retention, cache clearing, labor aggregation/validation, company-state bucketing, team-member store behavior, and receipt project-resolution behavior now live in `RHEIRTests/RHEIRTests.swift`.
 - Focused tests for project access normalization and assignment filtering now live in `RHEIRTests/RHEIRTests.swift`.
 - The current working slice has exact simulator evidence recorded:
-  - Gate A `build_sim`: PASS (`mcp__xcodebuildmcp__build_sim` with `-derivedDataPath /tmp/rheir_gateA_phase1at_mcp_dd`)
-  - Focused parity `test_sim -only-testing:RHEIRTests`: PASS (`mcp__xcodebuildmcp__test_sim` with `-derivedDataPath /tmp/rheir_parity_phase1at_mcp_dd`, `27/27`)
+  - Gate A `build_sim`: PASS (`mcp__xcodebuildmcp__build_sim` with `-derivedDataPath /tmp/rheir_gateA_phase1au_mcp_dd`)
+  - Focused parity `test_sim -only-testing:RHEIRTests`: PASS (`mcp__xcodebuildmcp__test_sim` with `-derivedDataPath /tmp/rheir_parity_phase1au_mcp_dd`, `27/27`)
   - Direct `xcodebuild` CLI evidence remains less stable than the MCP simulator path in the current local CoreSimulator environment
 
 ## Known Constraints
@@ -87,6 +89,6 @@
 - This repo follows a repo-local STS equivalent defined in the root governance docs because the original STS spine docs were not present here.
 
 ## Next Required Action
-1. Commit the `Shared/Services/GlobalChatGPTService.swift` logging slice without staging `Shared/Views/Auth/LoginView.swift`, `rheir_knowledge_database.json`, `RHEIRmemories.csv`, or `RheirLogo 1024x1024.png`.
+1. Commit the `Shared/Services/Core/ContextAwareReceiptService.swift` logging slice without staging `Shared/Views/Auth/LoginView.swift`, `rheir_knowledge_database.json`, `RHEIRmemories.csv`, or `RheirLogo 1024x1024.png`.
 2. Preserve the repo-local STS docs and `SHIP_READINESS_CHECKLIST.md` as the current release-planning truth for this repository.
-3. Continue the next logging-hardening seam in `Shared/Services/Core/ContextAwareReceiptService.swift` after the `GlobalChatGPTService.swift` checkpoint lands.
+3. Continue the next logging-hardening seam in `Shared/Features/Receipts/ReceiptScannerView.swift` after the `ContextAwareReceiptService.swift` checkpoint lands.
