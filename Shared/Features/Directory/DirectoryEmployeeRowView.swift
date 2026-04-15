@@ -1,4 +1,5 @@
 import SwiftUI
+import OSLog
 
 struct DirectoryEmployeeRowView: View {
     let employee: TeamMember
@@ -22,9 +23,13 @@ struct DirectoryEmployeeRowView: View {
                 if !employee.email.isEmpty {
                     authVM.sendTeamMemberInvitation(to: employee.email) { success, message in
                         if success {
-                            print("📧 Invitation sent successfully to \(employee.email)")
+                            Logger.teamMember.notice(
+                                "Team member invitation sent [email=\(employee.email, privacy: .private(mask: .hash))]"
+                            )
                         } else {
-                            print("❌ Failed to send invitation: \(message ?? "Unknown error")")
+                            Logger.teamMember.error(
+                                "Team member invitation failed [email=\(employee.email, privacy: .private(mask: .hash)) error=\((message ?? "Unknown error"), privacy: .public)]"
+                            )
                         }
                     }
                 }
