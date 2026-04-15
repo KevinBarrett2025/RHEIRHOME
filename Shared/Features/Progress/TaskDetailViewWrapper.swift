@@ -1,4 +1,5 @@
 import SwiftUI
+import OSLog
 
 struct TaskDetailViewWrapper: View {
     let task: ProjectTask
@@ -284,7 +285,9 @@ struct AsyncTaskPhoto<Content: View, Placeholder: View>: View {
                 }
             }
         } catch {
-            print("❌ Failed to load task photo \(photoID): \(error)")
+            Logger.cloudKitPhoto.error(
+                "Failed to load task photo [taskID=\(taskID.uuidString, privacy: .private(mask: .hash)) photoID=\(photoID.uuidString, privacy: .private(mask: .hash)) error=\(error.localizedDescription, privacy: .public)]"
+            )
             await MainActor.run {
                 self.isLoading = false
             }
@@ -349,7 +352,9 @@ struct AsyncTaskPhotoDetailView: View {
                 }
             }
         } catch {
-            print("❌ Failed to load task photo \(photoID): \(error)")
+            Logger.cloudKitPhoto.error(
+                "Failed to load task photo detail [taskID=\(taskID.uuidString, privacy: .private(mask: .hash)) photoID=\(photoID.uuidString, privacy: .private(mask: .hash)) error=\(error.localizedDescription, privacy: .public)]"
+            )
             await MainActor.run {
                 self.isLoading = false
             }
