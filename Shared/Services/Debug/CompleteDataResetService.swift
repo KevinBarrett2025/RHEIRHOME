@@ -1,5 +1,6 @@
 import Foundation
 import CloudKit
+import OSLog
 
 /// Complete data reset service for debugging
 /// Clears both local and CloudKit data
@@ -39,7 +40,7 @@ class CompleteDataResetService: ObservableObject {
             try await clearDefaultZoneRecords()
             
             resetProgress = "✅ Complete reset finished!"
-            print("🔄 COMPLETE DATA RESET SUCCESSFUL")
+            Logger.settingsSupport.notice("Complete data reset finished successfully.")
             
         } catch {
             resetProgress = "❌ Reset failed: \(error.localizedDescription)"
@@ -94,7 +95,7 @@ class CompleteDataResetService: ObservableObject {
         // Clear caches
         clearCaches()
         
-        print("🗑️ Cleared all local UserDefaults data including ghost team members")
+        Logger.settingsSupport.notice("Cleared local UserDefaults data, organization caches, and ghost team-member data.")
     }
     
     /// Clear legacy team member data from all possible storage locations
@@ -128,7 +129,7 @@ class CompleteDataResetService: ObservableObject {
             }
         }
         
-        print("🗑️ Cleared all legacy team member data from storage")
+        Logger.settingsSupport.notice("Cleared legacy team-member data from local storage.")
     }
     
     /// Clear custom CloudKit zones
@@ -140,7 +141,9 @@ class CompleteDataResetService: ObservableObject {
             if zone.zoneID.zoneName != "_defaultZone" {
                 resetProgress = "Deleting zone: \(zone.zoneID.zoneName)"
                 try await privateDB.deleteRecordZone(withID: zone.zoneID)
-                print("🗑️ Deleted zone: \(zone.zoneID.zoneName)")
+                Logger.settingsSupport.notice(
+                    "Deleted custom CloudKit zone [zone=\(zone.zoneID.zoneName, privacy: .private)]"
+                )
             }
         }
     }
@@ -184,14 +187,20 @@ class CompleteDataResetService: ObservableObject {
                         let batch = Array(recordIDs[i..<endIndex])
                         
                         let _ = try await privateDB.modifyRecords(saving: [], deleting: batch)
-                        print("🗑️ Deleted \(batch.count) \(recordType) records from default zone")
+                        Logger.settingsSupport.notice(
+                            "Deleted default-zone records [type=\(recordType, privacy: .public), batch=\(batch.count, privacy: .public)]"
+                        )
                     }
-                    print("✅ Total deleted \(recordIDs.count) \(recordType) records")
+                    Logger.settingsSupport.notice(
+                        "Completed default-zone deletion [type=\(recordType, privacy: .public), total=\(recordIDs.count, privacy: .public)]"
+                    )
                 }
                 
             } catch {
                 // If querying fails, try a different approach
-                print("⚠️ Could not query \(recordType) records with organizationID: \(error.localizedDescription)")
+                Logger.settingsSupport.warning(
+                    "Could not query default-zone records by organization identifier [type=\(recordType, privacy: .public), error=\(error.localizedDescription, privacy: .public)]"
+                )
                 
                 // Try using a simpler predicate for record types without organizationID
                 if recordType == "Organization" {
@@ -210,10 +219,14 @@ class CompleteDataResetService: ObservableObject {
                         
                         if !recordIDs.isEmpty {
                             let _ = try await privateDB.modifyRecords(saving: [], deleting: recordIDs)
-                            print("✅ Deleted \(recordIDs.count) Organization records using name field")
+                            Logger.settingsSupport.notice(
+                                "Deleted organization records using name fallback [total=\(recordIDs.count, privacy: .public)]"
+                            )
                         }
                     } catch {
-                        print("⚠️ Could not delete Organization records: \(error.localizedDescription)")
+                        Logger.settingsSupport.warning(
+                            "Could not delete organization records with name fallback [error=\(error.localizedDescription, privacy: .public)]"
+                        )
                     }
                 }
             }
@@ -244,10 +257,14 @@ class CompleteDataResetService: ObservableObject {
                 
                 if !recordIDs.isEmpty {
                     let _ = try await privateDB.modifyRecords(saving: [], deleting: recordIDs)
-                    print("✅ Deleted \(recordIDs.count) \(recordType) records")
+                    Logger.settingsSupport.notice(
+                        "Deleted system record set [type=\(recordType, privacy: .public), total=\(recordIDs.count, privacy: .public)]"
+                    )
                 }
             } catch {
-                print("⚠️ Could not delete \(recordType) records: \(error.localizedDescription)")
+                Logger.settingsSupport.warning(
+                    "Could not delete system record set [type=\(recordType, privacy: .public), error=\(error.localizedDescription, privacy: .public)]"
+                )
             }
         }
     }
