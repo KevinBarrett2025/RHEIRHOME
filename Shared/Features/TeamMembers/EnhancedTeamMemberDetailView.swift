@@ -1,4 +1,5 @@
 import SwiftUI
+import OSLog
 
 struct EnhancedTeamMemberDetailView: View {
     @EnvironmentObject var projectVM: ProjectViewModel
@@ -553,7 +554,9 @@ struct EnhancedTeamMemberDetailView: View {
     
     private func saveChanges() {
         projectVM.updateTeamMemberInOrganization(member)
-        print("✅ Saved changes for team member: \(member.name)")
+        Logger.teamMember.notice(
+            "Team member detail changes saved [member=\(member.name, privacy: .private(mask: .hash))]"
+        )
     }
     
     private func removeTeamMember() {
