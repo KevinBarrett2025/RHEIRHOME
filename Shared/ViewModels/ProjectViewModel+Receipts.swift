@@ -4,6 +4,107 @@
 //
 
 import Foundation
+import OSLog
+
+extension Logger {
+    static let receiptWorkflow = Logger(subsystem: "com.RheirHome.RHEIR", category: "receiptWorkflow")
+}
+
+enum ReceiptProjectStorage {
+    case organizationProjects(index: Int)
+    case allProjects(index: Int)
+
+    var logLabel: String {
+        switch self {
+        case .organizationProjects:
+            return "organizationProjects"
+        case .allProjects:
+            return "allProjects"
+        }
+    }
+}
+
+struct ReceiptProjectResolution {
+    let project: Project
+    let storage: ReceiptProjectStorage
+    let synchronizedOrganizationProjects: [Project]
+    let resynchronizedFromAllProjects: Bool
+}
+
+final class ReceiptProjectStore {
+    func resolveProject(
+        projectID: UUID,
+        organizationProjects: [Project],
+        allProjects: [Project],
+        currentOrganizationID: String?
+    ) -> ReceiptProjectResolution? {
+        if let orgIndex = organizationProjects.firstIndex(where: { $0.id == projectID }) {
+            return ReceiptProjectResolution(
+                project: organizationProjects[orgIndex],
+                storage: .organizationProjects(index: orgIndex),
+                synchronizedOrganizationProjects: organizationProjects,
+                resynchronizedFromAllProjects: false
+            )
+        }
+
+        guard let allIndex = allProjects.firstIndex(where: { $0.id == projectID }) else {
+            return nil
+        }
+
+        let project = allProjects[allIndex]
+        guard currentOrganizationID == nil || project.organizationID == currentOrganizationID else {
+            return nil
+        }
+
+        if let currentOrganizationID, project.organizationID == currentOrganizationID {
+            var synchronizedOrganizationProjects = organizationProjects
+            synchronizedOrganizationProjects.append(project)
+            return ReceiptProjectResolution(
+                project: project,
+                storage: .organizationProjects(index: synchronizedOrganizationProjects.count - 1),
+                synchronizedOrganizationProjects: synchronizedOrganizationProjects,
+                resynchronizedFromAllProjects: true
+            )
+        }
+
+        return ReceiptProjectResolution(
+            project: project,
+            storage: .allProjects(index: allIndex),
+            synchronizedOrganizationProjects: organizationProjects,
+            resynchronizedFromAllProjects: false
+        )
+    }
+
+    func synchronize(
+        _ updatedProject: Project,
+        resolution: ReceiptProjectResolution,
+        organizationProjects: inout [Project],
+        allProjects: inout [Project]
+    ) {
+        organizationProjects = resolution.synchronizedOrganizationProjects
+
+        switch resolution.storage {
+        case .organizationProjects(let index):
+            if organizationProjects.indices.contains(index) {
+                organizationProjects[index] = updatedProject
+            } else {
+                organizationProjects.append(updatedProject)
+            }
+        case .allProjects(let index):
+            if allProjects.indices.contains(index) {
+                allProjects[index] = updatedProject
+            } else {
+                allProjects.append(updatedProject)
+            }
+        }
+
+        if let allIndex = allProjects.firstIndex(where: { $0.id == updatedProject.id }) {
+            allProjects[allIndex] = updatedProject
+        } else {
+            allProjects.append(updatedProject)
+        }
+    }
+}
 
 @MainActor
 extension ProjectViewModel {
@@ -40,7 +141,7 @@ extension ProjectViewModel {
         if let teamMemberID = updatedReceipt.teamMemberID,
            !organizationProjects[idx].assignedTeamMemberIDs.contains(teamMemberID.uuidString) {
             organizationProjects[idx].assignTeamMember(teamMemberID.uuidString)
-            print("✅ Auto-assigned team member \(teamMemberID) to project from receipt")
+            Logger.receiptWorkflow.info("Auto-assigned team member from receipt add.")
         }
         
         // Add receipt to project
@@ -60,7 +161,9 @@ extension ProjectViewModel {
             _ = await saveAllProjectsToCloudKit()
         }
         
-        print("📝 Added receipt: \(receipt.vendor) - \(receipt.amount.formatAsCurrency()) (\(paymentMethod.displayName))")
+        Logger.receiptWorkflow.notice(
+            "Added receipt to selected project [vendor=\(receipt.vendor, privacy: .private(mask: .hash)) amount=\(receipt.amount, privacy: .public) payment=\(paymentMethod.displayName, privacy: .public)]"
+        )
     }
 
     /// Update an existing receipt in the current project with Enterprise Intelligence integration.
@@ -94,7 +197,7 @@ extension ProjectViewModel {
         if let teamMemberID = updatedReceipt.teamMemberID,
            !organizationProjects[pIdx].assignedTeamMemberIDs.contains(teamMemberID.uuidString) {
             organizationProjects[pIdx].assignTeamMember(teamMemberID.uuidString)
-            print("✅ Auto-assigned team member \(teamMemberID) to project from receipt update")
+            Logger.receiptWorkflow.info("Auto-assigned team member from receipt update.")
         }
         
         // Adjust spending totals (remove old, add new)
@@ -129,7 +232,9 @@ extension ProjectViewModel {
             _ = await saveAllProjectsToCloudKit()
         }
         
-        print("✏️ Updated receipt: \(receipt.vendor) - \(receipt.amount.formatAsCurrency()) (\(paymentMethod.displayName))")
+        Logger.receiptWorkflow.notice(
+            "Updated receipt in selected project [vendor=\(receipt.vendor, privacy: .private(mask: .hash)) amount=\(receipt.amount, privacy: .public) payment=\(paymentMethod.displayName, privacy: .public)]"
+        )
     }
     
     // MARK: - Enterprise Intelligence Integration (Phase 2C - Simplified)
@@ -147,12 +252,13 @@ extension ProjectViewModel {
         projectID: String
     ) async {
         guard isEnterpriseIntelligenceReady else {
-            print("⚠️ Enterprise Intelligence not ready - skipping intelligence processing")
+            Logger.receiptIntelligence.warning("Skipped receipt intelligence processing because the organization context is not ready.")
             return
         }
         
-        print("🧠 ENTERPRISE INTELLIGENCE: Processing receipt for organizational learning...")
-        print("  📊 Vendor: \(vendor), Payment: \(paymentMethod), Amount: \(amount.formatAsCurrency())")
+        Logger.receiptIntelligence.info(
+            "Processing receipt intelligence [vendor=\(vendor, privacy: .private(mask: .hash)) payment=\(paymentMethod, privacy: .private(mask: .hash)) amount=\(amount, privacy: .public)]"
+        )
         
         // 🚀 PHASE 2C: REAL-TIME ORGANIZATIONAL LEARNING
         // Store intelligence data for this transaction
@@ -166,11 +272,11 @@ extension ProjectViewModel {
         // Update organizational insights
         await updateOrganizationalInsights()
         
-        print("✅ ORGANIZATIONAL LEARNING: Receipt processed and intelligence updated!")
+        Logger.receiptIntelligence.notice("Completed receipt intelligence processing.")
         
         // Trigger UI refresh for intelligence dashboards
         await MainActor.run {
-            objectWillChange.send()
+            intelligenceSnapshotVersion = UUID()
         }
     }
     
@@ -181,33 +287,20 @@ extension ProjectViewModel {
         amount: Double,
         projectID: String
     ) async {
-        guard let _ = currentOrganizationID else { return }
-        
-        // Create intelligence record with detailed categorization
-        let intelligenceRecord = [
-            "vendor": vendor,
-            "paymentMethod": paymentMethod,
-            "amount": amount,
-            "projectID": projectID,
-            "date": Date().timeIntervalSince1970,
-            "organizationID": currentOrganizationID ?? "",
-            "category": detectVendorCategory(from: vendor).rawValue,
-            "paymentType": detectPaymentType(from: paymentMethod).rawValue
-        ] as [String : Any]
-        
-        // Store in UserDefaults with organization-specific key
-        let key = "receipt_intelligence_\(currentOrganizationID ?? "")"
-        var existingRecords = UserDefaults.standard.array(forKey: key) as? [[String: Any]] ?? []
-        existingRecords.append(intelligenceRecord)
-        
-        // Keep only the last 1000 records for performance
-        if existingRecords.count > 1000 {
-            existingRecords = Array(existingRecords.suffix(1000))
-        }
-        
-        UserDefaults.standard.set(existingRecords, forKey: key)
-        
-        print("💾 Stored receipt intelligence: \(existingRecords.count) total records")
+        guard let organizationID = currentOrganizationID else { return }
+
+        let intelligenceRecord = ReceiptIntelligenceRecord(
+            vendor: vendor,
+            paymentMethod: paymentMethod,
+            amount: amount,
+            projectID: projectID,
+            date: Date().timeIntervalSince1970,
+            organizationID: organizationID,
+            category: detectVendorCategory(from: vendor).rawValue,
+            paymentType: detectPaymentType(from: paymentMethod).rawValue
+        )
+
+        receiptIntelligenceStore.append(intelligenceRecord, for: organizationID)
     }
     
     // MARK: - Helper Methods
@@ -263,36 +356,36 @@ extension ProjectViewModel {
     private func updateOrganizationalInsights() async {
         guard let orgID = currentOrganizationID else { return }
         
-        print("🏢 ORGANIZATIONAL INSIGHTS: Updating enterprise intelligence metrics...")
-        
         let totalVendors = vendorService.vendorsSortedByName.count
         let totalPaymentMethods = paymentMethodService.paymentMethodsSortedByName.count
         let totalSpending = organizationProjects.flatMap { $0.receipts }.reduce(0) { $0 + $1.amount }
         
-        // Store updated insights in simple format
-        let insights = [
-            "totalVendors": totalVendors,
-            "totalPaymentMethods": totalPaymentMethods,
-            "totalSpending": totalSpending,
-            "lastUpdated": Date().timeIntervalSince1970,
-            "organizationID": orgID
-        ] as [String : Any]
+        receiptIntelligenceStore.saveInsights(
+            OrganizationInsightsSnapshot(
+                totalVendors: totalVendors,
+                totalPaymentMethods: totalPaymentMethods,
+                totalSpending: totalSpending,
+                lastUpdated: Date().timeIntervalSince1970,
+                organizationID: orgID
+            ),
+            for: orgID
+        )
         
-        UserDefaults.standard.set(insights, forKey: "org_insights_\(orgID)")
-        
-        print("  🎯 Organizational insights updated: \(totalVendors) vendors, \(totalPaymentMethods) payment methods, \(totalSpending.formatAsCurrency()) total spending")
+        Logger.receiptIntelligence.notice(
+            "Updated organizational receipt insights [vendors=\(totalVendors, privacy: .public) payments=\(totalPaymentMethods, privacy: .public) total=\(totalSpending, privacy: .public)]"
+        )
     }
     
     // MARK: - Phase 2C: Historical Intelligence Population
     
     /// Scan all existing receipts and populate organizational intelligence
     func scanExistingReceiptsForIntelligence() async {
-        guard let orgID = currentOrganizationID else {
-            print("❌ Cannot scan receipts - no organization selected")
+        guard currentOrganizationID != nil else {
+            Logger.receiptIntelligence.error("Cannot scan receipts for intelligence without an active organization.")
             return
         }
         
-        print("🔍 PHASE 2C: Scanning existing receipts for organizational intelligence...")
+        Logger.receiptIntelligence.info("Scanning existing receipts for intelligence population.")
         
         var processedCount = 0
         var totalReceiptCount = 0
@@ -319,7 +412,9 @@ extension ProjectViewModel {
                 // Update UI progress every 10 receipts
                 if processedCount % 10 == 0 {
                     await MainActor.run {
-                        print("  📊 Progress: \(processedCount)/\(totalReceiptCount) receipts processed")
+                        Logger.receiptIntelligence.debug(
+                            "Receipt intelligence scan progress [processed=\(processedCount, privacy: .public) total=\(totalReceiptCount, privacy: .public)]"
+                        )
                     }
                 }
             }
@@ -329,12 +424,11 @@ extension ProjectViewModel {
         await updateOrganizationalInsights()
         
         await MainActor.run {
-            print("✅ INTELLIGENCE POPULATION COMPLETE!")
-            print("  📈 Processed \(processedCount) receipts across \(organizationProjects.count) projects")
-            print("  🧠 Organizational intelligence is now fully populated!")
-            
-            // Trigger UI refresh for intelligence dashboards
-            objectWillChange.send()
+            Logger.receiptIntelligence.notice(
+                "Completed receipt intelligence population [processed=\(processedCount, privacy: .public) projects=\(self.organizationProjects.count, privacy: .public)]"
+            )
+
+            intelligenceSnapshotVersion = UUID()
         }
     }
     
@@ -342,16 +436,14 @@ extension ProjectViewModel {
     func getOrganizationalIntelligenceData() -> [String: Any]? {
         guard let orgID = currentOrganizationID else { return nil }
         
-        let insightsKey = "org_insights_\(orgID)"
-        return UserDefaults.standard.dictionary(forKey: insightsKey)
+        return receiptIntelligenceStore.loadInsights(for: orgID)?.dictionary
     }
     
     /// Get receipt intelligence records for analysis
     func getReceiptIntelligenceRecords() -> [[String: Any]] {
         guard let orgID = currentOrganizationID else { return [] }
         
-        let key = "receipt_intelligence_\(orgID)"
-        return UserDefaults.standard.array(forKey: key) as? [[String: Any]] ?? []
+        return receiptIntelligenceStore.loadRecords(for: orgID).map { $0.dictionary }
     }
     
     /// Get top vendors by spending from intelligence data
@@ -406,5 +498,116 @@ extension ProjectViewModel {
         currentReceipts.reduce(0) { acc, r in
             acc + (r.isReturn ? -r.amount : r.amount)
         }
+    }
+}
+
+struct ReceiptIntelligenceRecord: Codable, Equatable {
+    let vendor: String
+    let paymentMethod: String
+    let amount: Double
+    let projectID: String
+    let date: TimeInterval
+    let organizationID: String
+    let category: String
+    let paymentType: String
+
+    var dictionary: [String: Any] {
+        [
+            "vendor": vendor,
+            "paymentMethod": paymentMethod,
+            "amount": amount,
+            "projectID": projectID,
+            "date": date,
+            "organizationID": organizationID,
+            "category": category,
+            "paymentType": paymentType
+        ]
+    }
+}
+
+struct OrganizationInsightsSnapshot: Codable, Equatable {
+    let totalVendors: Int
+    let totalPaymentMethods: Int
+    let totalSpending: Double
+    let lastUpdated: TimeInterval
+    let organizationID: String
+
+    var dictionary: [String: Any] {
+        [
+            "totalVendors": totalVendors,
+            "totalPaymentMethods": totalPaymentMethods,
+            "totalSpending": totalSpending,
+            "lastUpdated": lastUpdated,
+            "organizationID": organizationID
+        ]
+    }
+}
+
+extension Logger {
+    static let receiptIntelligence = Logger(subsystem: "com.RheirHome.RHEIR", category: "receiptIntelligence")
+}
+
+final class ReceiptIntelligenceStore {
+    private enum Key {
+        static let receiptIntelligencePrefix = "receipt_intelligence_"
+        static let organizationalInsightsPrefix = "org_insights_"
+    }
+
+    private let userDefaults: UserDefaults
+
+    init(userDefaults: UserDefaults = .standard) {
+        self.userDefaults = userDefaults
+    }
+
+    func append(_ record: ReceiptIntelligenceRecord, for organizationID: String) {
+        var records = loadRecords(for: organizationID)
+        records.append(record)
+
+        if records.count > 1000 {
+            records = Array(records.suffix(1000))
+        }
+
+        save(records, forKey: Key.receiptIntelligencePrefix + organizationID)
+        Logger.receiptIntelligence.debug(
+            "Stored \(records.count, privacy: .public) receipt intelligence records for organization \(organizationID, privacy: .private(mask: .hash))"
+        )
+    }
+
+    func loadRecords(for organizationID: String) -> [ReceiptIntelligenceRecord] {
+        load([ReceiptIntelligenceRecord].self, forKey: Key.receiptIntelligencePrefix + organizationID, fallback: [])
+    }
+
+    func saveInsights(_ snapshot: OrganizationInsightsSnapshot, for organizationID: String) {
+        save(snapshot, forKey: Key.organizationalInsightsPrefix + organizationID)
+    }
+
+    func loadInsights(for organizationID: String) -> OrganizationInsightsSnapshot? {
+        loadOptional(OrganizationInsightsSnapshot.self, forKey: Key.organizationalInsightsPrefix + organizationID)
+    }
+
+    private func save<Value: Encodable>(_ value: Value, forKey key: String) {
+        guard let data = try? JSONEncoder().encode(value) else {
+            Logger.receiptIntelligence.error("Failed to encode receipt intelligence value for key \(key, privacy: .private(mask: .hash))")
+            return
+        }
+
+        userDefaults.set(data, forKey: key)
+    }
+
+    private func load<Value: Decodable>(_ type: Value.Type, forKey key: String, fallback: Value) -> Value {
+        guard let data = userDefaults.data(forKey: key),
+              let decoded = try? JSONDecoder().decode(type, from: data) else {
+            return fallback
+        }
+
+        return decoded
+    }
+
+    private func loadOptional<Value: Decodable>(_ type: Value.Type, forKey key: String) -> Value? {
+        guard let data = userDefaults.data(forKey: key) else {
+            return nil
+        }
+
+        return try? JSONDecoder().decode(type, from: data)
     }
 }

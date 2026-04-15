@@ -7,6 +7,177 @@
 
 import Foundation
 import CloudKit
+import OSLog
+
+extension Logger {
+    static let teamMember = Logger(subsystem: "com.RheirHome.RHEIR", category: "teamMember")
+}
+
+struct TeamMemberStoreCaches {
+    let byID: [UUID: TeamMember]
+    let byName: [String: TeamMember]
+}
+
+struct TeamMemberStoreVerification {
+    let members: [TeamMember]
+    let filteredCount: Int
+}
+
+struct TeamMemberStoreUpdateResult {
+    let members: [TeamMember]
+    let previousName: String?
+}
+
+struct TeamMemberStoreUpsertResult {
+    enum Action: Equatable {
+        case inserted
+        case updatedExisting
+        case ignoredDuplicate
+
+        var logLabel: String {
+            switch self {
+            case .inserted:
+                return "inserted"
+            case .updatedExisting:
+                return "updatedExisting"
+            case .ignoredDuplicate:
+                return "ignoredDuplicate"
+            }
+        }
+    }
+
+    let members: [TeamMember]
+    let action: Action
+}
+
+struct TeamMemberLoggedHourMutation {
+    let project: Project
+    let changedCount: Int
+}
+
+final class TeamMemberStore {
+    func upsert(_ candidate: TeamMember, into existing: [TeamMember]) -> TeamMemberStoreUpsertResult {
+        let duplicateIndex = existing.firstIndex { member in
+            if let existingAppUserID = member.appUserID,
+               let candidateAppUserID = candidate.appUserID,
+               member.organizationID == candidate.organizationID {
+                return existingAppUserID == candidateAppUserID
+            }
+
+            return member.name.lowercased() == candidate.name.lowercased()
+                && member.organizationID == candidate.organizationID
+        }
+
+        guard let duplicateIndex else {
+            return TeamMemberStoreUpsertResult(
+                members: existing + [candidate],
+                action: .inserted
+            )
+        }
+
+        let existingMember = existing[duplicateIndex]
+        let shouldMerge = candidate.rates.count > existingMember.rates.count
+            || (!candidate.email.isEmpty && existingMember.email.isEmpty)
+            || (!candidate.phone.isEmpty && existingMember.phone.isEmpty)
+            || (!candidate.jobTitle.isEmpty && existingMember.jobTitle.isEmpty)
+
+        guard shouldMerge else {
+            return TeamMemberStoreUpsertResult(
+                members: existing,
+                action: .ignoredDuplicate
+            )
+        }
+
+        var updatedMembers = existing
+        updatedMembers[duplicateIndex] = candidate
+        return TeamMemberStoreUpsertResult(
+            members: updatedMembers,
+            action: .updatedExisting
+        )
+    }
+
+    func update(_ updated: TeamMember, in existing: [TeamMember]) -> TeamMemberStoreUpdateResult? {
+        guard let index = existing.firstIndex(where: { $0.id == updated.id }) else {
+            return nil
+        }
+
+        let previousName = existing[index].name
+        var updatedMembers = existing
+        updatedMembers[index] = updated
+        return TeamMemberStoreUpdateResult(
+            members: updatedMembers,
+            previousName: previousName
+        )
+    }
+
+    func remove(_ member: TeamMember, from existing: [TeamMember]) -> [TeamMember] {
+        existing.filter { $0.id != member.id }
+    }
+
+    func verify(_ members: [TeamMember], for organizationID: String) -> TeamMemberStoreVerification {
+        let verifiedMembers = members.filter { $0.organizationID == organizationID }
+        return TeamMemberStoreVerification(
+            members: verifiedMembers,
+            filteredCount: members.count - verifiedMembers.count
+        )
+    }
+
+    func mergeRecovered(_ recovered: [TeamMember], with existing: [TeamMember]) -> [TeamMember] {
+        var mergedMembers: [TeamMember] = []
+        var seenIDs: Set<UUID> = []
+
+        for member in recovered where seenIDs.insert(member.id).inserted {
+            mergedMembers.append(member)
+        }
+
+        for member in existing where seenIDs.insert(member.id).inserted {
+            mergedMembers.append(member)
+        }
+
+        return mergedMembers
+    }
+
+    func renameLoggedHours(in project: Project, from oldName: String, to newName: String) -> TeamMemberLoggedHourMutation {
+        var updatedProject = project
+        var updatedCount = 0
+
+        for index in updatedProject.loggedHours.indices where updatedProject.loggedHours[index].employee == oldName {
+            updatedProject.loggedHours[index].employee = newName
+            updatedCount += 1
+        }
+
+        return TeamMemberLoggedHourMutation(project: updatedProject, changedCount: updatedCount)
+    }
+
+    func removeLoggedHours(for member: TeamMember, in project: Project) -> TeamMemberLoggedHourMutation {
+        var updatedProject = project
+        let beforeCount = updatedProject.loggedHours.count
+        updatedProject.loggedHours.removeAll { hour in
+            if let employeeID = hour.employeeID {
+                return employeeID == member.id
+            }
+
+            return hour.employee == member.name
+        }
+
+        return TeamMemberLoggedHourMutation(
+            project: updatedProject,
+            changedCount: beforeCount - updatedProject.loggedHours.count
+        )
+    }
+
+    func buildCaches(from members: [TeamMember]) -> TeamMemberStoreCaches {
+        var byName: [String: TeamMember] = [:]
+        for member in members {
+            byName[member.name] = member
+        }
+
+        return TeamMemberStoreCaches(
+            byID: Dictionary(uniqueKeysWithValues: members.map { ($0.id, $0) }),
+            byName: byName
+        )
+    }
+}
 
 @MainActor
 extension ProjectViewModel {
@@ -14,125 +185,112 @@ extension ProjectViewModel {
 
     /// Add a new team member to the organization directory.
     func addTeamMember(_ teamMember: TeamMember) {
-        // Check for duplicates by name in organization
-        if teamMembers.contains(where: { $0.name.lowercased() == teamMember.name.lowercased() }) {
-            print("⚠️ Team member with name '\(teamMember.name)' already exists, not adding duplicate")
-            return
-        }
-        
-        print("✅ Adding new team member to organization: \(teamMember.name) with \(teamMember.rates.count) rates")
         addTeamMemberToOrganization(teamMember)
-        
-        updateTeamMemberCaches() // Rebuild cache immediately
     }
 
     /// Update an existing team member's details in the organization.
     func updateTeamMember(_ updated: TeamMember) {
-        guard teamMembers.contains(where: { $0.id == updated.id }) else {
-            print("❌ Could not find team member with ID \(updated.id) in organization")
-            return
-        }
-        
-        let oldTeamMember = teamMembers.first { $0.id == updated.id }
-        let oldName = oldTeamMember?.name ?? ""
-        
-        print("✅ Updating team member in organization: \(oldName) → \(updated.name)")
-        print("  Rates: \(oldTeamMember?.rates.count ?? 0) → \(updated.rates.count)")
-        
         updateTeamMemberInOrganization(updated)
-        
-        // If name changed, update all WorkHour entries
-        if oldName != updated.name {
-            updateWorkHourTeamMemberNames(from: oldName, to: updated.name)
-        }
-        
-        updateTeamMemberCaches() // Rebuild cache immediately
     }
 
     /// Remove a team member (and their rates) from the organization directory.
     func removeTeamMember(_ teamMember: TeamMember) {
-        print("🗑️ Removing team member from organization: \(teamMember.name)")
+        let updatedMembers = teamMemberStore.remove(teamMember, from: teamMembers)
+        let removedCount = teamMembers.count - updatedMembers.count
+
+        guard removedCount > 0 else {
+            Logger.teamMember.warning("Ignored team-member removal because the member was not found.")
+            return
+        }
+
+        teamMembers = updatedMembers
+        updateTeamMemberCaches()
+        saveOrganizationSpecificBackup()
+        recomputeLaborData()
+
+        Logger.teamMember.notice(
+            "Removed team member from organization directory [remaining=\(self.teamMembers.count, privacy: .public)]"
+        )
+
         Task {
             await removeTeamMember(teamMember)
         }
-        
-        updateTeamMemberCaches() // Rebuild cache immediately
     }
 
     /// Delete a team member entirely: removes from organization directory,
     /// and also clears any logged hours for them on the current project.
     func deleteTeamMember(_ toDelete: TeamMember) {
-        print("🗑️ Deleting team member entirely from organization: \(toDelete.name)")
-        
-        // 1) Remove from organization team member directory
+        let updatedMembers = teamMemberStore.remove(toDelete, from: teamMembers)
+        let removedDirectoryCount = teamMembers.count - updatedMembers.count
+        teamMembers = updatedMembers
+        updateTeamMemberCaches()
+
         Task {
             await removeTeamMember(toDelete)
         }
-        
-        // 2) Strip out any logged hours under that name in the selected project
+
         guard let sel = selectedProject,
               let projIdx = organizationProjects.firstIndex(where: { $0.id == sel.id })
         else { 
+            saveOrganizationSpecificBackup()
+            recomputeLaborData()
             updateTeamMemberCaches()
             return 
         }
 
-        let beforeCount = organizationProjects[projIdx].loggedHours.count
-        organizationProjects[projIdx].loggedHours.removeAll { hour in
-            // Match by employeeID first, then fallback to name
-            if let employeeID = hour.employeeID {
-                return employeeID == toDelete.id
-            } else {
-                return hour.employee == toDelete.name
-            }
-        }
-        let afterCount = organizationProjects[projIdx].loggedHours.count
-        
-        print("  Removed \(beforeCount - afterCount) logged hours for \(toDelete.name)")
-        
-        // re-assign to force view update
-        selectedProject = organizationProjects[projIdx]
-        
-        updateTeamMemberCaches()
+        let mutation = teamMemberStore.removeLoggedHours(for: toDelete, in: organizationProjects[projIdx])
+        organizationProjects[projIdx] = mutation.project
+        selectedProject = mutation.project
+
+        saveOrganizationSpecificBackup()
         recomputeLaborData()
         debouncedSaveProjects()
+
+        Logger.teamMember.notice(
+            "Deleted team member and removed related logged hours [directoryRemoved=\(removedDirectoryCount, privacy: .public) hoursRemoved=\(mutation.changedCount, privacy: .public)]"
+        )
     }
     
     /// Update team member names in all WorkHour entries when a team member's name changes
-    private func updateWorkHourTeamMemberNames(from oldName: String, to newName: String) {
+    func updateWorkHourTeamMemberNames(from oldName: String, to newName: String) {
         guard let sel = selectedProject,
               let projIdx = organizationProjects.firstIndex(where: { $0.id == sel.id }) else {
             return
         }
-        
-        var updatedCount = 0
-        for i in 0..<organizationProjects[projIdx].loggedHours.count {
-            if organizationProjects[projIdx].loggedHours[i].employee == oldName {
-                organizationProjects[projIdx].loggedHours[i].employee = newName
-                updatedCount += 1
-            }
-        }
-        
-        if updatedCount > 0 {
-            print("  Updated \(updatedCount) work hour entries from '\(oldName)' to '\(newName)'")
-            selectedProject = organizationProjects[projIdx]
+
+        let mutation = teamMemberStore.renameLoggedHours(
+            in: organizationProjects[projIdx],
+            from: oldName,
+            to: newName
+        )
+
+        if mutation.changedCount > 0 {
+            organizationProjects[projIdx] = mutation.project
+            selectedProject = mutation.project
+            saveOrganizationSpecificBackup()
             recomputeLaborData()
             debouncedSaveProjects()
+            Logger.teamMember.info(
+                "Renamed logged-hour team-member references [count=\(mutation.changedCount, privacy: .public)]"
+            )
         }
     }
     
     /// Debug method to print current team member state from organization
     func debugTeamMemberState() {
-        print("🔍 Current Team Member State (from Organization):")
-        print("  Total team members: \(teamMembers.count)")
+        Logger.teamMember.debug("Current team-member directory snapshot follows.")
+        Logger.teamMember.debug("Team member count: \(self.teamMembers.count, privacy: .public)")
         for (index, teamMember) in teamMembers.enumerated() {
-            print("  [\(index)] \(teamMember.name) - \(teamMember.rates.count) rates - Role: \(teamMember.role.displayName)")
+            Logger.teamMember.debug(
+                "[\(index, privacy: .public)] role=\(teamMember.role.displayName, privacy: .public) rates=\(teamMember.rates.count, privacy: .public)"
+            )
             for rate in teamMember.rates {
-                print("    - \(rate.taskType): $\(rate.rate)")
+                Logger.teamMember.debug(
+                    "Rate taskType=\(rate.taskType, privacy: .public) amount=\(rate.rate, privacy: .public)"
+                )
             }
         }
-        print("  Cache size: \(teamMembers.count)")
-        print("  Organization: \(currentOrganizationID?.prefix(8).description ?? "None")...")
+        Logger.teamMember.debug("Cache size: \(self.teamMembers.count, privacy: .public)")
     }
     
     // MARK: - Backward Compatibility Methods (Updated for Organization)
@@ -141,8 +299,7 @@ extension ProjectViewModel {
     var employees: [TeamMember] {
         get { teamMembers }
         set { 
-            print("⚠️ Setting employees array is deprecated - use organization team member methods instead")
-            // For backward compatibility, we could update the organization, but this is not recommended
+            Logger.teamMember.warning("Setting employees directly is deprecated; use organization team-member methods.")
         }
     }
     
@@ -164,7 +321,6 @@ extension ProjectViewModel {
     
     var employeeCache: [String: TeamMember] {
         get { 
-            // Convert teamMembers array to dictionary by name
             var cache: [String: TeamMember] = [:]
             for member in teamMembers {
                 cache[member.name] = member
@@ -172,7 +328,7 @@ extension ProjectViewModel {
             return cache
         }
         set { 
-            print("⚠️ Setting employeeCache is deprecated - cache is now computed from organization")
+            Logger.teamMember.warning("Setting employeeCache directly is deprecated; caches are derived from organization state.")
         }
     }
     

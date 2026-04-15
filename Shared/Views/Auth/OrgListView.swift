@@ -2,6 +2,7 @@ import SwiftUI
 
 struct OrgListView: View {
     @ObservedObject private var vm: AuthViewModel
+    @EnvironmentObject private var sessionStore: SessionStore
     @State private var showingCreateOrg = false
     @State private var newOrgName = ""
     @State private var isCreating = false
@@ -31,8 +32,14 @@ struct OrgListView: View {
                 }
                 
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Sign Out") {
-                        vm.signOut()
+                    if vm.currentOrg != nil {
+                        Button("Done") {
+                            sessionStore.cancelOrganizationSelection()
+                        }
+                    } else {
+                        Button("Sign Out") {
+                            vm.signOut()
+                        }
                     }
                 }
             }
@@ -118,7 +125,7 @@ struct OrgListView: View {
         List {
             ForEach(vm.organizations, id: \.id) { org in
                 Button(action: {
-                    vm.setCurrentOrganization(org)
+                    sessionStore.selectOrganization(org)
                 }) {
                     HStack {
                         VStack(alignment: .leading) {
@@ -181,6 +188,15 @@ struct OrgListView: View {
 
 struct OrgListView_Previews: PreviewProvider {
     static var previews: some View {
-        OrgListView(vm: AuthViewModel(service: PreviewAuthService()))
+        let authViewModel = AuthViewModel(service: PreviewAuthService())
+        let projectViewModel = ProjectViewModel(offlineDataManager: OfflineDataManager())
+
+        return OrgListView(vm: authViewModel)
+            .environmentObject(
+                SessionStore(
+                    authViewModel: authViewModel,
+                    projectViewModel: projectViewModel
+                )
+            )
     }
 }

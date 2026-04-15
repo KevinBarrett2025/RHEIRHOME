@@ -1,8 +1,10 @@
 import SwiftUI
+import OSLog
 
 struct LandingPageView: View {
     @EnvironmentObject var viewModel: ProjectViewModel
     @EnvironmentObject var authVM: AuthViewModel
+    @EnvironmentObject private var sessionStore: SessionStore
     @Binding var selectedTab: Tab
 
     @State private var showNewProject = false
@@ -71,6 +73,8 @@ struct LandingPageView: View {
                         .padding(.horizontal)
                         .padding(.bottom, 8)
                     }
+
+                    selectionContextSection
                     
                     logoSection
                     
@@ -105,12 +109,6 @@ struct LandingPageView: View {
             )
             .onAppear {
                 viewModel.navigateToBudgetBreakdown = false
-                
-                print(" Current Organization: \(authVM.currentOrg?.name ?? "None")")
-                print(" Showing \(activeProjects.count) active projects (local + shared)")
-                
-                // AUTOMATIC REFRESH: Load shared projects when view appears
-                loadSharedProjects()
             }
             .navigationDestination(isPresented: $viewModel.navigateToBudgetBreakdown) {
                 BudgetBreakdownView(selectedTab: $selectedTab)
@@ -136,6 +134,78 @@ struct LandingPageView: View {
             .scaledToFit()
             .frame(height: 120)
             .padding(.top, 8)
+    }
+
+    @ViewBuilder
+    private var selectionContextSection: some View {
+        VStack(spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(authVM.currentOrg?.name ?? "No Organization Selected")
+                        .font(.headline)
+
+                    if let role = authVM.currentOrganizationRole {
+                        Text(role.displayName)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    } else {
+                        Text("Select an organization to continue")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+
+                Spacer()
+
+                if authVM.userOrganizations.count > 1 {
+                    Button("Switch") {
+                        sessionStore.showOrganizationSelector()
+                    }
+                    .buttonStyle(.bordered)
+                }
+            }
+
+            HStack(spacing: 12) {
+                Label(
+                    viewModel.selectedProject?.name ?? "No Project Selected",
+                    systemImage: viewModel.selectedProject == nil ? "folder.badge.questionmark" : "folder.fill"
+                )
+                .font(.subheadline)
+                .lineLimit(1)
+
+                Spacer()
+
+                Menu {
+                    Button("Clear Selection") {
+                        viewModel.deselectProject()
+                    }
+                    .disabled(viewModel.selectedProject == nil)
+
+                    if activeProjects.isEmpty {
+                        Text("No active projects available")
+                    } else {
+                        ForEach(activeProjects) { project in
+                            Button(project.name) {
+                                sessionStore.selectProject(project)
+                            }
+                        }
+                    }
+                } label: {
+                    Text(viewModel.selectedProject == nil ? "Choose Project" : "Change")
+                        .font(.caption.weight(.semibold))
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(activeProjects.isEmpty)
+            }
+
+            if viewModel.selectedProject == nil && activeProjects.count > 1 {
+                Text("Choose a project before working in Receipts, Labor, or Tasks.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .padding(.horizontal)
     }
     
     private var emptyStateSection: some View {
@@ -312,9 +382,6 @@ struct LandingPageView: View {
         return NavigationLink {
             BudgetBreakdownView(selectedTab: $selectedTab)
                 .environmentObject(viewModel)
-                .onAppear {
-                    viewModel.selectProject(project)
-                }
         } label: {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
@@ -368,16 +435,14 @@ struct LandingPageView: View {
             .scaleEffect(isSelected ? 1.05 : 1)
             .matchedGeometryEffect(id: project.id, in: animation)
         }
+        .simultaneousGesture(
+            TapGesture().onEnded {
+                sessionStore.selectProject(project)
+            }
+        )
     }
     
     // MARK: - Project Loading Methods
-    
-    private func loadSharedProjects() {
-        print("☁️ Auto-loading shared projects from CloudKit...")
-        Task {
-            await viewModel.loadProjects() // This now loads from CloudKit organization zone
-        }
-    }
     
     private func refreshProjects() {
         guard !isRefreshing else { return }
@@ -386,7 +451,7 @@ struct LandingPageView: View {
             isRefreshing = true
         }
         
-        print("☁️ Manually refreshing all projects from CloudKit...")
+        Logger.project.info("Manually refreshing projects from CloudKit.")
         
         Task {
             await viewModel.loadProjects() // This now loads from CloudKit organization zone
@@ -395,18 +460,20 @@ struct LandingPageView: View {
                 withAnimation {
                     isRefreshing = false
                 }
-                print("✅ Manual refresh complete - showing \(activeProjects.count) active projects from CloudKit")
+                Logger.project.notice(
+                    "Completed manual project refresh [activeProjects=\(activeProjects.count, privacy: .public)]"
+                )
             }
         }
     }
     
     private func refreshProjectsAsync() async {
-        print("☁️ Pull-to-refresh triggered for CloudKit projects...")
+        Logger.project.info("Triggered pull-to-refresh for projects.")
         
         // Load projects from CloudKit organization zone
         await viewModel.loadProjects()
         
-        print("✅ Pull-to-refresh complete - CloudKit projects loaded")
+        Logger.project.notice("Completed pull-to-refresh for projects.")
     }
     
     private func setupOrganizationSharing() {
@@ -424,11 +491,8 @@ struct LandingPageView: View {
             }
             showingStatusAlert = true
             
-            // Automatically refresh projects after setup
             if success {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-                    refreshProjects()
-                }
+                refreshProjects()
             }
         }
     }
@@ -447,8 +511,13 @@ struct LandingPageView_Previews: PreviewProvider {
         let offlineDataManager = OfflineDataManager()
         let vm = ProjectViewModel(offlineDataManager: offlineDataManager)
         let authVM = AuthViewModel(service: PreviewAuthService()) 
+        let sessionStore = SessionStore(
+            authViewModel: authVM,
+            projectViewModel: vm
+        )
         return LandingPageView(selectedTab: .constant(Tab.projects))
             .environmentObject(vm)
             .environmentObject(authVM)
+            .environmentObject(sessionStore)
     }
 }

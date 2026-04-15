@@ -532,26 +532,14 @@ struct ReceiptsView: View {
     }
     
     private var emptyStateView: some View {
-        VStack(spacing: 20) {
-            Image(systemName: "folder.circle")
-                .font(.system(size: 60))
-                .foregroundColor(.secondary)
-            
-            Text("No Project Selected")
-                .font(.headline)
-                .foregroundColor(.secondary)
-            
-            Text("Select a project from the Projects tab to view receipts")
-                .multilineTextAlignment(.center)
-                .foregroundColor(.secondary)
-                .padding(.horizontal)
-            
-            Button("Go to Projects") {
+        ProjectSelectionRequiredView(
+            title: "Select a Project",
+            message: "Choose a project from the Projects tab before viewing receipts.",
+            actionTitle: "Go to Projects",
+            action: {
                 selectedTab = .projects
             }
-            .buttonStyle(.borderedProminent)
-        }
-        .padding()
+        )
     }
     
     private var emptyReceiptsView: some View {

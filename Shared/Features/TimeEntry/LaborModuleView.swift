@@ -1,4 +1,5 @@
 import SwiftUI
+import OSLog
 
 struct LaborModuleView: View {
     @EnvironmentObject var projectVM: ProjectViewModel
@@ -41,7 +42,7 @@ struct LaborModuleView: View {
         
         // FALLBACK: If no organization team members found, create virtual members from work hours
         if discoveredMembers.isEmpty && !project.loggedHours.isEmpty {
-            print("🔧 FALLBACK: Creating virtual team members from logged hours")
+            Logger.labor.notice("Creating fallback team-member models from logged hours for labor module.")
             let uniqueEmployeeNames = Set(project.loggedHours.map { $0.employee })
             
             for employeeName in uniqueEmployeeNames {
@@ -242,21 +243,10 @@ struct LaborModuleView: View {
     
     @ViewBuilder 
     private var noProjectSelectedView: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "briefcase")
-                .font(.system(size: 50))
-                .foregroundColor(.secondary)
-            
-            Text("No Project Selected")
-                .font(.title2)
-                .fontWeight(.bold)
-            
-            Text("Select a project to view and manage labor hours")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-        }
-        .padding()
+        ProjectSelectionRequiredView(
+            title: "Select a Project",
+            message: "Choose a project before viewing or logging labor hours."
+        )
     }
 }
 

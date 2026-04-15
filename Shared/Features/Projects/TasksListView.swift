@@ -256,21 +256,10 @@ struct TasksListView: View {
     }
     
     private var emptyStateView: some View {
-        VStack(spacing: 20) {
-            Image(systemName: "folder.circle")
-                .font(.system(size: 60))
-                .foregroundColor(.secondary)
-            
-            Text("No Project Selected")
-                .font(.headline)
-                .foregroundColor(.secondary)
-            
-            Text("Select a project to view and manage tasks")
-                .multilineTextAlignment(.center)
-                .foregroundColor(.secondary)
-                .padding(.horizontal)
-        }
-        .padding()
+        ProjectSelectionRequiredView(
+            title: "Select a Project",
+            message: "Choose a project before viewing or managing tasks."
+        )
     }
     
     private var emptyTasksView: some View {

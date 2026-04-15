@@ -9,6 +9,11 @@ import Foundation
 import SwiftUI
 import CloudKit
 import Combine
+import OSLog
+
+extension Logger {
+    static let project = Logger(subsystem: "com.RheirHome.RHEIR", category: "project")
+}
 
 @MainActor
 class ProjectViewModel: ObservableObject {
@@ -21,6 +26,7 @@ class ProjectViewModel: ObservableObject {
     @Published var currentOrganizationRole: TeamMemberRole?
     @Published var isBulkSyncing = false
     @Published var bulkSyncProgress: Double = 0.0
+    @Published var intelligenceSnapshotVersion = UUID()
     
     // PHASE 2A: Add missing properties for LandingPageView compatibility
     @Published var navigateToBudgetBreakdown: Bool = false
@@ -55,6 +61,12 @@ class ProjectViewModel: ObservableObject {
     
     // Services - Only keep the ones that exist
     private let offlineDataManager: OfflineDataManager
+    private let projectStore: ProjectStore
+    private let projectRepository: ProjectRepository
+    let receiptIntelligenceStore: ReceiptIntelligenceStore
+    let receiptProjectStore: ReceiptProjectStore
+    let laborStore: LaborStore
+    let teamMemberStore: TeamMemberStore
     
     // Timers
     private var savingTimer: Timer?
@@ -66,7 +78,13 @@ class ProjectViewModel: ObservableObject {
     private let updateDebounceInterval: TimeInterval = 0.1 // 100ms debounce
     
     init(
-        offlineDataManager: OfflineDataManager
+        offlineDataManager: OfflineDataManager,
+        projectStore: ProjectStore = ProjectStore(),
+        projectRepository: ProjectRepository = CloudKitProjectRepository(),
+        receiptIntelligenceStore: ReceiptIntelligenceStore = ReceiptIntelligenceStore(),
+        receiptProjectStore: ReceiptProjectStore = ReceiptProjectStore(),
+        laborStore: LaborStore = LaborStore(),
+        teamMemberStore: TeamMemberStore = TeamMemberStore()
         // TODO: Re-add service dependencies in Phase 2
         // cloudKitService: CloudKitService,
         // sharingService: SimpleCloudKitSharingService,
@@ -77,9 +95,12 @@ class ProjectViewModel: ObservableObject {
         // organizationKnowledgeService: OrganizationKnowledgeService
     ) {
         self.offlineDataManager = offlineDataManager
-        
-        // CRITICAL: Set default organization ID for Phase 1
-        self.currentOrganizationID = "RHEIR-DEFAULT-ORG"
+        self.projectStore = projectStore
+        self.projectRepository = projectRepository
+        self.receiptIntelligenceStore = receiptIntelligenceStore
+        self.receiptProjectStore = receiptProjectStore
+        self.laborStore = laborStore
+        self.teamMemberStore = teamMemberStore
         
         // TODO: Re-add service assignments in Phase 2
         // self.cloudKitService = cloudKitService
@@ -91,76 +112,56 @@ class ProjectViewModel: ObservableObject {
         // self.organizationKnowledgeService = organizationKnowledgeService
         
         setupDataObservation()
-        
-        print(" ProjectViewModel initialized with organization ID: \(currentOrganizationID ?? "none")")
+
+        Logger.project.info("Project view model initialized.")
     }
     
     // MARK: - PHASE 1 STUB METHODS - TODO: Implement in Phase 2
     
     func addTeamMemberToOrganization(_ teamMember: TeamMember) {
-        print(" ADD TEAM MEMBER: Adding team member to organization...")
-        print("   Name: \(teamMember.name)")
-        print("   Role: \(teamMember.role.displayName)")
-        print("   Organization: \(teamMember.organizationID.prefix(8))...")
-        print("   App User ID: \(teamMember.appUserID ?? "none")")
-        
-        // CRITICAL: Check for duplicates before adding
-        let existingMember = teamMembers.firstIndex { existing in
-            // Check by app user ID and organization ID for app users
-            if let existingAppUserID = existing.appUserID,
-               let newAppUserID = teamMember.appUserID,
-               existing.organizationID == teamMember.organizationID {
-                return existingAppUserID == newAppUserID
-            }
-            
-            // Check by name and organization for non-app users (fallback)
-            return existing.name == teamMember.name && 
-                   existing.organizationID == teamMember.organizationID
-        }
-        
-        if let existingIndex = existingMember {
-            print(" DUPLICATE PREVENTION: Team member already exists at index \(existingIndex)")
-            print("   Existing: \(teamMembers[existingIndex].name) (\(teamMembers[existingIndex].role.displayName))")
-            print("   Attempted: \(teamMember.name) (\(teamMember.role.displayName))")
-            
-            // Update existing member if new one has more complete data
-            if teamMember.rates.count > teamMembers[existingIndex].rates.count ||
-               !teamMember.email.isEmpty && teamMembers[existingIndex].email.isEmpty {
-                print(" UPDATING: Existing member with more complete data")
-                teamMembers[existingIndex] = teamMember
-                updateTeamMemberCaches()
-            }
+        let result = teamMemberStore.upsert(teamMember, into: teamMembers)
+
+        guard result.action != .ignoredDuplicate else {
+            Logger.teamMember.info(
+                "Ignored duplicate team member add [org=\(teamMember.organizationID, privacy: .private(mask: .hash)) role=\(teamMember.role.displayName, privacy: .public)]"
+            )
             return
         }
-        
-        // Add new team member
-        teamMembers.append(teamMember)
+
+        teamMembers = result.members
         updateTeamMemberCaches()
-        
-        // Save to CloudKit if this is organization data
+        saveOrganizationSpecificBackup()
+
+        Logger.teamMember.notice(
+            "Updated team member directory [action=\(result.action.logLabel, privacy: .public) org=\(teamMember.organizationID, privacy: .private(mask: .hash)) rates=\(teamMember.rates.count, privacy: .public)]"
+        )
+
         if isUsingCloudKitForOrganizationData {
             Task {
                 do {
                     try await saveTeamMemberToCloudKit(teamMember)
-                    print(" CLOUDKIT: Team member saved to CloudKit")
+                    Logger.teamMember.info(
+                        "Synced team member to CloudKit [org=\(teamMember.organizationID, privacy: .private(mask: .hash))]"
+                    )
                 } catch {
-                    print(" CLOUDKIT: Failed to save team member: \(error)")
+                    Logger.teamMember.error(
+                        "Failed to sync team member to CloudKit: \(error.localizedDescription, privacy: .public)"
+                    )
                 }
             }
         }
-        
-        // Also persist locally
+
         Task {
-            await addTeamMember(teamMember)
+            if result.action == .inserted {
+                await addTeamMember(teamMember)
+            } else {
+                await updateTeamMember(teamMember)
+            }
         }
-        
-        print(" ADD TEAM MEMBER: Successfully added \(teamMember.name) to organization")
-        print("   Total team members: \(teamMembers.count)")
-        print("   Organization team members: \(teamMembers.filter { $0.organizationID == teamMember.organizationID }.count)");
     }
     
     /// Save team member to CloudKit using proper schema
-    private func saveTeamMemberToCloudKit(_ teamMember: TeamMember) async throws {
+    func saveTeamMemberToCloudKit(_ teamMember: TeamMember) async throws {
         let container = CKContainer(identifier: "iCloud.com.rheirhome.rheirhomeappV3")
         let privateDatabase = container.privateCloudDatabase
         
@@ -205,11 +206,13 @@ class ProjectViewModel: ObservableObject {
         }
         
         _ = try await privateDatabase.save(record)
-        print(" CLOUDKIT SCHEMA: TeamMember saved with proper field mapping")
+        Logger.teamMember.debug(
+            "Saved team member with CloudKit schema mapping [org=\(teamMember.organizationID, privacy: .private(mask: .hash))]"
+        )
     }
     
     func markProjectAsCompleted(_ project: Project) {
-        print(" PROJECT COMPLETION: Marking project as completed: \(project.name)")
+        Logger.project.notice("Marking project as completed.")
         
         var updatedProject = project
         updatedProject.status = .completed
@@ -229,12 +232,12 @@ class ProjectViewModel: ObservableObject {
         
         Task {
             await updateProject(updatedProject)
-            print(" PROJECT COMPLETION: Project '\(project.name)' marked as completed successfully")
+            Logger.project.notice("Completed project status update.")
         }
     }
     
     func syncAllProjectsToCloudKit(completion: @escaping (Bool, String) -> Void) {
-        print(" CLOUDKIT SYNC: Starting sync of all projects to CloudKit...")
+        Logger.project.info("Starting CloudKit sync for all projects.")
         
         Task {
             let success = await saveAllProjectsToCloudKit()
@@ -243,10 +246,10 @@ class ProjectViewModel: ObservableObject {
     }
     
     func organizationDidChange() async {
-        print(" ORGANIZATION CHANGED: Starting organization data synchronization...")
+        Logger.project.info("Starting organization data synchronization.")
         
         guard let currentOrgID = currentOrganizationID else {
-            print(" ORGANIZATION CHANGED: No organization ID - clearing data")
+            Logger.project.notice("No organization selected; clearing organization-scoped state.")
             await MainActor.run {
                 organizationProjects = []
                 accessibleProjects = []
@@ -256,7 +259,9 @@ class ProjectViewModel: ObservableObject {
             return
         }
         
-        print(" ORGANIZATION CHANGED: Switching to organization: \(currentOrgID.prefix(8))...")
+        Logger.project.notice(
+            "Switching active organization [org=\(currentOrgID, privacy: .private(mask: .hash))]"
+        )
         
         // Step 1: Clear old organization data
         await MainActor.run {
@@ -287,26 +292,33 @@ class ProjectViewModel: ObservableObject {
             await MainActor.run {
                 mergeCloudKitProjects(cloudKitProjects)
             }
-            print(" CLOUDKIT LOAD: Loaded \(cloudKitProjects.count) projects from CloudKit")
+            Logger.project.info(
+                "Loaded CloudKit projects during organization switch [count=\(cloudKitProjects.count, privacy: .public)]"
+            )
         } catch {
-            print(" CLOUDKIT LOAD: CloudKit load failed, using local data: \(error)")
+            Logger.project.error(
+                "CloudKit load failed during organization switch: \(error.localizedDescription, privacy: .public)"
+            )
         }
         
-        print(" ORGANIZATION CHANGED: Successfully switched to organization \(currentOrgID.prefix(8))...")
-        print("   Organization projects: \(organizationProjects.count)")
-        print("   Team members: \(teamMembers.count)")
-        print("   CloudKit enabled: \(isUsingCloudKitForOrganizationData)")
+        Logger.project.notice(
+            "Completed organization switch [org=\(currentOrgID, privacy: .private(mask: .hash)) projects=\(self.organizationProjects.count, privacy: .public) teamMembers=\(self.teamMembers.count, privacy: .public) cloudKit=\(self.isUsingCloudKitForOrganizationData, privacy: .public)]"
+        )
     }
     
     /// Load team members for a specific organization
     private func loadOrganizationTeamMembers(organizationID: String) async {
-        let teamMembersKey = "team_members_\(organizationID)"
-        print(" TEAM LOAD: Loading team members from key: \(teamMembersKey)")
-        
-        guard let data = UserDefaults.standard.data(forKey: teamMembersKey),
-              let members = try? JSONDecoder().decode([TeamMember].self, from: data) else {
-            print(" TEAM LOAD: No team member data found for organization: \(organizationID.prefix(8))...")
-            
+        Logger.teamMember.info(
+            "Loading organization team members [org=\(organizationID, privacy: .private(mask: .hash))]"
+        )
+
+        let members = projectStore.loadTeamMembers(for: organizationID)
+
+        guard !members.isEmpty else {
+            Logger.teamMember.notice(
+                "No stored team members found for organization [org=\(organizationID, privacy: .private(mask: .hash))]"
+            )
+
             await MainActor.run {
                 self.teamMembers = []
                 self.updateTeamMemberCaches()
@@ -315,26 +327,20 @@ class ProjectViewModel: ObservableObject {
         }
         
         await MainActor.run {
-            // Verify all team members belong to this organization
-            let verifiedMembers = members.filter { member in
-                member.organizationID == organizationID
-            }
-            
-            if verifiedMembers.count != members.count {
-                print(" SECURITY: Filtered out \(members.count - verifiedMembers.count) team members that didn't belong to organization \(organizationID.prefix(8))...")
-            }
-            
-            self.teamMembers = verifiedMembers
+            let verification = self.teamMemberStore.verify(members, for: organizationID)
+            self.teamMembers = verification.members
             self.updateTeamMemberCaches()
-            print(" TEAM LOAD: Loaded \(verifiedMembers.count) verified team members for organization \(organizationID.prefix(8))...")
+            Logger.teamMember.notice(
+                "Loaded verified team members [org=\(organizationID, privacy: .private(mask: .hash)) count=\(verification.members.count, privacy: .public) filtered=\(verification.filteredCount, privacy: .public)]"
+            )
         }
     }
     
     func emergencyRecoverFromBackup() async -> Bool {
-        print(" EMERGENCY RECOVERY: Starting comprehensive data recovery process...")
+        Logger.project.notice("Starting emergency recovery flow.")
         
         guard let currentOrgID = currentOrganizationID else {
-            print(" EMERGENCY RECOVERY: No organization ID - cannot perform recovery")
+            Logger.project.error("Cannot run emergency recovery without an active organization.")
             return false
         }
         
@@ -342,49 +348,54 @@ class ProjectViewModel: ObservableObject {
         var recoveredTeamMembers: [TeamMember] = []
         var recoverySuccess = false
         
-        // Step 1: Try to recover from organization-specific UserDefaults
-        print(" EMERGENCY RECOVERY: Step 1 - Checking organization-specific UserDefaults...")
-        let projectsKey = "projects_\(currentOrgID)"
-        let teamMembersKey = "team_members_\(currentOrgID)"
-        
-        if let projectData = UserDefaults.standard.data(forKey: projectsKey),
-           let projects = try? JSONDecoder().decode([Project].self, from: projectData) {
-            recoveredProjects.append(contentsOf: projects)
-            print(" EMERGENCY RECOVERY: Recovered \(projects.count) projects from UserDefaults")
+        Logger.project.info("Emergency recovery: checking organization-scoped local store.")
+        let locallyStoredProjects = projectStore.loadProjects(for: currentOrgID)
+        let locallyStoredTeamMembers = projectStore.loadTeamMembers(for: currentOrgID)
+
+        if !locallyStoredProjects.isEmpty {
+            recoveredProjects.append(contentsOf: locallyStoredProjects)
+            Logger.project.info(
+                "Recovered projects from local store [count=\(locallyStoredProjects.count, privacy: .public)]"
+            )
+            recoverySuccess = true
+        }
+
+        if !locallyStoredTeamMembers.isEmpty {
+            recoveredTeamMembers.append(contentsOf: locallyStoredTeamMembers)
+            Logger.teamMember.info(
+                "Recovered team members from local store [count=\(locallyStoredTeamMembers.count, privacy: .public)]"
+            )
             recoverySuccess = true
         }
         
-        if let teamMemberData = UserDefaults.standard.data(forKey: teamMembersKey),
-           let teamMembers = try? JSONDecoder().decode([TeamMember].self, from: teamMemberData) {
-            recoveredTeamMembers.append(contentsOf: teamMembers)
-            print(" EMERGENCY RECOVERY: Recovered \(teamMembers.count) team members from UserDefaults")
-            recoverySuccess = true
-        }
-        
-        // Step 2: Try to recover from CloudKit if UserDefaults failed
         if recoveredProjects.isEmpty && isUsingCloudKitForOrganizationData {
-            print(" EMERGENCY RECOVERY: Step 2 - Attempting CloudKit recovery...")
+            Logger.project.info("Emergency recovery: attempting CloudKit project restore.")
             
             do {
                 let cloudKitProjects = try await loadProjectsFromCloudKit()
                 recoveredProjects.append(contentsOf: cloudKitProjects)
-                print(" EMERGENCY RECOVERY: Recovered \(cloudKitProjects.count) projects from CloudKit")
+                Logger.project.info(
+                    "Recovered projects from CloudKit [count=\(cloudKitProjects.count, privacy: .public)]"
+                )
                 recoverySuccess = true
             } catch {
-                print(" EMERGENCY RECOVERY: CloudKit recovery failed: \(error)")
+                Logger.project.error(
+                    "CloudKit recovery failed: \(error.localizedDescription, privacy: .public)"
+                )
             }
         }
         
-        // Step 3: Try to recover from OfflineDataManager as last resort
         if recoveredProjects.isEmpty {
-            print(" EMERGENCY RECOVERY: Step 3 - Attempting OfflineDataManager recovery...")
+            Logger.project.info("Emergency recovery: attempting offline fallback restore.")
             
             let offlineProjects = offlineDataManager.loadProjectsOffline()
             let orgSpecificProjects = offlineProjects.filter { $0.organizationID == currentOrgID }
             
             if !orgSpecificProjects.isEmpty {
                 recoveredProjects.append(contentsOf: orgSpecificProjects)
-                print(" EMERGENCY RECOVERY: Recovered \(orgSpecificProjects.count) projects from OfflineDataManager")
+                Logger.project.info(
+                    "Recovered projects from offline fallback [count=\(orgSpecificProjects.count, privacy: .public)]"
+                )
                 recoverySuccess = true
             }
             
@@ -393,17 +404,17 @@ class ProjectViewModel: ObservableObject {
             
             if !orgSpecificTeamMembers.isEmpty {
                 recoveredTeamMembers.append(contentsOf: orgSpecificTeamMembers)
-                print(" EMERGENCY RECOVERY: Recovered \(orgSpecificTeamMembers.count) team members from OfflineDataManager")
+                Logger.teamMember.info(
+                    "Recovered team members from offline fallback [count=\(orgSpecificTeamMembers.count, privacy: .public)]"
+                )
                 recoverySuccess = true
             }
         }
         
-        // Step 4: Apply recovered data if we found anything
         if recoverySuccess {
             await MainActor.run {
-                print(" EMERGENCY RECOVERY: Step 4 - Applying recovered data...")
-                
-                // Remove duplicates from recovered projects
+                Logger.project.info("Applying recovered project and team-member state.")
+
                 var uniqueProjects: [Project] = []
                 var seenProjectIDs: Set<UUID> = []
                 
@@ -423,51 +434,33 @@ class ProjectViewModel: ObservableObject {
                 }
                 
                 organizationProjects = mergedProjects
-                
-                // Remove duplicates from recovered team members
-                var uniqueTeamMembers: [TeamMember] = []
-                var seenMemberIDs: Set<UUID> = []
-                
-                for member in recoveredTeamMembers {
-                    if !seenMemberIDs.contains(member.id) {
-                        uniqueTeamMembers.append(member)
-                        seenMemberIDs.insert(member.id)
-                    }
-                }
-                
-                // Merge with existing team members (recovered takes precedence)
-                var mergedTeamMembers = uniqueTeamMembers
-                for existingMember in teamMembers {
-                    if !seenMemberIDs.contains(existingMember.id) {
-                        mergedTeamMembers.append(existingMember)
-                    }
-                }
-                
-                teamMembers = mergedTeamMembers
+
+                teamMembers = self.teamMemberStore.mergeRecovered(recoveredTeamMembers, with: teamMembers)
                 updateTeamMemberCaches()
                 updateOrganizationProjects()
-                
-                print(" EMERGENCY RECOVERY: Applied recovered data:")
-                print("   Projects: \(organizationProjects.count)")
-                print("   Team Members: \(teamMembers.count)")
+
+                Logger.project.notice(
+                    "Applied recovered state [projects=\(self.organizationProjects.count, privacy: .public) teamMembers=\(self.teamMembers.count, privacy: .public)]"
+                )
             }
             
-            // Step 5: Create new backup with recovered data
             saveOrganizationSpecificBackup()
             
-            // Step 6: Save to CloudKit for future recovery
             if isUsingCloudKitForOrganizationData {
                 let saveSuccess = await saveAllProjectsToCloudKit()
                 await saveTeamMembersToCloudKit()
-                print(" EMERGENCY RECOVERY: CloudKit backup \(saveSuccess ? "succeeded" : "failed")")
+                Logger.project.notice(
+                    "Emergency recovery CloudKit backup completed [success=\(saveSuccess, privacy: .public)]"
+                )
             }
             
-            print(" EMERGENCY RECOVERY: Recovery completed successfully!")
-            print("   Recovered \(recoveredProjects.count) projects and \(recoveredTeamMembers.count) team members")
+            Logger.project.notice(
+                "Emergency recovery completed [projects=\(recoveredProjects.count, privacy: .public) teamMembers=\(recoveredTeamMembers.count, privacy: .public)]"
+            )
             
             return true
         } else {
-            print(" EMERGENCY RECOVERY: No data could be recovered from any source")
+            Logger.project.error("Emergency recovery could not restore any data.")
             return false
         }
     }
@@ -477,7 +470,7 @@ class ProjectViewModel: ObservableObject {
     }
     
     func invalidateReceiptCache() {
-        print(" CACHE INVALIDATION: Clearing receipt cache for organization data refresh")
+        Logger.project.info("Invalidating receipt intelligence caches.")
         
         // Clear internal caches
         receiptVendorCache.removeAll()
@@ -485,24 +478,20 @@ class ProjectViewModel: ObservableObject {
         
         // Clear team member caches as they might affect receipt processing
         updateTeamMemberCaches()
-        
-        // Force UI update to refresh any receipt-dependent views
-        objectWillChange.send()
-        
-        print(" CACHE INVALIDATION: Receipt cache cleared successfully")
+
+        Logger.project.debug("Receipt intelligence caches cleared.")
     }
     
     func recomputeFilteredReceipts() {
-        print(" RECEIPT FILTERING: Starting comprehensive receipt recomputation...")
+        Logger.receiptWorkflow.info("Starting receipt cache recomputation.")
         
         guard let currentOrgID = currentOrganizationID else {
-            print(" RECEIPT FILTERING: No organization selected - clearing caches")
             receiptVendorCache.removeAll()
             receiptPaymentMethodCache.removeAll()
+            Logger.receiptWorkflow.warning("Cleared receipt caches because no organization is active.")
             return
         }
         
-        // Clear existing caches
         receiptVendorCache.removeAll()
         receiptPaymentMethodCache.removeAll()
         
@@ -512,19 +501,16 @@ class ProjectViewModel: ObservableObject {
         var vendorCacheHits = 0
         var paymentMethodCacheHits = 0
         
-        // Process all receipts in organization projects
         for project in organizationProjects {
             totalReceipts += project.receipts.count
             
             for receipt in project.receipts {
                 processedReceipts += 1
                 
-                // Cache vendor information for quick lookup
                 let vendor = vendorService.findOrCreateVendor(name: receipt.vendor)
                 receiptVendorCache[receipt.vendor] = vendor
                 vendorCacheHits += 1
                 
-                // Cache payment method information for quick lookup
                 let paymentMethod = paymentMethodService.findOrCreatePaymentMethod(name: receipt.paymentMethod)
                 receiptPaymentMethodCache[receipt.paymentMethod] = paymentMethod
                 paymentMethodCacheHits += 1
@@ -532,36 +518,25 @@ class ProjectViewModel: ObservableObject {
         }
         
         let processingTime = Date().timeIntervalSince(startTime)
-        
-        print(" RECEIPT FILTERING: Recomputation completed successfully")
-        print("   Organization: \(currentOrgID.prefix(8))...")
-        print("   Projects processed: \(organizationProjects.count)")
-        print("   Total receipts: \(totalReceipts)")
-        print("   Processed receipts: \(processedReceipts)")
-        print("   Vendor cache entries: \(receiptVendorCache.count)")
-        print("   Payment method cache entries: \(receiptPaymentMethodCache.count)")
-        print("   Processing time: \(String(format: "%.3f", processingTime))s")
-        
-        // Trigger UI update if significant changes
-        if processedReceipts > 0 {
-            objectWillChange.send()
-            print(" RECEIPT FILTERING: UI refresh triggered for \(processedReceipts) receipt updates")
-        }
+
+        Logger.receiptWorkflow.notice(
+            "Completed receipt cache recomputation [org=\(currentOrgID, privacy: .private(mask: .hash)) projects=\(self.organizationProjects.count, privacy: .public) receipts=\(totalReceipts, privacy: .public) processed=\(processedReceipts, privacy: .public) vendorEntries=\(self.receiptVendorCache.count, privacy: .public) paymentEntries=\(self.receiptPaymentMethodCache.count, privacy: .public) vendorLookups=\(vendorCacheHits, privacy: .public) paymentLookups=\(paymentMethodCacheHits, privacy: .public) duration=\(String(format: "%.3f", processingTime), privacy: .public)s]"
+        )
     }
     
     func debouncedSaveProjects() {
-        print(" DEBOUNCED SAVE: Initiating smart project save operation...")
+        Logger.project.debug("Scheduling debounced project save.")
         
         // Cancel any existing timer to prevent duplicate saves
         savingTimer?.invalidate()
         
-        guard let currentOrgID = currentOrganizationID else {
-            print(" DEBOUNCED SAVE: No organization selected - skipping save")
+        guard currentOrganizationID != nil else {
+            Logger.project.warning("Skipped debounced save because no organization is selected.")
             return
         }
         
         guard !organizationProjects.isEmpty else {
-            print(" DEBOUNCED SAVE: No projects to save")
+            Logger.project.debug("Skipped debounced save because there are no organization projects.")
             return
         }
         
@@ -574,27 +549,27 @@ class ProjectViewModel: ObservableObject {
             }
         }
         
-        print(" DEBOUNCED SAVE: Save operation scheduled with 500ms debounce")
+        Logger.project.debug("Debounced save scheduled.")
     }
     
     /// Perform the actual batched save operation
     private func performBatchedProjectSave() async {
         guard let currentOrgID = currentOrganizationID else {
-            print(" BATCHED SAVE: No organization ID - aborting save")
+            Logger.project.error("Cannot perform batched save without an organization.")
             return
         }
         
         guard !isBulkSyncing else {
-            print(" BATCHED SAVE: Bulk sync already in progress - skipping")
+            Logger.project.warning("Skipped batched save because bulk sync is already in progress.")
             return
         }
         
         let startTime = Date()
         let projectsToSave = organizationProjects
         
-        print(" BATCHED SAVE: Starting comprehensive save operation...")
-        print("   Organization: \(currentOrgID.prefix(8))...")
-        print("   Projects to save: \(projectsToSave.count)")
+        Logger.project.notice(
+            "Starting batched project save [org=\(currentOrgID, privacy: .private(mask: .hash)) projects=\(projectsToSave.count, privacy: .public)]"
+        )
         
         // Step 1: Save to local organization-specific storage
         saveOrganizationSpecificBackup()
@@ -616,7 +591,9 @@ class ProjectViewModel: ObservableObject {
         // Step 3: Save to CloudKit if enabled (with error handling)
         var cloudKitSuccess = false
         if isUsingCloudKitForOrganizationData {
-            print(" BATCHED SAVE: Syncing \(projectsToSave.count) projects to CloudKit...")
+            Logger.project.info(
+                "Syncing projects to CloudKit during batched save [count=\(projectsToSave.count, privacy: .public)]"
+            )
             cloudKitSuccess = await saveAllProjectsToCloudKit()
         }
         
@@ -624,35 +601,22 @@ class ProjectViewModel: ObservableObject {
         if !teamMembers.isEmpty {
             let teamMembersToSave = teamMembers.filter { $0.organizationID == currentOrgID }
             if !teamMembersToSave.isEmpty {
-                let teamMembersKey = "team_members_\(currentOrgID)"
-                if let teamMembersData = try? JSONEncoder().encode(teamMembersToSave) {
-                    UserDefaults.standard.set(teamMembersData, forKey: teamMembersKey)
-                    print(" BATCHED SAVE: Saved \(teamMembersToSave.count) team members")
-                }
+                projectStore.saveTeamMembers(teamMembersToSave, for: currentOrgID)
+                Logger.teamMember.info(
+                    "Saved team members during batched save [org=\(currentOrgID, privacy: .private(mask: .hash)) count=\(teamMembersToSave.count, privacy: .public)]"
+                )
                 
-                // Save team members to CloudKit if enabled
                 if isUsingCloudKitForOrganizationData {
                     await saveTeamMembersToCloudKit()
                 }
             }
         }
         
-        // Step 5: Force UserDefaults synchronization
-        UserDefaults.standard.synchronize()
-        
         let saveTime = Date().timeIntervalSince(startTime)
         
-        print(" BATCHED SAVE: Save operation completed successfully")
-        print("   Projects saved locally: \(projectsToSave.count)")
-        print("   CloudKit sync: \(cloudKitSuccess ? "SUCCESS" : "FAILED/DISABLED")")
-        print("   Team members updated: \(teamMembers.filter { $0.organizationID == currentOrgID }.count)")
-        print("   Total save time: \(String(format: "%.3f", saveTime))s")
-        print("   Organization: \(currentOrgID.prefix(8))...")
-        
-        // Trigger final UI update to reflect save state
-        await MainActor.run {
-            objectWillChange.send()
-        }
+        Logger.project.notice(
+            "Completed batched project save [org=\(currentOrgID, privacy: .private(mask: .hash)) projects=\(projectsToSave.count, privacy: .public) cloudKit=\(cloudKitSuccess, privacy: .public) teamMembers=\(self.teamMembers.filter { $0.organizationID == currentOrgID }.count, privacy: .public) duration=\(String(format: "%.3f", saveTime), privacy: .public)s]"
+        )
         
         // Clean up timer
         savingTimer?.invalidate()
@@ -662,7 +626,7 @@ class ProjectViewModel: ObservableObject {
     // MARK: - Data Initialization
     
     func loadProjects() async {
-        print(" loadProjects - Loading projects from organization-specific storage")
+        Logger.project.info("Loading projects from organization-scoped storage.")
         isDataLoading = true
         
         if let orgID = currentOrganizationID {
@@ -673,15 +637,17 @@ class ProjectViewModel: ObservableObject {
             do {
                 let cloudKitProjects = try await loadProjectsFromCloudKit()
                 await MainActor.run {
-                    // Merge CloudKit projects with local projects (CloudKit takes precedence)
                     mergeCloudKitProjects(cloudKitProjects)
                 }
-                print(" CLOUDKIT LOAD: Loaded \(cloudKitProjects.count) projects from CloudKit")
+                Logger.project.info(
+                    "Loaded CloudKit projects during refresh [count=\(cloudKitProjects.count, privacy: .public)]"
+                )
             } catch {
-                print(" CLOUDKIT LOAD: Failed to load from CloudKit, using local data: \(error)")
+                Logger.project.error(
+                    "CloudKit project load failed; using local data: \(error.localizedDescription, privacy: .public)"
+                )
             }
         } else {
-            // Load projects using OfflineDataManager as fallback
             let loadedProjects = offlineDataManager.loadProjectsOffline()
             
             await MainActor.run {
@@ -694,7 +660,9 @@ class ProjectViewModel: ObservableObject {
             isDataLoading = false
         }
         
-        print(" loadProjects - Loaded \(organizationProjects.count) projects")
+        Logger.project.notice(
+            "Completed project load [projects=\(self.organizationProjects.count, privacy: .public)]"
+        )
     }
     
     /// Load projects from CloudKit using simple CloudKit approach
@@ -702,53 +670,11 @@ class ProjectViewModel: ObservableObject {
         guard let currentOrganizationID = currentOrganizationID else {
             return []
         }
-        
-        let container = CKContainer(identifier: "iCloud.com.rheirhome.rheirhomeappV3")
-        let privateDatabase = container.privateCloudDatabase
-        
-        // Query for projects belonging to this organization
-        let predicate = NSPredicate(format: "organizationID == %@", currentOrganizationID)
-        let query = CKQuery(recordType: "Project", predicate: predicate)
-        
-        let result = try await privateDatabase.records(matching: query)
-        
-        let projects = result.matchResults.compactMap { (_, result) -> Project? in
-            switch result {
-            case .success(let record):
-                // Try to decode from full project data first
-                if let projectData = record["fullProjectData"] as? Data,
-                   let project = try? JSONDecoder().decode(Project.self, from: projectData) {
-                    return project
-                }
-                
-                // Fallback: construct from individual fields
-                guard let name = record["name"] as? String,
-                      let client = record["client"] as? String,
-                      let totalBudget = record["totalBudget"] as? Double,
-                      let startDate = record["startDate"] as? Date,
-                      let endDate = record["endDate"] as? Date else {
-                    return nil
-                }
-                
-                return Project(
-                    name: name,
-                    client: client,
-                    totalBudget: totalBudget,
-                    materialCost: 0,
-                    laborCost: 0,
-                    generalConditions: 0,
-                    contingency: 0,
-                    startDate: startDate,
-                    endDate: endDate,
-                    organizationID: currentOrganizationID
-                )
-            case .failure(let error):
-                print(" Failed to fetch project: \(error)")
-                return nil
-            }
-        }
-        
-        print(" CLOUDKIT LOAD: Loaded \(projects.count) projects from CloudKit (fixed query)")
+
+        let projects = try await projectRepository.fetchProjects(for: currentOrganizationID)
+        Logger.project.debug(
+            "Fetched projects from CloudKit [org=\(currentOrganizationID, privacy: .private(mask: .hash)) count=\(projects.count, privacy: .public)]"
+        )
         return projects
     }
     
@@ -772,8 +698,10 @@ class ProjectViewModel: ObservableObject {
         
         organizationProjects = mergedProjects
         updateOrganizationProjects()
-        
-        print(" MERGE: Merged \(cloudKitProjects.count) CloudKit + \(organizationProjects.count - cloudKitProjects.count) local projects")
+
+        Logger.project.debug(
+            "Merged CloudKit and local projects [cloudKit=\(cloudKitProjects.count, privacy: .public) localFallback=\(self.organizationProjects.count - cloudKitProjects.count, privacy: .public)]"
+        )
     }
     
     /// Simple CloudKit persistence using standard CloudKit APIs
@@ -781,36 +709,17 @@ class ProjectViewModel: ObservableObject {
         guard let currentOrganizationID = currentOrganizationID else {
             throw NSError(domain: "RHEIR", code: -1, userInfo: [NSLocalizedDescriptionKey: "No organization ID"])
         }
-        
-        let container = CKContainer(identifier: "iCloud.com.rheirhome.rheirhomeappV3")
-        let privateDatabase = container.privateCloudDatabase
-        
-        // Create record with organization-specific ID
-        let recordID = CKRecord.ID(recordName: "project_\(project.id.uuidString)")
-        let record = CKRecord(recordType: "Project", recordID: recordID)
-        
-        // Set project data
-        record["name"] = project.name as CKRecordValue
-        record["client"] = project.client as CKRecordValue
-        record["totalBudget"] = project.totalBudget as CKRecordValue
-        record["startDate"] = project.startDate as CKRecordValue
-        record["endDate"] = project.endDate as CKRecordValue
-        record["status"] = project.status.rawValue as CKRecordValue
-        record["organizationID"] = currentOrganizationID as CKRecordValue
-        
-        // Store complete project data as JSON for full data integrity
-        if let projectData = try? JSONEncoder().encode(project) {
-            record["fullProjectData"] = projectData as CKRecordValue
-        }
-        
-        _ = try await privateDatabase.save(record)
-        print(" SIMPLE CLOUDKIT: Project '\(project.name)' saved to CloudKit")
+
+        try await projectRepository.saveProject(project, organizationID: currentOrganizationID)
+        Logger.project.debug(
+            "Saved project to CloudKit [org=\(currentOrganizationID, privacy: .private(mask: .hash))]"
+        )
     }
     
     /// Save all projects to CloudKit for bulk sync using simple approach
     internal func saveAllProjectsToCloudKit() async -> Bool {
         guard !organizationProjects.isEmpty else {
-            print(" No projects to sync to CloudKit")
+            Logger.project.debug("Skipped CloudKit project sync because there are no organization projects.")
             return true
         }
         
@@ -820,7 +729,9 @@ class ProjectViewModel: ObservableObject {
         let projectsToSync = organizationProjects
         bulkSyncProgress = 0.0
         
-        print(" SIMPLE CLOUDKIT BULK SYNC: Starting sync of \(projectsToSync.count) projects...")
+        Logger.project.notice(
+            "Starting CloudKit bulk sync [count=\(projectsToSync.count, privacy: .public)]"
+        )
         
         var successCount = 0
         
@@ -829,14 +740,20 @@ class ProjectViewModel: ObservableObject {
                 try await saveProjectToCloudKit(project)
                 successCount += 1
                 bulkSyncProgress = Double(index + 1) / Double(projectsToSync.count)
-                print(" SIMPLE CLOUDKIT BULK SYNC: \(index + 1)/\(projectsToSync.count) - \(project.name)")
+                Logger.project.debug(
+                    "Synced project during bulk CloudKit save [index=\(index + 1, privacy: .public) total=\(projectsToSync.count, privacy: .public)]"
+                )
             } catch {
-                print(" SIMPLE CLOUDKIT BULK SYNC: Failed to sync \(project.name): \(error)")
+                Logger.project.error(
+                    "Failed project CloudKit sync: \(error.localizedDescription, privacy: .public)"
+                )
             }
         }
         
         bulkSyncProgress = 1.0
-        print(" SIMPLE CLOUDKIT BULK SYNC: Completed sync - \(successCount)/\(projectsToSync.count) projects saved")
+        Logger.project.notice(
+            "Completed CloudKit bulk sync [saved=\(successCount, privacy: .public) total=\(projectsToSync.count, privacy: .public)]"
+        )
         
         return successCount == projectsToSync.count
     }
@@ -865,29 +782,31 @@ class ProjectViewModel: ObservableObject {
     // MARK: - Organization Management
     
     func setCurrentOrganization(_ organization: Organization?, role: TeamMemberRole? = nil) {
+        let previousOrganizationID = currentOrganizationID
         self.currentOrganization = organization
         self.currentOrganizationRole = role
-        // CRITICAL FIX: Set currentOrganizationID to the REAL organization ID from CloudKit
         if let org = organization {
             self.currentOrganizationID = org.id
-            print(" CRITICAL FIX: Set currentOrganizationID to real CloudKit org ID: \(org.id.prefix(8))...")
-            
-            // PHASE 2: Enable CloudKit project persistence
+            Logger.project.notice(
+                "Set active organization [org=\(org.id, privacy: .private(mask: .hash))]"
+            )
             self.isUsingCloudKitForOrganizationData = true
-            print(" CLOUDKIT PERSISTENCE: Enabled for organization \(org.id.prefix(8))...")
         } else {
             self.currentOrganizationID = nil
             self.isUsingCloudKitForOrganizationData = false
+            Logger.project.notice("Cleared active organization.")
+        }
+
+        if previousOrganizationID != currentOrganizationID,
+           selectedProject?.organizationID != currentOrganizationID {
+            selectedProject = nil
         }
         
-        // CRITICAL FIX: Update organization projects synchronously to prevent count issues
         updateOrganizationProjects()
         
-        // Load projects for this organization using the REAL ID
         if let orgID = self.currentOrganizationID {
             Task {
                 await loadOrganizationSpecificProjects(organizationID: orgID)
-                // CRITICAL FIX: Update again after loading to ensure UI reflects correct counts
                 await MainActor.run {
                     updateOrganizationProjects()
                 }
@@ -899,36 +818,29 @@ class ProjectViewModel: ObservableObject {
         let now = Date()
         if let lastUpdate = lastUpdateTimestamp,
            now.timeIntervalSince(lastUpdate) < updateDebounceInterval {
-            print(" DEBOUNCE: Skipping redundant updateOrganizationProjects call (within \(updateDebounceInterval)s)")
+            Logger.project.debug("Skipped redundant organization project refresh because of debounce.")
             return
         }
         lastUpdateTimestamp = now
-        
-        print(" UPDATING ORGANIZATION PROJECTS (OPTIMIZED)")
-        print(" Current organization: \(currentOrganization?.name ?? "None")")
-        print(" Current organization ID: \(currentOrganizationID ?? "None")")
-        print(" Total projects: \(projects.count)")
         
         if let currentOrgID = currentOrganizationID {
             let filteredProjects = projects.filter { project in
                 let matches = project.organizationID == currentOrgID
                 if !matches {
-                    // Only log mismatches in debug mode to reduce noise
                     #if DEBUG
-                    print(" PROJECT FILTER: Excluding '\(project.name)' - OrgID: \(project.organizationID) vs Current: \(currentOrgID)")
+                    Logger.project.debug(
+                        "Excluded project during org filter [projectOrg=\(project.organizationID, privacy: .private(mask: .hash)) currentOrg=\(currentOrgID, privacy: .private(mask: .hash))]"
+                    )
                     #endif
                 }
                 return matches
             }
             
-            // CRITICAL FIX: Only update if the data has actually changed
             let previousCount = organizationProjects.count
-            
-            // CRITICAL FIX: Merge with organization-specific loaded projects to prevent duplicates
+
             var uniqueProjects: [Project] = []
             var projectIDs: Set<UUID> = []
             
-            // Add filtered projects first
             for project in filteredProjects {
                 if !projectIDs.contains(project.id) {
                     uniqueProjects.append(project)
@@ -936,75 +848,63 @@ class ProjectViewModel: ObservableObject {
                 }
             }
             
-            // Add organization projects that might not be in the main projects array
             for project in organizationProjects {
                 if !projectIDs.contains(project.id) && project.organizationID == currentOrgID {
                     uniqueProjects.append(project)
                     projectIDs.insert(project.id)
                     #if DEBUG
-                    print(" PROJECT SYNC: Added missing project from organizationProjects: \(project.name)")
+                    Logger.project.debug("Reconciled missing project from organization-scoped cache.")
                     #endif
                 }
             }
             
-            // CRITICAL FIX: Only update and trigger UI refresh if data changed
             let hasChanged = uniqueProjects.count != previousCount || 
                            !Set(uniqueProjects.map { $0.id }).isSubset(of: Set(organizationProjects.map { $0.id }))
             
             if hasChanged {
                 organizationProjects = uniqueProjects
-                print(" PROJECTS UPDATED: \(organizationProjects.count) unique projects for organization \(currentOrgID.prefix(8))... (was \(previousCount))")
+                Logger.project.notice(
+                    "Updated organization project list [org=\(currentOrgID, privacy: .private(mask: .hash)) current=\(self.organizationProjects.count, privacy: .public) previous=\(previousCount, privacy: .public)]"
+                )
                 
                 #if DEBUG
-                for (i, project) in organizationProjects.enumerated() {
-                    print("  \(i + 1): \(project.name) - ID: \(project.id)")
-                }
+                Logger.project.debug("Organization project refresh completed with debug tracing enabled.")
                 #endif
                 
-                // CRITICAL FIX: Update accessible projects after organization projects change
                 updateAccessibleProjects()
-                
-                // CRITICAL FIX: Only send UI update when data actually changed
-                objectWillChange.send()
             } else {
-                print(" PROJECTS UNCHANGED: No update needed (\(organizationProjects.count) projects)")
+                Logger.project.debug(
+                    "Organization project list unchanged [count=\(self.organizationProjects.count, privacy: .public)]"
+                )
             }
         } else {
-            // CRITICAL FIX: Only clear if not already empty
             if !organizationProjects.isEmpty || !accessibleProjects.isEmpty {
-                print(" NO ORGANIZATION: Clearing organization projects")
+                Logger.project.notice("Clearing organization-scoped projects because no organization is active.")
                 organizationProjects = []
                 accessibleProjects = []
-                objectWillChange.send()
             } else {
-                print(" NO ORGANIZATION: Already cleared")
+                Logger.project.debug("Organization-scoped project state is already clear.")
             }
         }
     }
     
     internal func updateAccessibleProjects() {
         let previousCount = accessibleProjects.count
-        
-        // CRITICAL: For Phase 1, accessible projects are the same as organization projects
-        // but ensure the array is properly synchronized
         let newAccessibleProjects = organizationProjects
         
-        // CRITICAL FIX: Only update if the data has actually changed
         let hasChanged = newAccessibleProjects.count != previousCount ||
                         !Set(newAccessibleProjects.map { $0.id }).isSubset(of: Set(accessibleProjects.map { $0.id }))
         
         if hasChanged {
             accessibleProjects = newAccessibleProjects
-            
-            print(" ACCESSIBLE PROJECTS: Updated to \(accessibleProjects.count) projects (was \(previousCount))")
-            print("   Organization projects count: \(organizationProjects.count)")
-            print("   Projects array count: \(projects.count)")
-            
-            // Verify no duplicates
+
+            Logger.project.notice(
+                "Updated accessible projects [current=\(self.accessibleProjects.count, privacy: .public) previous=\(previousCount, privacy: .public)]"
+            )
+
             let uniqueIDs = Set(accessibleProjects.map { $0.id })
             if uniqueIDs.count != accessibleProjects.count {
-                print(" DUPLICATE DETECTION: Found duplicates in accessible projects")
-                // Remove duplicates
+                Logger.project.warning("Detected duplicate accessible projects; normalizing list.")
                 var uniqueProjects: [Project] = []
                 var seenIDs: Set<UUID> = []
                 
@@ -1016,10 +916,14 @@ class ProjectViewModel: ObservableObject {
                 }
                 
                 accessibleProjects = uniqueProjects
-                print(" DUPLICATE FIX: Removed duplicates, now \(accessibleProjects.count) unique projects")
+                Logger.project.notice(
+                    "Normalized accessible project list [count=\(self.accessibleProjects.count, privacy: .public)]"
+                )
             }
         } else {
-            print(" ACCESSIBLE PROJECTS: No update needed (\(accessibleProjects.count) projects)")
+            Logger.project.debug(
+                "Accessible project list unchanged [count=\(self.accessibleProjects.count, privacy: .public)]"
+            )
         }
     }
     
@@ -1027,86 +931,81 @@ class ProjectViewModel: ObservableObject {
     
     func createNewProject(project: Project) async throws {
         guard let orgID = currentOrganizationID else {
-            print(" SECURITY: Cannot create project - no organization selected")
+            Logger.project.error("Cannot create a project without an active organization.")
             throw NSError(domain: "RHEIR", code: -1, userInfo: [NSLocalizedDescriptionKey: "No organization selected"])
         }
         
-        // CRITICAL: Ensure new project has correct organization ID
         var secureProject = project
         secureProject.organizationID = orgID
         
-        // CRITICAL FIX: Add to BOTH arrays so UI updates immediately
         await MainActor.run {
             organizationProjects.append(secureProject)
             projects.append(secureProject)
             selectedProject = secureProject
-            
-            // CRITICAL FIX: Update accessible projects after adding new project
             updateAccessibleProjects()
         }
         
-        // Save to organization-specific storage
         saveOrganizationSpecificBackup()
         
-        // CRITICAL FIX: Also save to the OfflineDataManager so projects array stays synced
         await MainActor.run {
             offlineDataManager.addProject(secureProject)
         }
         
-        // PHASE 2: Save to CloudKit for persistence across app reinstalls
         do {
             try await saveProjectToCloudKit(secureProject)
-            print(" CLOUDKIT SAVE: Project '\(secureProject.name)' saved to CloudKit")
+            Logger.project.info("Created project and saved it to CloudKit.")
         } catch {
-            print(" CLOUDKIT SAVE: Failed to save to CloudKit (local save succeeded): \(error)")
+            Logger.project.error(
+                "Created project locally but failed CloudKit save: \(error.localizedDescription, privacy: .public)"
+            )
         }
         
-        print(" Created new project for organization \(orgID.prefix(8))...: \(secureProject.name)")
+        Logger.project.notice(
+            "Created new project [org=\(orgID, privacy: .private(mask: .hash))]"
+        )
     }
     
     func addProject(_ project: Project) async {
         guard let orgID = currentOrganizationID else {
-            print(" SECURITY: Cannot add project - no organization selected")
+            Logger.project.error("Cannot add a project without an active organization.")
             return
         }
         
-        // CRITICAL: Ensure project belongs to current organization
         var secureProject = project
         secureProject.organizationID = orgID
         
-        // Add to local storage
         await MainActor.run {
             if !organizationProjects.contains(where: { $0.id == secureProject.id }) {
                 organizationProjects.append(secureProject)
             }
         }
         
-        // Save to organization-specific storage
         saveOrganizationSpecificBackup()
         
-        // PHASE 2: Save to CloudKit for persistence across app reinstalls
         do {
             try await saveProjectToCloudKit(secureProject)
-            print(" CLOUDKIT SAVE: Project '\(secureProject.name)' saved to CloudKit")
+            Logger.project.info("Added project and saved it to CloudKit.")
         } catch {
-            print(" CLOUDKIT SAVE: Failed to save to CloudKit (local save succeeded): \(error)")
+            Logger.project.error(
+                "Added project locally but failed CloudKit save: \(error.localizedDescription, privacy: .public)"
+            )
         }
         
-        print(" Added project '\(secureProject.name)' to organization: \(orgID.prefix(8))...")
+        Logger.project.notice(
+            "Added project to active organization [org=\(orgID, privacy: .private(mask: .hash))]"
+        )
     }
     
     func updateProject(_ project: Project) async {
         guard let orgID = currentOrganizationID else {
-            print(" SECURITY: Cannot update project - no organization selected")
+            Logger.project.error("Cannot update a project without an active organization.")
             return
         }
         
-        // CRITICAL: Ensure project belongs to current organization
         var secureProject = project
         secureProject.organizationID = orgID
         secureProject.lastModifiedDate = Date()
         
-        // Update in local storage
         await MainActor.run {
             if let index = organizationProjects.firstIndex(where: { $0.id == secureProject.id }) {
                 organizationProjects[index] = secureProject
@@ -1119,18 +1018,18 @@ class ProjectViewModel: ObservableObject {
             }
         }
         
-        // Save to organization-specific storage
         saveOrganizationSpecificBackup()
         
-        // PHASE 2: Save to CloudKit for persistence across app reinstalls
         do {
             try await saveProjectToCloudKit(secureProject)
-            print(" CLOUDKIT UPDATE: Project '\(secureProject.name)' updated in CloudKit")
+            Logger.project.info("Updated project and synced it to CloudKit.")
         } catch {
-            print(" CLOUDKIT UPDATE: Failed to update in CloudKit (local update succeeded): \(error)")
+            Logger.project.error(
+                "Updated project locally but failed CloudKit update: \(error.localizedDescription, privacy: .public)"
+            )
         }
         
-        print(" Updated project: \(secureProject.name)")
+        Logger.project.notice("Updated project.")
     }
     
     func deleteProject(_ project: Project) async {
@@ -1155,72 +1054,81 @@ class ProjectViewModel: ObservableObject {
     
     /// CRITICAL FIX: Actually create CloudKit zones for organizations instead of just setting flags
     func setupCloudKitZoneForOrganization(_ orgID: UUID) async {
-        print(" CLOUDKIT ZONE: Setting up zone for organization: \(orgID.uuidString.prefix(8))...")
+        Logger.project.info(
+            "Setting up CloudKit zone for organization [org=\(orgID.uuidString, privacy: .private(mask: .hash))]"
+        )
         
-        // Convert UUID to String
         let orgIDString = orgID.uuidString
         currentOrganizationID = orgIDString
         
         isUsingCloudKitForOrganizationData = true
         zoneSetupError = nil
         
-        // CRITICAL FIX: Create CloudKit zone using CloudKit container directly
-        // This avoids import issues while still creating the actual zones
         do {
             let container = CKContainer(identifier: "iCloud.com.rheirhome.rheirhomeappV3")
             let privateDatabase = container.privateCloudDatabase
             
-            // Create organization-specific zone
             let zoneName = "Org-\(orgIDString)"
             let zoneID = CKRecordZone.ID(zoneName: zoneName, ownerName: CKCurrentUserDefaultName)
             let zone = CKRecordZone(zoneID: zoneID)
             
             let savedZone = try await privateDatabase.save(zone)
-            print(" CLOUDKIT ZONE: Zone created successfully: \(savedZone.zoneID.zoneName)")
+            Logger.project.notice(
+                "Created CloudKit zone [zone=\(savedZone.zoneID.zoneName, privacy: .private(mask: .hash))]"
+            )
             
         } catch let error as CKError where error.code == .serverRecordChanged {
-            // Zone already exists, which is fine
-            print(" CLOUDKIT ZONE: Zone already exists for organization: \(orgIDString.prefix(8))...")
+            Logger.project.debug(
+                "CloudKit zone already exists [org=\(orgIDString, privacy: .private(mask: .hash))]"
+            )
         } catch {
-            print(" CLOUDKIT ZONE: Failed to create zone: \(error)")
+            Logger.project.error(
+                "Failed to create CloudKit zone: \(error.localizedDescription, privacy: .public)"
+            )
             zoneSetupError = error
-            // Don't throw - allow app to continue with local data
         }
         
-        print(" CLOUDKIT ZONE: Zone setup completed for organization: \(orgIDString.prefix(8))...")
+        Logger.project.notice(
+            "Finished CloudKit zone setup [org=\(orgIDString, privacy: .private(mask: .hash))]"
+        )
     }
     
     func setupCloudKitZoneForOrganization(_ organizationID: String) async {
-        // CRITICAL FIX: Create CloudKit zones using CloudKit container directly
-        print(" CLOUDKIT ZONE: Setting up zone for organization: \(organizationID.prefix(8))...")
+        Logger.project.info(
+            "Setting up CloudKit zone for organization [org=\(organizationID, privacy: .private(mask: .hash))]"
+        )
         
         currentOrganizationID = organizationID
         isUsingCloudKitForOrganizationData = true
         zoneSetupError = nil
         
-        // CRITICAL FIX: Create CloudKit zone using CloudKit container directly
         do {
             let container = CKContainer(identifier: "iCloud.com.rheirhome.rheirhomeappV3")
             let privateDatabase = container.privateCloudDatabase
             
-            // Create organization-specific zone
             let zoneName = "Org-\(organizationID)"
             let zoneID = CKRecordZone.ID(zoneName: zoneName, ownerName: CKCurrentUserDefaultName)
             let zone = CKRecordZone(zoneID: zoneID)
             
             let savedZone = try await privateDatabase.save(zone)
-            print(" CLOUDKIT ZONE: Zone created successfully: \(savedZone.zoneID.zoneName)")
+            Logger.project.notice(
+                "Created CloudKit zone [zone=\(savedZone.zoneID.zoneName, privacy: .private(mask: .hash))]"
+            )
             
         } catch let error as CKError where error.code == .serverRecordChanged {
-            // Zone already exists, which is fine
-            print(" CLOUDKIT ZONE: Zone already exists for organization: \(organizationID.prefix(8))...")
+            Logger.project.debug(
+                "CloudKit zone already exists [org=\(organizationID, privacy: .private(mask: .hash))]"
+            )
         } catch {
-            print(" CLOUDKIT ZONE: Failed to create zone: \(error)")
+            Logger.project.error(
+                "Failed to create CloudKit zone: \(error.localizedDescription, privacy: .public)"
+            )
             zoneSetupError = error
-            // Don't throw - allow app to continue with local data
         }
         
-        print(" CLOUDKIT ZONE: Zone setup completed for organization: \(organizationID.prefix(8))...")
+        Logger.project.notice(
+            "Finished CloudKit zone setup [org=\(organizationID, privacy: .private(mask: .hash))]"
+        )
     }
     
     // MARK: - Team Member Management
@@ -1244,13 +1152,9 @@ class ProjectViewModel: ObservableObject {
     }
     
     internal func updateTeamMemberCaches() {
-        teamMembersCache.removeAll()
-        teamMemberNameCache.removeAll()
-        
-        for member in teamMembers {
-            teamMembersCache[member.id] = member
-            teamMemberNameCache[member.name] = member
-        }
+        let caches = teamMemberStore.buildCaches(from: teamMembers)
+        teamMembersCache = caches.byID
+        teamMemberNameCache = caches.byName
     }
     
     func getTeamMember(by id: UUID) -> TeamMember? {
@@ -1348,92 +1252,62 @@ class ProjectViewModel: ObservableObject {
     // MARK: - Receipt Management
     
     func addReceipt(_ receipt: Receipt, to projectID: UUID) async {
-        print(" RECEEPT DEBUG: Looking for project ID: \(projectID)")
-        print(" RECEIPT DEBUG: Organization projects count: \(organizationProjects.count)")
-        print(" RECEIPT DEBUG: All projects count: \(projects.count)")
-        
-        // CRITICAL FIX: Check BOTH organizationProjects AND all projects to handle sync issues
-        var targetProject: Project?
-        var projectIndex: Int?
-        var isInOrganizationProjects = false
-        
-        // First, try to find in organizationProjects (preferred)
-        if let orgIndex = organizationProjects.firstIndex(where: { $0.id == projectID }) {
-            targetProject = organizationProjects[orgIndex]
-            projectIndex = orgIndex
-            isInOrganizationProjects = true
-            print(" RECEIPT DEBUG: Found project in organizationProjects at index \(orgIndex)")
-        }
-        // If not found, try all projects (fallback for sync issues)
-        else if let allIndex = projects.firstIndex(where: { $0.id == projectID }) {
-            targetProject = projects[allIndex]
-            projectIndex = allIndex
-            isInOrganizationProjects = false
-            print(" RECEIPT DEBUG: Found project in all projects (not in org projects) at index \(allIndex)")
-            print(" RECEIPT DEBUG: This indicates a data sync issue - adding to organizationProjects")
-            
-            // CRITICAL FIX: Add project to organizationProjects if it belongs to current org
-            let foundProject = projects[allIndex]
-            if let currentOrgID = currentOrganizationID, foundProject.organizationID == currentOrgID {
-                await MainActor.run {
-                    organizationProjects.append(foundProject)
-                    print(" RECEIPT DEBUG: Added project to organizationProjects to fix sync issue")
-                }
-                isInOrganizationProjects = true
-                projectIndex = organizationProjects.count - 1
-            }
-        }
-        
-        guard let project = targetProject, let index = projectIndex else { 
-            print(" RECEIPT ADD FAILED: Project not found with ID: \(projectID)")
-            print(" AVAILABLE ORGANIZATION PROJECTS:")
-            for (i, proj) in organizationProjects.enumerated() {
-                print("  \(i): \(proj.name) (ID: \(proj.id))")
-            }
-            print(" AVAILABLE ALL PROJECTS:")
-            for (i, proj) in projects.enumerated() {
-                print("  \(i): \(proj.name) (ID: \(proj.id)) - OrgID: \(proj.organizationID)")
-            }
+        Logger.receiptWorkflow.info(
+            "Adding receipt to project [project=\(projectID.uuidString, privacy: .private(mask: .hash))]"
+        )
+
+        guard let resolution = receiptProjectStore.resolveProject(
+            projectID: projectID,
+            organizationProjects: organizationProjects,
+            allProjects: projects,
+            currentOrganizationID: currentOrganizationID
+        ) else {
+            Logger.receiptWorkflow.error(
+                "Failed to resolve project for receipt add [project=\(projectID.uuidString, privacy: .private(mask: .hash)) orgProjects=\(self.organizationProjects.count, privacy: .public) allProjects=\(self.projects.count, privacy: .public)]"
+            )
             return 
         }
-        
-        print(" ADDING RECEIPT: \(receipt.vendor) - \(receipt.amount.formatAsCurrency()) to project: \(project.name)")
-        
-        var updatedProject = project
+
+        if resolution.resynchronizedFromAllProjects {
+            Logger.receiptWorkflow.notice(
+                "Resynchronized receipt target from all-projects into organization projects [project=\(projectID.uuidString, privacy: .private(mask: .hash))]"
+            )
+        }
+
+        var updatedProject = resolution.project
         updatedProject.receipts.append(receipt)
         updatedProject.lastModifiedDate = Date()
-        
-        // Update the project in the correct array
-        if isInOrganizationProjects {
-            await MainActor.run {
-                organizationProjects[index] = updatedProject
-            }
-        } else {
-            await MainActor.run {
-                projects[index] = updatedProject
-            }
-        }
-        
-        // CRITICAL: Also update the selectedProject if it matches
+
         await MainActor.run {
-            if selectedProject?.id == projectID {
-                selectedProject = updatedProject
-                print(" RECEIPT ADDED: Updated selected project with new receipt")
+            receiptProjectStore.synchronize(
+                updatedProject,
+                resolution: resolution,
+                organizationProjects: &organizationProjects,
+                allProjects: &projects
+            )
+
+            if self.selectedProject?.id == projectID {
+                self.selectedProject = updatedProject
+                Logger.receiptWorkflow.debug("Updated selected project after receipt add.")
             }
         }
-        
-        // Save to organization-specific storage
+
         saveOrganizationSpecificBackup()
-        
-        // PHASE 2: Save updated project to CloudKit for receipt persistence
+
         do {
             try await saveProjectToCloudKit(updatedProject)
-            print(" RECEIPT CLOUDKIT: Project with new receipt saved to CloudKit")
+            Logger.receiptWorkflow.info(
+                "Saved receipt-bearing project to CloudKit [storage=\(resolution.storage.logLabel, privacy: .public)]"
+            )
         } catch {
-            print(" RECEIPT CLOUDKIT: Failed to save to CloudKit (local save succeeded): \(error)")
+            Logger.receiptWorkflow.error(
+                "Failed CloudKit save after receipt add: \(error.localizedDescription, privacy: .public)"
+            )
         }
-        
-        print(" RECEIPT PERSISTENCE: Receipt added and project updated successfully")
+
+        Logger.receiptWorkflow.notice(
+            "Completed receipt add [vendor=\(receipt.vendor, privacy: .private(mask: .hash)) amount=\(receipt.amount, privacy: .public) storage=\(resolution.storage.logLabel, privacy: .public) receiptCount=\(updatedProject.receipts.count, privacy: .public)]"
+        )
     }
     
     func updateReceipt(_ receipt: Receipt, in projectID: UUID) async {
@@ -1488,20 +1362,22 @@ class ProjectViewModel: ObservableObject {
     // MARK: - Team Member Management Methods (For PHASE 2 compatibility)
     
     func saveTeamMembersToCloudKit() async {
-        print(" CLOUDKIT TEAM SYNC: Starting team members sync to CloudKit...")
+        Logger.teamMember.info("Starting team-member CloudKit sync.")
         
         guard !teamMembers.isEmpty else {
-            print(" CLOUDKIT TEAM SYNC: No team members to sync")
+            Logger.teamMember.debug("Skipped team-member CloudKit sync because there are no members.")
             return
         }
         
         guard let currentOrgID = currentOrganizationID else {
-            print(" CLOUDKIT TEAM SYNC: No organization ID")
+            Logger.teamMember.error("Cannot sync team members without an active organization.")
             return
         }
         
         let teamMembersToSync = teamMembers.filter { $0.organizationID == currentOrgID }
-        print(" CLOUDKIT TEAM SYNC: Syncing \(teamMembersToSync.count) team members for organization \(currentOrgID.prefix(8))...")
+        Logger.teamMember.notice(
+            "Syncing team members to CloudKit [org=\(currentOrgID, privacy: .private(mask: .hash)) count=\(teamMembersToSync.count, privacy: .public)]"
+        )
         
         var successCount = 0
         
@@ -1509,22 +1385,18 @@ class ProjectViewModel: ObservableObject {
             do {
                 try await saveTeamMemberToCloudKit(teamMember)
                 successCount += 1
-                print(" CLOUDKIT TEAM SYNC: Saved \(teamMember.name)")
+                Logger.teamMember.debug("Synced team member during CloudKit batch.")
             } catch {
-                print(" CLOUDKIT TEAM SYNC: Failed to save \(teamMember.name): \(error)")
+                Logger.teamMember.error(
+                    "Failed team-member CloudKit sync: \(error.localizedDescription, privacy: .public)"
+                )
             }
         }
         
-        // Also save team members to organization-specific local storage
-        let teamMembersKey = "team_members_\(currentOrgID)"
-        if let teamMembersData = try? JSONEncoder().encode(teamMembersToSync) {
-            UserDefaults.standard.set(teamMembersData, forKey: teamMembersKey)
-            print(" LOCAL SYNC: Saved \(teamMembersToSync.count) team members to key: \(teamMembersKey)")
-        }
-        
-        UserDefaults.standard.synchronize()
-        
-        print(" CLOUDKIT TEAM SYNC: Completed - \(successCount)/\(teamMembersToSync.count) team members saved")
+        projectStore.saveTeamMembers(teamMembersToSync, for: currentOrgID)
+        Logger.teamMember.notice(
+            "Completed team-member CloudKit sync [saved=\(successCount, privacy: .public) total=\(teamMembersToSync.count, privacy: .public)]"
+        )
     }
     
     // MARK: - PHASE 2A: UUID/String Organization ID Compatibility
@@ -1540,9 +1412,10 @@ class ProjectViewModel: ObservableObject {
     // MARK: - Role Management
     
     func setCurrentUserRole(_ role: OrganizationRole, forOrganization organizationID: UUID) {
-        print(" ROLE MANAGEMENT: Setting user role to \(role.displayName) for organization: \(organizationID.uuidString.prefix(8))...")
+        Logger.project.info(
+            "Setting user role [role=\(role.displayName, privacy: .public) org=\(organizationID.uuidString, privacy: .private(mask: .hash))]"
+        )
         
-        // Convert OrganizationRole to TeamMemberRole for ProjectViewModel compatibility
         let teamMemberRole: TeamMemberRole = {
             switch role {
             case .admin:
@@ -1556,33 +1429,27 @@ class ProjectViewModel: ObservableObject {
             }
         }()
         
-        // Update the current organization role
         currentOrganizationRole = teamMemberRole
         
-        // Ensure we're working with the correct organization
         let orgIDString = organizationID.uuidString
         if currentOrganizationID != orgIDString {
-            print(" ROLE SYNC WARNING: Role set for organization \(orgIDString.prefix(8))... but current org is \(currentOrganizationID?.prefix(8) ?? "none")")
+            Logger.project.warning(
+                "Role update did not match active organization [targetOrg=\(orgIDString, privacy: .private(mask: .hash)) activeOrg=\(self.currentOrganizationID ?? "none", privacy: .private(mask: .hash))]"
+            )
         }
         
-        // Update accessible projects based on new role
         updateAccessibleProjects()
         
-        print(" ROLE MANAGEMENT: User role set to \(teamMemberRole.displayName) (converted from \(role.displayName))")
-        print("   Organization: \(orgIDString.prefix(8))...")
-        print("   Current Org Role: \(currentOrganizationRole?.displayName ?? "none")")
-        
-        // Trigger UI update
-        objectWillChange.send()
-        
-        print(" ROLE MANAGEMENT: User role updated")
+        Logger.project.notice(
+            "Updated project role mapping [role=\(teamMemberRole.displayName, privacy: .public) org=\(orgIDString, privacy: .private(mask: .hash))]"
+        )
     }
     
     func setCurrentUserRole(_ role: OrganizationRole, forOrganization organizationID: String) {
         if let uuid = UUID(uuidString: organizationID) {
             setCurrentUserRole(role, forOrganization: uuid)
         } else {
-            print(" ROLE MANAGEMENT: Invalid organization ID format: \(organizationID)")
+            Logger.project.error("Invalid organization identifier format for role update.")
         }
     }
     
@@ -1625,6 +1492,35 @@ class ProjectViewModel: ObservableObject {
     }
     
     func updateTeamMemberInOrganization(_ teamMember: TeamMember) {
+        guard let update = teamMemberStore.update(teamMember, in: teamMembers) else {
+            Logger.teamMember.error("Failed to update team member because the record was not found.")
+            return
+        }
+
+        let previousName = update.previousName ?? teamMember.name
+        teamMembers = update.members
+        updateTeamMemberCaches()
+        saveOrganizationSpecificBackup()
+
+        if previousName != teamMember.name {
+            updateWorkHourTeamMemberNames(from: previousName, to: teamMember.name)
+        }
+
+        if isUsingCloudKitForOrganizationData {
+            Task {
+                do {
+                    try await saveTeamMemberToCloudKit(teamMember)
+                    Logger.teamMember.info("Updated team member in CloudKit.")
+                } catch {
+                    Logger.teamMember.error(
+                        "Failed to update team member in CloudKit: \(error.localizedDescription, privacy: .public)"
+                    )
+                }
+            }
+        }
+
+        Logger.teamMember.notice("Updated team member in organization directory.")
+
         Task {
             await updateTeamMember(teamMember)
         }
@@ -1655,42 +1551,35 @@ class ProjectViewModel: ObservableObject {
     /// Save data using organization-specific keys to prevent data bleeding
     internal func saveOrganizationSpecificBackup() {
         guard let orgID = currentOrganizationID else {
-            print(" SECURITY: Cannot save backup - no organization ID")
+            Logger.project.error("Cannot save organization backup without an active organization.")
             return
         }
-        
-        print(" SECURE SAVE: Saving organization-specific backup for \(orgID.prefix(8))...")
-        
-        // Save projects with ORGANIZATION-SPECIFIC key
-        let projectsKey = "projects_\(orgID)"
-        if let projectData = try? JSONEncoder().encode(organizationProjects) {
-            UserDefaults.standard.set(projectData, forKey: projectsKey)
-            print(" Saved \(organizationProjects.count) projects to key: \(projectsKey)")
-        } else {
-            print(" Failed to encode projects for organization: \(orgID)")
-        }
-        
-        // Save organization with SPECIFIC key
-        if let org = currentOrganization,
-           let orgData = try? JSONEncoder().encode(org) {
-            let orgKey = "organization_\(orgID)"
-            UserDefaults.standard.set(orgData, forKey: orgKey)
-            print(" Saved organization data to key: \(orgKey)")
-        }
-        
-        UserDefaults.standard.synchronize()
-        print(" SECURE SAVE: Organization-specific backup completed for \(orgID.prefix(8))...")
+
+        projectStore.saveSnapshot(
+            projects: organizationProjects,
+            organization: currentOrganization,
+            teamMembers: teamMembers,
+            for: orgID
+        )
+
+        Logger.project.debug(
+            "Saved organization snapshot [org=\(orgID, privacy: .private(mask: .hash)) projects=\(self.organizationProjects.count, privacy: .public) teamMembers=\(self.teamMembers.count, privacy: .public)]"
+        )
     }
     
     /// Load projects using organization-specific keys
     private func loadOrganizationSpecificProjects(organizationID: String) async {
-        let projectsKey = "projects_\(organizationID)"
-        print(" SECURE LOAD: Loading projects from organization-specific key: \(projectsKey)")
-        
-        guard let data = UserDefaults.standard.data(forKey: projectsKey),
-              let projects = try? JSONDecoder().decode([Project].self, from: data) else { 
-            print(" No organization-specific project data found for \(organizationID.prefix(8))... - starting with empty projects")
-            
+        Logger.project.info(
+            "Loading organization snapshot [org=\(organizationID, privacy: .private(mask: .hash))]"
+        )
+
+        let projects = projectStore.loadProjects(for: organizationID)
+
+        guard !projects.isEmpty else {
+            Logger.project.notice(
+                "No organization snapshot projects found [org=\(organizationID, privacy: .private(mask: .hash))]"
+            )
+
             await MainActor.run {
                 self.organizationProjects = []
             }
@@ -1698,17 +1587,20 @@ class ProjectViewModel: ObservableObject {
         }
         
         await MainActor.run {
-            // CRITICAL: Verify all loaded projects belong to this organization
             let verifiedProjects = projects.filter { project in
                 project.organizationID == organizationID
             }
             
             if verifiedProjects.count != projects.count {
-                print(" SECURITY: Filtered out \(projects.count - verifiedProjects.count) projects that didn't belong to organization \(organizationID.prefix(8))...")
+                Logger.project.warning(
+                    "Filtered projects that did not match active organization [org=\(organizationID, privacy: .private(mask: .hash)) filtered=\(projects.count - verifiedProjects.count, privacy: .public)]"
+                )
             }
             
             self.organizationProjects = verifiedProjects
-            print(" SECURE LOAD: Loaded \(verifiedProjects.count) verified projects for organization \(organizationID.prefix(8))...")
+            Logger.project.notice(
+                "Loaded verified organization snapshot [org=\(organizationID, privacy: .private(mask: .hash)) count=\(verifiedProjects.count, privacy: .public)]"
+            )
         }
     }
     
@@ -1722,7 +1614,12 @@ class ProjectViewModel: ObservableObject {
     }
     
     func selectProject(_ project: Project) {
+        if let currentOrganizationID, project.organizationID != currentOrganizationID {
+            Logger.project.warning("Ignored project selection outside the active organization.")
+            return
+        }
         selectedProject = project
+        Logger.project.info("Updated selected project.")
     }
     
     func deselectProject() {
@@ -1756,97 +1653,69 @@ class ProjectViewModel: ObservableObject {
     
     /// Consolidated debug information for troubleshooting
     func debugOrganizationState() {
-        print(" ORGANIZATION DEBUG STATE:")
-        print("  Current Org: \(currentOrganization?.name ?? "None")")
-        print("  Current Org ID: \(currentOrganizationID ?? "None")")
-        print("  Projects Array: \(projects.count)")
-        print("  Organization Projects: \(organizationProjects.count)")
-        print("  Accessible Projects: \(accessibleProjects.count)")
-        print("  Team Members: \(teamMembers.count)")
-        print("  CloudKit Enabled: \(isUsingCloudKitForOrganizationData)")
-        print("  Data Loading: \(isDataLoading)")
+        Logger.project.debug(
+            "Organization debug state [orgName=\(self.currentOrganization?.name ?? "None", privacy: .private(mask: .hash)) org=\(self.currentOrganizationID ?? "None", privacy: .private(mask: .hash)) projects=\(self.projects.count, privacy: .public) orgProjects=\(self.organizationProjects.count, privacy: .public) accessible=\(self.accessibleProjects.count, privacy: .public) teamMembers=\(self.teamMembers.count, privacy: .public) cloudKit=\(self.isUsingCloudKitForOrganizationData, privacy: .public) loading=\(self.isDataLoading, privacy: .public)]"
+        )
         
         if let error = zoneSetupError {
-            print("  Zone Setup Error: \(error.localizedDescription)")
+            Logger.project.error("Zone setup error: \(error.localizedDescription, privacy: .public)")
         }
         
-        // Show project details if count mismatch
         if projects.count != organizationProjects.count {
-            print(" PROJECT COUNT MISMATCH:")
-            print("    All Projects: \(projects.map { "\($0.name) (\($0.organizationID))" })")
-            print("    Org Projects: \(organizationProjects.map { "\($0.name) (\($0.organizationID))" })")
+            Logger.project.warning(
+                "Project count mismatch [allProjects=\(self.projects.count, privacy: .public) orgProjects=\(self.organizationProjects.count, privacy: .public)]"
+            )
         }
     }
     
     func setUserProjectAssignments(_ projectIDs: [String]) {
-        print(" ENTERPRISE PROJECT ACCESS: Setting user project assignments...")
-        print("   Assigned Projects: \(projectIDs.count)")
-        print("   Organization: \(currentOrganizationID?.prefix(8) ?? "None")...")
-        
         guard let currentOrgID = currentOrganizationID else {
-            print(" PROJECT ASSIGNMENTS: No organization selected")
+            Logger.project.error("Cannot set project assignments without an active organization.")
             return
         }
-        
-        // Store project assignments for current organization
-        let assignmentsKey = "project_assignments_\(currentOrgID)"
-        if let assignmentsData = try? JSONEncoder().encode(projectIDs) {
-            UserDefaults.standard.set(assignmentsData, forKey: assignmentsKey)
-            print(" PROJECT ASSIGNMENTS: Saved assignments to key: \(assignmentsKey)")
-        }
-        
-        // Convert String IDs to UUIDs for filtering
+
+        projectStore.saveProjectAssignments(projectIDs, for: currentOrgID)
+        Logger.project.debug(
+            "Saved project assignment snapshot [org=\(currentOrgID, privacy: .private(mask: .hash)) count=\(projectIDs.count, privacy: .public)]"
+        )
+
         let assignedUUIDs = projectIDs.compactMap { UUID(uuidString: $0) }
-        print(" PROJECT ASSIGNMENTS: Converted \(assignedUUIDs.count)/\(projectIDs.count) valid UUIDs")
-        
-        // Update accessible projects based on assignments
         let filteredProjects: [Project]
         
         if assignedUUIDs.isEmpty {
-            // No specific assignments - user has access to all organization projects
             filteredProjects = organizationProjects
-            print(" PROJECT ASSIGNMENTS: No restrictions - access to all \(organizationProjects.count) organization projects")
+            Logger.project.notice(
+                "Applied unrestricted project access [orgProjects=\(self.organizationProjects.count, privacy: .public)]"
+            )
         } else {
-            // Filter projects based on assignments
             filteredProjects = organizationProjects.filter { project in
                 assignedUUIDs.contains(project.id)
             }
-            print(" PROJECT ASSIGNMENTS: Restricted access to \(filteredProjects.count) assigned projects")
-            
-            // Log project access details
-            for (index, project) in filteredProjects.enumerated() {
-                print("   [\(index + 1)] Access granted: \(project.name)")
-            }
-            
+
             let restrictedCount = organizationProjects.count - filteredProjects.count
             if restrictedCount > 0 {
-                print(" PROJECT ASSIGNMENTS: Access restricted from \(restrictedCount) projects")
+                Logger.project.notice(
+                    "Applied restricted project access [allowed=\(filteredProjects.count, privacy: .public) restricted=\(restrictedCount, privacy: .public)]"
+                )
             }
         }
         
-        // Update accessible projects array
         accessibleProjects = filteredProjects
         
-        // If currently selected project is not accessible, deselect it
         if let selected = selectedProject, !filteredProjects.contains(where: { $0.id == selected.id }) {
             selectedProject = nil
-            print(" PROJECT ASSIGNMENTS: Deselected project '\(selected.name)' - no longer accessible")
+            Logger.project.notice("Deselected project because it is no longer accessible.")
         }
         
-        // Save assignments to CloudKit for enterprise synchronization
         if isUsingCloudKitForOrganizationData {
             Task {
                 await saveProjectAssignmentsToCloudKit(projectIDs)
             }
         }
-        
-        // Trigger UI update
-        objectWillChange.send()
-        
-        print(" PROJECT ASSIGNMENTS: Enterprise project access control configured")
-        print("   Total organization projects: \(organizationProjects.count)")
-        print("   User accessible projects: \(accessibleProjects.count)")
-        print("   Assignment type: \(assignedUUIDs.isEmpty ? "Full Access" : "Restricted")")
+
+        Logger.project.notice(
+            "Configured project access control [orgProjects=\(self.organizationProjects.count, privacy: .public) accessible=\(self.accessibleProjects.count, privacy: .public) restricted=\(!assignedUUIDs.isEmpty, privacy: .public)]"
+        )
     }
     
     /// Save project assignments to CloudKit for enterprise synchronization
@@ -1854,47 +1723,246 @@ class ProjectViewModel: ObservableObject {
         guard let currentOrgID = currentOrganizationID else { return }
         
         do {
-            let container = CKContainer(identifier: "iCloud.com.rheirhome.rheirhomeappV3")
-            let privateDatabase = container.privateCloudDatabase
-            
-            // Create project assignments record
-            let recordID = CKRecord.ID(recordName: "project_assignments_\(currentOrgID)")
-            let record = CKRecord(recordType: "ProjectAssignments", recordID: recordID)
-            
-            // Set assignment data
-            record["organizationID"] = currentOrgID as CKRecordValue
-            record["assignedProjectIDs"] = projectIDs as CKRecordValue
-            record["lastModified"] = Date() as CKRecordValue
-            record["environment"] = "production" as CKRecordValue
-            
-            _ = try await privateDatabase.save(record)
-            print(" CLOUDKIT ASSIGNMENTS: Project assignments synced to CloudKit")
-            
+            try await projectRepository.saveProjectAssignments(projectIDs, organizationID: currentOrgID)
+            Logger.project.info(
+                "Synced project assignments to CloudKit [org=\(currentOrgID, privacy: .private(mask: .hash)) count=\(projectIDs.count, privacy: .public)]"
+            )
         } catch {
-            print(" CLOUDKIT ASSIGNMENTS: Failed to save assignments: \(error)")
+            Logger.project.error(
+                "Failed to sync project assignments to CloudKit: \(error.localizedDescription, privacy: .public)"
+            )
         }
     }
     
     /// Load project assignments from CloudKit
     private func loadProjectAssignmentsFromCloudKit() async -> [String] {
         guard let currentOrgID = currentOrganizationID else { return [] }
-        
-        do {
-            let container = CKContainer(identifier: "iCloud.com.rheirhome.rheirhomeappV3")
-            let privateDatabase = container.privateCloudDatabase
-            
-            let recordID = CKRecord.ID(recordName: "project_assignments_\(currentOrgID)")
-            let record = try await privateDatabase.record(for: recordID)
-            
-            if let assignments = record["assignedProjectIDs"] as? [String] {
-                print(" CLOUDKIT ASSIGNMENTS: Loaded \(assignments.count) project assignments")
-                return assignments
-            }
-            
-        } catch {
-            print(" CLOUDKIT ASSIGNMENTS: Failed to load assignments: \(error)")
+
+        let assignments = await projectRepository.loadProjectAssignments(organizationID: currentOrgID)
+        if !assignments.isEmpty {
+            Logger.project.debug(
+                "Loaded project assignments from CloudKit [org=\(currentOrgID, privacy: .private(mask: .hash)) count=\(assignments.count, privacy: .public)]"
+            )
         }
-        
-        return []
+        return assignments
+    }
+}
+
+extension Logger {
+    static let projectStore = Logger(subsystem: "com.RheirHome.RHEIR", category: "projectStore")
+}
+
+final class ProjectStore {
+    private enum Key {
+        static let projectsPrefix = "projects_"
+        static let organizationPrefix = "organization_"
+        static let teamMembersPrefix = "team_members_"
+        static let projectAssignmentsPrefix = "project_assignments_"
+    }
+
+    private let userDefaults: UserDefaults
+
+    init(userDefaults: UserDefaults = .standard) {
+        self.userDefaults = userDefaults
+    }
+
+    func loadProjects(for organizationID: String) -> [Project] {
+        load([Project].self, forKey: Key.projectsPrefix + organizationID, fallback: []).filter {
+            $0.organizationID == organizationID
+        }
+    }
+
+    func saveProjects(_ projects: [Project], for organizationID: String) {
+        let scopedProjects = projects.filter { $0.organizationID == organizationID }
+        save(scopedProjects, forKey: Key.projectsPrefix + organizationID)
+        Logger.projectStore.debug(
+            "Saved \(scopedProjects.count, privacy: .public) projects for organization \(organizationID, privacy: .private(mask: .hash))"
+        )
+    }
+
+    func loadOrganization(for organizationID: String) -> Organization? {
+        loadOptional(Organization.self, forKey: Key.organizationPrefix + organizationID)
+    }
+
+    func saveOrganization(_ organization: Organization?, for organizationID: String) {
+        guard let organization else {
+            userDefaults.removeObject(forKey: Key.organizationPrefix + organizationID)
+            return
+        }
+
+        save(organization, forKey: Key.organizationPrefix + organizationID)
+    }
+
+    func loadTeamMembers(for organizationID: String) -> [TeamMember] {
+        load([TeamMember].self, forKey: Key.teamMembersPrefix + organizationID, fallback: []).filter {
+            $0.organizationID == organizationID
+        }
+    }
+
+    func saveTeamMembers(_ teamMembers: [TeamMember], for organizationID: String) {
+        let scopedTeamMembers = teamMembers.filter { $0.organizationID == organizationID }
+        save(scopedTeamMembers, forKey: Key.teamMembersPrefix + organizationID)
+        Logger.projectStore.debug(
+            "Saved \(scopedTeamMembers.count, privacy: .public) team members for organization \(organizationID, privacy: .private(mask: .hash))"
+        )
+    }
+
+    func loadProjectAssignments(for organizationID: String) -> [String] {
+        load([String].self, forKey: Key.projectAssignmentsPrefix + organizationID, fallback: [])
+    }
+
+    func saveProjectAssignments(_ projectIDs: [String], for organizationID: String) {
+        save(projectIDs, forKey: Key.projectAssignmentsPrefix + organizationID)
+    }
+
+    func saveSnapshot(
+        projects: [Project],
+        organization: Organization?,
+        teamMembers: [TeamMember],
+        for organizationID: String
+    ) {
+        saveProjects(projects, for: organizationID)
+        saveOrganization(organization, for: organizationID)
+        saveTeamMembers(teamMembers, for: organizationID)
+    }
+
+    private func save<Value: Encodable>(_ value: Value, forKey key: String) {
+        guard let data = try? JSONEncoder().encode(value) else {
+            Logger.projectStore.error("Failed to encode value for key \(key, privacy: .private(mask: .hash))")
+            return
+        }
+
+        userDefaults.set(data, forKey: key)
+    }
+
+    private func load<Value: Decodable>(_ type: Value.Type, forKey key: String, fallback: Value) -> Value {
+        guard let data = userDefaults.data(forKey: key),
+              let decoded = try? JSONDecoder().decode(type, from: data) else {
+            return fallback
+        }
+
+        return decoded
+    }
+
+    private func loadOptional<Value: Decodable>(_ type: Value.Type, forKey key: String) -> Value? {
+        guard let data = userDefaults.data(forKey: key) else {
+            return nil
+        }
+
+        return try? JSONDecoder().decode(type, from: data)
+    }
+}
+
+extension Logger {
+    static let projectRepository = Logger(subsystem: "com.RheirHome.RHEIR", category: "projectRepository")
+}
+
+protocol ProjectRepository {
+    func fetchProjects(for organizationID: String) async throws -> [Project]
+    func saveProject(_ project: Project, organizationID: String) async throws
+    func saveProjectAssignments(_ projectIDs: [String], organizationID: String) async throws
+    func loadProjectAssignments(organizationID: String) async -> [String]
+}
+
+final class CloudKitProjectRepository: ProjectRepository {
+    private let container: CKContainer
+
+    init(container: CKContainer = CKContainer(identifier: "iCloud.com.rheirhome.rheirhomeappV3")) {
+        self.container = container
+    }
+
+    func fetchProjects(for organizationID: String) async throws -> [Project] {
+        let privateDatabase = container.privateCloudDatabase
+        let predicate = NSPredicate(format: "organizationID == %@", organizationID)
+        let query = CKQuery(recordType: "Project", predicate: predicate)
+        let result = try await privateDatabase.records(matching: query)
+
+        let projects = result.matchResults.compactMap { (_, result) -> Project? in
+            switch result {
+            case .success(let record):
+                if let projectData = record["fullProjectData"] as? Data,
+                   let project = try? JSONDecoder().decode(Project.self, from: projectData) {
+                    return project
+                }
+
+                guard let name = record["name"] as? String,
+                      let client = record["client"] as? String,
+                      let totalBudget = record["totalBudget"] as? Double,
+                      let startDate = record["startDate"] as? Date,
+                      let endDate = record["endDate"] as? Date else {
+                    return nil
+                }
+
+                return Project(
+                    name: name,
+                    client: client,
+                    totalBudget: totalBudget,
+                    materialCost: 0,
+                    laborCost: 0,
+                    generalConditions: 0,
+                    contingency: 0,
+                    startDate: startDate,
+                    endDate: endDate,
+                    organizationID: organizationID
+                )
+
+            case .failure(let error):
+                Logger.projectRepository.error("Project fetch failed: \(error.localizedDescription, privacy: .public)")
+                return nil
+            }
+        }
+
+        Logger.projectRepository.debug(
+            "Fetched \(projects.count, privacy: .public) projects for organization \(organizationID, privacy: .private(mask: .hash))"
+        )
+
+        return projects
+    }
+
+    func saveProject(_ project: Project, organizationID: String) async throws {
+        let privateDatabase = container.privateCloudDatabase
+        let recordID = CKRecord.ID(recordName: "project_\(project.id.uuidString)")
+        let record = CKRecord(recordType: "Project", recordID: recordID)
+
+        record["name"] = project.name as CKRecordValue
+        record["client"] = project.client as CKRecordValue
+        record["totalBudget"] = project.totalBudget as CKRecordValue
+        record["startDate"] = project.startDate as CKRecordValue
+        record["endDate"] = project.endDate as CKRecordValue
+        record["status"] = project.status.rawValue as CKRecordValue
+        record["organizationID"] = organizationID as CKRecordValue
+
+        if let projectData = try? JSONEncoder().encode(project) {
+            record["fullProjectData"] = projectData as CKRecordValue
+        }
+
+        _ = try await privateDatabase.save(record)
+    }
+
+    func saveProjectAssignments(_ projectIDs: [String], organizationID: String) async throws {
+        let privateDatabase = container.privateCloudDatabase
+        let recordID = CKRecord.ID(recordName: "project_assignments_\(organizationID)")
+        let record = CKRecord(recordType: "ProjectAssignments", recordID: recordID)
+
+        record["organizationID"] = organizationID as CKRecordValue
+        record["assignedProjectIDs"] = projectIDs as CKRecordValue
+        record["lastModified"] = Date() as CKRecordValue
+        record["environment"] = "production" as CKRecordValue
+
+        _ = try await privateDatabase.save(record)
+    }
+
+    func loadProjectAssignments(organizationID: String) async -> [String] {
+        do {
+            let privateDatabase = container.privateCloudDatabase
+            let recordID = CKRecord.ID(recordName: "project_assignments_\(organizationID)")
+            let record = try await privateDatabase.record(for: recordID)
+            return record["assignedProjectIDs"] as? [String] ?? []
+        } catch {
+            Logger.projectRepository.error(
+                "Project assignment load failed for organization \(organizationID, privacy: .private(mask: .hash)): \(error.localizedDescription, privacy: .public)"
+            )
+            return []
+        }
     }
 }

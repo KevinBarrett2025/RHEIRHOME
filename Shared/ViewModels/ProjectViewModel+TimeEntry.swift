@@ -1,5 +1,10 @@
 import Foundation
 import CoreLocation
+import OSLog
+
+extension Logger {
+    static let labor = Logger(subsystem: "com.RheirHome.RHEIR", category: "labor")
+}
 
 @MainActor
 extension ProjectViewModel {
@@ -17,11 +22,11 @@ extension ProjectViewModel {
         guard let sel = selectedProject,
               let idx = organizationProjects.firstIndex(where: { $0.id == sel.id })
         else { 
-            print("❌ Failed to log hours: No project selected or project not found")
+            Logger.labor.error("Failed to log hours because no active project is selected.")
             return 
         }
 
-        print("🕐 Creating enhanced work hour entry...")
+        Logger.labor.info("Creating work-hour entry for selected project.")
         var wh = WorkHour(
             id: UUID(),
             date: startTime,
@@ -46,14 +51,13 @@ extension ProjectViewModel {
             let beforeLunch = (totalShift - lunchDur * 3600) / 2
             wh.lunchStart = startTime.addingTimeInterval(beforeLunch)
             wh.lunchEnd   = wh.lunchStart?.addingTimeInterval(lunchDur * 3600)
-            print("🍽️ Added lunch break: \(lunchDur) hours")
+            Logger.labor.debug("Added lunch break [hours=\(lunchDur, privacy: .public)]")
         }
 
         // Validate the work hour entry
         if !wh.isValid {
-            print("⚠️ Invalid work hour entry:")
             for issue in wh.validationIssues {
-                print("  - \(issue)")
+                Logger.labor.warning("Work-hour validation issue: \(issue, privacy: .public)")
             }
             // Still save it but mark for review
         }
@@ -62,24 +66,25 @@ extension ProjectViewModel {
         if let employeeID = wh.employeeID,
            !organizationProjects[idx].assignedTeamMemberIDs.contains(employeeID.uuidString) {
             organizationProjects[idx].assignTeamMember(employeeID.uuidString)
-            print("✅ Auto-assigned team member \(employeeID) to project from logged hours")
+            Logger.labor.info("Auto-assigned team member from logged hours [teamMember=\(employeeID.uuidString, privacy: .private(mask: .hash))]")
         } else if let employeeID = wh.employeeID, 
                   organizationProjects[idx].assignedTeamMemberIDs.contains(employeeID.uuidString) {
-            print("ℹ️ Team member \(employeeID) already assigned to project")
+            Logger.labor.debug("Team member already assigned to project [teamMember=\(employeeID.uuidString, privacy: .private(mask: .hash))]")
         }
 
-        print("✅ Adding work hour to project: \(sel.name)")
         organizationProjects[idx].loggedHours.append(wh)
         selectedProject = organizationProjects[idx]
-        
-        print("📊 Project now has \(organizationProjects[idx].loggedHours.count) logged hours")
+
+        Logger.labor.notice(
+            "Logged hours for project [project=\(sel.id.uuidString, privacy: .private(mask: .hash)) totalEntries=\(self.organizationProjects[idx].loggedHours.count, privacy: .public)]"
+        )
         
         // Invalidate caches and recompute data
         recomputeLaborData()
         invalidateReceiptCache()
         debouncedSaveProjects()
         
-        print("💾 Successfully logged \(wh.hours) hours for \(employee)")
+        Logger.labor.info("Saved work-hour entry [hours=\(wh.hours, privacy: .public)]")
     }
     
     /// Start live tracking for a team member
@@ -92,7 +97,7 @@ extension ProjectViewModel {
         guard let sel = selectedProject,
               let idx = organizationProjects.firstIndex(where: { $0.id == sel.id })
         else { 
-            print("❌ Failed to start live tracking: No project selected")
+            Logger.labor.error("Failed to start live tracking because no active project is selected.")
             return nil
         }
         
@@ -100,7 +105,7 @@ extension ProjectViewModel {
         if organizationProjects[idx].loggedHours.contains(where: { 
             $0.employeeID == teamMember.id && $0.endTime == nil 
         }) {
-            print("⚠️ Team member \(teamMember.name) already has an active timer")
+            Logger.labor.warning("Attempted to start duplicate live timer for a team member.")
             return nil
         }
         
@@ -115,13 +120,13 @@ extension ProjectViewModel {
         // CRITICAL FIX: Auto-assign team member to project when they start tracking time
         if !organizationProjects[idx].assignedTeamMemberIDs.contains(teamMember.id.uuidString) {
             organizationProjects[idx].assignTeamMember(teamMember.id.uuidString)
-            print("✅ Auto-assigned team member \(teamMember.name) to project from live tracking")
+            Logger.labor.info("Auto-assigned team member from live tracking [teamMember=\(teamMember.id.uuidString, privacy: .private(mask: .hash))]")
         }
         
         organizationProjects[idx].loggedHours.append(workHour)
         selectedProject = organizationProjects[idx]
         
-        print("⏰ Started live tracking for \(teamMember.name)")
+        Logger.labor.notice("Started live tracking [teamMember=\(teamMember.id.uuidString, privacy: .private(mask: .hash))]")
         return workHour.id
     }
     
@@ -135,7 +140,7 @@ extension ProjectViewModel {
               let idx = organizationProjects.firstIndex(where: { $0.id == sel.id }),
               let whIdx = organizationProjects[idx].loggedHours.firstIndex(where: { $0.id == workHourID })
         else { 
-            print("❌ Failed to stop live tracking: Entry not found")
+            Logger.labor.error("Failed to stop live tracking because the work-hour entry was not found.")
             return false
         }
         
@@ -149,9 +154,8 @@ extension ProjectViewModel {
         
         // Validate the completed entry
         if !workHour.isValid {
-            print("⚠️ Invalid work hour entry completed:")
             for issue in workHour.validationIssues {
-                print("  - \(issue)")
+                Logger.labor.warning("Completed work-hour validation issue: \(issue, privacy: .public)")
             }
         }
         
@@ -163,7 +167,7 @@ extension ProjectViewModel {
         invalidateReceiptCache()
         debouncedSaveProjects()
         
-        print("✅ Stopped live tracking - Total hours: \(workHour.hours)")
+        Logger.labor.notice("Stopped live tracking [hours=\(workHour.hours, privacy: .public)]")
         return true
     }
     
@@ -197,7 +201,7 @@ extension ProjectViewModel {
         selectedProject = organizationProjects[idx]
         debouncedSaveProjects()
         
-        print("✅ Approved \(approvedCount) work hour entries")
+        Logger.labor.notice("Approved work-hour entries [count=\(approvedCount, privacy: .public)]")
     }
     
     /// Detect overlapping time entries for validation
@@ -281,21 +285,17 @@ extension ProjectViewModel {
               let idx = organizationProjects.firstIndex(where: { $0.id == sel.id }),
               let whIdx = organizationProjects[idx].loggedHours.firstIndex(where: { $0.id == entry.id })
         else { 
-            print("❌ Failed to update hours: project or hours entry not found")
-            print("  Selected project: \(selectedProject?.name ?? "nil")")
-            print("  Hours ID: \(entry.id)")
+            Logger.labor.error("Failed to update hours because the project or work-hour entry was not found.")
             return 
         }
 
-        print("✅ Updating hours entry:")
-        print("  Old: \(organizationProjects[idx].loggedHours[whIdx].employee) - $\(organizationProjects[idx].loggedHours[whIdx].rate)")
-        print("  New: \(entry.employee) - $\(entry.rate)")
+        Logger.labor.info("Updating work-hour entry.")
 
         // CRITICAL FIX: Auto-assign team member to project when hours are updated with employeeID
         if let employeeID = entry.employeeID,
            !organizationProjects[idx].assignedTeamMemberIDs.contains(employeeID.uuidString) {
             organizationProjects[idx].assignTeamMember(employeeID.uuidString)
-            print("✅ Auto-assigned team member \(employeeID) to project from updated hours")
+            Logger.labor.info("Auto-assigned team member from updated hours [teamMember=\(employeeID.uuidString, privacy: .private(mask: .hash))]")
         }
 
         organizationProjects[idx].loggedHours[whIdx] = entry
@@ -354,14 +354,13 @@ extension ProjectViewModel {
               let idx = organizationProjects.firstIndex(where: { $0.id == sel.id })
         else { return }
 
-        print("🗑️ Deleting hours with IDs: \(ids)")
         let beforeCount = organizationProjects[idx].loggedHours.count
         
         organizationProjects[idx].loggedHours.removeAll { ids.contains($0.id) }
         selectedProject = organizationProjects[idx]
         
         let afterCount = organizationProjects[idx].loggedHours.count
-        print("  Deleted \(beforeCount - afterCount) entries")
+        Logger.labor.notice("Deleted work-hour entries [count=\(beforeCount - afterCount, privacy: .public)]")
         
         // Invalidate caches and recompute data
         recomputeLaborData()

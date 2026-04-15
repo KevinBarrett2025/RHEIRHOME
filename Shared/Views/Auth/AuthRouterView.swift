@@ -1,101 +1,71 @@
 import SwiftUI
 
 struct AuthRouterView: View {
-    @EnvironmentObject var authVM: AuthViewModel
-    @EnvironmentObject var projectVM: ProjectViewModel
+    @EnvironmentObject private var authVM: AuthViewModel
+    @EnvironmentObject private var projectVM: ProjectViewModel
+    @EnvironmentObject private var sessionStore: SessionStore
 
     var body: some View {
         NavigationStack {
-            if authVM.user != nil {
-                productionUserFlow
-            } else {
-                // User not authenticated - show login
-                LoginView(vm: authVM)
-            }
+            content
         }
+        .animation(.easeInOut(duration: 0.2), value: sessionStore.state)
     }
-    
+
     @ViewBuilder
-    private var productionUserFlow: some View {
-        Group {
-            if let pendingOrgName = UserDefaults.standard.string(forKey: "pending_invite_orgName") {
-                // Show loading screen while processing invite
-                inviteProcessingView(orgName: pendingOrgName)
-            } else if authVM.needsOrganizationSetup || authVM.showOrganizationSetup {
-                // PRIORITY 1: Show integrated organization setup (includes admin onboarding)
-                IntegratedOrganizationSetupView()
-                    .environmentObject(authVM)
-                    .environmentObject(projectVM)
-                    .onAppear {
-                        print("🏢 INTEGRATED SETUP: Showing integrated organization setup")
-                        print("   needsOrganizationSetup: \(authVM.needsOrganizationSetup)")
-                        print("   showOrganizationSetup: \(authVM.showOrganizationSetup)")
-                    }
-            } else if authVM.showAdminInfoUpdate, let currentOrg = authVM.currentOrg {
-                // PRIORITY 2: Show separate admin onboarding (only if not using integrated setup)
+    private var content: some View {
+        switch sessionStore.state {
+        case .launching:
+            SplashScreenView()
+
+        case .signedOut:
+            LoginView(vm: authVM)
+
+        case .processingInvite:
+            inviteProcessingView(orgName: sessionStore.pendingInvite?.organizationName ?? "Organization")
+
+        case .adminOnboarding:
+            if let currentOrg = authVM.currentOrg {
                 AdminOnboardingView(organization: currentOrg)
                     .environmentObject(authVM)
                     .environmentObject(projectVM)
                     .interactiveDismissDisabled(true)
-                    .onAppear {
-                        print("🎯 SEPARATE ADMIN ONBOARDING: Showing AdminOnboardingView")
-                        print("   Organization: \(currentOrg.name)")
-                        print("   This should only appear for legacy flows")
-                    }
-            } else if authVM.currentOrg != nil {
-                // PRIORITY 3: User has organization - show main app
-                MainTabView()
-                    .environmentObject(authVM)
-                    .onAppear {
-                        print("🚀 MAIN APP: Showing MainTabView for authenticated user")
-                        print("   Current organization: \(authVM.currentOrg?.name ?? "nil")")
-                        print("   Organization ID: \(authVM.currentOrg?.id.prefix(8) ?? "nil")...")
-                        print("   showAdminInfoUpdate: \(authVM.showAdminInfoUpdate)")
-                        print("   User: \(authVM.user?.email ?? "Unknown")")
-                        print("✅ ROUTING CORRECT: MainTabView shown for completed setup")
-                    }
-            } else if authVM.isLoadingOrgs {
-                // Loading organizations - show inline loading
-                organizationLoadingView
-                    .onAppear {
-                        print("⏳ LOADING: Showing organization loading view")
-                        print("   isLoadingOrgs: \(authVM.isLoadingOrgs)")
-                    }
-            } else if !authVM.organizations.isEmpty {
-                // User has organizations but no current org selected
-                OrgListView(vm: authVM)
-                    .onAppear {
-                        print("🏢 ORG SELECTION: User has \(authVM.organizations.count) organizations")
-                        print("   Showing organization selection view")
-                    }
             } else {
-                // Fallback - show integrated setup
-                IntegratedOrganizationSetupView()
-                    .environmentObject(authVM)
-                    .environmentObject(projectVM)
-                    .onAppear {
-                        print("🏢 FALLBACK: Showing integrated setup as fallback")
-                    }
+                organizationLoadingView
             }
+
+        case .selectingOrganization:
+            if authVM.isLoadingOrgs {
+                organizationLoadingView
+            } else if authVM.organizations.isEmpty {
+                OrganizationSetupView()
+                    .environmentObject(authVM)
+            } else {
+                OrgListView(vm: authVM)
+                    .environmentObject(sessionStore)
+            }
+
+        case .ready:
+            MainTabView()
         }
     }
-    
+
     @ViewBuilder
     private func inviteProcessingView(orgName: String) -> some View {
         VStack(spacing: 20) {
             ProgressView()
                 .scaleEffect(1.5)
-            
+
             Text("Joining \(orgName)...")
                 .font(.title2)
                 .foregroundColor(.primary)
-            
-            Text("Please wait while we connect you to the organization")
+
+            Text("Please wait while we connect you to the organization.")
                 .font(.body)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
-            
+
             if !authVM.inviteStatus.isEmpty {
                 Text(authVM.inviteStatus)
                     .font(.caption)
@@ -103,31 +73,30 @@ struct AuthRouterView: View {
                     .multilineTextAlignment(.center)
                     .padding(.horizontal)
             }
-            
-            if let errorMessage = authVM.errorMessage {
+
+            if let errorMessage = authVM.errorMessage ?? sessionStore.alertMessage {
                 VStack(spacing: 12) {
                     Text(errorMessage)
                         .font(.caption)
                         .foregroundColor(.red)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal)
-                    
+
                     HStack(spacing: 16) {
                         Button("Cancel") {
-                            authVM.clearPendingInvite()
+                            sessionStore.clearPendingInvite()
                         }
                         .buttonStyle(.bordered)
-                        
+
                         Button("Retry") {
-                            authVM.retryPendingInvite()
+                            sessionStore.retryPendingInvite()
                         }
                         .buttonStyle(.borderedProminent)
                     }
                 }
             } else {
-                // Show cancel button after 10 seconds
-                Button("Taking too long? Cancel") {
-                    authVM.clearPendingInvite()
+                Button("Cancel") {
+                    sessionStore.clearPendingInvite()
                 }
                 .buttonStyle(.borderless)
                 .foregroundColor(.secondary)
@@ -138,18 +107,18 @@ struct AuthRouterView: View {
         .padding()
         .background(Color(.systemBackground))
     }
-    
+
     @ViewBuilder
     private var organizationLoadingView: some View {
         VStack(spacing: 20) {
             ProgressView()
                 .scaleEffect(1.2)
-            
+
             Text("Loading Organizations...")
                 .font(.title2)
                 .foregroundColor(.primary)
-            
-            Text("Please wait while we fetch your organizations")
+
+            Text("Please wait while we fetch your organizations.")
                 .font(.body)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
@@ -162,7 +131,17 @@ struct AuthRouterView: View {
 
 struct AuthRouterView_Previews: PreviewProvider {
     static var previews: some View {
+        let authViewModel = AuthViewModel(service: CloudKitAuthService())
+        let projectViewModel = ProjectViewModel(offlineDataManager: OfflineDataManager())
+
         AuthRouterView()
-            .environmentObject(AuthViewModel(service: CloudKitAuthService()))
+            .environmentObject(authViewModel)
+            .environmentObject(projectViewModel)
+            .environmentObject(
+                SessionStore(
+                    authViewModel: authViewModel,
+                    projectViewModel: projectViewModel
+                )
+            )
     }
 }

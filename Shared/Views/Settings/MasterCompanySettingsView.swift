@@ -1,9 +1,14 @@
 import SwiftUI
+import OSLog
+
+extension Logger {
+    static let company = Logger(subsystem: "com.RheirHome.RHEIR", category: "company")
+}
 
 struct MasterCompanySettingsView: View {
     @EnvironmentObject private var authVM: AuthViewModel
     @EnvironmentObject var projectVM: ProjectViewModel
-    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var sessionStore: SessionStore
     
     @State private var selectedTab: CompanySettingsTab = .teamMembers
     @State private var showingAddTeamMember = false
@@ -55,12 +60,13 @@ struct MasterCompanySettingsView: View {
                 if let currentOrg = authVM.currentOrg {
                     // Company Header
                     companyHeader(currentOrg)
-                    
-                    // Tab Selector
-                    tabSelector
-                    
-                    // Content based on selected tab
-                    tabContent
+
+                    if authVM.canPerformAdminActions {
+                        tabSelector
+                        tabContent
+                    } else {
+                        restrictedAccessView
+                    }
                 } else {
                     noOrganizationView
                 }
@@ -186,8 +192,7 @@ struct MasterCompanySettingsView: View {
                         .foregroundColor(.blue)
                     Spacer()
                     Button("Switch") {
-                        dismiss()
-                        // This will trigger the organization selector in the main view
+                        sessionStore.showOrganizationSelector()
                     }
                     .font(.caption)
                     .buttonStyle(.bordered)
@@ -299,10 +304,36 @@ struct MasterCompanySettingsView: View {
                 .multilineTextAlignment(.center)
             
             Button("Select Organization") {
-                dismiss()
+                sessionStore.showOrganizationSelector()
             }
             .buttonStyle(.borderedProminent)
         }
+        .padding()
+    }
+
+    @ViewBuilder
+    private var restrictedAccessView: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "lock.shield")
+                .font(.system(size: 52))
+                .foregroundColor(.secondary)
+
+            Text("Administrator Access Required")
+                .font(.title3)
+                .fontWeight(.semibold)
+
+            Text("Company management, team administration, and organization settings are only available to administrators.")
+                .multilineTextAlignment(.center)
+                .foregroundColor(.secondary)
+
+            if authVM.userOrganizations.count > 1 {
+                Button("Switch Organization") {
+                    sessionStore.showOrganizationSelector()
+                }
+                .buttonStyle(.borderedProminent)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding()
     }
 }
@@ -311,6 +342,7 @@ struct MasterCompanySettingsView: View {
 struct MasterTeamMembersTabView: View {
     @EnvironmentObject private var authVM: AuthViewModel
     @EnvironmentObject var projectVM: ProjectViewModel
+    private let companyStore = CompanyStore()
     
     @Binding var showingAddTeamMember: Bool
     @Binding var selectedTeamMember: TeamMember?
@@ -323,40 +355,28 @@ struct MasterTeamMembersTabView: View {
     @State private var inviteCopiedMessage = ""
     
     // Smart project-based team member categorization
+    private var teamBuckets: CompanyTeamBuckets {
+        companyStore.teamBuckets(teamMembers: projectVM.teamMembers, projects: projectVM.allProjects)
+    }
+
     private var activeTeamMembers: [TeamMember] {
-        return projectVM.teamMembers.filter { member in
-            isTeamMemberActiveOnAnyProject(member)
-        }
+        teamBuckets.active
     }
     
     private var betweenProjectsMembers: [TeamMember] {
-        return projectVM.teamMembers.filter { member in
-            member.employmentStatus.canBeAssignedToProjects && 
-            !isTeamMemberActiveOnAnyProject(member) &&
-            member.employmentStatus != .terminated &&
-            member.employmentStatus != .suspended &&
-            member.employmentStatus != .onLeave
-        }
+        teamBuckets.betweenProjects
     }
     
     private var completedTeamMembers: [TeamMember] {
-        return projectVM.teamMembers.filter { member in
-            member.employmentStatus == .active &&
-            !isTeamMemberActiveOnAnyProject(member) &&
-            hasCompletedAllAssignedProjects(member)
-        }
+        teamBuckets.completed
     }
     
     private var inactiveTeamMembers: [TeamMember] {
-        return projectVM.teamMembers.filter { 
-            $0.employmentStatus == .terminated || 
-            $0.employmentStatus == .suspended || 
-            $0.employmentStatus == .onLeave 
-        }
+        teamBuckets.inactive
     }
     
     private var appUsers: Int {
-        return activeTeamMembers.filter { $0.hasAppAccess }.count
+        teamBuckets.appUsers
     }
     
     var body: some View {
@@ -654,60 +674,12 @@ struct MasterTeamMembersTabView: View {
         .cornerRadius(10)
     }
     
-    // MARK: - Team Member Project Status Helpers
-    
-    private func isTeamMemberActiveOnAnyProject(_ member: TeamMember) -> Bool {
-        return projectVM.allProjects.filter { $0.status == .active }.contains { project in
-            isTeamMemberAssignedToProject(member, project)
-        }
-    }
-    
-    private func isTeamMemberAssignedToProject(_ member: TeamMember, _ project: Project) -> Bool {
-        let memberIDString = member.id.uuidString
-        
-        // Check explicit assignment
-        if project.assignedTeamMemberIDs.contains(memberIDString) {
-            return true
-        }
-        
-        // Check if they have worked on this project (receipts, progress, hours)
-        let hasReceipts = project.receipts.contains { $0.teamMemberID == member.id }
-        let hasProgress = project.progressReports.contains { $0.employeeIDs.contains(member.id) }
-        let hasLoggedHours = project.loggedHours.contains { $0.employeeID == member.id }
-        
-        return hasReceipts || hasProgress || hasLoggedHours
-    }
-    
-    private func hasCompletedAllAssignedProjects(_ member: TeamMember) -> Bool {
-        let assignedProjects = projectVM.allProjects.filter { project in
-            isTeamMemberAssignedToProject(member, project)
-        }
-        
-        // If they have assigned projects, check if all are completed
-        if !assignedProjects.isEmpty {
-            return assignedProjects.allSatisfy { $0.status == .completed }
-        }
-        
-        // If no assigned projects but they have an active employment status, they're available
-        return false
-    }
-    
-    private func getAssignedProjectsForMember(_ member: TeamMember) -> [Project] {
-        return projectVM.allProjects.filter { project in
-            isTeamMemberAssignedToProject(member, project)
-        }
-    }
-    
-    private func getActiveProjectsForMember(_ member: TeamMember) -> [Project] {
-        return projectVM.allProjects.filter { project in
-            project.status == .active && isTeamMemberAssignedToProject(member, project)
-        }
-    }
 }
 
 // MARK: - Master Team Member Row View
 struct MasterTeamMemberRowView: View {
     @EnvironmentObject var projectVM: ProjectViewModel
+    private let companyStore = CompanyStore()
     let member: TeamMember
     let statusColor: Color
     let onTap: () -> Void
@@ -715,21 +687,7 @@ struct MasterTeamMemberRowView: View {
     let onTerminate: () -> Void
     
     private var assignedProjects: [Project] {
-        return projectVM.allProjects.filter { project in
-            let memberIDString = member.id.uuidString
-            
-            // Check explicit assignment
-            if project.assignedTeamMemberIDs.contains(memberIDString) {
-                return true
-            }
-            
-            // Check if they have worked on this project
-            let hasReceipts = project.receipts.contains { $0.teamMemberID == member.id }
-            let hasProgress = project.progressReports.contains { $0.employeeIDs.contains(member.id) }
-            let hasLoggedHours = project.loggedHours.contains { $0.employeeID == member.id }
-            
-            return hasReceipts || hasProgress || hasLoggedHours
-        }
+        companyStore.assignedProjects(for: member, in: projectVM.allProjects)
     }
     
     private var activeProjects: [Project] {
@@ -844,24 +802,13 @@ struct MasterTeamMemberRowView: View {
 // MARK: - Available Team Member Row View
 struct AvailableTeamMemberRowView: View {
     @EnvironmentObject var projectVM: ProjectViewModel
+    private let companyStore = CompanyStore()
     let member: TeamMember
     let onTap: () -> Void
     let onAssign: () -> Void
     
     private var availableProjects: [Project] {
-        return projectVM.allProjects.filter { project in
-            project.status == .active && 
-            !project.assignedTeamMemberIDs.contains(member.id.uuidString) &&
-            !hasWorkedOnProject(member, project)
-        }
-    }
-    
-    private func hasWorkedOnProject(_ member: TeamMember, _ project: Project) -> Bool {
-        let hasReceipts = project.receipts.contains { $0.teamMemberID == member.id }
-        let hasProgress = project.progressReports.contains { $0.employeeIDs.contains(member.id) }
-        let hasLoggedHours = project.loggedHours.contains { $0.employeeID == member.id }
-        
-        return hasReceipts || hasProgress || hasLoggedHours
+        companyStore.availableProjects(for: member, in: projectVM.allProjects)
     }
     
     var body: some View {
@@ -989,6 +936,7 @@ struct InactiveTeamMemberRowView: View {
 struct MasterOrganizationSettingsTabView: View {
     @EnvironmentObject private var authVM: AuthViewModel
     @EnvironmentObject var projectVM: ProjectViewModel
+    private let companyStore = CompanyStore()
     
     @Binding var showingStatusAlert: Bool
     @Binding var statusMessage: String
@@ -1020,15 +968,21 @@ struct MasterOrganizationSettingsTabView: View {
     
     @ViewBuilder
     private func organizationInfoSection(_ organization: Organization) -> some View {
+        let summary = companyStore.summary(
+            organization: organization,
+            projects: projectVM.projects,
+            teamMembers: projectVM.teamMembers
+        )
+
         VStack(alignment: .leading, spacing: 12) {
             Text("Organization Details")
                 .font(.headline)
             
             VStack(spacing: 8) {
                 infoRow("Organization ID", organization.id, isMonospace: true)
-                infoRow("Total Members", "\(projectVM.teamMembers.count)")
-                infoRow("Active Projects", "\(projectVM.projects.filter { $0.status == .active }.count)")
-                infoRow("CloudKit Members", "\(organization.members.count + 1) app users")
+                infoRow("Total Members", "\(summary.totalMembers)")
+                infoRow("Active Projects", "\(summary.activeProjects)")
+                infoRow("CloudKit Members", "\(summary.cloudKitMembers) app users")
                 
                 if let businessPhone = organization.businessPhone, !businessPhone.isEmpty {
                     infoRow("Phone", businessPhone)
@@ -1068,6 +1022,11 @@ struct MasterOrganizationSettingsTabView: View {
             
             VStack(spacing: 8) {
                 if let currentOrg = authVM.currentOrg {
+                    let summary = companyStore.summary(
+                        organization: currentOrg,
+                        projects: projectVM.projects,
+                        teamMembers: projectVM.teamMembers
+                    )
                     infoRow("Current Plan", currentOrg.subscriptionTier.displayName)
                     infoRow("Monthly Cost", currentOrg.subscriptionTier.monthlyPrice > 0 ? "$\(String(format: "%.0f", currentOrg.subscriptionTier.monthlyPrice))" : "Free")
                     infoRow("Project Limit", currentOrg.subscriptionTier.projectLimitDisplay == "∞" ? "Unlimited" : "\(currentOrg.subscriptionTier.projectLimitDisplay) projects max")
@@ -1075,17 +1034,14 @@ struct MasterOrganizationSettingsTabView: View {
                     infoRow("Features", "\(currentOrg.subscriptionTier.features.count) included")
                     
                     // Current usage
-                    let currentProjects = projectVM.projects.count
-                    let currentTeamMembers = projectVM.teamMembers.count + 1 // +1 for admin
-                    
-                    infoRow("Projects Used", currentOrg.subscriptionTier.projectUsageDisplay(current: currentProjects))
-                    infoRow("Team Members", currentOrg.subscriptionTier.teamMemberUsageDisplay(current: currentTeamMembers))
+                    infoRow("Projects Used", currentOrg.subscriptionTier.projectUsageDisplay(current: summary.currentProjects))
+                    infoRow("Team Members", currentOrg.subscriptionTier.teamMemberUsageDisplay(current: summary.currentTeamMembers))
                 }
                 
                 // Upgrade/Manage Subscription Button
                 Button("Manage Subscription") {
                     // TODO: Navigate to subscription management
-                    print("Navigate to subscription management")
+                    Logger.company.info("Subscription management action requested from company settings.")
                 }
                 .frame(maxWidth: .infinity)
                 .padding()
@@ -1227,26 +1183,28 @@ struct MasterOrganizationSettingsTabView: View {
     // MARK: - Force CloudKit Sync Method
     @MainActor
     private func forceCloudKitSync() async {
-        print("🔄 COMPANY SETTINGS: Force CloudKit Sync starting...")
+        Logger.company.info("Starting force CloudKit sync from company settings.")
         
         // Step 1: Clear all local cache using AuthViewModel's nuclear clear method
         authVM.clearAllLocalCache()
-        
-        print("✅ Step 1: Local cache cleared using nuclear option")
+
+        Logger.company.notice("Cleared local cache before CloudKit sync.")
         
         // Step 2: Force comprehensive CloudKit sync  
         Task {
             let syncResult = await authVM.forceCloudKitSync()
-            print("✅ Step 2: CloudKit sync completed - \(syncResult)")
+            Logger.company.notice("CloudKit sync completed from company settings [result=\(syncResult, privacy: .public)]")
             
             // Step 3: Reload organization data
             authVM.reloadOrganizationData()
-            print("✅ Step 3: Organization data reloaded")
+            Logger.company.info("Reloaded organization data after company settings sync.")
             
             // Step 4: If current organization is set, trigger ProjectViewModel sync
             if let currentOrg = authVM.currentOrg {
                 await projectVM.organizationDidChange(currentOrg.id)
-                print("✅ Step 4: ProjectViewModel synced for organization: \(currentOrg.name)")
+                Logger.company.notice(
+                    "Project view model synchronized after company settings sync [org=\(currentOrg.id, privacy: .private(mask: .hash))]"
+                )
                 
                 alertMessage = "✅ CloudKit Sync Complete!\n\nOrganizations: \(authVM.userOrganizations.count)\nCurrent: \(currentOrg.name)\nCloudKit is now the single source of truth!"
             } else {
@@ -1308,6 +1266,109 @@ struct MasterOrganizationSettingsTabView: View {
             .cornerRadius(8)
         }
         .buttonStyle(PlainButtonStyle())
+    }
+}
+
+struct CompanyTeamBuckets {
+    let active: [TeamMember]
+    let betweenProjects: [TeamMember]
+    let completed: [TeamMember]
+    let inactive: [TeamMember]
+
+    var appUsers: Int {
+        active.filter(\.hasAppAccess).count
+    }
+}
+
+struct CompanySummary {
+    let totalMembers: Int
+    let activeProjects: Int
+    let cloudKitMembers: Int
+    let currentProjects: Int
+    let currentTeamMembers: Int
+}
+
+final class CompanyStore {
+    func teamBuckets(teamMembers: [TeamMember], projects: [Project]) -> CompanyTeamBuckets {
+        let active = teamMembers.filter { isTeamMemberActiveOnAnyProject($0, projects: projects) }
+        let betweenProjects = teamMembers.filter { member in
+            member.employmentStatus.canBeAssignedToProjects &&
+            !isTeamMemberActiveOnAnyProject(member, projects: projects) &&
+            !hasCompletedAllAssignedProjects(member, projects: projects) &&
+            member.employmentStatus != .terminated &&
+            member.employmentStatus != .suspended &&
+            member.employmentStatus != .onLeave
+        }
+        let completed = teamMembers.filter { member in
+            member.employmentStatus == .active &&
+            !isTeamMemberActiveOnAnyProject(member, projects: projects) &&
+            hasCompletedAllAssignedProjects(member, projects: projects)
+        }
+        let inactive = teamMembers.filter {
+            $0.employmentStatus == .terminated ||
+            $0.employmentStatus == .suspended ||
+            $0.employmentStatus == .onLeave
+        }
+
+        return CompanyTeamBuckets(
+            active: active,
+            betweenProjects: betweenProjects,
+            completed: completed,
+            inactive: inactive
+        )
+    }
+
+    func assignedProjects(for member: TeamMember, in projects: [Project]) -> [Project] {
+        projects.filter { isTeamMemberAssigned(member, to: $0) }
+    }
+
+    func availableProjects(for member: TeamMember, in projects: [Project]) -> [Project] {
+        projects.filter { project in
+            project.status == .active &&
+            !project.assignedTeamMemberIDs.contains(member.id.uuidString) &&
+            !hasWorkedOnProject(member, project)
+        }
+    }
+
+    func summary(organization: Organization, projects: [Project], teamMembers: [TeamMember]) -> CompanySummary {
+        CompanySummary(
+            totalMembers: teamMembers.count,
+            activeProjects: projects.filter { $0.status == .active }.count,
+            cloudKitMembers: organization.members.count + 1,
+            currentProjects: projects.count,
+            currentTeamMembers: teamMembers.count + 1
+        )
+    }
+
+    private func isTeamMemberActiveOnAnyProject(_ member: TeamMember, projects: [Project]) -> Bool {
+        projects.filter { $0.status == .active }.contains { isTeamMemberAssigned(member, to: $0) }
+    }
+
+    private func hasCompletedAllAssignedProjects(_ member: TeamMember, projects: [Project]) -> Bool {
+        let assigned = assignedProjects(for: member, in: projects)
+        guard !assigned.isEmpty else {
+            return false
+        }
+
+        return assigned.allSatisfy { $0.status == .completed }
+    }
+
+    private func isTeamMemberAssigned(_ member: TeamMember, to project: Project) -> Bool {
+        if project.assignedTeamMemberIDs.contains(member.id.uuidString) {
+            return true
+        }
+
+        return hasWorkedOnProject(member, project)
+    }
+
+    private func hasWorkedOnProject(_ member: TeamMember, _ project: Project) -> Bool {
+        let hasReceipts = project.receipts.contains { $0.teamMemberID == member.id }
+        let hasProgress = project.progressReports.contains { $0.employeeIDs.contains(member.id) }
+        let hasLoggedHours = project.loggedHours.contains {
+            $0.employeeID == member.id || $0.employee.lowercased() == member.name.lowercased()
+        }
+
+        return hasReceipts || hasProgress || hasLoggedHours
     }
 }
 
