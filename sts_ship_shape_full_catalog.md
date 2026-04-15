@@ -21,6 +21,10 @@
 - `LaborStore`
 - `CompanyStore`
 - `TeamMemberStore`
+- `OfflineDataManager` structured logging
+- `CloudKitProjectService` structured logging
+- `CloudKitZoneManager` structured logging
+- `RHEIRCloudKitManager` structured logging
 - `VendorKnowledgeService` structured logging
 - `PaymentMethodKnowledgeService` structured logging
 - `OrganizationService` structured logging
@@ -29,11 +33,12 @@
 - `SignInWithAppleCoordinator` structured logging
 
 ## Current Validation Baseline
-- Simulator build path: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_gateA_phase1d_dd clean build`
-- Focused parity path: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_parity_phase1d_dd test -only-testing:RHEIRTests`
+- Simulator build path: `mcp__xcodebuildmcp__build_sim` with `extraArgs=["-derivedDataPath","/tmp/rheir_gateA_phase1e_mcp_dd"]`
+- Focused parity path: `mcp__xcodebuildmcp__test_sim` with `extraArgs=["-derivedDataPath","/tmp/rheir_parity_phase1e_mcp_dd","-only-testing:RHEIRTests"]`
 - Latest focused parity count: `26/26`
 
 ## Known Residual Risks
 - Remaining raw `print(...)` statements still exist in active production files outside the hardened receipt/project flow.
 - `ProjectViewModel` is still oversized even after the extracted stores, though organization/project synchronization is now isolated behind `OrganizationProjectSyncStore`.
+- Direct CLI `xcodebuild` evidence remains less stable than the MCP simulator path in the local CoreSimulator environment.
 - Device signing is still unresolved for physical-device gate execution.

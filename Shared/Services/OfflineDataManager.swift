@@ -2,6 +2,12 @@ import Foundation
 import Combine
 import CloudKit
 import Network
+import OSLog
+
+extension Logger {
+    static let offlineSync = Logger(subsystem: "com.RheirHome.RHEIR", category: "offlineSync")
+    static let offlineStorage = Logger(subsystem: "com.RheirHome.RHEIR", category: "offlineStorage")
+}
 
 /// Advanced offline data management for construction environments
 /// Ensures full functionality even in areas with poor/no internet connectivity
@@ -68,8 +74,8 @@ class OfflineDataManager: ObservableObject {
         loadOfflineState()
         loadDataIntoPublishedProperties()
         
-        print("📱 OfflineDataManager initialized - Offline-first mode active")
-        print("🔗 Bridge activated - @Published properties loaded for ProjectViewModel compatibility")
+        Logger.offlineSync.info("Offline data manager initialized in offline-first mode.")
+        Logger.offlineSync.debug("Activated ProjectViewModel offline bridge.")
     }
     
     // MARK: - PHASE 1 BRIDGE: Load Data into @Published Properties
@@ -83,7 +89,9 @@ class OfflineDataManager: ObservableObject {
         self.vendors = loadVendorsOffline()
         self.paymentMethods = loadPaymentMethodsOffline()
         
-        print("🔗 Bridge loaded: \(projects.count) projects, \(teamMembers.count) team members, \(vendors.count) vendors, \(paymentMethods.count) payment methods")
+        Logger.offlineSync.info(
+            "Loaded offline bridge state [projects=\(self.projects.count, privacy: .public), teamMembers=\(self.teamMembers.count, privacy: .public), vendors=\(self.vendors.count, privacy: .public), paymentMethods=\(self.paymentMethods.count, privacy: .public)]"
+        )
     }
     
     // MARK: - PHASE 1 BRIDGE: Convenience CRUD Methods (Wrap Offline Methods)
@@ -98,7 +106,7 @@ class OfflineDataManager: ObservableObject {
             if !projects.contains(where: { $0.id == project.id }) {
                 projects.append(project)
             }
-            print("🔗 Bridge: addProject - Project added to @Published array")
+            Logger.offlineSync.debug("Added project to offline bridge cache.")
         }
     }
     
@@ -114,7 +122,7 @@ class OfflineDataManager: ObservableObject {
             } else {
                 projects.append(project)
             }
-            print("🔗 Bridge: updateProject - Project updated in @Published array")
+            Logger.offlineSync.debug("Updated project in offline bridge cache.")
         }
     }
     
@@ -126,14 +134,14 @@ class OfflineDataManager: ObservableObject {
         // Remove from offline storage
         deleteProjectFromOfflineStorage(project)
         
-        print("🔗 Bridge: deleteProject - Project removed from @Published array and offline storage")
+        Logger.offlineSync.notice("Deleted project from offline bridge cache.")
     }
     
     /// Convenience method that ProjectViewModel expects
     func deleteProjectPermanently(_ project: Project) {
         // Same as deleteProject for offline-first architecture
         deleteProject(project)
-        print("🔗 Bridge: deleteProjectPermanently - Project permanently deleted")
+        Logger.offlineSync.notice("Permanently deleted project from offline bridge cache.")
     }
     
     /// Convenience method for team member management
@@ -145,7 +153,7 @@ class OfflineDataManager: ObservableObject {
         
         // Save offline (stub implementation)
         saveTeamMemberOffline(teamMember)
-        print("🔗 Bridge: addTeamMember - Team member added")
+        Logger.offlineSync.debug("Added team member to offline bridge cache.")
     }
     
     /// Convenience method for team member management
@@ -159,7 +167,7 @@ class OfflineDataManager: ObservableObject {
         
         // Save offline (stub implementation)
         saveTeamMemberOffline(teamMember)
-        print("🔗 Bridge: updateTeamMember - Team member updated")
+        Logger.offlineSync.debug("Updated team member in offline bridge cache.")
     }
     
     /// Convenience method for team member management
@@ -169,21 +177,23 @@ class OfflineDataManager: ObservableObject {
         
         // Remove from offline storage (stub implementation)
         deleteTeamMemberFromOfflineStorage(teamMember)
-        print("🔗 Bridge: removeTeamMember - Team member removed")
+        Logger.offlineSync.debug("Removed team member from offline bridge cache.")
     }
     
     /// Convenience method for vendor/payment method updates
     func updateVendors(_ vendors: [Vendor]) {
         self.vendors = vendors
         // TODO: Save to offline storage when needed
-        print("🔗 Bridge: updateVendors - \(vendors.count) vendors updated")
+        Logger.offlineSync.debug("Updated offline vendor bridge cache [count=\(vendors.count, privacy: .public)]")
     }
     
     /// Convenience method for vendor/payment method updates
     func updatePaymentMethods(_ paymentMethods: [PaymentMethod]) {
         self.paymentMethods = paymentMethods  
         // TODO: Save to offline storage when needed
-        print("🔗 Bridge: updatePaymentMethods - \(paymentMethods.count) payment methods updated")
+        Logger.offlineSync.debug(
+            "Updated offline payment-method bridge cache [count=\(paymentMethods.count, privacy: .public)]"
+        )
     }
     
     /// Convenience method for project list updates
@@ -193,7 +203,7 @@ class OfflineDataManager: ObservableObject {
         for project in projects {
             _ = saveProjectOffline(project)
         }
-        print("🔗 Bridge: updateProjects - \(projects.count) projects updated")
+        Logger.offlineSync.debug("Updated offline project bridge cache [count=\(projects.count, privacy: .public)]")
     }
     
     // MARK: - PHASE 1 BRIDGE: Stub Data Loading Methods
@@ -218,7 +228,9 @@ class OfflineDataManager: ObservableObject {
     
     private func saveTeamMemberOffline(_ teamMember: TeamMember) {
         // TODO: Implement team member offline storage
-        print("💾 TODO: saveTeamMemberOffline - \(teamMember.name)")
+        Logger.offlineStorage.debug(
+            "Team-member offline persistence is not implemented yet [teamMember=\(teamMember.name, privacy: .private(mask: .hash))]"
+        )
     }
     
     private func deleteProjectFromOfflineStorage(_ project: Project) {
@@ -227,12 +239,16 @@ class OfflineDataManager: ObservableObject {
         var allProjects = loadProjectsOffline()
         allProjects.removeAll { $0.id == project.id }
         _ = offlineStorageManager.saveProjects(allProjects)
-        print("💾 deleteProjectFromOfflineStorage - \(project.name)")
+        Logger.offlineStorage.notice(
+            "Deleted project from offline storage [project=\(project.name, privacy: .private(mask: .hash))]"
+        )
     }
     
     private func deleteTeamMemberFromOfflineStorage(_ teamMember: TeamMember) {
         // TODO: Implement team member deletion from offline storage
-        print("💾 TODO: deleteTeamMemberFromOfflineStorage - \(teamMember.name)")
+        Logger.offlineStorage.debug(
+            "Team-member offline deletion is not implemented yet [teamMember=\(teamMember.name, privacy: .private(mask: .hash))]"
+        )
     }
     
     // MARK: - Network Monitoring
@@ -246,11 +262,13 @@ class OfflineDataManager: ObservableObject {
                 
                 // Trigger sync when coming back online
                 if !wasOnline && self?.isOnline == true {
-                    print("🌐 Connection restored - triggering sync")
+                    Logger.offlineSync.notice("Connection restored; triggering pending offline sync.")
                     self?.syncWhenOnline()
                 }
                 
-                print("📶 Network status: \(self?.isOnline == true ? "Online" : "Offline") (\(self?.connectionQuality ?? .unknown))")
+                Logger.offlineSync.debug(
+                    "Updated network status [online=\(self?.isOnline == true, privacy: .public), quality=\(String(describing: self?.connectionQuality ?? .unknown), privacy: .public)]"
+                )
             }
         }
         
@@ -287,7 +305,9 @@ class OfflineDataManager: ObservableObject {
         let success = offlineStorageManager.saveProject(project)
         
         if success {
-            print("💾 Project '\(project.name)' saved offline")
+            Logger.offlineStorage.notice(
+                "Saved project offline [project=\(project.name, privacy: .private(mask: .hash))]"
+            )
             
             // Queue for sync when online
             if isOnline {
@@ -303,7 +323,7 @@ class OfflineDataManager: ObservableObject {
     /// Loads all projects from local storage (always works offline)
     func loadProjectsOffline() -> [Project] {
         let projects = offlineStorageManager.loadProjects()
-        print("📂 Loaded \(projects.count) projects from offline storage")
+        Logger.offlineStorage.info("Loaded projects from offline storage [count=\(projects.count, privacy: .public)]")
         return projects
     }
     
@@ -312,7 +332,9 @@ class OfflineDataManager: ObservableObject {
         let success = offlineStorageManager.saveProgressLog(log, projectId: projectId)
         
         if success {
-            print("📝 Progress log saved offline with \(log.photoIDs.count) photos")
+            Logger.offlineStorage.notice(
+                "Saved progress log offline [project=\(projectId.uuidString, privacy: .private(mask: .hash)), photos=\(log.photoIDs.count, privacy: .public)]"
+            )
             
             // Queue for sync when online
             if isOnline {
@@ -330,7 +352,9 @@ class OfflineDataManager: ObservableObject {
         let success = offlineStorageManager.saveReceipt(receipt, projectId: projectId)
         
         if success {
-            print("🧾 Receipt saved offline")
+            Logger.offlineStorage.notice(
+                "Saved receipt offline [project=\(projectId.uuidString, privacy: .private(mask: .hash)), vendor=\(receipt.vendor, privacy: .private(mask: .hash))]"
+            )
             
             // Queue for sync when online
             if isOnline {
@@ -348,7 +372,9 @@ class OfflineDataManager: ObservableObject {
         let success = offlineStorageManager.saveWorkHours(workHours, projectId: projectId)
         
         if success {
-            print("⏰ Work hours saved offline")
+            Logger.offlineStorage.notice(
+                "Saved work hours offline [project=\(projectId.uuidString, privacy: .private(mask: .hash)), count=\(workHours.count, privacy: .public)]"
+            )
             
             // Queue for sync when online
             if isOnline {
@@ -366,7 +392,9 @@ class OfflineDataManager: ObservableObject {
     private func addPendingSyncOperation(_ operation: SyncOperation) {
         pendingSyncOperations.append(operation)
         savePendingOperations()
-        print("📥 Queued operation for sync: \(operation.description)")
+        Logger.offlineSync.info(
+            "Queued offline sync operation [pending=\(self.pendingSyncOperations.count, privacy: .public), operation=\(operation.description, privacy: .private(mask: .hash))]"
+        )
     }
     
     private func queueSyncOperation(_ operation: SyncOperation) {
@@ -376,19 +404,21 @@ class OfflineDataManager: ObservableObject {
     
     func syncWhenOnline() {
         guard isOnline else {
-            print("📵 Cannot sync - offline")
+            Logger.offlineSync.warning("Skipped offline sync because the device is offline.")
             return
         }
         
         guard !isSyncing else {
-            print("🔄 Sync already in progress")
+            Logger.offlineSync.info("Skipped offline sync because a sync is already in progress.")
             return
         }
         
         isSyncing = true
         syncProgress = 0.0
         
-        print("🔄 Starting background sync...")
+        Logger.offlineSync.notice(
+            "Starting background offline sync [pending=\(self.pendingSyncOperations.count, privacy: .public)]"
+        )
         
         // Process all pending operations
         let operations = pendingSyncOperations
@@ -415,7 +445,7 @@ class OfflineDataManager: ObservableObject {
             self.syncProgress = 1.0
             self.lastSuccessfulSync = Date()
             self.saveOfflineState()
-            print("✅ Background sync completed")
+            Logger.offlineSync.notice("Completed background offline sync.")
         }
     }
     
@@ -428,7 +458,9 @@ class OfflineDataManager: ObservableObject {
            let state = try? JSONDecoder().decode(OfflineState.self, from: data) {
             lastSuccessfulSync = state.lastSuccessfulSync
             pendingSyncOperations = state.pendingOperations
-            print("📱 Loaded offline state: \(pendingSyncOperations.count) pending operations")
+            Logger.offlineSync.info(
+                "Loaded offline sync state [pending=\(self.pendingSyncOperations.count, privacy: .public)]"
+            )
         }
     }
     
@@ -455,10 +487,10 @@ class OfflineDataManager: ObservableObject {
         // Simple last-modified-wins strategy
         // In production, this could be more sophisticated
         if localProject.startDate > cloudProject.startDate {
-            print("🔄 Conflict resolved: Using local version (newer)")
+            Logger.offlineSync.notice("Resolved project sync conflict in favor of local version.")
             return localProject
         } else {
-            print("🔄 Conflict resolved: Using cloud version (newer)")
+            Logger.offlineSync.notice("Resolved project sync conflict in favor of cloud version.")
             return cloudProject
         }
     }
@@ -557,7 +589,9 @@ class OfflineStorageManager {
             try data.write(to: projectsURL, options: .atomic)
             return true
         } catch {
-            print("❌ Failed to save projects offline: \(error)")
+            Logger.offlineStorage.error(
+                "Failed to save projects offline [error=\(error.localizedDescription, privacy: .public)]"
+            )
             return false
         }
     }
@@ -574,10 +608,10 @@ class OfflineStorageManager {
         logs.append(ProjectProgressLog(projectId: projectId, log: logWithProject))
         
         // Save photos locally
-        for (_, photoID) in log.photoIDs.enumerated() {
-            // Note: For offline storage, we'd need to retrieve actual image data
-            // This is a placeholder for the migration from imageDatas to photoIDs
-            print("📷 Photo ID stored: \(photoID)")
+        if !log.photoIDs.isEmpty {
+            Logger.offlineStorage.debug(
+                "Stored progress-log photo references offline [count=\(log.photoIDs.count, privacy: .public)]"
+            )
         }
         
         return saveProgressLogs(logs)
@@ -611,7 +645,9 @@ class OfflineStorageManager {
         // Save receipt photos using photoIDs (modern CloudKit approach)
         // Photos are handled by CloudKitPhotoService, offline caching handled separately
         if !receipt.photoIDs.isEmpty {
-            print("📷 Receipt has \(receipt.photoIDs.count) photo references")
+            Logger.offlineStorage.debug(
+                "Stored receipt photo references offline [count=\(receipt.photoIDs.count, privacy: .public)]"
+            )
         }
         
         return saveReceipts(receipts)
@@ -769,13 +805,17 @@ class SyncOperationWrapper: Operation, @unchecked Sendable {
         
         // Simulate CloudKit sync operation
         // In production, this would call actual CloudKit APIs
-        print("🔄 Syncing: \(operation.description)")
+        Logger.offlineSync.debug(
+            "Syncing queued offline operation [operation=\(self.operation.description, privacy: .private(mask: .hash))]"
+        )
         
         // Simulate network delay
         Thread.sleep(forTimeInterval: 0.5)
         
         if !isCancelled {
-            print("✅ Synced: \(operation.description)")
+            Logger.offlineSync.debug(
+                "Completed queued offline operation [operation=\(self.operation.description, privacy: .private(mask: .hash))]"
+            )
         }
     }
 }

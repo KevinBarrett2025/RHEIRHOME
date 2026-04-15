@@ -1,6 +1,11 @@
 import Foundation
 import Combine
 import CloudKit
+import OSLog
+
+extension Logger {
+    static let cloudKitManager = Logger(subsystem: "com.RheirHome.RHEIR", category: "cloudKitManager")
+}
 
 /// Centralized CloudKit manager for the RHEIR app
 /// Handles the complete lifecycle from 2-phone setup to thousands of organizations
@@ -50,19 +55,21 @@ class RHEIRCloudKitManager: ObservableObject {
     }
     
     // MARK: - Lifecycle Management
-    
+
     init() {
-        print("🏗️ RHEIRCloudKitManager initializing...")
+        Logger.cloudKitManager.info("Initializing top-level CloudKit manager.")
         
         // Determine deployment mode based on environment and configuration
         detectDeploymentMode()
         
         // Initialize appropriate architecture
         if shouldUseScalableArchitecture {
-            print("🏢 Using scalable architecture for \(deploymentMode)")
+            Logger.cloudKitManager.notice(
+                "Using scalable CloudKit architecture [mode=\(deploymentMode.rawValue, privacy: .public)]"
+            )
             initializeScalableArchitecture()
         } else {
-            print("📱 Using simple sharing for two-phone setup")
+            Logger.cloudKitManager.notice("Using simple-sharing CloudKit architecture.")
             initializeSimpleSharing()
         }
     }
@@ -80,7 +87,9 @@ class RHEIRCloudKitManager: ObservableObject {
             deploymentMode = .twoPhone
         }
         
-        print("🔍 Detected deployment mode: \(deploymentMode)")
+        Logger.cloudKitManager.info(
+            "Detected CloudKit deployment mode [mode=\(deploymentMode.rawValue, privacy: .public)]"
+        )
     }
     
     private func initializeScalableArchitecture() {
@@ -99,7 +108,7 @@ class RHEIRCloudKitManager: ObservableObject {
             do {
                 // Setup the organization zone (will create shared zone)
                 guard let currentUserID = getCurrentUserID() else {
-                    print("❌ No current user ID available")
+                    Logger.cloudKitManager.error("Cannot initialize simple-sharing CloudKit setup without a current user ID.")
                     setupProgress = .failed(RHEIRCloudKitError.noCurrentOrganization)
                     return
                 }
@@ -107,11 +116,13 @@ class RHEIRCloudKitManager: ObservableObject {
                 // Setup organization zone for current user
                 let _ = try await organizationZoneService.setupOrganizationSharedZone(for: currentUserID)
                 
-                print("✅ Simple sharing setup complete")
+                Logger.cloudKitManager.notice("Completed simple-sharing CloudKit setup.")
                 setupProgress = .complete
                 isSetupComplete = true
             } catch {
-                print("❌ Simple sharing setup failed: \(error)")
+                Logger.cloudKitManager.error(
+                    "Simple-sharing CloudKit setup failed [error=\(error.localizedDescription, privacy: .public)]"
+                )
                 setupProgress = .failed(error)
             }
         }
@@ -165,7 +176,9 @@ class RHEIRCloudKitManager: ObservableObject {
                     
                     promise(.success(organization))
                 } catch {
-                    print("❌ Failed to create scalable organization: \(error)")
+                    Logger.cloudKitManager.error(
+                        "Failed to create scalable organization [error=\(error.localizedDescription, privacy: .public)]"
+                    )
                     promise(.failure(error))
                 }
             }
@@ -312,7 +325,7 @@ class RHEIRCloudKitManager: ObservableObject {
     
     /// Migrates data using OrganizationZoneService only
     func migrateToScalableArchitecture() -> AnyPublisher<Void, Error> {
-        print("🔄 Migration not needed - using OrganizationZoneService for all operations")
+        Logger.cloudKitManager.info("Skipped CloudKit migration because OrganizationZoneService already owns the active path.")
         
         return Just(())
             .setFailureType(to: Error.self)

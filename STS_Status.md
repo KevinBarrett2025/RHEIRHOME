@@ -3,7 +3,7 @@
 ## Repo
 - Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Branch: `gm/rheir-hardening-phase1`
-- HEAD: `2e8b62329642867f02d851c2b577e992ff6abec8`
+- HEAD: `12c38c0cf2ec69a6ddef025a03585f1da1a03bcb`
 
 ## Active Initiative
 - RHEIR hardening and streamlining, phase 1 foundation pass.
@@ -37,20 +37,22 @@
 - Replaced raw company-settings prints with structured `Logger.company` usage in the active organization settings flow.
 - Replaced raw `print(...)` tracing in the active organization directory, vendor intelligence, and payment intelligence services with structured `Logger` usage.
 - Replaced raw `print(...)` tracing in the active deep-link, organization-entry, and Sign in with Apple coordination flow with structured `Logger` usage.
+- Replaced raw `print(...)` tracing in `OfflineDataManager`, `CloudKitProjectService`, `CloudKitZoneManager`, and `RHEIRCloudKitManager` with structured `Logger` usage and lower-noise runtime sync logging.
 - Added focused persistence/session tests in `RHEIRTests/RHEIRTests.swift` for invite parsing, legacy cache migration, project storage, receipt intelligence retention, cache clearing, labor aggregation/validation, company-state bucketing, team-member store behavior, and receipt project-resolution behavior.
 
 ## In Progress
-- Replace remaining unsafe logging/state hacks in the rest of the active codebase.
+- Replace remaining unsafe logging/state hacks in the rest of the active codebase outside the hardened runtime sync slice.
 - Continue shrinking the remaining oversized active state owners around the new sync store boundary.
 - Expand deterministic parity beyond the focused `RHEIRTests` suite.
 
 ## Blockers
-- Raw ad hoc `xcodebuild` commands are still less reliable than the `xcodebuildmcp` path in this environment.
+- Raw ad hoc `xcodebuild` commands are still less reliable than the `xcodebuildmcp` path in this environment; the phase-1e direct CLI gate still faults against CoreSimulator even when the MCP build/test path passes.
 - Device-targeted Gate A remains blocked by signing because automatic provisioning is disabled for `com.RheirHome.RHEIR`.
 
 ## Latest Evidence
-- Gate A: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_gateA_phase1d_dd clean build` -> PASS (`/tmp/rheir_gateA_20260415_phase1d.log`)
-- Focused parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_parity_phase1d_dd test -only-testing:RHEIRTests` -> PASS (`/tmp/rheir_parity_RHEIRTests_20260415_phase1d.log`, `26/26`)
+- Gate A: `mcp__xcodebuildmcp__build_sim` with `extraArgs=["-derivedDataPath","/tmp/rheir_gateA_phase1e_mcp_dd"]` -> PASS
+- Focused parity: `mcp__xcodebuildmcp__test_sim` with `extraArgs=["-derivedDataPath","/tmp/rheir_parity_phase1e_mcp_dd","-only-testing:RHEIRTests"]` -> PASS (`26/26`)
+- Direct CLI gate path for the same slice remains unstable in the local simulator environment (`/tmp/rheir_gateA_20260415_phase1e.log`)
 
 ## Next Milestone
-- Checkpoint the auth/session-entry logging cleanup slice, then continue the remaining production logging cleanup and the next oversized-state split around company/project coordination.
+- Checkpoint the runtime sync logging cleanup slice, then continue the remaining production logging cleanup and the next oversized-state split around company/project coordination.

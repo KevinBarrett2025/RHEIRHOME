@@ -1,5 +1,10 @@
 import CloudKit
 import Foundation
+import OSLog
+
+extension Logger {
+    static let cloudKitProject = Logger(subsystem: "com.RheirHome.RHEIR", category: "cloudKitProject")
+}
 
 class CloudKitProjectService {
     private let container: CKContainer
@@ -20,9 +25,13 @@ class CloudKitProjectService {
         // Save to shared database for organization sharing
         do {
             let savedRecord = try await sharedDB.save(record)
-            print("Project saved to CloudKit shared zone: \(savedRecord.recordID.recordName)")
+            Logger.cloudKitProject.notice(
+                "Saved project to shared CloudKit zone [organization=\(organizationID.uuidString, privacy: .private(mask: .hash)), record=\(savedRecord.recordID.recordName, privacy: .private(mask: .hash))]"
+            )
         } catch {
-            print("Failed to save project to CloudKit: \(error)")
+            Logger.cloudKitProject.error(
+                "Failed to save project to CloudKit [organization=\(organizationID.uuidString, privacy: .private(mask: .hash)), error=\(error.localizedDescription, privacy: .public)]"
+            )
             throw error
         }
     }
@@ -35,7 +44,9 @@ class CloudKitProjectService {
             let records = try await sharedDB.records(matching: query).matchResults.map { try $0.get() }
             return try records.compactMap { try Project(from: $0) }
         } catch {
-            print("Failed to fetch projects from CloudKit: \(error)")
+            Logger.cloudKitProject.error(
+                "Failed to fetch CloudKit projects [organization=\(organizationID.uuidString, privacy: .private(mask: .hash)), error=\(error.localizedDescription, privacy: .public)]"
+            )
             throw error
         }
     }
@@ -45,9 +56,13 @@ class CloudKitProjectService {
         
         do {
             try await sharedDB.deleteRecord(withID: recordID)
-            print("Project deleted from CloudKit: \(recordID.recordName)")
+            Logger.cloudKitProject.notice(
+                "Deleted project from shared CloudKit zone [organization=\(organizationID.uuidString, privacy: .private(mask: .hash)), record=\(recordID.recordName, privacy: .private(mask: .hash))]"
+            )
         } catch {
-            print("Failed to delete project from CloudKit: \(error)")
+            Logger.cloudKitProject.error(
+                "Failed to delete CloudKit project [organization=\(organizationID.uuidString, privacy: .private(mask: .hash)), error=\(error.localizedDescription, privacy: .public)]"
+            )
             throw error
         }
     }
@@ -65,7 +80,9 @@ class CloudKitProjectService {
             let zone = try await sharedDB.recordZone(zoneID)
             return zone != nil
         } catch {
-            print("CloudKit not enabled for organization \(organizationID): \(error)")
+            Logger.cloudKitProject.warning(
+                "CloudKit shared zone unavailable for organization [organization=\(organizationID.uuidString, privacy: .private(mask: .hash)), error=\(error.localizedDescription, privacy: .public)]"
+            )
             return false
         }
     }

@@ -1,5 +1,10 @@
 import Foundation
 import CloudKit
+import OSLog
+
+extension Logger {
+    static let cloudKitZone = Logger(subsystem: "com.RheirHome.RHEIR", category: "cloudKitZone")
+}
 
 /// Manages CloudKit zones for scalable RHEIR architecture with proper organization data isolation
 /// Each organization gets its own private zone for complete data isolation
@@ -27,7 +32,9 @@ class CloudKitZoneManager: ObservableObject {
     // MARK: - Initialization
     init(organizationID: String) {
         self.organizationID = organizationID
-        print("🏗️ CloudKitZoneManager initialized for organization: \(organizationID.prefix(8))...")
+        Logger.cloudKitZone.info(
+            "Initialized organization zone manager [organization=\(organizationID, privacy: .private(mask: .hash))]"
+        )
     }
     
     // MARK: - Zone Setup
@@ -37,7 +44,9 @@ class CloudKitZoneManager: ObservableObject {
         setupStatus = "Setting up organization zone..."
         setupProgress = 0.1
         
-        print("🏗️ ZONE SETUP: Creating organization-specific zone for \(organizationID.prefix(8))...")
+        Logger.cloudKitZone.info(
+            "Creating organization-specific CloudKit zone [organization=\(organizationID, privacy: .private(mask: .hash))]"
+        )
         
         // Create organization-specific zone in private database for security
         try await createOrganizationZone()
@@ -46,7 +55,9 @@ class CloudKitZoneManager: ObservableObject {
         isSetupComplete = true
         setupStatus = "Zone setup complete"
         
-        print("✅ ZONE SETUP: Complete! Organization \(organizationID.prefix(8))... has isolated zone")
+        Logger.cloudKitZone.notice(
+            "Completed organization zone setup [organization=\(organizationID, privacy: .private(mask: .hash))]"
+        )
     }
     
     /// Creates the private organization-specific zone for complete data isolation
@@ -58,13 +69,19 @@ class CloudKitZoneManager: ObservableObject {
         do {
             let savedZone = try await container.privateCloudDatabase.save(zone)
             currentZone = savedZone
-            print("✅ Created Organization Zone: \(organizationZoneID.zoneName)")
+            Logger.cloudKitZone.notice(
+                "Created organization CloudKit zone [organization=\(organizationID, privacy: .private(mask: .hash))]"
+            )
         } catch let error as CKError where error.code == .serverRecordChanged {
             // Zone already exists, which is fine
             currentZone = zone
-            print("✅ Organization Zone already exists: \(organizationZoneID.zoneName)")
+            Logger.cloudKitZone.info(
+                "Organization CloudKit zone already exists [organization=\(organizationID, privacy: .private(mask: .hash))]"
+            )
         } catch {
-            print("❌ Failed to create organization zone: \(error)")
+            Logger.cloudKitZone.error(
+                "Failed to create organization CloudKit zone [organization=\(organizationID, privacy: .private(mask: .hash)), error=\(error.localizedDescription, privacy: .public)]"
+            )
             throw error
         }
     }
@@ -91,7 +108,9 @@ class CloudKitZoneManager: ObservableObject {
         record.recordID = CKRecord.ID(recordName: record.recordID.recordName, zoneID: organizationZoneID)
         
         let savedRecord = try await database.save(record)
-        print("✅ Saved \(record.recordType) to organization zone \(organizationID.prefix(8))...")
+        Logger.cloudKitZone.notice(
+            "Saved record to organization CloudKit zone [organization=\(organizationID, privacy: .private(mask: .hash)), recordType=\(record.recordType, privacy: .public)]"
+        )
         
         guard let typedRecord = savedRecord as? T else {
             throw CloudKitZoneError.recordTypeMismatch
@@ -119,7 +138,9 @@ class CloudKitZoneManager: ObservableObject {
             case .success(let record):
                 return record as? T
             case .failure(let error):
-                print("❌ Failed to fetch \(recordType): \(error)")
+                Logger.cloudKitZone.error(
+                    "Failed to fetch zone record [organization=\(organizationID, privacy: .private(mask: .hash)), recordType=\(recordType, privacy: .public), error=\(error.localizedDescription, privacy: .public)]"
+                )
                 return nil
             }
         }
@@ -133,7 +154,9 @@ class CloudKitZoneManager: ObservableObject {
         let scopedRecordID = CKRecord.ID(recordName: recordID.recordName, zoneID: organizationZoneID)
         
         try await database.deleteRecord(withID: scopedRecordID)
-        print("✅ Deleted record from organization zone \(organizationID.prefix(8))...")
+        Logger.cloudKitZone.notice(
+            "Deleted record from organization CloudKit zone [organization=\(organizationID, privacy: .private(mask: .hash)), record=\(recordID.recordName, privacy: .private(mask: .hash))]"
+        )
     }
     
     // MARK: - Project-Specific Methods
@@ -157,7 +180,9 @@ class CloudKitZoneManager: ObservableObject {
         }
         
         let savedRecord = try await saveRecord(projectRecord)
-        print("✅ Project '\(project.name)' saved to organization zone \(organizationID.prefix(8))...")
+        Logger.cloudKitZone.notice(
+            "Saved project to organization CloudKit zone [organization=\(organizationID, privacy: .private(mask: .hash)), project=\(project.name, privacy: .private(mask: .hash))]"
+        )
         
         return savedRecord
     }
@@ -199,7 +224,9 @@ class CloudKitZoneManager: ObservableObject {
             )
         }
         
-        print("✅ Loaded \(projects.count) projects from organization zone \(organizationID.prefix(8))...")
+        Logger.cloudKitZone.info(
+            "Loaded projects from organization CloudKit zone [organization=\(organizationID, privacy: .private(mask: .hash)), count=\(projects.count, privacy: .public)]"
+        )
         return projects
     }
     
@@ -207,7 +234,9 @@ class CloudKitZoneManager: ObservableObject {
     func deleteProject(_ project: Project) async throws {
         let recordID = CKRecord.ID(recordName: project.id.uuidString, zoneID: organizationZoneID)
         try await deleteRecord(recordID: recordID)
-        print("✅ Deleted project '\(project.name)' from organization zone \(organizationID.prefix(8))...")
+        Logger.cloudKitZone.notice(
+            "Deleted project from organization CloudKit zone [organization=\(organizationID, privacy: .private(mask: .hash)), project=\(project.name, privacy: .private(mask: .hash))]"
+        )
     }
     
     // MARK: - Team Member-Specific Methods
@@ -227,7 +256,9 @@ class CloudKitZoneManager: ObservableObject {
         }
         
         let savedRecord = try await saveRecord(orgRecord)
-        print("✅ Saved \(teamMembers.count) team members to organization zone \(organizationID.prefix(8))...")
+        Logger.cloudKitZone.notice(
+            "Saved team members to organization CloudKit zone [organization=\(organizationID, privacy: .private(mask: .hash)), count=\(teamMembers.count, privacy: .public)]"
+        )
         
         return savedRecord
     }
@@ -242,15 +273,21 @@ class CloudKitZoneManager: ObservableObject {
             // Try to decode team members from JSON data
             if let teamMembersData = record["teamMembersData"] as? Data,
                let teamMembers = try? JSONDecoder().decode([TeamMember].self, from: teamMembersData) {
-                print("✅ Loaded \(teamMembers.count) team members from organization zone \(organizationID.prefix(8))...")
+                Logger.cloudKitZone.info(
+                    "Loaded team members from organization CloudKit zone [organization=\(organizationID, privacy: .private(mask: .hash)), count=\(teamMembers.count, privacy: .public)]"
+                )
                 return teamMembers
             }
         } catch let error as CKError where error.code == .unknownItem {
             // Organization record doesn't exist yet, return empty array
-            print("ℹ️ No organization record found for \(organizationID.prefix(8))..., returning empty team members")
+            Logger.cloudKitZone.info(
+                "No organization record found when loading team members [organization=\(organizationID, privacy: .private(mask: .hash))]"
+            )
             return []
         } catch {
-            print("❌ Failed to load team members: \(error)")
+            Logger.cloudKitZone.error(
+                "Failed to load team members from organization CloudKit zone [organization=\(organizationID, privacy: .private(mask: .hash)), error=\(error.localizedDescription, privacy: .public)]"
+            )
             throw error
         }
         
@@ -296,7 +333,9 @@ class CloudKitZoneManager: ObservableObject {
                 try await setupOrganizationZones()
                 completion(true)
             } catch {
-                print("❌ Zone setup failed: \(error)")
+                Logger.cloudKitZone.error(
+                    "Legacy zone setup callback failed [organization=\(organizationID, privacy: .private(mask: .hash)), error=\(error.localizedDescription, privacy: .public)]"
+                )
                 completion(false)
             }
         }
