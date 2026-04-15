@@ -1,5 +1,6 @@
 import SwiftUI
 import CloudKit
+import OSLog
 
 // MARK: - Project Data Migration Service
 class ProjectDataMigrationService {
@@ -22,7 +23,9 @@ class ProjectDataMigrationService {
         let group = DispatchGroup()
         var allSucceeded = true
         
-        print("🔄 Starting migration of \(projects.count) projects to CloudKit (\(currentEnvironment))...")
+        Logger.organizationMigration.notice(
+            "Starting project migration to CloudKit [environment=\(currentEnvironment, privacy: .public), count=\(projects.count, privacy: .public)]"
+        )
         
         for project in projects {
             group.enter()
@@ -44,17 +47,23 @@ class ProjectDataMigrationService {
             
             privateDB.save(projectRecord) { savedRecord, error in
                 if let error = error {
-                    print("❌ Failed to migrate project '\(project.name)': \(error.localizedDescription)")
+                    Logger.organizationMigration.error(
+                        "Failed to migrate project [project=\(project.id.uuidString, privacy: .private(mask: .hash)), error=\(error.localizedDescription, privacy: .public)]"
+                    )
                     allSucceeded = false
                 } else {
-                    print("✅ Successfully migrated project '\(project.name)'")
+                    Logger.organizationMigration.notice(
+                        "Migrated project to CloudKit [project=\(project.id.uuidString, privacy: .private(mask: .hash))]"
+                    )
                 }
                 group.leave()
             }
         }
         
         group.notify(queue: .main) {
-            print("🔄 Migration completed. Success: \(allSucceeded)")
+            Logger.organizationMigration.notice(
+                "Completed project migration to CloudKit [success=\(allSucceeded, privacy: .public)]"
+            )
             completion(allSucceeded)
         }
     }
@@ -64,7 +73,9 @@ class ProjectDataMigrationService {
         
         let query = CKQuery(recordType: "Organization", predicate: NSPredicate(value: true))
         
-        print("🔍 Searching for Organization records in CloudKit...")
+        Logger.organizationMigration.info(
+            "Searching for organization records in CloudKit [keepName=\(keepOnlyOrganizationWithName, privacy: .private)]"
+        )
         
         // Use modern CloudKit API and avoid recordName queries completely
         privateDB.fetch(withQuery: query, inZoneWith: nil, desiredKeys: ["name"], resultsLimit: 50) { result in
@@ -76,33 +87,41 @@ class ProjectDataMigrationService {
                         case .success(let record):
                             return record
                         case .failure(let error):
-                            print("❌ Failed to fetch record: \(error.localizedDescription)")
+                            Logger.organizationMigration.error(
+                                "Failed to fetch organization record during cleanup: \(error.localizedDescription, privacy: .public)"
+                            )
                             return nil
                         }
                     }
                     
                     if records.isEmpty {
-                        print("✅ No organizations found to clean up")
+                        Logger.organizationMigration.notice("No organization records were found for cleanup.")
                         completion(true)
                         return
                     }
                     
-                    print("📋 Total organizations found: \(records.count)")
+                    Logger.organizationMigration.notice(
+                        "Loaded organization records for cleanup [count=\(records.count, privacy: .public)]"
+                    )
                     
                     // Filter records to delete based on name field (not recordName)
                     let recordsToDelete = records.filter { record in
                         let name = record["name"] as? String ?? ""
                         let shouldDelete = name != keepOnlyOrganizationWithName
                         if shouldDelete {
-                            print("🗑️ Will delete organization: \(name)")
+                            Logger.organizationMigration.notice(
+                                "Queued organization for deletion [name=\(name, privacy: .private)]"
+                            )
                         } else {
-                            print("✅ Keeping organization: \(name)")
+                            Logger.organizationMigration.info(
+                                "Keeping organization during cleanup [name=\(name, privacy: .private)]"
+                            )
                         }
                         return shouldDelete
                     }
                     
                     if recordsToDelete.isEmpty {
-                        print("✅ No organizations to delete")
+                        Logger.organizationMigration.notice("No organization records required deletion.")
                         completion(true)
                         return
                     }
@@ -110,7 +129,9 @@ class ProjectDataMigrationService {
                     self.deleteRecords(recordsToDelete, completion: completion)
                     
                 case .failure(let error):
-                    print("❌ Failed to query organizations: \(error.localizedDescription)")
+                    Logger.organizationMigration.error(
+                        "Failed to query organization records for cleanup: \(error.localizedDescription, privacy: .public)"
+                    )
                     completion(false)
                 }
             }
@@ -121,17 +142,23 @@ class ProjectDataMigrationService {
         let privateDB = privateDatabase
         let recordIDs = records.map { $0.recordID }
         
-        print("🗑️ Deleting \(recordIDs.count) organization records...")
+        Logger.organizationMigration.notice(
+            "Deleting organization records [count=\(recordIDs.count, privacy: .public)]"
+        )
         
         let deleteOperation = CKModifyRecordsOperation(recordsToSave: nil, recordIDsToDelete: recordIDs)
         deleteOperation.modifyRecordsResultBlock = { result in
             DispatchQueue.main.async {
                 switch result {
                 case .success:
-                    print("✅ Successfully deleted \(recordIDs.count) organizations")
+                    Logger.organizationMigration.notice(
+                        "Deleted organization records [count=\(recordIDs.count, privacy: .public)]"
+                    )
                     completion(true)
                 case .failure(let error):
-                    print("❌ Failed to delete organizations: \(error.localizedDescription)")
+                    Logger.organizationMigration.error(
+                        "Failed to delete organization records: \(error.localizedDescription, privacy: .public)"
+                    )
                     completion(false)
                 }
             }
