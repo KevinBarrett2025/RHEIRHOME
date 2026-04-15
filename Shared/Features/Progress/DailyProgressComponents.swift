@@ -1,4 +1,5 @@
 import SwiftUI
+import OSLog
 
 // MARK: - Models
 struct IdentifiableUUID: Identifiable {
@@ -428,7 +429,9 @@ struct AsyncProgressPhoto<Content: View, Placeholder: View>: View {
                 }
             }
         } catch {
-            print("❌ Failed to load progress photo \(photoID): \(error)")
+            Logger.cloudKitPhoto.error(
+                "Failed to load progress photo [photoID=\(photoID.uuidString, privacy: .private(mask: .hash)) error=\(error.localizedDescription, privacy: .public)]"
+            )
             await MainActor.run {
                 self.isLoading = false
             }
@@ -492,7 +495,9 @@ struct AsyncProgressPhotoDetailView: View {
                 }
             }
         } catch {
-            print("❌ Failed to load progress photo \(photoID): \(error)")
+            Logger.cloudKitPhoto.error(
+                "Failed to load progress photo detail [photoID=\(photoID.uuidString, privacy: .private(mask: .hash)) error=\(error.localizedDescription, privacy: .public)]"
+            )
             await MainActor.run {
                 self.isLoading = false
             }
