@@ -1,4 +1,5 @@
 import SwiftUI
+import OSLog
 
 struct NewProjectView: View {
     @EnvironmentObject var projectVM: ProjectViewModel
@@ -358,7 +359,7 @@ struct NewProjectView: View {
               laborValue.isFinite && laborValue >= 0,
               generalConditionsValue.isFinite && generalConditionsValue >= 0,
               contingencyAmount.isFinite && contingencyAmount >= 0 else {
-            print("❌ Invalid budget values detected, cannot create project")
+            Logger.project.warning("New project creation aborted because of invalid budget values.")
             return
         }
         
@@ -399,14 +400,12 @@ struct NewProjectView: View {
     
     private func loadSmartSuggestions() {
         guard projectVM.isEnterpriseIntelligenceReady else { 
-            print("⚠️ PHASE 2D: Enterprise Intelligence not ready for suggestions")
+            Logger.project.info("Enterprise intelligence is not ready for new-project suggestions.")
             return 
         }
         
-        print("🚀 PHASE 2D: Loading real organizational intelligence suggestions...")
+        Logger.project.info("Loading organizational intelligence suggestions for new project flow.")
         
-        // Get real intelligence data from existing methods
-        let intelligenceData = projectVM.getOrganizationalIntelligenceData()
         let receiptRecords = projectVM.getReceiptIntelligenceRecords()
         
         // Generate suggestions data
@@ -427,9 +426,9 @@ struct NewProjectView: View {
         let topPaymentMethodsByUsage = projectVM.getTopPaymentMethodsByUsage(limit: 3)
         suggestedPaymentMethods = topPaymentMethodsByUsage.map { $0.paymentMethod }
         
-        print("✅ PHASE 2D: Real intelligence loaded - \(suggestedVendors.count) AI vendors, \(suggestedPaymentMethods.count) AI payment methods")
-        print("  🏪 AI Vendors: \(suggestedVendors)")
-        print("  💳 AI Payment Methods: \(suggestedPaymentMethods)")
+        Logger.project.notice(
+            "Loaded organizational intelligence suggestions [vendors=\(suggestedVendors.count, privacy: .public) paymentMethods=\(suggestedPaymentMethods.count, privacy: .public) receipts=\(receiptRecords.count, privacy: .public)]"
+        )
     }
 }
 
@@ -915,7 +914,9 @@ struct SmartProjectSuggestionsView: View {
             }
             
             Button {
-                print("🚀 PHASE 2D: Applying AI suggestions - \(selectedVendors.count) vendors, \(selectedPaymentMethods.count) payment methods")
+                Logger.project.notice(
+                    "Applying AI suggestions in new project flow [vendors=\(selectedVendors.count, privacy: .public) paymentMethods=\(selectedPaymentMethods.count, privacy: .public)]"
+                )
                 onApplySuggestions(Array(selectedVendors), Array(selectedPaymentMethods))
             } label: {
                 HStack {
