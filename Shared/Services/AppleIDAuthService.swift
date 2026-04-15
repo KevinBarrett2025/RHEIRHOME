@@ -2,6 +2,7 @@ import Foundation
 import Combine
 import AuthenticationServices
 import UIKit
+import OSLog
 
 /// AppleIDAuthService's job is to present the Sign in with Apple UI,
 /// then publish a `User(id: String, email: String)` once the user completes.
@@ -19,15 +20,17 @@ public final class AppleIDAuthService: NSObject {
         if let storedUserID = UserDefaults.standard.string(forKey: "appleUserID") {
             let storedEmail = getStoredEmail(for: storedUserID)
             currentUser = User(id: storedUserID, email: storedEmail)
-            print("🔄 AppleIDAuthService - restored user from storage: \(storedUserID)")
+            Logger.auth.info(
+                "Restored Apple ID auth user from storage [user=\(storedUserID, privacy: .private(mask: .hash))]"
+            )
         }
         
-        print("🔧 AppleIDAuthService initialized")
+        Logger.auth.info("AppleIDAuthService initialized.")
     }
 
     /// Launch the Sign In with Apple flow and return a publisher that emits exactly one `User`.
     public func signInWithApple() -> AnyPublisher<User, Error> {
-        print("🔔 AppleIDAuthService.signInWithApple() called")
+        Logger.auth.notice("AppleIDAuthService sign-in flow started.")
 
         // Tear down any in-flight
         continuation?.send(completion: .finished)
@@ -39,19 +42,25 @@ public final class AppleIDAuthService: NSObject {
         // Build request
         let request = ASAuthorizationAppleIDProvider().createRequest()
         request.requestedScopes = [.email, .fullName]
-        print("   • requestedScopes = \(String(describing: request.requestedScopes))")
+        Logger.auth.debug(
+            "Configured Apple ID requested scopes: \(String(describing: request.requestedScopes), privacy: .public)"
+        )
 
         // Perform it
         let controller = ASAuthorizationController(authorizationRequests: [request])
         controller.delegate = self
         controller.presentationContextProvider = self
-        print("   • performing ASAuthorizationController.performRequests()…")
+        Logger.auth.info("Performing ASAuthorizationController request.")
         controller.performRequests()
 
         return subject
             .handleEvents(
-                receiveSubscription: { _ in print("   ↪️ Combine: subscriber attached") },
-                receiveCancel:    { print("   ↩️ Combine: subscription cancelled") }
+                receiveSubscription: { _ in
+                    Logger.auth.debug("Apple ID auth publisher subscriber attached.")
+                },
+                receiveCancel: {
+                    Logger.auth.debug("Apple ID auth publisher subscription cancelled.")
+                }
             )
             .receive(on: DispatchQueue.main)
             .eraseToAnyPublisher()
@@ -61,7 +70,9 @@ public final class AppleIDAuthService: NSObject {
     
     private func storeEmail(_ email: String, for userID: String) {
         UserDefaults.standard.set(email, forKey: "apple_user_email_\(userID)")
-        print("🔐 AppleIDAuthService - Email stored for user: \(userID)")
+        Logger.auth.info(
+            "Stored Apple ID email for user [user=\(userID, privacy: .private(mask: .hash))]"
+        )
     }
     
     private func getStoredEmail(for userID: String) -> String {
@@ -69,7 +80,9 @@ public final class AppleIDAuthService: NSObject {
             return storedEmail
         }
         
-        print("⚠️ AppleIDAuthService - No stored email found for user: \(userID)")
+        Logger.auth.warning(
+            "No stored Apple ID email found for user [user=\(userID, privacy: .private(mask: .hash))]"
+        )
         return "user.email.not.available@rheir.com"
     }
 
@@ -97,7 +110,7 @@ public final class AppleIDAuthService: NSObject {
     }
 
     public func signOut() {
-        print("🔒 AppleIDAuthService.signOut() called")
+        Logger.auth.notice("AppleIDAuthService sign-out requested.")
         
         if let userID = currentUser?.id {
             // Clear email from UserDefaults
@@ -116,7 +129,7 @@ extension AppleIDAuthService: ASAuthorizationControllerDelegate {
         controller: ASAuthorizationController,
         didCompleteWithAuthorization auth: ASAuthorization
     ) {
-        print("✅ ASAuthorizationControllerDelegate.didCompleteWithAuthorization")
+        Logger.auth.notice("Apple ID authorization completed successfully.")
         guard let creds = auth.credential as? ASAuthorizationAppleIDCredential else {
             let err = NSError(domain: "AppleIDAuthService",
                               code: -1,
@@ -134,18 +147,21 @@ extension AppleIDAuthService: ASAuthorizationControllerDelegate {
             // First time sign in - Apple provided email
             email = credentialEmail
             storeEmail(email, for: userID)
-            print("✅ First-time Apple Sign-In - email stored")
+            Logger.auth.info("Stored first-time Apple ID email from authorization callback.")
         } else {
             // Subsequent sign in - Apple doesn't provide email
             email = getStoredEmail(for: userID)
-            print("🔄 Subsequent Apple Sign-In - email retrieved from storage")
+            Logger.auth.info(
+                "Recovered Apple ID email from local storage for returning user [user=\(userID, privacy: .private(mask: .hash))]"
+            )
         }
         
         let user = User(id: userID, email: email)
         currentUser = user
         
-        print("   • Credential.user = \(userID)")
-        print("   • Using email = \(email)")
+        Logger.auth.info(
+            "Completed Apple ID auth for user [user=\(userID, privacy: .private(mask: .hash)), emailAvailable=\(!email.isEmpty, privacy: .public)]"
+        )
 
         // Persist for silent login
         UserDefaults.standard.set(userID, forKey: "appleUserID")
@@ -159,7 +175,7 @@ extension AppleIDAuthService: ASAuthorizationControllerDelegate {
         controller: ASAuthorizationController,
         didCompleteWithError error: Error
     ) {
-        print("❌ ASAuthorizationControllerDelegate.didCompleteWithError: \(error.localizedDescription)")
+        Logger.auth.error("Apple ID authorization failed: \(error.localizedDescription, privacy: .public)")
         continuation?.send(completion: .failure(error))
         continuation = nil
     }
