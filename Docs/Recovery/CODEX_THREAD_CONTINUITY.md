@@ -3,12 +3,12 @@
 ## Repo Truth
 - Repo Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Active Branch: `gm/rheir-hardening-phase1`
-- HEAD SHA: `0f6f76db1ea01e4674b5d23de1e767a6f3135446`
-- Last Commit: `0f6f76d Phase 1: replace team member service print tracing`
+- HEAD SHA: `b32869ba039434a9b2d16cef068e1b4a62a20640`
+- Last Commit: `b32869b Phase 1: replace core authentication service print tracing`
 
 ## Current Objective
-- Preserve the repo-tracked ship-readiness checklist and checkpoint the `Shared/Services/Core/AuthenticationService.swift` logging cleanup slice.
-- Queue the next highest-value remaining production service seam in `Shared/Services/EnhancedReceiptService.swift` after this checkpoint lands.
+- Preserve the repo-tracked ship-readiness checklist and checkpoint the `Shared/Services/EnhancedReceiptService.swift` logging cleanup slice.
+- Queue the next highest-value remaining production service seam in `Shared/Services/VendorManagementService.swift` after this checkpoint lands.
 
 ## Current Working Set
 - Session flow now routes through `Shared/Views/Auth/AppSessionSupport.swift`.
@@ -63,13 +63,14 @@
 - `Shared/Services/ChatGPTService.swift` now uses structured `Logger.organizationService` calls instead of raw `print(...)` tracing, even though the file currently houses `OrganizationService`.
 - `Shared/Services/TeamMemberService.swift` now uses structured `Logger.teamMember` calls instead of raw `print(...)` tracing.
 - `Shared/Services/Core/AuthenticationService.swift` now uses structured `Logger.auth` calls instead of raw `print(...)` tracing.
-- `Shared/Services/EnhancedReceiptService.swift` is the next highest-value remaining production service seam by fresh raw `print(...)` residue count.
+- `Shared/Services/EnhancedReceiptService.swift` now uses structured `Logger.receiptOCR` calls instead of raw `print(...)` tracing.
+- `Shared/Services/VendorManagementService.swift` is the next highest-value remaining production service seam by fresh raw `print(...)` residue count.
 - Other non-hardened seams still contain raw `print(...)` tracing.
 - Focused tests for invite parsing, cache migration, project-store persistence, receipt-intelligence retention, cache clearing, labor aggregation/validation, company-state bucketing, team-member store behavior, and receipt project-resolution behavior now live in `RHEIRTests/RHEIRTests.swift`.
 - Focused tests for project access normalization and assignment filtering now live in `RHEIRTests/RHEIRTests.swift`.
 - The current working slice has exact simulator evidence recorded:
-  - Gate A `build_sim`: PASS (`mcp__xcodebuildmcp__build_sim` with `-derivedDataPath /tmp/rheir_gateA_phase1al_mcp_dd`)
-  - Focused parity `test_sim -only-testing:RHEIRTests`: PASS (`mcp__xcodebuildmcp__test_sim` with `-derivedDataPath /tmp/rheir_parity_phase1al_mcp_dd`, `27/27`)
+  - Gate A `build_sim`: PASS (`mcp__xcodebuildmcp__build_sim` with `-derivedDataPath /tmp/rheir_gateA_phase1am_mcp_dd`)
+  - Focused parity `test_sim -only-testing:RHEIRTests`: PASS (`mcp__xcodebuildmcp__test_sim` with `-derivedDataPath /tmp/rheir_parity_phase1am_mcp_dd`, `27/27`)
   - Direct `xcodebuild` CLI evidence remains less stable than the MCP simulator path in the current local CoreSimulator environment
 
 ## Known Constraints
@@ -79,6 +80,6 @@
 - This repo follows a repo-local STS equivalent defined in the root governance docs because the original STS spine docs were not present here.
 
 ## Next Required Action
-1. Commit the `Shared/Services/Core/AuthenticationService.swift` logging slice without staging `Shared/Views/Auth/LoginView.swift`, `rheir_knowledge_database.json`, `RHEIRmemories.csv`, or `RheirLogo 1024x1024.png`.
+1. Commit the `Shared/Services/EnhancedReceiptService.swift` logging slice without staging `Shared/Views/Auth/LoginView.swift`, `rheir_knowledge_database.json`, `RHEIRmemories.csv`, or `RheirLogo 1024x1024.png`.
 2. Preserve the repo-local STS docs and `SHIP_READINESS_CHECKLIST.md` as the current release-planning truth for this repository.
-3. Continue the next logging-hardening seam in `Shared/Services/EnhancedReceiptService.swift` after the `AuthenticationService.swift` checkpoint lands.
+3. Continue the next logging-hardening seam in `Shared/Services/VendorManagementService.swift` after the `EnhancedReceiptService.swift` checkpoint lands.

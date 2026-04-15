@@ -1,6 +1,7 @@
 import Foundation
 import UIKit
 import Vision
+import OSLog
 
 /// Enhanced receipt processing service that orchestrates OCR + ChatGPT analysis
 actor EnhancedReceiptService {
@@ -12,35 +13,39 @@ actor EnhancedReceiptService {
     
     /// Processes a receipt image through OCR and ChatGPT analysis
     func processReceiptImage(_ image: UIImage) async -> ProcessedReceipt {
-        print("🔍 Starting enhanced receipt processing...")
+        Logger.receiptOCR.info("Starting enhanced receipt processing.")
         
         do {
             // Step 1: Extract text using OCR
-            print("📖 Extracting text with OCR...")
+            Logger.receiptOCR.info("Extracting text with OCR for enhanced receipt processing.")
             let ocrText = try await extractTextFromImage(image)
             
             guard !ocrText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                print("⚠️ No text found in image")
+                Logger.receiptOCR.warning("No text found in image during enhanced receipt processing.")
                 return ProcessedReceipt(
                     receipt: createFallbackReceipt(image: image),
                     error: "No text could be extracted from the image"
                 )
             }
             
-            print("✅ OCR extracted \(ocrText.count) characters")
+            Logger.receiptOCR.info("Enhanced receipt OCR extracted [characters=\(ocrText.count, privacy: .public)]")
             
             // Step 2: Analyze with ChatGPT
-            print("🤖 Analyzing with ChatGPT...")
+            Logger.receiptOCR.info("Starting AI analysis for enhanced receipt processing.")
             let analysis = try await chatGPTService.analyzeReceipt(ocrText)
             
             // Step 3: Create structured receipt
             let receipt = createReceiptFromAnalysis(analysis, ocrText: ocrText, image: image)
             
-            print("✅ Enhanced processing complete!")
+            Logger.receiptOCR.notice(
+                "Completed enhanced receipt processing [items=\(analysis.items.count, privacy: .public) confidence=\(analysis.confidence, privacy: .public)]"
+            )
             return ProcessedReceipt(receipt: receipt, error: nil)
             
         } catch let error as ChatGPTError {
-            print("🤖 ChatGPT analysis failed: \(error.localizedDescription)")
+            Logger.receiptOCR.warning(
+                "Enhanced receipt AI analysis failed [error=\(error.localizedDescription, privacy: .public)]"
+            )
             
             // Fallback to basic OCR processing
             do {
@@ -57,7 +62,9 @@ actor EnhancedReceiptService {
                 )
             }
         } catch {
-            print("❌ Processing error: \(error.localizedDescription)")
+            Logger.receiptOCR.error(
+                "Enhanced receipt processing failed before fallback [error=\(error.localizedDescription, privacy: .public)]"
+            )
             
             // Fallback to basic OCR processing
             do {
