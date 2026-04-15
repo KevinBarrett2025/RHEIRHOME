@@ -1,38 +1,39 @@
 import SwiftUI
 import CloudKit
+import OSLog
 
 // MARK: - Simplified Migration Service Reference
 class LocalDataMigrationService: ObservableObject {
     func testCloudKitEnvironment(completion: @escaping (String) -> Void) {
-        print("🔍 Testing CloudKit environment...")
+        Logger.settingsSupport.info("Testing CloudKit environment from data-management section.")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             completion("☁️ CloudKit environment: Connected\n✅ Status: All systems operational")
         }
     }
     
     func debugLocalData(completion: @escaping (String) -> Void) {
-        print("🔍 Debugging local data...")
+        Logger.settingsSupport.info("Debugging local data from data-management section.")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             completion("📱 Local data debug:\n✅ Projects file exists\n✅ Data integrity verified")
         }
     }
     
     func exploreCloudKitData(completion: @escaping (String) -> Void) {
-        print("🔍 Exploring CloudKit data...")
+        Logger.settingsSupport.info("Exploring CloudKit data from data-management section.")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             completion("☁️ CloudKit exploration:\n✅ Records found and accessible")
         }
     }
     
     func exploreCloudKitDataSafely(completion: @escaping (String) -> Void) {
-        print("🔍 Safe CloudKit exploration...")
+        Logger.settingsSupport.info("Running safe CloudKit exploration from data-management section.")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             completion("☁️ Safe CloudKit exploration:\n✅ No schema conflicts detected")
         }
     }
     
     func findRecentActivity(completion: @escaping (String) -> Void) {
-        print("🔍 Finding recent activity...")
+        Logger.settingsSupport.info("Finding recent CloudKit activity from data-management section.")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             completion("📊 Recent activity:\n✅ Recent changes detected")
         }

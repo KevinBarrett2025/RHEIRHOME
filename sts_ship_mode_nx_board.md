@@ -12,14 +12,15 @@
 - Active offline sync/storage, CloudKit project service, CloudKit zone management, and top-level CloudKit runtime coordination now use structured logging.
 - `CompanyStore` and its companion types no longer live inside `MasterCompanySettingsView.swift`.
 - Active company/project UI assignment, team-member, organization-edit, payment-method, and team-management views now use structured logging instead of raw `print(...)` tracing.
+- Debug/support settings views and data-management helpers now use structured `Logger.settingsSupport` logging instead of raw `print(...)` tracing.
 - Stable simulator evidence is green on the staged checkpoint:
-  - Gate A `build_sim`: PASS (`mcp__xcodebuildmcp__build_sim` with `-derivedDataPath /tmp/rheir_gateA_phase1h_mcp_dd`)
-  - Focused parity `test_sim -only-testing:RHEIRTests`: PASS (`mcp__xcodebuildmcp__test_sim` with `-derivedDataPath /tmp/rheir_parity_phase1h_mcp_dd`, `27/27`)
+  - Gate A `build_sim`: PASS (`mcp__xcodebuildmcp__build_sim` with `-derivedDataPath /tmp/rheir_gateA_phase1i_mcp_dd`)
+  - Focused parity `test_sim -only-testing:RHEIRTests`: PASS (`mcp__xcodebuildmcp__test_sim` with `-derivedDataPath /tmp/rheir_parity_phase1i_mcp_dd`, `27/27`)
 
 ## Open Work
-- Finish replacing raw `print(...)` tracing in the remaining debug/support settings paths and other non-hardened production seams.
+- Finish replacing raw `print(...)` tracing in hidden debug views, legacy services, models, onboarding, and other non-hardened production seams.
 - Continue shrinking the remaining oversized active state owners.
-- After the active company/project UI logging checkpoint commit, continue the next company/project coordination cleanup and the remaining production logging slice.
+- After the debug/support settings logging checkpoint commit, continue the next company/project coordination cleanup or the hidden-debug/logging cleanup slice.
 
 ## Blockers
 - Device-targeted Gate A remains blocked by signing for `com.RheirHome.RHEIR`.

@@ -1,5 +1,6 @@
 import SwiftUI
 import CloudKit
+import OSLog
 
 struct OrganizationDebugView: View {
     let organization: Organization?
@@ -602,7 +603,7 @@ struct OrganizationDebugView: View {
                 
                 switch result {
                 case .failure(let error):
-                    print("❌ [CloudKit Debug] Error: \(error)")
+                    Logger.settingsSupport.error("Organization debug CloudKit load failed: \(error.localizedDescription, privacy: .public)")
                 case .success(let matchInfo):
                     let records = matchInfo.matchResults.compactMap { pair -> CKRecord? in
                         if case .success(let record) = pair.1 {
@@ -612,7 +613,7 @@ struct OrganizationDebugView: View {
                     }
                     
                     self.allCloudKitRecords = records
-                    print("✅ [CloudKit Debug] Found \(records.count) CloudKit Organization records")
+                    Logger.settingsSupport.notice("Organization debug loaded CloudKit organization records [count=\(records.count, privacy: .public)]")
                 }
             }
         }
@@ -625,7 +626,7 @@ struct OrganizationDebugView: View {
             return
         }
         
-        print("🔍 [Debug] Forcing organization search for user: \(user.id.prefix(8))...")
+        Logger.settingsSupport.info("Forcing organization search from organization debug view [user=\(user.id, privacy: .private(mask: .hash))]")
         
         // Now using the public method
         Task {

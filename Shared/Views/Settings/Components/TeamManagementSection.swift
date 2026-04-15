@@ -1,4 +1,5 @@
 import SwiftUI
+import OSLog
 import CloudKit
 
 struct TeamManagementSection: View {
@@ -156,7 +157,7 @@ struct TeamManagementSection: View {
     private func performNuclearReset() async -> (Bool, String?) {
         return await withCheckedContinuation { continuation in
             // Since the nuclear reset methods may not be accessible, we'll simulate
-            print("🔄 Performing simulated nuclear reset...")
+            Logger.settingsSupport.info("Performing simulated nuclear reset from team-management section.")
             
             // Simulate nuclear reset by clearing projects and resetting state
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {

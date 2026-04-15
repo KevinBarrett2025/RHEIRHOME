@@ -1,5 +1,6 @@
 import SwiftUI
 import CloudKit
+import OSLog
 
 struct CloudKitDataView: View {
     @State private var organizations: [CKRecord] = []
@@ -143,11 +144,11 @@ struct CloudKitDataView: View {
                 switch result {
                 case .success:
                     organizations = fetchedRecords
-                    print("📋 Loaded \(fetchedRecords.count) organizations")
+                    Logger.settingsSupport.notice("Loaded organizations from CloudKit data view [count=\(fetchedRecords.count, privacy: .public)]")
                 case .failure(let error):
                     errorMessage = "Failed to load organizations: \(error.localizedDescription)"
                     showingError = true
-                    print("❌ Organization query failed: \(error)")
+                    Logger.settingsSupport.error("CloudKit data view organization query failed: \(error.localizedDescription, privacy: .public)")
                 }
                 checkLoadingComplete()
             }
@@ -177,11 +178,11 @@ struct CloudKitDataView: View {
                 switch result {
                 case .success:
                     projects = fetchedRecords
-                    print("📋 Loaded \(fetchedRecords.count) projects")
+                    Logger.settingsSupport.notice("Loaded projects from CloudKit data view [count=\(fetchedRecords.count, privacy: .public)]")
                 case .failure(let error):
                     errorMessage = "Failed to load projects: \(error.localizedDescription)"
                     showingError = true
-                    print("❌ Project query failed: \(error)")
+                    Logger.settingsSupport.error("CloudKit data view project query failed: \(error.localizedDescription, privacy: .public)")
                 }
                 checkLoadingComplete()
             }
@@ -210,7 +211,7 @@ struct CloudKitDataView: View {
                     errorMessage = "Failed to create organization: \(error.localizedDescription)"
                     showingError = true
                 } else {
-                    print("✅ Created test organization")
+                    Logger.settingsSupport.notice("Created test organization from CloudKit data view.")
                     loadOrganizations()
                 }
             }
@@ -229,7 +230,7 @@ struct CloudKitDataView: View {
                     errorMessage = "Failed to delete organization: \(error.localizedDescription)"
                     showingError = true
                 } else {
-                    print("✅ Deleted organization")
+                    Logger.settingsSupport.notice("Deleted organization from CloudKit data view.")
                     loadOrganizations()
                 }
             }
@@ -248,7 +249,7 @@ struct CloudKitDataView: View {
                     errorMessage = "Failed to delete project: \(error.localizedDescription)"
                     showingError = true
                 } else {
-                    print("✅ Deleted project")
+                    Logger.settingsSupport.notice("Deleted project from CloudKit data view.")
                     loadProjects()
                 }
             }

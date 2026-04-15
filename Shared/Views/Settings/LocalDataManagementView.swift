@@ -1,4 +1,9 @@
 import SwiftUI
+import OSLog
+
+extension Logger {
+    static let settingsSupport = Logger(subsystem: "com.RheirHome.RHEIR", category: "settings-support")
+}
 
 /// Local data and cache management
 struct LocalDataManagementView: View {
@@ -63,17 +68,17 @@ struct LocalDataManagementView: View {
     
     private func clearCache() {
         // Simple cache clearing
-        print("Cache cleared")
+        Logger.settingsSupport.notice("Cleared local app cache from local-data management view.")
     }
     
     private func clearUserDefaults() {
         // Clear non-essential UserDefaults
-        print("UserDefaults cleared")
+        Logger.settingsSupport.notice("Cleared non-essential UserDefaults from local-data management view.")
     }
     
     private func resetAllData() {
         // Reset all local data
-        print("All local data reset")
+        Logger.settingsSupport.notice("Reset all local data from local-data management view.")
     }
 }
 
