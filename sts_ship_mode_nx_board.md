@@ -32,14 +32,15 @@
 - `ProjectDataMigrationService.swift` now uses structured `Logger.organizationMigration` logging instead of raw `print(...)` tracing.
 - `Organization/CloudKitPaymentMethodService.swift` now uses structured `Logger.cloudKitPaymentMethod` logging instead of raw `print(...)` tracing.
 - `DataMigrationService.swift` now uses structured `Logger.organizationMigration` logging instead of raw `print(...)` tracing.
+- `Core/JWTService.swift` now uses structured `Logger.auth` logging instead of raw `print(...)` tracing.
 - Stable simulator evidence is green on the staged checkpoint:
-  - Gate A `build_sim`: PASS (`mcp__xcodebuildmcp__build_sim` with `-derivedDataPath /tmp/rheir_gateA_phase1ab_mcp_dd`)
-  - Focused parity `test_sim -only-testing:RHEIRTests`: PASS (`mcp__xcodebuildmcp__test_sim` with `-derivedDataPath /tmp/rheir_parity_phase1ab_mcp_dd`, `27/27`)
+  - Gate A `build_sim`: PASS (`mcp__xcodebuildmcp__build_sim` with `-derivedDataPath /tmp/rheir_gateA_phase1ac_mcp_dd`)
+  - Focused parity `test_sim -only-testing:RHEIRTests`: PASS (`mcp__xcodebuildmcp__test_sim` with `-derivedDataPath /tmp/rheir_parity_phase1ac_mcp_dd`, `27/27`)
 
 ## Open Work
-- Finish replacing raw `print(...)` tracing in `Core/JWTService.swift` and the other non-hardened production seams.
+- Finish replacing raw `print(...)` tracing in `PaymentMethodManagementService.swift` and the other non-hardened production seams.
 - Continue shrinking the remaining oversized active state owners.
-- After the `DataMigrationService.swift` checkpoint commit, continue the `Core/JWTService.swift` cleanup slice.
+- After the `Core/JWTService.swift` checkpoint commit, continue the `PaymentMethodManagementService.swift` cleanup slice.
 
 ## Blockers
 - Device-targeted Gate A remains blocked by signing for `com.RheirHome.RHEIR`.

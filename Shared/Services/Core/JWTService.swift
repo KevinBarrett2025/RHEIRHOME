@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 import AuthenticationServices
+import OSLog
 
 /// Service responsible for JWT token management and exchange
 protocol JWTServiceProtocol {
@@ -28,8 +29,8 @@ final class RHEIRJWTService: JWTServiceProtocol {
             return Fail(error: JWTError.invalidAppleToken).eraseToAnyPublisher()
         }
         
-        print("🔄 [JWT] Exchanging Apple token for 24-hour RHEIR JWT...")
-        print("🔄 [JWT] Apple identity token length: \(tokenString.count)")
+        Logger.auth.notice("Exchanging Apple identity token for RHEIR JWT.")
+        Logger.auth.debug("Apple identity token length: \(tokenString.count, privacy: .public)")
         
         guard let url = URL(string: authLambdaURL) else {
             return Fail(error: JWTError.invalidURL).eraseToAnyPublisher()
@@ -43,7 +44,9 @@ final class RHEIRJWTService: JWTServiceProtocol {
     }
     
     func createAppSpecificJWT(for user: User) -> AnyPublisher<String, Error> {
-        print("🔄 [JWT] Creating app-specific JWT for user: \(user.id)")
+        Logger.auth.info(
+            "Creating app-specific JWT [user=\(user.id, privacy: .private(mask: .hash))]"
+        )
         
         guard let url = URL(string: authLambdaURL) else {
             return Fail(error: JWTError.invalidURL).eraseToAnyPublisher()
@@ -65,7 +68,7 @@ final class RHEIRJWTService: JWTServiceProtocol {
                 if let httpError = error as? JWTError,
                    case .httpError(let statusCode, _) = httpError,
                    statusCode == 400 {
-                    print("⚠️ [JWT] Lambda doesn't support app-specific JWT, creating local token")
+                    Logger.auth.warning("JWT Lambda does not support app-specific JWT yet; using local fallback token.")
                     let localJWT = self?.createLocalJWT(for: user) ?? "local.jwt.token"
                     return Just(localJWT)
                         .setFailureType(to: Error.self)
@@ -90,7 +93,7 @@ final class RHEIRJWTService: JWTServiceProtocol {
         let expiryDate = Date().addingTimeInterval(24 * 60 * 60)
         UserDefaults.standard.set(expiryDate, forKey: jwtExpiryKey)
         
-        print("💾 [JWT] Stored 24-hour RHEIR JWT: \(jwt.prefix(20))...")
+        Logger.auth.notice("Stored 24-hour RHEIR JWT in local cache.")
     }
     
     func getStoredJWT() -> String? {
@@ -104,7 +107,7 @@ final class RHEIRJWTService: JWTServiceProtocol {
     func clearJWT() {
         UserDefaults.standard.removeObject(forKey: jwtStorageKey)
         UserDefaults.standard.removeObject(forKey: jwtExpiryKey)
-        print("🗑 [JWT] Cleared stored RHEIR JWT")
+        Logger.auth.notice("Cleared stored RHEIR JWT from local cache.")
     }
     
     func hasValidJWT() -> Bool {
@@ -132,20 +135,18 @@ final class RHEIRJWTService: JWTServiceProtocol {
             return Fail(error: error).eraseToAnyPublisher()
         }
         
-        // Log request details
-        if let bodyString = String(data: request.httpBody!, encoding: .utf8) {
-            print("📡 [JWT] \(requestType) request body: \(bodyString)")
-        }
-        
-        print("🌐 [JWT] Calling Auth Lambda for \(requestType): \(url.absoluteString)")
+        let payloadKeys = payload.keys.sorted().joined(separator: ",")
+        Logger.auth.info(
+            "Calling JWT Lambda [requestType=\(requestType, privacy: .public), url=\(url.absoluteString, privacy: .public), keys=\(payloadKeys, privacy: .public)]"
+        )
         
         return URLSession.shared.dataTaskPublisher(for: request)
             .handleEvents(
                 receiveOutput: { data, response in
                     if let httpResponse = response as? HTTPURLResponse {
-                        let responseBody = String(data: data, encoding: .utf8) ?? ""
-                        print("📡 [JWT] \(requestType) response status: \(httpResponse.statusCode)")
-                        print("📡 [JWT] \(requestType) response body: \(responseBody)")
+                        Logger.auth.debug(
+                            "JWT Lambda response received [requestType=\(requestType, privacy: .public), status=\(httpResponse.statusCode, privacy: .public), bytes=\(data.count, privacy: .public)]"
+                        )
                     }
                 }
             )
@@ -165,7 +166,7 @@ final class RHEIRJWTService: JWTServiceProtocol {
                     throw JWTError.noJWTInResponse
                 }
                 
-                print("✅ [JWT] Successfully received JWT from Auth Lambda")
+                Logger.auth.notice("Successfully received JWT from Auth Lambda.")
                 return jwt
             }
             .eraseToAnyPublisher()
@@ -199,7 +200,9 @@ final class RHEIRJWTService: JWTServiceProtocol {
         let signature = "local_signature_\(user.id.suffix(8))" // Simple signature for local use
         
         let jwt = "\(headerB64).\(payloadB64).\(signature)"
-        print("🔧 [JWT] Created local JWT for user: \(user.id)")
+        Logger.auth.notice(
+            "Created local JWT fallback [user=\(user.id, privacy: .private(mask: .hash))]"
+        )
         return jwt
     }
 }
