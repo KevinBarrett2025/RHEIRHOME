@@ -1,4 +1,5 @@
 #if os(iOS)
+import OSLog
 import SwiftUI
 import VisionKit
 import Vision
@@ -31,7 +32,9 @@ class ReceiptScannerCoordinator: NSObject, VNDocumentCameraViewControllerDelegat
         didFailWithError error: Error
     ) {
         parent.isPresented = false
-        print("❌ Document camera failed: \(error.localizedDescription)")
+        Logger.receiptWorkflow.error(
+            "Legacy document camera failed [error=\(error.localizedDescription, privacy: .public)]"
+        )
     }
 }
 

@@ -3,12 +3,12 @@
 ## Repo Truth
 - Repo Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Active Branch: `gm/rheir-hardening-phase1`
-- HEAD SHA: `fdede83a45dec01030fae814f5ec6cc65c22f6d0`
-- Last Commit: `fdede83 Phase 1: replace team member detail print tracing`
+- HEAD SHA: `c32e78a0fc1a51f60e6ca200e830c505fa1c6ef3`
+- Last Commit: `c32e78a Phase 1: replace task create edit print tracing`
 
 ## Current Objective
-- Preserve the repo-tracked ship-readiness checklist and checkpoint the `Shared/Features/Tasks/TaskCreateEditView.swift` logging cleanup slice.
-- Queue `Shared/Features/Receipts/ReceiptScannerCoordinator.swift` as the next highest-value remaining production seam after the `TaskCreateEditView.swift` checkpoint lands.
+- Preserve the repo-tracked ship-readiness checklist and checkpoint the `Shared/Features/Receipts/ReceiptScannerCoordinator.swift` logging cleanup slice.
+- Queue `Shared/Features/Receipts/ReceiptEditView.swift` as the next highest-value remaining production seam after the `ReceiptScannerCoordinator.swift` checkpoint lands.
 
 ## Current Working Set
 - Session flow now routes through `Shared/Views/Auth/AppSessionSupport.swift`.
@@ -91,13 +91,14 @@
 - `Shared/Utilities/Shared/FAB.swift` no longer emits preview-only console tracing in its preview action closure.
 - `Shared/Features/TeamMembers/EnhancedTeamMemberDetailView.swift` now uses structured `Logger.teamMember` calls instead of raw `print(...)` tracing for team-member detail save events.
 - `Shared/Features/Tasks/TaskCreateEditView.swift` now uses structured `Logger.project` calls instead of raw `print(...)` tracing for task-save events.
-- `Shared/Features/Receipts/ReceiptScannerCoordinator.swift` is now the next highest-value remaining production seam by fresh raw `print(...)` residue count.
+- `Shared/Features/Receipts/ReceiptScannerCoordinator.swift` now uses structured `Logger.receiptWorkflow` calls instead of raw `print(...)` tracing for legacy document-camera failure events.
+- `Shared/Features/Receipts/ReceiptEditView.swift` is now the next highest-value remaining production seam by fresh raw `print(...)` residue count.
 - Other non-hardened seams still contain raw `print(...)` tracing.
 - Focused tests for invite parsing, cache migration, project-store persistence, receipt-intelligence retention, cache clearing, labor aggregation/validation, company-state bucketing, team-member store behavior, and receipt project-resolution behavior now live in `RHEIRTests/RHEIRTests.swift`.
 - Focused tests for project access normalization and assignment filtering now live in `RHEIRTests/RHEIRTests.swift`.
 - The current working slice has exact simulator evidence recorded:
-  - Gate A `build_sim`: PASS (`mcp__xcodebuildmcp__build_sim` with `-derivedDataPath /tmp/rheir_gateA_phase1bj_mcp_dd`)
-  - Focused parity `test_sim -only-testing:RHEIRTests`: PASS (`mcp__xcodebuildmcp__test_sim` with `-derivedDataPath /tmp/rheir_parity_phase1bj_mcp_dd`, `27/27`)
+  - Gate A `build_sim`: PASS (`mcp__xcodebuildmcp__build_sim` with `-derivedDataPath /tmp/rheir_gateA_phase1bk_mcp_dd`)
+  - Focused parity `test_sim -only-testing:RHEIRTests`: PASS (`mcp__xcodebuildmcp__test_sim` with `-derivedDataPath /tmp/rheir_parity_phase1bk_mcp_dd`, `27/27`)
   - Direct `xcodebuild` CLI evidence remains less stable than the MCP simulator path in the current local CoreSimulator environment
 
 ## Known Constraints
@@ -107,6 +108,6 @@
 - This repo follows a repo-local STS equivalent defined in the root governance docs because the original STS spine docs were not present here.
 
 ## Next Required Action
-1. Commit the `Shared/Features/Tasks/TaskCreateEditView.swift` logging slice without staging `Shared/Views/Auth/LoginView.swift`, `rheir_knowledge_database.json`, `RHEIRmemories.csv`, or `RheirLogo 1024x1024.png`.
+1. Commit the `Shared/Features/Receipts/ReceiptScannerCoordinator.swift` logging slice without staging `Shared/Views/Auth/LoginView.swift`, `rheir_knowledge_database.json`, `RHEIRmemories.csv`, or `RheirLogo 1024x1024.png`.
 2. Preserve the repo-local STS docs and `SHIP_READINESS_CHECKLIST.md` as the current release-planning truth for this repository.
-3. Continue with `Shared/Features/Receipts/ReceiptScannerCoordinator.swift` after the `TaskCreateEditView.swift` checkpoint lands.
+3. Continue with `Shared/Features/Receipts/ReceiptEditView.swift` after the `ReceiptScannerCoordinator.swift` checkpoint lands.
