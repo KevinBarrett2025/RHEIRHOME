@@ -3,12 +3,12 @@
 ## Repo Truth
 - Repo Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Active Branch: `gm/rheir-hardening-phase1`
-- HEAD SHA: `d74a669e7eab5f575db48b8cfa42efbacbbad5db`
-- Last Commit: `d74a669 Phase 1: replace runtime sync print tracing`
+- HEAD SHA: `5c710d905cc1f55d179c922a72bda72fc3785b51`
+- Last Commit: `5c710d9 Phase 1: extract project access coordination store`
 
 ## Current Objective
 - Stabilize the streamlined repo after the file-tree cleanup and sync-store extraction checkpoints.
-- Continue phase 1 hardening by checkpointing the project access coordination extraction slice.
+- Continue phase 1 hardening by checkpointing the `CompanyStore` relocation out of `MasterCompanySettingsView.swift`.
 
 ## Current Working Set
 - Session flow now routes through `Shared/Views/Auth/AppSessionSupport.swift`.
@@ -24,7 +24,7 @@
 - Team-member directory mutations, organization verification, cache building, and logged-hour cleanup now route through `TeamMemberStore`.
 - Receipt-to-project resolution and project-list resynchronization now route through `ReceiptProjectStore`.
 - Labor aggregation and validation now route through `LaborStore` instead of living inline inside `recomputeLaborData()`.
-- Company team-member bucketing and organization summary logic now route through `CompanyStore` instead of staying embedded in `MasterCompanySettingsView.swift`.
+- Company team-member bucketing and organization summary logic now route through `CompanyStore` in the compiled state layer instead of staying embedded in `MasterCompanySettingsView.swift`.
 - Receipt intelligence persistence now routes through `ReceiptIntelligenceStore` instead of raw `UserDefaults` dictionaries.
 - Auth cache clearing now routes through `LocalCacheStore.clearAllKnownSessionKeys()` instead of ad hoc `UserDefaults` removals.
 - Active auth/session logging now uses structured `Logger` calls instead of raw `print(...)` tracing in `AuthViewModel.swift`.
@@ -34,8 +34,8 @@
 - Focused tests for invite parsing, cache migration, project-store persistence, receipt-intelligence retention, cache clearing, labor aggregation/validation, company-state bucketing, team-member store behavior, and receipt project-resolution behavior now live in `RHEIRTests/RHEIRTests.swift`.
 - Focused tests for project access normalization and assignment filtering now live in `RHEIRTests/RHEIRTests.swift`.
 - The current working slice has exact simulator evidence recorded:
-  - Gate A `build_sim`: PASS (`mcp__xcodebuildmcp__build_sim` with `-derivedDataPath /tmp/rheir_gateA_phase1f_mcp_dd`)
-  - Focused parity `test_sim -only-testing:RHEIRTests`: PASS (`mcp__xcodebuildmcp__test_sim` with `-derivedDataPath /tmp/rheir_parity_phase1f_mcp_dd`, `27/27`)
+  - Gate A `build_sim`: PASS (`mcp__xcodebuildmcp__build_sim` with `-derivedDataPath /tmp/rheir_gateA_phase1g_mcp_dd`)
+  - Focused parity `test_sim -only-testing:RHEIRTests`: PASS (`mcp__xcodebuildmcp__test_sim` with `-derivedDataPath /tmp/rheir_parity_phase1g_mcp_dd`, `27/27`)
   - Direct `xcodebuild` CLI evidence remains less stable than the MCP simulator path in the current local CoreSimulator environment
 
 ## Known Constraints
@@ -44,7 +44,7 @@
 - This repo follows a repo-local STS equivalent defined in the root governance docs because the original STS spine docs were not present here.
 
 ## Next Required Action
-1. Commit the project access coordination extraction slice without staging `Shared/Views/Auth/LoginView.swift`, `rheir_knowledge_database.json`, or `RHEIRmemories.csv`.
-2. Continue the remaining company/project coordination cleanup, starting with moving `CompanyStore` out of `MasterCompanySettingsView.swift`.
+1. Commit the `CompanyStore` relocation slice without staging `Shared/Views/Auth/LoginView.swift`, `rheir_knowledge_database.json`, or `RHEIRmemories.csv`.
+2. Continue the remaining company/project coordination cleanup on top of the extracted access and company-store seams.
 3. Replace the remaining raw `print(...)` tracing in the active production files outside the hardened sync/runtime slice.
 4. Preserve the repo-local STS docs as the source of workflow truth until a canonical authority/promo structure exists for this repository.

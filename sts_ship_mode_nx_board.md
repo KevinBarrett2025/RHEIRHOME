@@ -10,14 +10,15 @@
 - Active organization directory, vendor intelligence, and payment intelligence services now use structured logging.
 - Active invite routing, organization setup/selection, and Sign in with Apple coordination now use structured logging.
 - Active offline sync/storage, CloudKit project service, CloudKit zone management, and top-level CloudKit runtime coordination now use structured logging.
+- `CompanyStore` and its companion types no longer live inside `MasterCompanySettingsView.swift`.
 - Stable simulator evidence is green on the staged checkpoint:
-  - Gate A `build_sim`: PASS (`mcp__xcodebuildmcp__build_sim` with `-derivedDataPath /tmp/rheir_gateA_phase1f_mcp_dd`)
-  - Focused parity `test_sim -only-testing:RHEIRTests`: PASS (`mcp__xcodebuildmcp__test_sim` with `-derivedDataPath /tmp/rheir_parity_phase1f_mcp_dd`, `27/27`)
+  - Gate A `build_sim`: PASS (`mcp__xcodebuildmcp__build_sim` with `-derivedDataPath /tmp/rheir_gateA_phase1g_mcp_dd`)
+  - Focused parity `test_sim -only-testing:RHEIRTests`: PASS (`mcp__xcodebuildmcp__test_sim` with `-derivedDataPath /tmp/rheir_parity_phase1g_mcp_dd`, `27/27`)
 
 ## Open Work
 - Finish replacing raw `print(...)` tracing in the remaining active production paths outside the hardened project/receipt flow.
 - Continue shrinking the remaining oversized active state owners.
-- After the project access checkpoint commit, move `CompanyStore` out of `MasterCompanySettingsView.swift` and continue the company/project coordination cleanup.
+- After the `CompanyStore` relocation checkpoint commit, continue the remaining company/project coordination cleanup and the next production logging slice.
 
 ## Blockers
 - Device-targeted Gate A remains blocked by signing for `com.RheirHome.RHEIR`.

@@ -29,6 +29,7 @@
 - Removed inline team-member merge/update/remove logic from the active project/team-member path and routed it through `TeamMemberStore`.
 - Removed inline labor recomputation logic and the forced `objectWillChange.send()` refresh from `recomputeLaborData()`.
 - Removed inline company/team categorization logic from `MasterCompanySettingsView.swift`.
+- Relocated `CompanyStore`, `CompanyTeamBuckets`, and `CompanySummary` out of `MasterCompanySettingsView.swift` into the compiled state layer so the settings view no longer owns store definitions.
 - Removed direct `UserDefaults` access and forced refresh hacks from the active receipt intelligence path.
 - Routed AuthViewModel cache clearing through `LocalCacheStore` instead of raw session-key deletion.
 - Replaced raw `print(...)` tracing in active auth/session flows with structured `Logger` usage and masked org/user identifiers where applicable.
@@ -52,9 +53,9 @@
 - Device-targeted Gate A remains blocked by signing because automatic provisioning is disabled for `com.RheirHome.RHEIR`.
 
 ## Latest Evidence
-- Gate A: `mcp__xcodebuildmcp__build_sim` with `extraArgs=["-derivedDataPath","/tmp/rheir_gateA_phase1f_mcp_dd"]` -> PASS
-- Focused parity: `mcp__xcodebuildmcp__test_sim` with `extraArgs=["-derivedDataPath","/tmp/rheir_parity_phase1f_mcp_dd","-only-testing:RHEIRTests"]` -> PASS (`27/27`)
+- Gate A: `mcp__xcodebuildmcp__build_sim` with `extraArgs=["-derivedDataPath","/tmp/rheir_gateA_phase1g_mcp_dd"]` -> PASS
+- Focused parity: `mcp__xcodebuildmcp__test_sim` with `extraArgs=["-derivedDataPath","/tmp/rheir_parity_phase1g_mcp_dd","-only-testing:RHEIRTests"]` -> PASS (`27/27`)
 - Direct CLI gate path remains less stable than the MCP simulator path in the local simulator environment
 
 ## Next Milestone
-- Checkpoint the project access coordination extraction slice, then continue the remaining production logging cleanup and the next company/project coordination split around `CompanyStore`.
+- Checkpoint the `CompanyStore` relocation slice, then continue the remaining production logging cleanup and the next company/project coordination cleanup on top of the extracted store seams.
