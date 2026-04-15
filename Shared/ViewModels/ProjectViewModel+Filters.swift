@@ -2,6 +2,7 @@
 // RheirMultiplatformApp
 
 import Foundation
+import OSLog
 
 // MARK: - Budget Category Mapping (Bridge to Enhanced System)
 
@@ -26,6 +27,25 @@ public enum EnhancedBudgetCategory: String, CaseIterable, Identifiable, Codable,
 
 @MainActor
 extension ProjectViewModel {
+    private func logInvalidBudgetValue(_ calculation: String, value: Double) {
+        Logger.project.warning(
+            "\(calculation, privacy: .public) resulted in invalid value: \(value, privacy: .public)"
+        )
+    }
+
+    private func logEnhancedBudgetMismatch(_ category: String, enhanced: Double, legacy: Double) {
+        let enhancedFormatted = enhanced.formatAsCurrency()
+        let legacyFormatted = legacy.formatAsCurrency()
+
+        Logger.project.debug(
+            "\(category, privacy: .public) enhanced spending diverged from legacy. Enhanced=\(enhancedFormatted, privacy: .public) Legacy=\(legacyFormatted, privacy: .public)"
+        )
+    }
+
+    private func logLegacyBudgetFallback(_ calculation: String) {
+        Logger.project.notice("\(calculation, privacy: .public) used legacy fallback.")
+    }
+
     private var currentReceipts: [Receipt] {
         selectedProject?.receipts ?? []
     }
@@ -74,7 +94,7 @@ extension ProjectViewModel {
         
         // Ensure final result is valid
         guard result.isFinite else {
-            print("⚠️ receiptGeneralConditions resulted in invalid value: \(result)")
+            logInvalidBudgetValue("receiptGeneralConditions", value: result)
             return 0
         }
         return result
@@ -93,7 +113,7 @@ extension ProjectViewModel {
         
         // Ensure final result is valid
         guard result.isFinite else {
-            print("⚠️ receiptMaterials resulted in invalid value: \(result)")
+            logInvalidBudgetValue("receiptMaterials", value: result)
             return 0
         }
         return result
@@ -112,7 +132,7 @@ extension ProjectViewModel {
         
         // Ensure final result is valid
         guard result.isFinite else {
-            print("⚠️ receiptContingency resulted in invalid value: \(result)")
+            logInvalidBudgetValue("receiptContingency", value: result)
             return 0
         }
         return result
@@ -124,7 +144,7 @@ extension ProjectViewModel {
         
         // Ensure final result is valid
         guard result.isFinite else {
-            print("⚠️ totalReceiptsNet resulted in invalid value: \(result)")
+            logInvalidBudgetValue("totalReceiptsNet", value: result)
             return 0
         }
         return result
@@ -143,7 +163,7 @@ extension ProjectViewModel {
         
         // Ensure final result is valid
         guard result.isFinite else {
-            print("⚠️ hoursLabor resulted in invalid value: \(result)")
+            logInvalidBudgetValue("hoursLabor", value: result)
             return 0
         }
         return result
@@ -162,7 +182,7 @@ extension ProjectViewModel {
         
         // Ensure final result is valid
         guard result.isFinite else {
-            print("⚠️ hoursGeneralConditions resulted in invalid value: \(result)")
+            logInvalidBudgetValue("hoursGeneralConditions", value: result)
             return 0
         }
         return result
@@ -181,7 +201,7 @@ extension ProjectViewModel {
         
         // Ensure final result is valid
         guard result.isFinite else {
-            print("⚠️ hoursContingency resulted in invalid value: \(result)")
+            logInvalidBudgetValue("hoursContingency", value: result)
             return 0
         }
         return result
@@ -218,7 +238,7 @@ extension ProjectViewModel {
         }
         
         guard spending.isFinite else {
-            print("⚠️ enhancedSpentMaterials resulted in invalid value: \(spending)")
+            logInvalidBudgetValue("enhancedSpentMaterials", value: spending)
             return 0
         }
         return spending
@@ -256,7 +276,7 @@ extension ProjectViewModel {
         let totalSpending = receiptSpending + hoursGeneralConditions
         
         guard totalSpending.isFinite else {
-            print("⚠️ enhancedSpentGeneralConditions resulted in invalid value: \(totalSpending)")
+            logInvalidBudgetValue("enhancedSpentGeneralConditions", value: totalSpending)
             return 0
         }
         return totalSpending
@@ -294,7 +314,7 @@ extension ProjectViewModel {
         let totalSpending = receiptSpending + hoursContingency
         
         guard totalSpending.isFinite else {
-            print("⚠️ enhancedSpentContingency resulted in invalid value: \(totalSpending)")
+            logInvalidBudgetValue("enhancedSpentContingency", value: totalSpending)
             return 0
         }
         return totalSpending
@@ -403,12 +423,12 @@ extension ProjectViewModel {
         
         // For debugging: log differences if significant
         if abs(enhanced - legacy) > 0.01 {
-            print("📊 General Conditions: Enhanced=\(enhanced.formatAsCurrency()), Legacy=\(legacy.formatAsCurrency())")
+            logEnhancedBudgetMismatch("General Conditions", enhanced: enhanced, legacy: legacy)
         }
         
         // Prefer enhanced calculation
         guard enhanced.isFinite else {
-            print("⚠️ spentGeneralConditions using legacy fallback")
+            logLegacyBudgetFallback("spentGeneralConditions")
             return legacy
         }
         return enhanced
@@ -422,12 +442,12 @@ extension ProjectViewModel {
         
         // For debugging: log differences if significant
         if abs(enhanced - legacy) > 0.01 {
-            print("📊 Materials: Enhanced=\(enhanced.formatAsCurrency()), Legacy=\(legacy.formatAsCurrency())")
+            logEnhancedBudgetMismatch("Materials", enhanced: enhanced, legacy: legacy)
         }
         
         // Prefer enhanced calculation
         guard enhanced.isFinite else {
-            print("⚠️ spentMaterials using legacy fallback")
+            logLegacyBudgetFallback("spentMaterials")
             return legacy
         }
         return enhanced
@@ -439,7 +459,7 @@ extension ProjectViewModel {
         
         // Ensure final result is valid
         guard result.isFinite else {
-            print("⚠️ spentLabor resulted in invalid value: \(result)")
+            logInvalidBudgetValue("spentLabor", value: result)
             return 0
         }
         return result
@@ -453,12 +473,12 @@ extension ProjectViewModel {
         
         // For debugging: log differences if significant
         if abs(enhanced - legacy) > 0.01 {
-            print("📊 Contingency: Enhanced=\(enhanced.formatAsCurrency()), Legacy=\(legacy.formatAsCurrency())")
+            logEnhancedBudgetMismatch("Contingency", enhanced: enhanced, legacy: legacy)
         }
         
         // Prefer enhanced calculation
         guard enhanced.isFinite else {
-            print("⚠️ spentContingency using legacy fallback")
+            logLegacyBudgetFallback("spentContingency")
             return legacy
         }
         return enhanced
@@ -697,7 +717,7 @@ extension ProjectViewModel {
         let totalSpent = receiptTotal + laborTotal
         
         guard totalSpent.isFinite else {
-            print("⚠️ calculateTotalSpent resulted in invalid value: \(totalSpent)")
+            logInvalidBudgetValue("calculateTotalSpent", value: totalSpent)
             return 0
         }
         return totalSpent

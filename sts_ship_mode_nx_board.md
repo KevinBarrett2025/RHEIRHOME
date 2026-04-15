@@ -16,14 +16,15 @@
 - `HiddenDebugPanelView.swift` now uses structured `Logger.settingsSupport` logging instead of raw `print(...)` tracing.
 - `OrganizationKnowledgeService.swift`, `Employee.swift`, and `AdminOnboardingView.swift` now use structured logging instead of raw `print(...)` tracing.
 - `ProjectViewModel+BudgetIntegration.swift` and `ProjectViewModel+Import.swift` now use structured logging instead of raw `print(...)` tracing.
+- `ProjectViewModel+Filters.swift` now uses structured `Logger.project` logging instead of raw `print(...)` tracing.
 - Stable simulator evidence is green on the staged checkpoint:
-  - Gate A `build_sim`: PASS (`mcp__xcodebuildmcp__build_sim` with `-derivedDataPath /tmp/rheir_gateA_phase1l_mcp_dd`)
-  - Focused parity `test_sim -only-testing:RHEIRTests`: PASS (`mcp__xcodebuildmcp__test_sim` with `-derivedDataPath /tmp/rheir_parity_phase1l_mcp_dd`, `27/27`)
+  - Gate A `build_sim`: PASS (`mcp__xcodebuildmcp__build_sim` with `-derivedDataPath /tmp/rheir_gateA_phase1m_mcp_dd`)
+  - Focused parity `test_sim -only-testing:RHEIRTests`: PASS (`mcp__xcodebuildmcp__test_sim` with `-derivedDataPath /tmp/rheir_parity_phase1m_mcp_dd`, `27/27`)
 
 ## Open Work
-- Finish replacing raw `print(...)` tracing in filters/validation helpers, reset and migration services, CloudKit auth organization flows, and other non-hardened production seams.
+- Finish replacing raw `print(...)` tracing in reset and migration services, CloudKit auth organization flows, and other non-hardened production seams.
 - Continue shrinking the remaining oversized active state owners.
-- After the budget/import helper logging checkpoint commit, continue the next company/project coordination cleanup or the filters/validation logging cleanup slice.
+- After the filters/validation logging checkpoint commit, continue the next reset/migration service cleanup or CloudKit auth organization-flow cleanup slice.
 
 ## Blockers
 - Device-targeted Gate A remains blocked by signing for `com.RheirHome.RHEIR`.
