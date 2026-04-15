@@ -1,6 +1,11 @@
 import Foundation
 import Combine
 import CloudKit
+import OSLog
+
+extension Logger {
+    static let organizationMigration = Logger(subsystem: "com.RheirHome.RHEIR", category: "organization-migration")
+}
 
 /// Enhanced data migration service for organization-based zones
 class OrganizationDataMigrationService: ObservableObject {
@@ -79,13 +84,17 @@ class OrganizationDataMigrationService: ObservableObject {
             isBackingUp = false
             migrationProgress = "✅ Local backup created at: \(backupPath.lastPathComponent)"
             
-            print("✅ Local backup created: \(backupPath.path)")
+            Logger.organizationMigration.notice(
+                "Created local migration backup at \(backupPath.path, privacy: .private)"
+            )
             completion(true, backupPath.path)
             
         } catch {
             isBackingUp = false
             migrationProgress = "❌ Backup failed: \(error.localizedDescription)"
-            print("❌ Backup failed: \(error)")
+            Logger.organizationMigration.error(
+                "Failed to create local migration backup: \(error.localizedDescription, privacy: .public)"
+            )
             completion(false, error.localizedDescription)
         }
     }
@@ -165,7 +174,9 @@ class OrganizationDataMigrationService: ObservableObject {
                 },
                 receiveValue: { savedRecords in
                     self.migrationProgress = "✅ Migrated \(savedRecords.count) projects to organization zone"
-                    print("✅ Successfully migrated \(savedRecords.count) projects")
+                    Logger.organizationMigration.notice(
+                        "Migrated \(savedRecords.count, privacy: .public) projects into the organization zone."
+                    )
                 }
             )
         }
@@ -192,7 +203,9 @@ class OrganizationDataMigrationService: ObservableObject {
                     return date1 > date2
                 }
         } catch {
-            print("❌ Failed to list backups: \(error)")
+            Logger.organizationMigration.error(
+                "Failed to list local migration backups: \(error.localizedDescription, privacy: .public)"
+            )
             return []
         }
     }

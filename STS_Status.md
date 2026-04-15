@@ -46,11 +46,12 @@
 - Replaced raw `print(...)` tracing in `OrganizationKnowledgeService.swift`, `Employee.swift`, and `AdminOnboardingView.swift` with structured `Logger` usage.
 - Replaced raw `print(...)` tracing in `ProjectViewModel+BudgetIntegration.swift` and `ProjectViewModel+Import.swift` with structured `Logger` usage.
 - Replaced raw `print(...)` tracing in `ProjectViewModel+Filters.swift` with structured `Logger.project` usage for invalid-value warnings, enhanced-versus-legacy comparison logs, and legacy fallback notices.
+- Replaced raw `print(...)` tracing in `OrganizationDataMigrationService.swift` with structured `Logger.organizationMigration` usage for local-backup, migration, and backup-listing events.
 - Added focused persistence/session tests in `RHEIRTests/RHEIRTests.swift` for invite parsing, legacy cache migration, project storage, receipt intelligence retention, cache clearing, labor aggregation/validation, company-state bucketing, team-member store behavior, and receipt project-resolution behavior.
 - Added focused parity for project access normalization and assignment filtering in `RHEIRTests/RHEIRTests.swift`.
 
 ## In Progress
-- Replace remaining unsafe logging/state hacks in reset and migration services, CloudKit auth organization flows, and other non-hardened seams.
+- Replace remaining unsafe logging/state hacks in reset/debug services, CloudKit auth organization flows, and other non-hardened seams.
 - Continue shrinking the remaining oversized active state owners around the new sync and access store boundaries.
 - Expand deterministic parity beyond the focused `RHEIRTests` suite.
 
@@ -59,9 +60,9 @@
 - Device-targeted Gate A remains blocked by signing because automatic provisioning is disabled for `com.RheirHome.RHEIR`.
 
 ## Latest Evidence
-- Gate A: `mcp__xcodebuildmcp__build_sim` with `extraArgs=["-derivedDataPath","/tmp/rheir_gateA_phase1m_mcp_dd"]` -> PASS
-- Focused parity: `mcp__xcodebuildmcp__test_sim` with `extraArgs=["-derivedDataPath","/tmp/rheir_parity_phase1m_mcp_dd","-only-testing:RHEIRTests"]` -> PASS (`27/27`)
+- Gate A: `mcp__xcodebuildmcp__build_sim` with `extraArgs=["-derivedDataPath","/tmp/rheir_gateA_phase1n_mcp_dd"]` -> PASS
+- Focused parity: `mcp__xcodebuildmcp__test_sim` with `extraArgs=["-derivedDataPath","/tmp/rheir_parity_phase1n_mcp_dd","-only-testing:RHEIRTests"]` -> PASS (`27/27`)
 - Direct CLI gate path remains less stable than the MCP simulator path in the local simulator environment
 
 ## Next Milestone
-- Checkpoint the filters/validation helper logging cleanup slice, then continue with reset/migration services or CloudKit auth organization-flow cleanup on top of the extracted store seams.
+- Checkpoint the organization migration logging cleanup slice, then continue with `CompleteDataResetService.swift` or the CloudKit auth organization-flow cleanup on top of the extracted store seams.
