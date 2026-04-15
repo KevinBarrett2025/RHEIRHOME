@@ -1,4 +1,9 @@
 import Foundation
+import OSLog
+
+extension Logger {
+    static let globalChatGPT = Logger(subsystem: "com.RheirHome.RHEIR", category: "globalChatGPT")
+}
 
 /// Global ChatGPT service that works across all organizations and projects
 actor GlobalChatGPTService {
@@ -140,8 +145,9 @@ actor GlobalChatGPTService {
         do {
             return try JSONDecoder().decode(GlobalReceiptAnalysis.self, from: data)
         } catch {
-            print("❌ JSON Parsing Error: \(error)")
-            print("📄 Raw Content: \(cleanContent)")
+            Logger.globalChatGPT.error(
+                "Failed to parse global receipt analysis JSON [error=\(error.localizedDescription, privacy: .public) characters=\(cleanContent.count, privacy: .public)]"
+            )
             throw GlobalChatGPTError.invalidJSON
         }
     }
