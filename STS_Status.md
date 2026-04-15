@@ -3,7 +3,7 @@
 ## Repo
 - Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Branch: `gm/rheir-hardening-phase1`
-- HEAD: `807ff668442b7672fc4482561c64f40a7bebbeea`
+- HEAD: `fdede83a45dec01030fae814f5ec6cc65c22f6d0`
 
 ## Active Initiative
 - RHEIR hardening and streamlining, phase 1 foundation pass.
@@ -96,12 +96,13 @@
 - Removed the preview-only `print(...)` tracing from `Shared/Views/Components/SubscriptionBadgeView.swift`.
 - Removed the preview-only `print(...)` tracing from `Shared/Utilities/Shared/FAB.swift`.
 - Replaced raw `print(...)` tracing in `Shared/Features/TeamMembers/EnhancedTeamMemberDetailView.swift` with structured `Logger.teamMember` usage for team-member detail save events.
+- Replaced raw `print(...)` tracing in `Shared/Features/Tasks/TaskCreateEditView.swift` with structured `Logger.project` usage for task-save events.
 - Added `SHIP_READINESS_CHECKLIST.md` as the repo-tracked release plan for the remaining foundation, hardening, promo, and submission work.
 - Added focused persistence/session tests in `RHEIRTests/RHEIRTests.swift` for invite parsing, legacy cache migration, project storage, receipt intelligence retention, cache clearing, labor aggregation/validation, company-state bucketing, team-member store behavior, and receipt project-resolution behavior.
 - Added focused parity for project access normalization and assignment filtering in `RHEIRTests/RHEIRTests.swift`.
 
 ## In Progress
-- Keep phase-1 hardening moving with `Shared/Features/Tasks/TaskCreateEditView.swift` as the next code slice after the current checkpoint.
+- Keep phase-1 hardening moving with `Shared/Features/Receipts/ReceiptScannerCoordinator.swift` as the next code slice after the current checkpoint.
 - Continue shrinking the remaining oversized active state owners around the new sync and access store boundaries.
 - Expand deterministic parity beyond the focused `RHEIRTests` suite.
 
@@ -110,9 +111,9 @@
 - Device-targeted Gate A remains blocked by signing because automatic provisioning is disabled for `com.RheirHome.RHEIR`.
 
 ## Latest Evidence
-- Gate A: `mcp__xcodebuildmcp__build_sim` with `extraArgs=["-derivedDataPath","/tmp/rheir_gateA_phase1bi_mcp_dd"]` -> PASS
-- Focused parity: `mcp__xcodebuildmcp__test_sim` with `extraArgs=["-derivedDataPath","/tmp/rheir_parity_phase1bi_mcp_dd","-only-testing:RHEIRTests"]` -> PASS (`27/27`)
+- Gate A: `mcp__xcodebuildmcp__build_sim` with `extraArgs=["-derivedDataPath","/tmp/rheir_gateA_phase1bj_mcp_dd"]` -> PASS
+- Focused parity: `mcp__xcodebuildmcp__test_sim` with `extraArgs=["-derivedDataPath","/tmp/rheir_parity_phase1bj_mcp_dd","-only-testing:RHEIRTests"]` -> PASS (`27/27`)
 - Direct CLI gate path remains less stable than the MCP simulator path in the local simulator environment
 
 ## Next Milestone
-- Checkpoint the `EnhancedTeamMemberDetailView.swift` logging slice, then continue with `Shared/Features/Tasks/TaskCreateEditView.swift`, the next highest-value remaining production seam in the active tree.
+- Checkpoint the `TaskCreateEditView.swift` logging slice, then continue with `Shared/Features/Receipts/ReceiptScannerCoordinator.swift`, the next highest-value remaining production seam in the active tree.

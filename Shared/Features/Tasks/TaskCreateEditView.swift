@@ -1,4 +1,5 @@
 import SwiftUI
+import OSLog
 
 struct TaskCreateEditView: View {
     let project: Project?
@@ -348,7 +349,9 @@ struct TaskCreateEditView: View {
             updatedAt: Date()
         )
         
-        print("✅ Task '\(task.title)' saved with \(taskImages.count) photos (upload pending)")
+        Logger.project.notice(
+            "Task saved [title=\(task.title, privacy: .private(mask: .hash)) photoCount=\(taskImages.count, privacy: .public)]"
+        )
         onSave(task)
         dismiss()
     }
