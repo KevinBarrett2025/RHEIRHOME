@@ -1,4 +1,5 @@
 import SwiftUI
+import OSLog
 
 struct ReceiptsView: View {
     @EnvironmentObject var projectVM: ProjectViewModel
@@ -473,7 +474,9 @@ struct ReceiptsView: View {
             return 
         }
         
-        print("🗑️ DELETING RECEIPT: \(receipt.vendor) - \(receipt.amount.formatAsCurrency())")
+        Logger.receiptWorkflow.notice(
+            "Deleting receipt [vendor=\(receipt.vendor, privacy: .private(mask: .hash)) amount=\(receipt.amount, privacy: .public)]"
+        )
         
         var updatedProject = selectedProject
         updatedProject.receipts.removeAll { $0.id == receipt.id }
@@ -496,7 +499,9 @@ struct ReceiptsView: View {
         
         receiptToDelete = nil
         
-        print("✅ RECEIPT DELETED: Receipt removed and changes persisted")
+        Logger.receiptWorkflow.notice(
+            "Receipt deleted and persisted [receiptID=\(receipt.id, privacy: .private(mask: .hash))]"
+        )
     }
     
     private func updateVendorSpending(for receipt: Receipt, isRemoving: Bool) {
