@@ -21,10 +21,13 @@
 - `LaborStore`
 - `CompanyStore`
 - `TeamMemberStore`
+- `VendorKnowledgeService` structured logging
+- `PaymentMethodKnowledgeService` structured logging
+- `OrganizationService` structured logging
 
 ## Current Validation Baseline
-- Simulator build path: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_gateA_phase1b_dd clean build`
-- Focused parity path: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_parity_phase1b_dd test -only-testing:RHEIRTests`
+- Simulator build path: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_gateA_phase1c_dd clean build`
+- Focused parity path: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_parity_phase1c_dd test -only-testing:RHEIRTests`
 - Latest focused parity count: `26/26`
 
 ## Known Residual Risks

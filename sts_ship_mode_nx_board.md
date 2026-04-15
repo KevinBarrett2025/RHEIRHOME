@@ -7,9 +7,10 @@
 - Canonical tree cleanup completed in the working branch.
 - Session flow consolidated around `AppSessionSupport.swift`.
 - `ProjectStore`, `ProjectRepository`, `OrganizationProjectSyncStore`, `ReceiptProjectStore`, `ReceiptIntelligenceStore`, `LaborStore`, `CompanyStore`, and `TeamMemberStore` are active seams in compiled code.
+- Active organization directory, vendor intelligence, and payment intelligence services now use structured logging.
 - Stable simulator evidence is green on the staged checkpoint:
-  - Gate A `clean build`: PASS (`/tmp/rheir_gateA_20260415_phase1b.log`)
-  - Focused parity `test -only-testing:RHEIRTests`: PASS (`/tmp/rheir_parity_RHEIRTests_20260415_phase1b.log`, `26/26`)
+  - Gate A `clean build`: PASS (`/tmp/rheir_gateA_20260415_phase1c.log`)
+  - Focused parity `test -only-testing:RHEIRTests`: PASS (`/tmp/rheir_parity_RHEIRTests_20260415_phase1c.log`, `26/26`)
 
 ## Open Work
 - Finish replacing raw `print(...)` tracing in the remaining active production paths outside the hardened project/receipt flow.

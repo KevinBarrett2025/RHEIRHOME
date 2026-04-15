@@ -1,6 +1,11 @@
 import Foundation
 import Combine
 import CloudKit
+import OSLog
+
+extension Logger {
+    static let vendorKnowledge = Logger(subsystem: "com.RheirHome.RHEIR", category: "vendorKnowledge")
+}
 
 /// Enterprise-wide vendor intelligence service that aggregates vendor data from all organization projects
 /// This transforms RHEIR from project management into enterprise construction intelligence platform
@@ -42,7 +47,9 @@ class VendorKnowledgeService: ObservableObject {
         syncStatus = .syncing
         
         do {
-            print("🏢 Loading organization-wide vendor intelligence...")
+            Logger.vendorKnowledge.info(
+                "Loading organization vendor intelligence [organization=\(organizationID, privacy: .private(mask: .hash))]"
+            )
             
             // Query all vendors in the organization zone
             let predicate = NSPredicate(format: "organizationID == %@", organizationID)
@@ -59,7 +66,9 @@ class VendorKnowledgeService: ObservableObject {
                         vendors.append(vendor)
                     }
                 case .failure(let error):
-                    print("❌ Failed to load vendor record: \(error)")
+                    Logger.vendorKnowledge.error(
+                        "Failed to load vendor record: \(error.localizedDescription, privacy: .public)"
+                    )
                 }
             }
             
@@ -74,20 +83,24 @@ class VendorKnowledgeService: ObservableObject {
                 self.lastSyncDate = Date()
             }
             
-            print("📊 Loaded \(vendors.count) organization vendors with $\(analytics.totalSpending) in spending")
+            Logger.vendorKnowledge.notice(
+                "Loaded organization vendor intelligence [count=\(vendors.count, privacy: .public) totalSpending=\(analytics.totalSpending, privacy: .public)]"
+            )
             
         } catch {
             await MainActor.run {
                 self.isLoading = false
                 self.syncStatus = .failed(error)
             }
-            print("❌ Failed to load organization vendors: \(error)")
+            Logger.vendorKnowledge.error(
+                "Failed to load organization vendors: \(error.localizedDescription, privacy: .public)"
+            )
         }
     }
     
     /// Aggregate vendor data from all projects in the organization
     func aggregateVendorDataFromAllProjects() async {
-        print("🔄 Aggregating vendor data from all organization projects...")
+        Logger.vendorKnowledge.info("Aggregating vendor data from all organization projects.")
         
         do {
             // Get all projects in the organization
@@ -140,10 +153,14 @@ class VendorKnowledgeService: ObservableObject {
             // Save to CloudKit organization zone
             await saveVendorsToCloudKit(vendors)
             
-            print("💼 Aggregated \(vendors.count) vendors with $\(vendors.reduce(0) { $0 + $1.totalSpent }) total spending")
+            Logger.vendorKnowledge.notice(
+                "Aggregated vendors from organization projects [count=\(vendors.count, privacy: .public) totalSpending=\(vendors.reduce(0) { $0 + $1.totalSpent }, privacy: .public)]"
+            )
             
         } catch {
-            print("❌ Failed to aggregate vendor data: \(error)")
+            Logger.vendorKnowledge.error(
+                "Failed to aggregate vendor data: \(error.localizedDescription, privacy: .public)"
+            )
         }
     }
     
@@ -153,7 +170,9 @@ class VendorKnowledgeService: ObservableObject {
         
         // Check if vendor already exists in organization
         if let existingVendor = await findExistingVendor(name: vendorName) {
-            print("📍 Found existing organization vendor: \(existingVendor.name)")
+            Logger.vendorKnowledge.debug(
+                "Matched existing organization vendor [vendor=\(existingVendor.name, privacy: .private(mask: .hash))]"
+            )
             
             // Update spending and usage
             await updateVendorUsage(
@@ -184,7 +203,9 @@ class VendorKnowledgeService: ObservableObject {
             self.organizationVendors.sort { $0.totalSpent > $1.totalSpent }
         }
         
-        print("🆕 Created new organization vendor: \(newVendor.name) (\(category.rawValue))")
+        Logger.vendorKnowledge.notice(
+            "Created organization vendor [vendor=\(newVendor.name, privacy: .private(mask: .hash)) category=\(category.rawValue, privacy: .public)]"
+        )
         return newVendor
     }
     
@@ -214,7 +235,9 @@ class VendorKnowledgeService: ObservableObject {
             self.vendorAnalytics = calculateVendorAnalytics(from: organizationVendors)
         }
         
-        print("💰 Updated organization vendor: \(updatedVendor.name) - New total: $\(updatedVendor.totalSpent)")
+        Logger.vendorKnowledge.info(
+            "Updated organization vendor usage [vendor=\(updatedVendor.name, privacy: .private(mask: .hash)) total=\(updatedVendor.totalSpent, privacy: .public)]"
+        )
     }
     
     // MARK: - Enterprise Analytics
@@ -273,9 +296,13 @@ class VendorKnowledgeService: ObservableObject {
         do {
             let record = createRecordFromVendor(vendor)
             _ = try await database.save(record)
-            print("☁️ Saved vendor to CloudKit: \(vendor.name)")
+            Logger.vendorKnowledge.debug(
+                "Saved vendor to CloudKit [vendor=\(vendor.name, privacy: .private(mask: .hash))]"
+            )
         } catch {
-            print("❌ Failed to save vendor to CloudKit: \(error)")
+            Logger.vendorKnowledge.error(
+                "Failed to save vendor to CloudKit: \(error.localizedDescription, privacy: .public)"
+            )
         }
     }
     
@@ -296,14 +323,20 @@ class VendorKnowledgeService: ObservableObject {
                     case .success:
                         break // Success
                     case .failure(let error):
-                        print("❌ Failed to save vendor batch: \(error)")
+                        Logger.vendorKnowledge.error(
+                            "Failed vendor batch save: \(error.localizedDescription, privacy: .public)"
+                        )
                     }
                 }
             }
             
-            print("☁️ Saved \(vendors.count) vendors to CloudKit")
+            Logger.vendorKnowledge.notice(
+                "Saved vendors to CloudKit [count=\(vendors.count, privacy: .public)]"
+            )
         } catch {
-            print("❌ Failed to save vendors batch to CloudKit: \(error)")
+            Logger.vendorKnowledge.error(
+                "Failed to save vendors batch to CloudKit: \(error.localizedDescription, privacy: .public)"
+            )
         }
     }
     
@@ -381,9 +414,11 @@ class VendorKnowledgeService: ObservableObject {
             subscription.notificationInfo = notificationInfo
             
             _ = try await database.save(subscription)
-            print("🔔 Set up real-time sync for organization vendors")
+            Logger.vendorKnowledge.info("Configured vendor CloudKit subscription.")
         } catch {
-            print("❌ Failed to set up vendor sync subscription: \(error)")
+            Logger.vendorKnowledge.error(
+                "Failed to configure vendor sync subscription: \(error.localizedDescription, privacy: .public)"
+            )
         }
     }
     

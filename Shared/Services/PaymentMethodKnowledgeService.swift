@@ -1,6 +1,11 @@
 import Foundation
 import Combine
 import CloudKit
+import OSLog
+
+extension Logger {
+    static let paymentMethodKnowledge = Logger(subsystem: "com.RheirHome.RHEIR", category: "paymentMethodKnowledge")
+}
 
 /// Enterprise-wide payment method intelligence service that tracks payment patterns across the organization
 /// Provides business insights for cash flow, rewards optimization, and financial planning
@@ -42,7 +47,9 @@ class PaymentMethodKnowledgeService: ObservableObject {
         syncStatus = .syncing
         
         do {
-            print("💳 Loading organization-wide payment method intelligence...")
+            Logger.paymentMethodKnowledge.info(
+                "Loading organization payment intelligence [organization=\(organizationID, privacy: .private(mask: .hash))]"
+            )
             
             // Query all payment methods in the organization zone
             let predicate = NSPredicate(format: "organizationID == %@", organizationID)
@@ -59,7 +66,9 @@ class PaymentMethodKnowledgeService: ObservableObject {
                         paymentMethods.append(paymentMethod)
                     }
                 case .failure(let error):
-                    print("❌ Failed to load payment method record: \(error)")
+                    Logger.paymentMethodKnowledge.error(
+                        "Failed to load payment method record: \(error.localizedDescription, privacy: .public)"
+                    )
                 }
             }
             
@@ -74,20 +83,24 @@ class PaymentMethodKnowledgeService: ObservableObject {
                 self.lastSyncDate = Date()
             }
             
-            print("💰 Loaded \(paymentMethods.count) organization payment methods with $\(analytics.totalSpending) in spending")
+            Logger.paymentMethodKnowledge.notice(
+                "Loaded organization payment intelligence [count=\(paymentMethods.count, privacy: .public) totalSpending=\(analytics.totalSpending, privacy: .public)]"
+            )
             
         } catch {
             await MainActor.run {
                 self.isLoading = false
                 self.syncStatus = .failed(error)
             }
-            print("❌ Failed to load organization payment methods: \(error)")
+            Logger.paymentMethodKnowledge.error(
+                "Failed to load organization payment methods: \(error.localizedDescription, privacy: .public)"
+            )
         }
     }
     
     /// Aggregate payment method data from all projects in the organization
     func aggregatePaymentMethodDataFromAllProjects() async {
-        print("🔄 Aggregating payment method data from all organization projects...")
+        Logger.paymentMethodKnowledge.info("Aggregating payment method data from all organization projects.")
         
         do {
             // Get all projects in the organization
@@ -147,10 +160,14 @@ class PaymentMethodKnowledgeService: ObservableObject {
             // Save to CloudKit organization zone
             await savePaymentMethodsToCloudKit(paymentMethods)
             
-            print("💼 Aggregated \(paymentMethods.count) payment methods with $\(paymentMethods.reduce(0) { $0 + $1.totalSpent }) total spending")
+            Logger.paymentMethodKnowledge.notice(
+                "Aggregated payment methods from organization projects [count=\(paymentMethods.count, privacy: .public) totalSpending=\(paymentMethods.reduce(0) { $0 + $1.totalSpent }, privacy: .public)]"
+            )
             
         } catch {
-            print("❌ Failed to aggregate payment method data: \(error)")
+            Logger.paymentMethodKnowledge.error(
+                "Failed to aggregate payment method data: \(error.localizedDescription, privacy: .public)"
+            )
         }
     }
     
@@ -160,7 +177,9 @@ class PaymentMethodKnowledgeService: ObservableObject {
         
         // Check if payment method already exists in organization
         if let existingMethod = await findExistingPaymentMethod(name: paymentName) {
-            print("💳 Found existing organization payment method: \(existingMethod.displayName)")
+            Logger.paymentMethodKnowledge.debug(
+                "Matched existing organization payment method [paymentMethod=\(existingMethod.displayName, privacy: .private(mask: .hash))]"
+            )
             
             // Update spending and usage
             await updatePaymentMethodUsage(
@@ -193,7 +212,9 @@ class PaymentMethodKnowledgeService: ObservableObject {
             self.organizationPaymentMethods.sort { $0.totalSpent > $1.totalSpent }
         }
         
-        print("🆕 Created new organization payment method: \(newPaymentMethod.displayName) (\(type.rawValue))")
+        Logger.paymentMethodKnowledge.notice(
+            "Created organization payment method [paymentMethod=\(newPaymentMethod.displayName, privacy: .private(mask: .hash)) type=\(type.rawValue, privacy: .public)]"
+        )
         return newPaymentMethod
     }
     
@@ -218,7 +239,9 @@ class PaymentMethodKnowledgeService: ObservableObject {
             self.paymentAnalytics = calculatePaymentMethodAnalytics(from: organizationPaymentMethods)
         }
         
-        print("💰 Updated organization payment method: \(updatedMethod.displayName) - New total: $\(updatedMethod.totalSpent)")
+        Logger.paymentMethodKnowledge.info(
+            "Updated organization payment method usage [paymentMethod=\(updatedMethod.displayName, privacy: .private(mask: .hash)) total=\(updatedMethod.totalSpent, privacy: .public)]"
+        )
     }
     
     // MARK: - Enterprise Analytics & Insights
@@ -332,9 +355,13 @@ class PaymentMethodKnowledgeService: ObservableObject {
         do {
             let record = createRecordFromPaymentMethod(paymentMethod)
             _ = try await database.save(record)
-            print("☁️ Saved payment method to CloudKit: \(paymentMethod.displayName)")
+            Logger.paymentMethodKnowledge.debug(
+                "Saved payment method to CloudKit [paymentMethod=\(paymentMethod.displayName, privacy: .private(mask: .hash))]"
+            )
         } catch {
-            print("❌ Failed to save payment method to CloudKit: \(error)")
+            Logger.paymentMethodKnowledge.error(
+                "Failed to save payment method to CloudKit: \(error.localizedDescription, privacy: .public)"
+            )
         }
     }
     
@@ -355,14 +382,20 @@ class PaymentMethodKnowledgeService: ObservableObject {
                     case .success:
                         break // Success
                     case .failure(let error):
-                        print("❌ Failed to save payment method batch: \(error)")
+                        Logger.paymentMethodKnowledge.error(
+                            "Failed payment method batch save: \(error.localizedDescription, privacy: .public)"
+                        )
                     }
                 }
             }
             
-            print("☁️ Saved \(paymentMethods.count) payment methods to CloudKit")
+            Logger.paymentMethodKnowledge.notice(
+                "Saved payment methods to CloudKit [count=\(paymentMethods.count, privacy: .public)]"
+            )
         } catch {
-            print("❌ Failed to save payment methods batch to CloudKit: \(error)")
+            Logger.paymentMethodKnowledge.error(
+                "Failed to save payment methods batch to CloudKit: \(error.localizedDescription, privacy: .public)"
+            )
         }
     }
     
@@ -444,9 +477,11 @@ class PaymentMethodKnowledgeService: ObservableObject {
             subscription.notificationInfo = notificationInfo
             
             _ = try await database.save(subscription)
-            print("🔔 Set up real-time sync for organization payment methods")
+            Logger.paymentMethodKnowledge.info("Configured payment method CloudKit subscription.")
         } catch {
-            print("❌ Failed to set up payment method sync subscription: \(error)")
+            Logger.paymentMethodKnowledge.error(
+                "Failed to configure payment method sync subscription: \(error.localizedDescription, privacy: .public)"
+            )
         }
     }
     
