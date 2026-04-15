@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import OSLog
 
 /// Service for managing payment methods across the organization
 @MainActor
@@ -26,7 +27,7 @@ class PaymentMethodManagementService: ObservableObject {
             $0.nickname.lowercased() == name.lowercased() ||
             $0.displayName.lowercased() == name.lowercased()
         }) {
-            print(" Found existing payment method: \(existingMethod.displayName) for receipt name: '\(name)'")
+            Logger.company.debug("Resolved existing payment method from receipt payment source.")
             return existingMethod
         }
         
@@ -44,7 +45,7 @@ class PaymentMethodManagementService: ObservableObject {
         paymentMethods.append(newMethod)
         savePaymentMethods()
         
-        print(" Created new payment method: \(newMethod.displayName) (\(type.rawValue)) for receipt name: '\(name)'")
+        Logger.company.notice("Created payment method from receipt payment source [type=\(type.rawValue, privacy: .public)]")
         return newMethod
     }
     
@@ -64,7 +65,7 @@ class PaymentMethodManagementService: ObservableObject {
         paymentMethods[index].totalSpent += amount
         savePaymentMethods()
         
-        print(" Updated payment method spending: \(paymentMethods[index].displayName) - Total: $\(paymentMethods[index].totalSpent)")
+        Logger.company.info("Updated payment method spending total.")
     }
     
     /// Get payment method by ID
@@ -118,7 +119,7 @@ class PaymentMethodManagementService: ObservableObject {
     
     /// Clean up duplicate payment methods (merge duplicates by name/nickname)
     func cleanupDuplicatePaymentMethods() {
-        print(" Cleaning up duplicate payment methods...")
+        Logger.company.info("Cleaning duplicate payment methods.")
         
         var seenNames: Set<String> = []
         var cleanedMethods: [PaymentMethod] = []
@@ -158,7 +159,7 @@ class PaymentMethodManagementService: ObservableObject {
                     // Merge the spending from the duplicate into the existing one
                     cleanedMethods[existingIndex].totalSpent += method.totalSpent
                     duplicatesFound += 1
-                    print(" Merged duplicate payment method: \(method.displayName) into \(cleanedMethods[existingIndex].displayName)")
+                    Logger.company.debug("Merged duplicate payment method into canonical company payment entry.")
                 }
             }
         }
@@ -166,9 +167,11 @@ class PaymentMethodManagementService: ObservableObject {
         if duplicatesFound > 0 {
             paymentMethods = cleanedMethods
             savePaymentMethods()
-            print(" Cleaned up \(duplicatesFound) duplicate payment methods. Now have \(paymentMethods.count) unique methods.")
+            Logger.company.notice(
+                "Cleaned duplicate payment methods [duplicates=\(duplicatesFound, privacy: .public) remaining=\(self.paymentMethods.count, privacy: .public)]"
+            )
         } else {
-            print(" No duplicate payment methods found.")
+            Logger.company.debug("No duplicate payment methods found during cleanup.")
         }
     }
     
@@ -213,19 +216,19 @@ class PaymentMethodManagementService: ObservableObject {
         }
         
         paymentMethods = loadedMethods
-        print(" Loaded \(paymentMethods.count) payment methods for organization")
+        Logger.company.info("Loaded company payment methods [count=\(self.paymentMethods.count, privacy: .public)]")
     }
     
     private func savePaymentMethods() {
         let key = "paymentMethods_\(organizationID)"
         
         guard let data = try? JSONEncoder().encode(paymentMethods) else {
-            print(" Failed to encode payment methods")
+            Logger.company.error("Failed to encode company payment methods for persistence.")
             return
         }
         
         userDefaults.set(data, forKey: key)
-        print(" Saved \(paymentMethods.count) payment methods")
+        Logger.company.info("Saved company payment methods [count=\(self.paymentMethods.count, privacy: .public)]")
     }
     
     private func createDefaultPaymentMethods() {
@@ -239,6 +242,6 @@ class PaymentMethodManagementService: ObservableObject {
         
         paymentMethods = defaultMethods
         savePaymentMethods()
-        print(" Created default payment methods")
+        Logger.company.notice("Created default company payment methods [count=\(defaultMethods.count, privacy: .public)]")
     }
 }

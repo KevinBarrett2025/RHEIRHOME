@@ -3,7 +3,7 @@
 ## Repo
 - Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Branch: `gm/rheir-hardening-phase1`
-- HEAD: `59879865a1df2025061528738578155c10121f4b`
+- HEAD: `8afb5dc1f52db5a4d3e9310c9f4db6586e19556a`
 
 ## Active Initiative
 - RHEIR hardening and streamlining, phase 1 foundation pass.
@@ -62,11 +62,12 @@
 - Replaced raw `print(...)` tracing in `Organization/CloudKitPaymentMethodService.swift` with structured `Logger.cloudKitPaymentMethod` usage for load/save/delete flows, find-or-create behavior, spending updates, record validation, and local migration events.
 - Replaced raw `print(...)` tracing in `DataMigrationService.swift` with structured `Logger.organizationMigration` usage for legacy migration start/completion, legacy cleanup queries, organization keep/delete decisions, and delete operations.
 - Replaced raw `print(...)` tracing in `Core/JWTService.swift` with structured `Logger.auth` usage for JWT exchange, app-specific JWT creation, Lambda fallback, request/response metadata, token cache lifecycle, and local JWT fallback creation.
+- Replaced raw `print(...)` tracing in `PaymentMethodManagementService.swift` with structured `Logger.company` usage for find-or-create resolution, spending updates, duplicate cleanup, persistence, and default-seed events.
 - Added focused persistence/session tests in `RHEIRTests/RHEIRTests.swift` for invite parsing, legacy cache migration, project storage, receipt intelligence retention, cache clearing, labor aggregation/validation, company-state bucketing, team-member store behavior, and receipt project-resolution behavior.
 - Added focused parity for project access normalization and assignment filtering in `RHEIRTests/RHEIRTests.swift`.
 
 ## In Progress
-- Replace remaining unsafe logging/state hacks in `PaymentMethodManagementService.swift` and the other non-hardened seams.
+- Replace remaining unsafe logging/state hacks in the other non-hardened seams, starting with `ReceiptOCRService.swift`.
 - Continue shrinking the remaining oversized active state owners around the new sync and access store boundaries.
 - Expand deterministic parity beyond the focused `RHEIRTests` suite.
 
@@ -75,9 +76,9 @@
 - Device-targeted Gate A remains blocked by signing because automatic provisioning is disabled for `com.RheirHome.RHEIR`.
 
 ## Latest Evidence
-- Gate A: `mcp__xcodebuildmcp__build_sim` with `extraArgs=["-derivedDataPath","/tmp/rheir_gateA_phase1ac_mcp_dd"]` -> PASS
-- Focused parity: `mcp__xcodebuildmcp__test_sim` with `extraArgs=["-derivedDataPath","/tmp/rheir_parity_phase1ac_mcp_dd","-only-testing:RHEIRTests"]` -> PASS (`27/27`)
+- Gate A: `mcp__xcodebuildmcp__build_sim` with `extraArgs=["-derivedDataPath","/tmp/rheir_gateA_phase1ad_retry_mcp_dd"]` -> PASS
+- Focused parity: `mcp__xcodebuildmcp__test_sim` with `extraArgs=["-derivedDataPath","/tmp/rheir_parity_phase1ad_retry_mcp_dd","-only-testing:RHEIRTests"]` -> PASS (`27/27`)
 - Direct CLI gate path remains less stable than the MCP simulator path in the local simulator environment
 
 ## Next Milestone
-- Checkpoint the `Core/JWTService.swift` logging cleanup slice, then continue with `PaymentMethodManagementService.swift`, the next highest-value remaining service seam in the active tree.
+- Checkpoint the `PaymentMethodManagementService.swift` logging cleanup slice, then continue with `ReceiptOCRService.swift`, the next highest-value remaining service seam in the active tree.
