@@ -1,3 +1,4 @@
+import OSLog
 import SwiftUI
 
 struct ReceiptEditView: View {
@@ -174,7 +175,9 @@ struct ReceiptEditView: View {
         
         isPresented = false
         
-        print("✏️ Updated receipt from \(vendor) for \(newAmount.formatAsCurrency())")
+        Logger.receiptWorkflow.notice(
+            "Receipt updated [vendor=\(vendor, privacy: .public) amount=\(newAmount, format: .fixed(precision: 2))]"
+        )
     }
     
     private func updateVendorSpending(oldVendor: String, newVendor: String, oldAmount: Double, newAmount: Double) {
