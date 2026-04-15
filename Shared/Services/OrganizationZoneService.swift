@@ -1,6 +1,7 @@
 import Foundation
 import CloudKit
 import Combine
+import OSLog
 
 /// Handles secure SHARED zone-based multi-tenant data isolation for organizations
 /// Each organization gets its own shared zone for team collaboration
@@ -23,14 +24,18 @@ public class OrganizationZoneService: ObservableObject {
     
     /// Create or get the SHARED zone for a specific organization
     func setupOrganizationSharedZone(for organizationID: String) async throws -> (zone: CKRecordZone, share: CKShare?) {
-        print("🏗️ Setting up SHARED zone for organization: \(organizationID.prefix(8))...")
+        Logger.cloudKitZone.info(
+            "Setting up shared organization zone [organization=\(organizationID, privacy: .private(mask: .hash))]"
+        )
         
         // Check if we already have this zone cached
         if let existingZoneData = organizationZones[organizationID] {
             currentOrganizationZone = existingZoneData.zone
             currentShare = existingZoneData.share
             isZoneReady = true
-            print("✅ Using cached SHARED zone for organization: \(organizationID.prefix(8))...")
+            Logger.cloudKitZone.info(
+                "Using cached shared organization zone [organization=\(organizationID, privacy: .private(mask: .hash))]"
+            )
             return existingZoneData
         }
         
@@ -39,17 +44,23 @@ public class OrganizationZoneService: ObservableObject {
         
         do {
             // STEP 1: Check if zone exists in PRIVATE database (where zone owner keeps it)
-            print("🔍 Checking for existing zone in private database...")
+            Logger.cloudKitZone.info(
+                "Checking private database for existing shared organization zone [organization=\(organizationID, privacy: .private(mask: .hash))]"
+            )
             let existingZones = try await privateDatabase.allRecordZones()
             if let existingZone = existingZones.first(where: { $0.zoneID.zoneName == zoneName }) {
-                print("✅ Found existing zone in private DB: \(zoneName)")
+                Logger.cloudKitZone.notice(
+                    "Found existing shared organization zone in private database [organization=\(organizationID, privacy: .private(mask: .hash)), zone=\(zoneName, privacy: .private(mask: .hash))]"
+                )
                 
                 // Try to find the root record and its share
                 let rootRecordID = CKRecord.ID(recordName: "org-root-\(organizationID)", zoneID: existingZone.zoneID)
                 
                 do {
                     let existingRootRecord = try await privateDatabase.record(for: rootRecordID)
-                    print("✅ Found existing organization root record")
+                    Logger.cloudKitZone.info(
+                        "Found organization root record for shared zone [organization=\(organizationID, privacy: .private(mask: .hash))]"
+                    )
                     
                     // Try to fetch share metadata for this record
                     let existingShare = try await fetchShareForRootRecord(existingRootRecord)
@@ -61,33 +72,47 @@ public class OrganizationZoneService: ObservableObject {
                     isZoneReady = true
                     
                     if existingShare != nil {
-                        print("✅ Zone is properly shared with collaboration enabled")
+                        Logger.cloudKitZone.notice(
+                            "Shared organization zone already has collaboration enabled [organization=\(organizationID, privacy: .private(mask: .hash))]"
+                        )
                     } else {
-                        print("⚠️ Zone exists but no share found - zone is not shared yet")
-                        print("ℹ️ Zone setup completed but sharing not enabled")
+                        Logger.cloudKitZone.warning(
+                            "Shared organization zone exists without a share record [organization=\(organizationID, privacy: .private(mask: .hash))]"
+                        )
+                        Logger.cloudKitZone.info(
+                            "Completed shared zone setup without collaboration share [organization=\(organizationID, privacy: .private(mask: .hash))]"
+                        )
                     }
                     
                     return zoneData
                     
                 } catch let error as CKError where error.code == .unknownItem {
-                    print("⚠️ Root record not found, but zone exists - will recreate root record and share")
+                    Logger.cloudKitZone.warning(
+                        "Shared organization zone exists without a root record; recreating collaboration records [organization=\(organizationID, privacy: .private(mask: .hash))]"
+                    )
                     // Fall through to create new root record and share
                 } catch {
-                    print("⚠️ Error fetching root record: \(error)")
+                    Logger.cloudKitZone.error(
+                        "Failed to fetch shared zone root record [organization=\(organizationID, privacy: .private(mask: .hash)), error=\(error.localizedDescription, privacy: .public)]"
+                    )
                     throw error
                 }
             }
             
             // STEP 2: Zone doesn't exist or root record missing - create everything
-            print("🆕 Creating new SHARED zone: \(zoneName)")
+            Logger.cloudKitZone.notice(
+                "Creating new shared organization zone [organization=\(organizationID, privacy: .private(mask: .hash)), zone=\(zoneName, privacy: .private(mask: .hash))]"
+            )
             
             // Create zone first
             let newZone = CKRecordZone(zoneID: zoneID)
             let savedZone = try await privateDatabase.save(newZone)
-            print("✅ Created zone in private DB: \(zoneName)")
+            Logger.cloudKitZone.notice(
+                "Created shared organization zone in private database [organization=\(organizationID, privacy: .private(mask: .hash)), zone=\(zoneName, privacy: .private(mask: .hash))]"
+            )
             
             // Create root record and share atomically
-            let (rootRecord, share) = try await createRootRecordAndShareAtomically(
+            let (_, share) = try await createRootRecordAndShareAtomically(
                 organizationID: organizationID, 
                 zone: savedZone
             )
@@ -98,20 +123,26 @@ public class OrganizationZoneService: ObservableObject {
             currentShare = share
             isZoneReady = true
             
-            print("✅ Created SHARED zone with collaboration: \(zoneName)")
+            Logger.cloudKitZone.notice(
+                "Created shared organization zone with collaboration enabled [organization=\(organizationID, privacy: .private(mask: .hash)), zone=\(zoneName, privacy: .private(mask: .hash))]"
+            )
             
             return zoneData
             
         } catch let error as CKError {
-            print("❌ CloudKit error during zone setup: \(error.localizedDescription)")
+            Logger.cloudKitZone.error(
+                "CloudKit error during shared organization zone setup [organization=\(organizationID, privacy: .private(mask: .hash)), error=\(error.localizedDescription, privacy: .public)]"
+            )
             if error.code == .zoneNotFound {
                 // This shouldn't happen in the private DB check, but handle it
-                print("🆕 Zone not found error - creating new zone...")
+                Logger.cloudKitZone.warning(
+                    "Shared organization zone was not found during setup; recreating it [organization=\(organizationID, privacy: .private(mask: .hash))]"
+                )
                 
                 let newZone = CKRecordZone(zoneID: zoneID)
                 let savedZone = try await privateDatabase.save(newZone)
                 
-                let (rootRecord, share) = try await createRootRecordAndShareAtomically(
+                let (_, share) = try await createRootRecordAndShareAtomically(
                     organizationID: organizationID,
                     zone: savedZone
                 )
@@ -122,21 +153,27 @@ public class OrganizationZoneService: ObservableObject {
                 currentShare = share
                 isZoneReady = true
                 
-                print("✅ Created SHARED zone after zone not found: \(zoneName)")
+                Logger.cloudKitZone.notice(
+                    "Recreated shared organization zone after zone-not-found error [organization=\(organizationID, privacy: .private(mask: .hash)), zone=\(zoneName, privacy: .private(mask: .hash))]"
+                )
                 
                 return zoneData
             } else {
                 throw error
             }
         } catch {
-            print("❌ Failed to setup SHARED zone for organization \(organizationID.prefix(8)): \(error)")
+            Logger.cloudKitZone.error(
+                "Failed to set up shared organization zone [organization=\(organizationID, privacy: .private(mask: .hash)), error=\(error.localizedDescription, privacy: .public)]"
+            )
             throw error
         }
     }
     
     /// Create root record and share in a single atomic operation
     private func createRootRecordAndShareAtomically(organizationID: String, zone: CKRecordZone) async throws -> (CKRecord, CKShare) {
-        print("🔄 Creating root record and share atomically for organization: \(organizationID.prefix(8))")
+        Logger.cloudKitZone.info(
+            "Creating root record and share atomically for shared organization zone [organization=\(organizationID, privacy: .private(mask: .hash))]"
+        )
         
         // Create root record
         let rootRecordID = CKRecord.ID(recordName: "org-root-\(organizationID)", zoneID: zone.zoneID)
@@ -152,7 +189,9 @@ public class OrganizationZoneService: ObservableObject {
         share.publicPermission = .none
         
         // CRITICAL FIX: Save both in SINGLE ATOMIC OPERATION using proper CloudKit API
-        print("💾 Saving root record and share atomically...")
+        Logger.cloudKitZone.info(
+            "Saving root record and share atomically for shared organization zone [organization=\(organizationID, privacy: .private(mask: .hash))]"
+        )
         
         return try await withCheckedThrowingContinuation { continuation in
             let modifyRecordsOperation = CKModifyRecordsOperation(
@@ -164,21 +203,29 @@ public class OrganizationZoneService: ObservableObject {
             
             modifyRecordsOperation.modifyRecordsCompletionBlock = { savedRecords, deletedRecordIDs, error in
                 if let error = error {
-                    print("❌ Failed to save root record and share atomically: \(error)")
+                    Logger.cloudKitZone.error(
+                        "Failed atomic save for shared organization root/share records [organization=\(organizationID, privacy: .private(mask: .hash)), error=\(error.localizedDescription, privacy: .public)]"
+                    )
                     continuation.resume(throwing: error)
                 } else {
-                    print("✅ Successfully saved root record and share atomically")
+                    Logger.cloudKitZone.notice(
+                        "Completed atomic save for shared organization root/share records [organization=\(organizationID, privacy: .private(mask: .hash))]"
+                    )
                     
                     // Find the saved records
                     guard let savedRecords = savedRecords,
                           let savedRootRecord = savedRecords.first(where: { !($0 is CKShare) }),
                           let savedShare = savedRecords.first(where: { $0 is CKShare }) as? CKShare else {
-                        print("❌ Could not find saved root record or share in results")
+                        Logger.cloudKitZone.error(
+                            "Atomic save did not return both root record and share [organization=\(organizationID, privacy: .private(mask: .hash))]"
+                        )
                         continuation.resume(throwing: OrganizationZoneError.shareCreationFailed)
                         return
                     }
                     
-                    print("✅ Created organization root record and share successfully")
+                    Logger.cloudKitZone.notice(
+                        "Created organization root record and share successfully [organization=\(organizationID, privacy: .private(mask: .hash))]"
+                    )
                     continuation.resume(returning: (savedRootRecord, savedShare))
                 }
             }
@@ -189,7 +236,7 @@ public class OrganizationZoneService: ObservableObject {
     
     /// Fetch share for a root record using CloudKit sharing APIs
     private func fetchShareForRootRecord(_ rootRecord: CKRecord) async throws -> CKShare? {
-        print("🔍 Checking if root record has an associated share...")
+        Logger.cloudKitZone.info("Checking whether organization root record has an associated share.")
         
         do {
             // Try to fetch share metadata for this record
@@ -200,21 +247,25 @@ public class OrganizationZoneService: ObservableObject {
                 // Fetch the actual share record
                 let shareRecord = try await privateDatabase.record(for: shareRecordID)
                 if let share = shareRecord as? CKShare {
-                    print("✅ Found existing share for root record")
+                    Logger.cloudKitZone.notice("Found existing share for organization root record.")
                     return share
                 }
             }
         } catch let error as CKError {
             if error.code == .unknownItem || error.code == .recordNotFound {
-                print("ℹ️ No share found for root record - this is normal for new zones")
+                Logger.cloudKitZone.info("No share is attached to the organization root record yet.")
                 return nil
             } else {
-                print("⚠️ Error checking for share: \(error)")
+                Logger.cloudKitZone.warning(
+                    "Error while checking for organization root share [error=\(error.localizedDescription, privacy: .public)]"
+                )
                 // Don't throw here - missing share is not a fatal error
                 return nil
             }
         } catch {
-            print("⚠️ Unexpected error checking for share: \(error)")
+            Logger.cloudKitZone.warning(
+                "Unexpected error while checking for organization root share [error=\(error.localizedDescription, privacy: .public)]"
+            )
             return nil
         }
         
@@ -223,19 +274,23 @@ public class OrganizationZoneService: ObservableObject {
     
     /// Switch to a different organization's shared zone
     func switchToOrganizationSharedZone(organizationID: String) async throws {
-        print("🔄 Switching to organization SHARED zone: \(organizationID.prefix(8))...")
+        Logger.cloudKitZone.info(
+            "Switching active shared organization zone [organization=\(organizationID, privacy: .private(mask: .hash))]"
+        )
         
         let zoneData = try await setupOrganizationSharedZone(for: organizationID)
         currentOrganizationZone = zoneData.zone
         currentShare = zoneData.share
         isZoneReady = true
         
-        print("✅ Switched to organization SHARED zone: \(organizationID.prefix(8))...")
+        Logger.cloudKitZone.notice(
+            "Switched active shared organization zone [organization=\(organizationID, privacy: .private(mask: .hash))]"
+        )
     }
     
     /// Clear current zone (for sign out)
     func clearCurrentZone() {
-        print("🧹 Clearing current organization SHARED zone")
+        Logger.cloudKitZone.notice("Cleared current shared organization zone and cache.")
         currentOrganizationZone = nil
         currentShare = nil
         isZoneReady = false
@@ -250,31 +305,37 @@ public class OrganizationZoneService: ObservableObject {
             throw OrganizationZoneError.noShareFound
         }
         
-        print("📧 Inviting user \(email) to organization shared zone")
+        Logger.cloudKitZone.info(
+            "Generating organization share invitation URL [invitee=\(email, privacy: .private(mask: .hash))]"
+        )
         
         // Get share URL directly from the CKShare object
         guard let shareURL = share.url else {
             throw OrganizationZoneError.invitationFailed
         }
         
-        print("✅ Generated invitation URL for \(email)")
+        Logger.cloudKitZone.notice(
+            "Generated organization share invitation URL [invitee=\(email, privacy: .private(mask: .hash))]"
+        )
         return shareURL.absoluteString
     }
     
     /// Accept an organization invitation
     func acceptOrganizationInvitation(from url: URL) async throws {
-        print("🤝 Accepting organization invitation from URL")
+        Logger.cloudKitZone.info("Accepting organization share invitation from URL.")
         
         do {
             let metadata = try await container.shareMetadata(for: url)
             let acceptedShare = try await container.accept(metadata)
-            print("✅ Successfully accepted organization invitation")
+            Logger.cloudKitZone.notice("Accepted organization share invitation.")
             
             // Update current zone info if this is for the current organization
             currentShare = acceptedShare
-            print("✅ Updated current share with accepted share")
+            Logger.cloudKitZone.notice("Updated current organization share after invitation acceptance.")
         } catch {
-            print("❌ Failed to accept organization invitation: \(error)")
+            Logger.cloudKitZone.error(
+                "Failed to accept organization share invitation [error=\(error.localizedDescription, privacy: .public)]"
+            )
             throw error
         }
     }
@@ -312,8 +373,10 @@ public class OrganizationZoneService: ObservableObject {
         
         // Save to private DB (zone owner) or shared DB (zone participant)
         let database = await getDatabaseForCurrentZone()
-        let savedRecord = try await database.save(record)
-        print("✅ Saved project '\(project.name)' to SHARED zone: \(zone.zoneID.zoneName)")
+        _ = try await database.save(record)
+        Logger.cloudKitZone.notice(
+            "Saved project to shared organization zone [project=\(project.name, privacy: .private(mask: .hash)), zone=\(zone.zoneID.zoneName, privacy: .private(mask: .hash))]"
+        )
     }
     
     /// Load all projects from the current organization's shared zone
@@ -322,7 +385,9 @@ public class OrganizationZoneService: ObservableObject {
             throw OrganizationZoneError.noZoneSet
         }
         
-        print("📥 Loading projects from SHARED zone: \(zone.zoneID.zoneName)")
+        Logger.cloudKitZone.info(
+            "Loading projects from shared organization zone [zone=\(zone.zoneID.zoneName, privacy: .private(mask: .hash))]"
+        )
         
         let query = CKQuery(recordType: "Project", predicate: NSPredicate(value: true))
         let database = await getDatabaseForCurrentZone()
@@ -333,12 +398,16 @@ public class OrganizationZoneService: ObservableObject {
             case .success(let record):
                 return recordToProject(record)
             case .failure(let error):
-                print("❌ Failed to process project record: \(error)")
+                Logger.cloudKitZone.error(
+                    "Failed to process project record from shared organization zone [zone=\(zone.zoneID.zoneName, privacy: .private(mask: .hash)), error=\(error.localizedDescription, privacy: .public)]"
+                )
                 return nil
             }
         }
         
-        print("✅ Loaded \(projects.count) projects from SHARED zone: \(zone.zoneID.zoneName)")
+        Logger.cloudKitZone.notice(
+            "Loaded projects from shared organization zone [zone=\(zone.zoneID.zoneName, privacy: .private(mask: .hash)), count=\(projects.count, privacy: .public)]"
+        )
         return projects
     }
     
@@ -352,7 +421,9 @@ public class OrganizationZoneService: ObservableObject {
         
         let database = await getDatabaseForCurrentZone()
         try await database.deleteRecord(withID: recordID)
-        print("✅ Deleted project from SHARED zone: \(zone.zoneID.zoneName)")
+        Logger.cloudKitZone.notice(
+            "Deleted project from shared organization zone [project=\(projectID.uuidString, privacy: .private(mask: .hash)), zone=\(zone.zoneID.zoneName, privacy: .private(mask: .hash))]"
+        )
     }
     
     /// Save organization team members to CloudKit shared zone
@@ -370,8 +441,10 @@ public class OrganizationZoneService: ObservableObject {
         
         // Save to appropriate database
         let database = await getDatabaseForCurrentZone()
-        let savedRecord = try await database.save(record)
-        print("✅ Saved \(teamMembers.count) team members to organization in SHARED zone")
+        _ = try await database.save(record)
+        Logger.cloudKitZone.notice(
+            "Saved organization team members to shared zone [count=\(teamMembers.count, privacy: .public), zone=\(zone.zoneID.zoneName, privacy: .private(mask: .hash))]"
+        )
     }
     
     /// Load organization team members from CloudKit shared zone
@@ -380,7 +453,9 @@ public class OrganizationZoneService: ObservableObject {
             throw OrganizationZoneError.noZoneSet
         }
         
-        print("📥 Loading organization team members from SHARED zone: \(zone.zoneID.zoneName)")
+        Logger.cloudKitZone.info(
+            "Loading organization team members from shared zone [zone=\(zone.zoneID.zoneName, privacy: .private(mask: .hash))]"
+        )
         
         let recordID = CKRecord.ID(recordName: "organization_\(zone.zoneID.zoneName)", zoneID: zone.zoneID)
         let database = await getDatabaseForCurrentZone()
@@ -389,11 +464,15 @@ public class OrganizationZoneService: ObservableObject {
         if let teamMembersData = record["teamMembersData"] as? Data,
            let teamMembers = try? JSONDecoder().decode([TeamMember].self, from: teamMembersData) {
             let lastModified = record.modificationDate ?? Date()
-            print("✅ Loaded \(teamMembers.count) team members from organization SHARED zone")
+            Logger.cloudKitZone.notice(
+                "Loaded organization team members from shared zone [count=\(teamMembers.count, privacy: .public), zone=\(zone.zoneID.zoneName, privacy: .private(mask: .hash))]"
+            )
             return (teamMembers: teamMembers, lastModified: lastModified)
         }
         
-        print("⚠️ No team members found in organization record")
+        Logger.cloudKitZone.warning(
+            "Organization shared zone record did not contain team members [zone=\(zone.zoneID.zoneName, privacy: .private(mask: .hash))]"
+        )
         return (teamMembers: [], lastModified: Date())
     }
     
