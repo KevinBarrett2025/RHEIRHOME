@@ -1,4 +1,5 @@
 import SwiftUI
+import OSLog
 
 struct ScannedReceiptEntryView: View {
     @Binding var isPresented: Bool
@@ -553,7 +554,9 @@ struct ScannedReceiptEntryView: View {
                 projectVM.vendorService.vendors[index].totalSpent = max(0, projectVM.vendorService.vendors[index].totalSpent)
             }
             
-            print("✅ AI-Enhanced vendor synced: \(vendor.name) with \(analysisResult.items.count) items detected")
+            Logger.receiptWorkflow.notice(
+                "AI-enhanced vendor sync completed [vendor=\(vendor.name, privacy: .private(mask: .hash)) items=\(analysisResult.items.count, privacy: .public)]"
+            )
         }
         
         // Sync payment method to organization's payment method directory
@@ -570,10 +573,14 @@ struct ScannedReceiptEntryView: View {
                 projectVM.paymentMethodService.paymentMethods[index].totalSpent = max(0, projectVM.paymentMethodService.paymentMethods[index].totalSpent)
             }
             
-            print("✅ AI-Enhanced payment method synced: \(paymentMethod.displayName)")
+            Logger.receiptWorkflow.notice(
+                "AI-enhanced payment method sync completed [paymentMethod=\(paymentMethod.displayName, privacy: .private(mask: .hash))]"
+            )
         }
         
-        print("🤖 AI-Powered receipt data synced to company settings - Confidence: \(Int(analysisResult.confidence * 100))%")
+        Logger.receiptWorkflow.notice(
+            "AI-powered receipt data synced to company settings [confidence=\(Int(analysisResult.confidence * 100), privacy: .public)]"
+        )
     }
     
     private func mapReceiptCategoryToVendorCategory(_ receiptCategory: ReceiptCategory) -> VendorCategory {
