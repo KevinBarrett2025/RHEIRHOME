@@ -3,12 +3,12 @@
 ## Repo Truth
 - Repo Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Active Branch: `gm/rheir-hardening-phase1`
-- HEAD SHA: `693218594d8e3c965cb58ba850e094b4e1e21a9b`
-- Last Commit: `6932185 Phase 1: replace vendor service print tracing`
+- HEAD SHA: `c12b46be9a1bb4aaaa3d9ed6ba6b18535947438e`
+- Last Commit: `c12b46b Phase 1: replace organization sharing print tracing`
 
 ## Current Objective
 - Stabilize the streamlined repo after the file-tree cleanup and sync-store extraction checkpoints.
-- Continue phase 1 hardening by checkpointing the `CloudKitOrganizationSharingService.swift` logging cleanup and then moving to `CloudKitOrganizationDebugService.swift` and the other non-hardened seams.
+- Continue phase 1 hardening by checkpointing the `CloudKitOrganizationDebugService.swift` logging cleanup and then moving to `AppleIDAuthService.swift` and the other non-hardened seams.
 
 ## Current Working Set
 - Session flow now routes through `Shared/Views/Auth/AppSessionSupport.swift`.
@@ -47,12 +47,13 @@
 - `ScalableCloudKitArchitecture.swift` now uses structured `Logger.scalableCloudKit` calls instead of raw `print(...)` tracing.
 - `Shared/Services/Organization/CloudKitVendorService.swift` now uses structured `Logger.cloudKitVendor` calls instead of raw `print(...)` tracing.
 - `CloudKitOrganizationSharingService.swift` now uses structured `Logger.organizationSharing` calls instead of raw `print(...)` tracing.
-- `CloudKitOrganizationDebugService.swift` and other non-hardened seams still contain raw `print(...)` tracing.
+- `CloudKitOrganizationDebugService.swift` now uses structured `Logger.organizationDebug` calls instead of raw `print(...)` tracing.
+- `AppleIDAuthService.swift` and other non-hardened seams still contain raw `print(...)` tracing.
 - Focused tests for invite parsing, cache migration, project-store persistence, receipt-intelligence retention, cache clearing, labor aggregation/validation, company-state bucketing, team-member store behavior, and receipt project-resolution behavior now live in `RHEIRTests/RHEIRTests.swift`.
 - Focused tests for project access normalization and assignment filtering now live in `RHEIRTests/RHEIRTests.swift`.
 - The current working slice has exact simulator evidence recorded:
-  - Gate A `build_sim`: PASS (`mcp__xcodebuildmcp__build_sim` with `-derivedDataPath /tmp/rheir_gateA_phase1v_mcp_dd`)
-  - Focused parity `test_sim -only-testing:RHEIRTests`: PASS (`mcp__xcodebuildmcp__test_sim` with `-derivedDataPath /tmp/rheir_parity_phase1v_mcp_dd`, `27/27`)
+  - Gate A `build_sim`: PASS (`mcp__xcodebuildmcp__build_sim` with `-derivedDataPath /tmp/rheir_gateA_phase1w_mcp_dd`)
+  - Focused parity `test_sim -only-testing:RHEIRTests`: PASS (`mcp__xcodebuildmcp__test_sim` with `-derivedDataPath /tmp/rheir_parity_phase1w_mcp_dd`, `27/27`)
   - Direct `xcodebuild` CLI evidence remains less stable than the MCP simulator path in the current local CoreSimulator environment
 
 ## Known Constraints
@@ -62,6 +63,6 @@
 - This repo follows a repo-local STS equivalent defined in the root governance docs because the original STS spine docs were not present here.
 
 ## Next Required Action
-1. Commit the narrowed `CloudKitOrganizationSharingService.swift` logging slice without staging `Shared/Views/Auth/LoginView.swift`, `rheir_knowledge_database.json`, `RHEIRmemories.csv`, or `RheirLogo 1024x1024.png`.
+1. Commit the narrowed `CloudKitOrganizationDebugService.swift` logging slice without staging `Shared/Views/Auth/LoginView.swift`, `rheir_knowledge_database.json`, `RHEIRmemories.csv`, or `RheirLogo 1024x1024.png`.
 2. Preserve the repo-local STS docs as the source of workflow truth until a canonical authority/promo structure exists for this repository.
-3. Continue the next logging-hardening seam in `CloudKitOrganizationDebugService.swift`.
+3. Continue the next logging-hardening seam in `AppleIDAuthService.swift`.

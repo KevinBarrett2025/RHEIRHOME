@@ -1,6 +1,11 @@
 import Foundation
 import CloudKit
 import Combine
+import OSLog
+
+extension Logger {
+    static let organizationDebug = Logger(subsystem: "com.RheirHome.RHEIR", category: "organizationDebug")
+}
 
 /// Service to diagnose and fix CloudKit organization sync issues
 @MainActor
@@ -28,7 +33,9 @@ class CloudKitOrganizationDebugService: ObservableObject {
         isAnalyzing = true
         defer { isAnalyzing = false }
         
-        print("🔍 Starting complete CloudKit organization analysis...")
+        Logger.organizationDebug.info(
+            "Starting complete CloudKit organization analysis [organization=\(organization.id, privacy: .private(mask: .hash))]"
+        )
         
         var results = "🔍 CLOUDKIT ORGANIZATION ANALYSIS\n"
         results += "Generated: \(Date().formatted())\n\n"
@@ -53,7 +60,9 @@ class CloudKitOrganizationDebugService: ObservableObject {
         results += generateRecommendations()
         
         analysisResults = results
-        print("✅ Complete analysis finished")
+        Logger.organizationDebug.notice(
+            "Completed CloudKit organization analysis [organization=\(organization.id, privacy: .private(mask: .hash)), discrepancy=\(userCountDiscrepancy, privacy: .public), persistenceIssues=\(projectPersistenceIssues.count, privacy: .public)]"
+        )
     }
     
     // MARK: - Individual Analysis Methods
@@ -257,10 +266,12 @@ class CloudKitOrganizationDebugService: ObservableObject {
     // MARK: - Fix Methods
     
     func fixUserCountDiscrepancy(organization: Organization, authVM: AuthViewModel, projectVM: ProjectViewModel) async -> Bool {
-        print("🔧 Fixing user count discrepancy...")
+        Logger.organizationDebug.info(
+            "Fixing organization user-count discrepancy [organization=\(organization.id, privacy: .private(mask: .hash)), discrepancy=\(userCountDiscrepancy, privacy: .public)]"
+        )
         
         guard userCountDiscrepancy != 0 else {
-            print("✅ No discrepancy to fix")
+            Logger.organizationDebug.notice("No organization user-count discrepancy required fixing.")
             return true
         }
         
@@ -275,13 +286,17 @@ class CloudKitOrganizationDebugService: ObservableObject {
             
             return true
         } catch {
-            print("❌ Failed to fix user count discrepancy: \(error)")
+            Logger.organizationDebug.error(
+                "Failed to fix organization user-count discrepancy [organization=\(organization.id, privacy: .private(mask: .hash)), error=\(error.localizedDescription, privacy: .public)]"
+            )
             return false
         }
     }
     
     private func syncOrganizationMembersToTeamMembers(organization: Organization, projectVM: ProjectViewModel) async {
-        print("🔄 Syncing organization members to local team members...")
+        Logger.organizationDebug.info(
+            "Syncing organization members to local team members [organization=\(organization.id, privacy: .private(mask: .hash))]"
+        )
         
         // For each organization member that's not in team members,
         // create a placeholder team member with app access
@@ -299,16 +314,22 @@ class CloudKitOrganizationDebugService: ObservableObject {
                 )
                 
                 projectVM.addTeamMemberToOrganization(newTeamMember)
-                print("✅ Added placeholder team member for user \(memberID.prefix(8))...")
+                Logger.organizationDebug.notice(
+                    "Added placeholder team member for organization member [organization=\(organization.id, privacy: .private(mask: .hash)), user=\(memberID, privacy: .private(mask: .hash))]"
+                )
             }
         }
         
         await projectVM.saveTeamMembersToCloudKit()
-        print("✅ Organization members synced to team members")
+        Logger.organizationDebug.notice(
+            "Completed sync from organization members to local team members [organization=\(organization.id, privacy: .private(mask: .hash))]"
+        )
     }
     
     private func syncTeamMembersToOrganization(organization: Organization, authVM: AuthViewModel, projectVM: ProjectViewModel) async {
-        print("🔄 Syncing team members to organization...")
+        Logger.organizationDebug.info(
+            "Syncing team members to organization membership [organization=\(organization.id, privacy: .private(mask: .hash))]"
+        )
         
         // Remove app access from team members who aren't in the organization
         for i in 0..<projectVM.teamMembers.count {
@@ -320,18 +341,22 @@ class CloudKitOrganizationDebugService: ObservableObject {
                     if var orgMember = projectVM.getTeamMember(by: memberID) {
                         orgMember.hasAppAccess = false
                         projectVM.updateTeamMemberInOrganization(orgMember)
-                        print("✅ Removed app access from \(member.name) - not in organization")
+                        Logger.organizationDebug.notice(
+                            "Removed app access from team member not present in organization [organization=\(organization.id, privacy: .private(mask: .hash)), member=\(member.name, privacy: .private(mask: .hash))]"
+                        )
                     }
                 }
             }
         }
         
         await projectVM.saveTeamMembersToCloudKit()
-        print("✅ Team members synced to organization")
+        Logger.organizationDebug.notice(
+            "Completed sync from local team members to organization membership [organization=\(organization.id, privacy: .private(mask: .hash))]"
+        )
     }
     
     func fixProjectPersistenceIssues(projectVM: ProjectViewModel) async -> Bool {
-        print("🔧 Fixing project persistence issues...")
+        Logger.organizationDebug.info("Fixing project persistence issues from organization debug service.")
         
         do {
             // 1. Reset and reinitialize CloudKit zone
@@ -341,34 +366,38 @@ class CloudKitOrganizationDebugService: ObservableObject {
             let success = await projectVM.triggerManualSync()
             
             if success {
-                print("✅ Project persistence issues fixed")
+                Logger.organizationDebug.notice("Project persistence issues were corrected after zone reset and manual sync.")
                 return true
             } else {
-                print("⚠️ Manual sync reported issues")
+                Logger.organizationDebug.warning("Manual sync reported issues while fixing project persistence.")
                 return false
             }
         } catch {
-            print("❌ Failed to fix project persistence: \(error)")
+            Logger.organizationDebug.error(
+                "Failed to fix project persistence issues [error=\(error.localizedDescription, privacy: .public)]"
+            )
             return false
         }
     }
     
     func performEmergencyRecovery(projectVM: ProjectViewModel) async -> Bool {
-        print("🚨 Performing emergency recovery...")
+        Logger.organizationDebug.info("Performing emergency recovery from organization debug service.")
         
         do {
             // Use ProjectViewModel's emergency recovery method
             let success = await projectVM.emergencyRecoverFromBackup()
             
             if success {
-                print("✅ Emergency recovery completed")
+                Logger.organizationDebug.notice("Emergency recovery completed successfully.")
                 return true
             } else {
-                print("❌ Emergency recovery failed")
+                Logger.organizationDebug.error("Emergency recovery reported failure.")
                 return false
             }
         } catch {
-            print("❌ Emergency recovery error: \(error)")
+            Logger.organizationDebug.error(
+                "Emergency recovery threw an error [error=\(error.localizedDescription, privacy: .public)]"
+            )
             return false
         }
     }
