@@ -3,6 +3,7 @@ import Combine
 import CloudKit
 import UIKit
 import ObjectiveC
+import OSLog
 
 extension CloudKitAuthService {
     
@@ -12,11 +13,13 @@ extension CloudKitAuthService {
         orgName: String,
         adminUserID: String
     ) -> AnyPublisher<Organization, Error> {
-        print("🔍 [CloudKit] ENHANCED ORG CREATION: '\(orgName)' for admin: \(adminUserID.prefix(8))...")
+        Logger.auth.info(
+            "Starting enhanced CloudKit organization creation [name=\(orgName, privacy: .public), admin=\(adminUserID, privacy: .private(mask: .hash))]"
+        )
         
         return checkCloudKitAvailability()
             .flatMap { _ -> AnyPublisher<Organization, Error> in
-                print("🔍 [CloudKit] CloudKit available, creating organization with enhanced admin linking")
+                Logger.auth.info("CloudKit available for organization creation.")
                 
                 let privateDB = self.container.privateCloudDatabase
                 let generatedOrgID = UUID().uuidString
@@ -25,11 +28,9 @@ extension CloudKitAuthService {
                 let currentUser = self.currentUser
                 let adminEmail = currentUser?.email ?? ""
                 
-                print("🔍 [CloudKit] Creating organization:")
-                print("🔍   ID: \(generatedOrgID)")
-                print("🔍   Name: \(orgName)")
-                print("🔍   AdminUserID: \(adminUserID.prefix(8))...")
-                print("🔍   AdminEmail: \(adminEmail)")
+                Logger.auth.info(
+                    "Prepared organization record for save [org=\(generatedOrgID, privacy: .private(mask: .hash)), admin=\(adminUserID, privacy: .private(mask: .hash)), emailAvailable=\(!adminEmail.isEmpty, privacy: .public)]"
+                )
                 
                 let orgRecord = CKRecord(recordType: "Organization", recordID: CKRecord.ID(recordName: generatedOrgID))
                 
@@ -66,15 +67,18 @@ extension CloudKitAuthService {
                 #endif
                 orgRecord["appVersion"] = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String as CKRecordValue?
                 
-                print("🔍 [CloudKit] Saving Organization for \(environment.uppercased()) environment")
+                Logger.auth.notice(
+                    "Saving organization record [org=\(generatedOrgID, privacy: .private(mask: .hash)), environment=\(environment, privacy: .public)]"
+                )
                 
                 return Future<Organization, Error> { promise in
                     privateDB.save(orgRecord) { savedRecord, error in
                         DispatchQueue.main.async {
                             if let error = error {
-                                print("❌ [CloudKit] Organization creation failed: \(error)")
-                                print("❌   Error Domain: \((error as NSError).domain)")
-                                print("❌   Error Code: \((error as NSError).code)")
+                                let nsError = error as NSError
+                                Logger.auth.error(
+                                    "Organization creation failed [domain=\(nsError.domain, privacy: .public), code=\(nsError.code, privacy: .public), error=\(error.localizedDescription, privacy: .public)]"
+                                )
                                 promise(.failure(self.handleCloudKitError(error)))
                                 return
                             }
@@ -86,9 +90,9 @@ extension CloudKitAuthService {
                                 return
                             }
                             
-                            print("✅ [CloudKit] Organization created successfully!")
-                            print("✅   Record ID: \(record.recordID.recordName)")
-                            print("✅   Environment: \(environment)")
+                            Logger.auth.notice(
+                                "Created organization record [org=\(record.recordID.recordName, privacy: .private(mask: .hash)), environment=\(environment, privacy: .public)]"
+                            )
                             
                             // Create organization object
                             var organization = Organization(
@@ -114,7 +118,9 @@ extension CloudKitAuthService {
                             )
                             
                             let success = organization.addTeamMember(adminTeamMember)
-                            print("✅ [CloudKit] Auto-added admin as team member: \(success)")
+                            Logger.auth.info(
+                                "Auto-added admin team member after organization creation [org=\(generatedOrgID, privacy: .private(mask: .hash)), success=\(success, privacy: .public)]"
+                            )
                             
                             // Create member record asynchronously
                             Task {
@@ -138,7 +144,9 @@ extension CloudKitAuthService {
     public func fetchOrganizationsWithRoles(
         for userID: String
     ) -> AnyPublisher<(organizations: [Organization], roles: [String: OrganizationRole]), Error> {
-        print("🔍 [CloudKit] Fetching organizations with roles for user: \(userID)")
+        Logger.auth.info(
+            "Fetching organizations with roles [user=\(userID, privacy: .private(mask: .hash))]"
+        )
         
         return fetchOrganizations(for: userID)
             .flatMap { organizations -> AnyPublisher<(organizations: [Organization], roles: [String: OrganizationRole]), Error> in
@@ -166,17 +174,21 @@ extension CloudKitAuthService {
     public func fetchOrganizations(
         for userID: String
     ) -> AnyPublisher<[Organization], Error> {
-        print("🔍 [CloudKit] ENHANCED ORG FETCH for user: \(userID.prefix(8))...")
+        Logger.auth.info(
+            "Starting enhanced organization fetch [user=\(userID, privacy: .private(mask: .hash))]"
+        )
         
         return checkCloudKitAvailability()
             .flatMap { _ -> AnyPublisher<[Organization], Error> in
-                print("🔍 [CloudKit] CloudKit available, starting comprehensive organization search")
+                Logger.auth.info("CloudKit available for organization fetch.")
                 
                 let privateDB = self.container.privateCloudDatabase
                 
                 // ENHANCED SEARCH: Try multiple userIDs if available
                 let allUserIDs = self.getAllUserIDsForSearch(primaryUserID: userID)
-                print("🔍 [CloudKit] Searching with userIDs: \(allUserIDs.map { $0.prefix(8) })...")
+                Logger.auth.debug(
+                    "Searching organizations with available user identifiers [count=\(allUserIDs.count, privacy: .public)]"
+                )
                 
                 // Create queries for both admin and member roles across all userIDs
                 var allQueries: [AnyPublisher<[CKRecord], Error>] = []
@@ -197,7 +209,7 @@ extension CloudKitAuthService {
                 if let currentUser = self.currentUser, 
                    currentUser.email != "user.email.not.available@rheir.com",
                    !currentUser.email.isEmpty {
-                    print("🔍 [CloudKit] Adding email-based search: \(currentUser.email)")
+                    Logger.auth.debug("Adding email-based organization lookup for current user.")
                     
                     let emailAdminPredicate = NSPredicate(format: "adminUserEmail == %@", currentUser.email)
                     let emailAdminQuery = CKQuery(recordType: "Organization", predicate: emailAdminPredicate)
@@ -211,7 +223,9 @@ extension CloudKitAuthService {
                         let allRecords = queryResults.flatMap { $0 }
                         let uniqueRecords = self.removeDuplicateRecords(allRecords)
                         
-                        print("🔍 [CloudKit] Combined results: \(allRecords.count) total, \(uniqueRecords.count) unique")
+                        Logger.auth.notice(
+                            "Combined organization query results [total=\(allRecords.count, privacy: .public), unique=\(uniqueRecords.count, privacy: .public)]"
+                        )
                         
                         return self.processOrganizationRecords(uniqueRecords, forUser: userID)
                     }
@@ -222,7 +236,9 @@ extension CloudKitAuthService {
     }
     
     public func deleteOrganization(organizationID: String) -> AnyPublisher<Bool, Error> {
-        print("🗑️ [CloudKit] Deleting organization: \(organizationID.prefix(8))...")
+        Logger.auth.notice(
+            "Deleting organization [org=\(organizationID, privacy: .private(mask: .hash))]"
+        )
         
         return checkCloudKitAvailability()
             .flatMap { _ -> AnyPublisher<Bool, Error> in
@@ -237,7 +253,9 @@ extension CloudKitAuthService {
                     privateDB.fetch(withQuery: memberQuery, inZoneWith: nil, desiredKeys: nil, resultsLimit: 100) { result in
                         switch result {
                         case .failure(let error):
-                            print("❌ [CloudKit] Failed to fetch members for deletion: \(error)")
+                            Logger.auth.error(
+                                "Failed to fetch organization members for deletion [org=\(organizationID, privacy: .private(mask: .hash)), error=\(error.localizedDescription, privacy: .public)]"
+                            )
                             promise(.failure(error))
                         case .success(let matchInfo):
                             let memberRecordIDs = matchInfo.matchResults.compactMap { pair -> CKRecord.ID? in
@@ -254,10 +272,14 @@ extension CloudKitAuthService {
                                 DispatchQueue.main.async {
                                     switch result {
                                     case .success(_):
-                                        print("✅ [CloudKit] Organization and \(memberRecordIDs.count) member records deleted")
+                                        Logger.auth.notice(
+                                            "Deleted organization and member records [org=\(organizationID, privacy: .private(mask: .hash)), members=\(memberRecordIDs.count, privacy: .public)]"
+                                        )
                                         promise(.success(true))
                                     case .failure(let error):
-                                        print("❌ [CloudKit] Failed to delete organization: \(error)")
+                                        Logger.auth.error(
+                                            "Failed to delete organization [org=\(organizationID, privacy: .private(mask: .hash)), error=\(error.localizedDescription, privacy: .public)]"
+                                        )
                                         promise(.failure(error))
                                     }
                                 }
@@ -291,9 +313,13 @@ extension CloudKitAuthService {
         
         do {
             _ = try await container.privateCloudDatabase.save(memberRecord)
-            print("✅ [CloudKit] Created member record for \(userID.prefix(8))... as \(role.displayName)")
+            Logger.auth.notice(
+                "Created organization member record [org=\(organizationID, privacy: .private(mask: .hash)), user=\(userID, privacy: .private(mask: .hash)), role=\(role.displayName, privacy: .public)]"
+            )
         } catch {
-            print("❌ [CloudKit] Failed to create member record: \(error)")
+            Logger.auth.error(
+                "Failed to create organization member record [org=\(organizationID, privacy: .private(mask: .hash)), user=\(userID, privacy: .private(mask: .hash)), error=\(error.localizedDescription, privacy: .public)]"
+            )
         }
     }
     
@@ -306,7 +332,9 @@ extension CloudKitAuthService {
             database.fetch(withQuery: query, inZoneWith: nil, desiredKeys: nil, resultsLimit: 50) { result in
                 switch result {
                 case .failure(let error):
-                    print("❌ [CloudKit] \(queryName) query failed: \(error)")
+                    Logger.auth.error(
+                        "Organization query failed [name=\(queryName, privacy: .public), error=\(error.localizedDescription, privacy: .public)]"
+                    )
                     promise(.success([]))
                 case .success(let matchInfo):
                     let records = matchInfo.matchResults.compactMap { pair -> CKRecord? in
@@ -315,7 +343,9 @@ extension CloudKitAuthService {
                         }
                         return nil
                     }
-                    print("✅ [CloudKit] \(queryName) query found \(records.count) organizations")
+                    Logger.auth.debug(
+                        "Organization query completed [name=\(queryName, privacy: .public), count=\(records.count, privacy: .public)]"
+                    )
                     promise(.success(records))
                 }
             }
@@ -324,43 +354,31 @@ extension CloudKitAuthService {
     }
     
     private func processOrganizationRecords(_ records: [CKRecord], forUser userID: String) -> [Organization] {
-        // CRITICAL DEBUG: Log all records found before filtering
-        print("🔍 [CloudKit] DEBUGGING: Found \(records.count) total organization records")
-        for (index, record) in records.enumerated() {
-            let recordID = record["id"] as? String ?? record.recordID.recordName
-            let name = record["name"] as? String ?? "Unknown"
-            let environment = record["environment"] as? String ?? "NONE"
-            let adminUserID = record["adminUserID"] as? String ?? "NONE"
-            let teamMembers = record["teamMembers"] as? [String] ?? []
-            
-            print("🔍 [\(index)] ID: \(recordID.prefix(8))... | Name: \(name)")
-            print("🔍     Environment: \(environment) | Admin: \(adminUserID.prefix(8))...")
-            print("🔍     TeamMembers: \(teamMembers.map { $0.prefix(8) })...")
-            print("🔍     Current User: \(userID.prefix(8))...")
-            print("🔍     Admin Match: \(adminUserID == userID)")
-            print("🔍     Member Match: \(teamMembers.contains(userID))")
-        }
+        Logger.auth.debug(
+            "Processing organization records [count=\(records.count, privacy: .public), user=\(userID, privacy: .private(mask: .hash))]"
+        )
         
         // FLEXIBLE ENVIRONMENT FILTERING: Support both dev and production
         let targetEnvironment = isDebugBuild() ? "development" : "production"
-        print("🔍 [CloudKit] Looking for environment: \(targetEnvironment)")
+        Logger.auth.debug(
+            "Filtering organization records by environment [target=\(targetEnvironment, privacy: .public)]"
+        )
         
         let filteredRecords = records.filter { record in
             if let environment = record["environment"] as? String {
-                let isTargetEnvironment = environment == targetEnvironment
-                print("🔍 Record \(record["name"] as? String ?? "Unknown"): \(environment) == \(targetEnvironment) ? \(isTargetEnvironment)")
-                return isTargetEnvironment
+                return environment == targetEnvironment
             } else {
                 // FALLBACK: If no environment field, check if it's a legacy record
-                print("🔍 Record \(record["name"] as? String ?? "Unknown"): NO ENVIRONMENT FIELD - treating as legacy")
                 return !isDebugBuild() // Include legacy records in production only
             }
         }
         
-        print("🔍 [CloudKit] After environment filtering: \(filteredRecords.count) records")
+        Logger.auth.debug(
+            "Filtered organization records by environment [count=\(filteredRecords.count, privacy: .public)]"
+        )
         
         let organizations = filteredRecords.map { record in
-            let org = Organization(
+            Organization(
                 id: record["id"] as? String ?? record.recordID.recordName,
                 name: record["name"] as? String ?? "Unknown Organization",
                 members: record["teamMembers"] as? [String] ?? [],
@@ -369,12 +387,11 @@ extension CloudKitAuthService {
                 createdAt: record["createdAt"] as? Date ?? Date(),
                 cloudKitRecordID: record.recordID.recordName
             )
-            
-            print("🔍 Final organization: \(org.name) | Members: \(org.members.count) | Admin: \(org.adminUserID.prefix(8))...")
-            return org
         }
         
-        print("🔍 [CloudKit] FINAL RESULT: \(organizations.count) organizations for user")
+        Logger.auth.notice(
+            "Completed organization record processing [count=\(organizations.count, privacy: .public), user=\(userID, privacy: .private(mask: .hash))]"
+        )
         return organizations.sorted { $0.createdAt > $1.createdAt }
     }
     
@@ -393,7 +410,9 @@ extension CloudKitAuthService {
             self.container.privateCloudDatabase.fetch(withQuery: query, inZoneWith: nil, desiredKeys: nil, resultsLimit: 50) { result in
                 switch result {
                 case .failure(let error):
-                    print("❌ [CloudKit] Failed to fetch user roles: \(error)")
+                    Logger.auth.error(
+                        "Failed to fetch user roles [user=\(userID, privacy: .private(mask: .hash)), error=\(error.localizedDescription, privacy: .public)]"
+                    )
                     promise(.success([:]))
                 case .success(let matchInfo):
                     var roles: [String: OrganizationRole] = [:]
@@ -407,7 +426,9 @@ extension CloudKitAuthService {
                         }
                     }
                     
-                    print("✅ [CloudKit] Fetched detailed roles for \(roles.count) organizations")
+                    Logger.auth.debug(
+                        "Fetched detailed organization roles [user=\(userID, privacy: .private(mask: .hash)), count=\(roles.count, privacy: .public)]"
+                    )
                     promise(.success(roles))
                 }
             }

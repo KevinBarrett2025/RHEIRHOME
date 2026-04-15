@@ -19,14 +19,15 @@
 - `ProjectViewModel+Filters.swift` now uses structured `Logger.project` logging instead of raw `print(...)` tracing.
 - `OrganizationDataMigrationService.swift` now uses structured `Logger.organizationMigration` logging instead of raw `print(...)` tracing.
 - `CompleteDataResetService.swift` now uses structured `Logger.settingsSupport` logging instead of raw `print(...)` tracing.
+- The organization create/fetch/delete and helper-query paths in `CloudKitAuthService+Organization.swift` now use structured `Logger.auth` logging instead of raw `print(...)` tracing.
 - Stable simulator evidence is green on the staged checkpoint:
-  - Gate A `build_sim`: PASS (`mcp__xcodebuildmcp__build_sim` with `-derivedDataPath /tmp/rheir_gateA_phase1o_mcp_dd`)
-  - Focused parity `test_sim -only-testing:RHEIRTests`: PASS (`mcp__xcodebuildmcp__test_sim` with `-derivedDataPath /tmp/rheir_parity_phase1o_mcp_dd`, `27/27`)
+  - Gate A `build_sim`: PASS (`mcp__xcodebuildmcp__build_sim` with `-derivedDataPath /tmp/rheir_gateA_phase1p_mcp_dd`)
+  - Focused parity `test_sim -only-testing:RHEIRTests`: PASS (`mcp__xcodebuildmcp__test_sim` with `-derivedDataPath /tmp/rheir_parity_phase1p_mcp_dd`, `27/27`)
 
 ## Open Work
-- Finish replacing raw `print(...)` tracing in `CloudKitAuthService+Organization.swift` and other non-hardened production seams.
+- Finish replacing raw `print(...)` tracing in the lower invite/zone/join/assignment half of `CloudKitAuthService+Organization.swift` and the other non-hardened production seams.
 - Continue shrinking the remaining oversized active state owners.
-- After the reset-service logging checkpoint commit, continue the `CloudKitAuthService+Organization.swift` organization-flow cleanup slice.
+- After the CloudKit org create/fetch/delete logging checkpoint commit, continue the lower invite/zone/join/assignment cleanup slice in the same file.
 
 ## Blockers
 - Device-targeted Gate A remains blocked by signing for `com.RheirHome.RHEIR`.
