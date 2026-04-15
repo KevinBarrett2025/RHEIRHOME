@@ -1,4 +1,5 @@
 import SwiftUI
+import OSLog
 
 /// Universal header component that provides consistent branding and project context across all main tabs
 struct UniversalHeaderView: View {
@@ -124,7 +125,7 @@ struct UniversalHeaderView: View {
         
         // Triple-tap detected - show debug panel
         if tapCount >= 3 {
-            print("🤫 SECRET: Triple-tap detected - opening hidden debug panel")
+            Logger.settingsSupport.notice("Hidden debug panel opened from universal header triple-tap")
             showingHiddenDebugPanel = true
             tapCount = 0 // Reset
         }
@@ -238,7 +239,9 @@ struct UniversalHeaderView: View {
         // Update cache immediately for responsive UI
         cachedTierInfo = (tier: newTier, timestamp: Date())
         
-        print("🔄 HEADER SUBSCRIPTION: Switched to \(tierDisplayName(newTier))")
+        Logger.company.notice(
+            "Header subscription tier switched [tier=\(tierDisplayName(newTier), privacy: .public)]"
+        )
     }
     
     private func tierIcon(_ tier: SubscriptionTier) -> String {

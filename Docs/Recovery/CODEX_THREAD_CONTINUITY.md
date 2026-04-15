@@ -3,12 +3,12 @@
 ## Repo Truth
 - Repo Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Active Branch: `gm/rheir-hardening-phase1`
-- HEAD SHA: `72f0e53c89bd5a3c46eae0f8a7c04d50efc758ab`
-- Last Commit: `72f0e53 Phase 1: replace scanned receipt entry print tracing`
+- HEAD SHA: `3bada29dac939a331a2d686f00acc5cd801edb7a`
+- Last Commit: `3bada29 Phase 1: replace receipts view print tracing`
 
 ## Current Objective
-- Preserve the repo-tracked ship-readiness checklist and checkpoint the `Shared/Features/Receipts/ReceiptsView.swift` logging cleanup slice.
-- Queue `Shared/Views/Components/UniversalHeaderView.swift` as the next highest-value remaining production seam after the `ReceiptsView.swift` checkpoint lands.
+- Preserve the repo-tracked ship-readiness checklist and checkpoint the `Shared/Views/Components/UniversalHeaderView.swift` logging cleanup slice.
+- Queue `Shared/Features/Progress/TaskDetailViewWrapper.swift` as the next highest-value remaining production seam after the `UniversalHeaderView.swift` checkpoint lands.
 
 ## Current Working Set
 - Session flow now routes through `Shared/Views/Auth/AppSessionSupport.swift`.
@@ -83,13 +83,14 @@
 - `Shared/Features/TimeEntry/AddTeamMemberView.swift` now uses structured `Logger.teamMember` calls instead of raw `print(...)` tracing for default-rate changes and team-member create/update save events.
 - `Shared/Features/Receipts/ScannedReceiptEntryView.swift` now uses structured `Logger.receiptWorkflow` calls instead of raw `print(...)` tracing for AI-enhanced vendor/payment sync completion and company-settings sync completion.
 - `Shared/Features/Receipts/ReceiptsView.swift` now uses structured `Logger.receiptWorkflow` calls instead of raw `print(...)` tracing for receipt deletion start/completion events.
-- `Shared/Views/Components/UniversalHeaderView.swift` is now the next highest-value remaining production seam by fresh raw `print(...)` residue count.
+- `Shared/Views/Components/UniversalHeaderView.swift` now uses structured `Logger.settingsSupport` / `Logger.company` calls instead of raw `print(...)` tracing for hidden debug panel access and subscription-tier switching.
+- `Shared/Features/Progress/TaskDetailViewWrapper.swift` is now the next highest-value remaining production seam by fresh raw `print(...)` residue count.
 - Other non-hardened seams still contain raw `print(...)` tracing.
 - Focused tests for invite parsing, cache migration, project-store persistence, receipt-intelligence retention, cache clearing, labor aggregation/validation, company-state bucketing, team-member store behavior, and receipt project-resolution behavior now live in `RHEIRTests/RHEIRTests.swift`.
 - Focused tests for project access normalization and assignment filtering now live in `RHEIRTests/RHEIRTests.swift`.
 - The current working slice has exact simulator evidence recorded:
-  - Gate A `build_sim`: PASS (`mcp__xcodebuildmcp__build_sim` with `-derivedDataPath /tmp/rheir_gateA_phase1bb_retry_mcp_dd`)
-  - Focused parity `test_sim -only-testing:RHEIRTests`: PASS (`mcp__xcodebuildmcp__test_sim` with `-derivedDataPath /tmp/rheir_parity_phase1bb_retry_mcp_dd`, `27/27`)
+  - Gate A `build_sim`: PASS (`mcp__xcodebuildmcp__build_sim` with `-derivedDataPath /tmp/rheir_gateA_phase1bc_mcp_dd`)
+  - Focused parity `test_sim -only-testing:RHEIRTests`: PASS (`mcp__xcodebuildmcp__test_sim` with `-derivedDataPath /tmp/rheir_parity_phase1bc_mcp_dd`, `27/27`)
   - Direct `xcodebuild` CLI evidence remains less stable than the MCP simulator path in the current local CoreSimulator environment
 
 ## Known Constraints
@@ -99,6 +100,6 @@
 - This repo follows a repo-local STS equivalent defined in the root governance docs because the original STS spine docs were not present here.
 
 ## Next Required Action
-1. Commit the `Shared/Features/Receipts/ReceiptsView.swift` logging slice without staging `Shared/Views/Auth/LoginView.swift`, `rheir_knowledge_database.json`, `RHEIRmemories.csv`, or `RheirLogo 1024x1024.png`.
+1. Commit the `Shared/Views/Components/UniversalHeaderView.swift` logging slice without staging `Shared/Views/Auth/LoginView.swift`, `rheir_knowledge_database.json`, `RHEIRmemories.csv`, or `RheirLogo 1024x1024.png`.
 2. Preserve the repo-local STS docs and `SHIP_READINESS_CHECKLIST.md` as the current release-planning truth for this repository.
-3. Continue with `Shared/Views/Components/UniversalHeaderView.swift` after the `ReceiptsView.swift` checkpoint lands.
+3. Continue with `Shared/Features/Progress/TaskDetailViewWrapper.swift` after the `UniversalHeaderView.swift` checkpoint lands.
