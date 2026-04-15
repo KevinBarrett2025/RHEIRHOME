@@ -1,6 +1,11 @@
 import Foundation
 import CloudKit
 import Combine
+import OSLog
+
+extension Logger {
+    static let cloudKitVendor = Logger(subsystem: "com.RheirHome.RHEIR", category: "cloudKitVendor")
+}
 
 /// CloudKit-based vendor management service for organization-wide data sharing
 @MainActor
@@ -41,7 +46,9 @@ class CloudKitVendorService: ObservableObject {
                 case .success(let record):
                     return createVendorFromRecord(record)
                 case .failure(let error):
-                    print("❌ Failed to load vendor record: \(error)")
+                    Logger.cloudKitVendor.error(
+                        "Failed to load vendor record from CloudKit [error=\(error.localizedDescription, privacy: .public)]"
+                    )
                     return nil
                 }
             }
@@ -50,11 +57,15 @@ class CloudKitVendorService: ObservableObject {
                 self.vendors = cloudKitVendors
                 self.isLoading = false
                 self.errorMessage = nil
-                print("✅ Loaded \(cloudKitVendors.count) vendors from CloudKit for organization")
+                Logger.cloudKitVendor.notice(
+                    "Loaded vendors from CloudKit [organization=\(organizationID, privacy: .private(mask: .hash)), count=\(cloudKitVendors.count, privacy: .public)]"
+                )
             }
             
         } catch {
-            print("❌ Failed to load vendors from CloudKit: \(error)")
+            Logger.cloudKitVendor.error(
+                "Failed to load vendors from CloudKit [organization=\(organizationID, privacy: .private(mask: .hash)), error=\(error.localizedDescription, privacy: .public)]"
+            )
             await MainActor.run {
                 self.isLoading = false
                 self.errorMessage = "Failed to load vendors: \(error.localizedDescription)"
@@ -67,7 +78,9 @@ class CloudKitVendorService: ObservableObject {
         
         do {
             _ = try await privateDatabase.save(record)
-            print("✅ Saved vendor to CloudKit: \(vendor.name)")
+            Logger.cloudKitVendor.notice(
+                "Saved vendor to CloudKit [organization=\(organizationID, privacy: .private(mask: .hash)), vendor=\(vendor.name, privacy: .private(mask: .hash))]"
+            )
             
             // Update local array
             await MainActor.run {
@@ -80,7 +93,9 @@ class CloudKitVendorService: ObservableObject {
             }
             
         } catch {
-            print("❌ Failed to save vendor to CloudKit: \(error)")
+            Logger.cloudKitVendor.error(
+                "Failed to save vendor to CloudKit [organization=\(organizationID, privacy: .private(mask: .hash)), vendor=\(vendor.name, privacy: .private(mask: .hash)), error=\(error.localizedDescription, privacy: .public)]"
+            )
             throw error
         }
     }
@@ -90,7 +105,9 @@ class CloudKitVendorService: ObservableObject {
         
         do {
             _ = try await privateDatabase.deleteRecord(withID: recordID)
-            print("✅ Deleted vendor from CloudKit: \(vendor.name)")
+            Logger.cloudKitVendor.notice(
+                "Deleted vendor from CloudKit [organization=\(organizationID, privacy: .private(mask: .hash)), vendor=\(vendor.name, privacy: .private(mask: .hash))]"
+            )
             
             // Update local array
             await MainActor.run {
@@ -98,7 +115,9 @@ class CloudKitVendorService: ObservableObject {
             }
             
         } catch {
-            print("❌ Failed to delete vendor from CloudKit: \(error)")
+            Logger.cloudKitVendor.error(
+                "Failed to delete vendor from CloudKit [organization=\(organizationID, privacy: .private(mask: .hash)), vendor=\(vendor.name, privacy: .private(mask: .hash)), error=\(error.localizedDescription, privacy: .public)]"
+            )
             throw error
         }
     }
@@ -108,7 +127,9 @@ class CloudKitVendorService: ObservableObject {
     func findOrCreateVendor(name: String, category: VendorCategory = .other) async -> Vendor? {
         // Check if vendor already exists (case-insensitive)
         if let existingVendor = vendors.first(where: { $0.name.lowercased() == name.lowercased() }) {
-            print("📍 Found existing vendor: \(existingVendor.name)")
+            Logger.cloudKitVendor.info(
+                "Found existing vendor match [organization=\(organizationID, privacy: .private(mask: .hash)), vendor=\(existingVendor.name, privacy: .private(mask: .hash))]"
+            )
             return existingVendor
         }
         
@@ -122,7 +143,9 @@ class CloudKitVendorService: ObservableObject {
         
         do {
             try await saveVendorToCloudKit(newVendor)
-            print("🆕 Created new vendor: \(newVendor.name) (\(category.rawValue))")
+            Logger.cloudKitVendor.notice(
+                "Created new vendor [organization=\(organizationID, privacy: .private(mask: .hash)), vendor=\(newVendor.name, privacy: .private(mask: .hash)), category=\(category.rawValue, privacy: .public)]"
+            )
             return newVendor
         } catch {
             await MainActor.run {
@@ -141,7 +164,9 @@ class CloudKitVendorService: ObservableObject {
         
         do {
             try await saveVendorToCloudKit(updatedVendor)
-            print("💰 Updated vendor spending: \(updatedVendor.name) - Total: $\(updatedVendor.totalSpent)")
+            Logger.cloudKitVendor.notice(
+                "Updated vendor spending [organization=\(organizationID, privacy: .private(mask: .hash)), vendor=\(updatedVendor.name, privacy: .private(mask: .hash)), totalSpent=\(updatedVendor.totalSpent, privacy: .public)]"
+            )
         } catch {
             await MainActor.run {
                 self.errorMessage = "Failed to update vendor spending: \(error.localizedDescription)"
@@ -253,7 +278,9 @@ class CloudKitVendorService: ObservableObject {
               let name = record["name"] as? String,
               let categoryString = record["category"] as? String,
               let category = VendorCategory(rawValue: categoryString) else {
-            print("❌ Invalid vendor record format")
+            Logger.cloudKitVendor.error(
+                "Encountered invalid vendor record format [record=\(record.recordID.recordName, privacy: .private(mask: .hash))]"
+            )
             return nil
         }
         
@@ -278,13 +305,17 @@ class CloudKitVendorService: ObservableObject {
     // MARK: - Migration from Local Storage
     
     func migrateLocalVendorsToCloudKit() async throws {
-        print("🔄 Migrating local vendors to CloudKit...")
+        Logger.cloudKitVendor.info(
+            "Migrating local vendors to CloudKit [organization=\(organizationID, privacy: .private(mask: .hash))]"
+        )
         
         // Load vendors from UserDefaults
         let key = "vendors_\(organizationID)"
         guard let data = UserDefaults.standard.data(forKey: key),
               let localVendors = try? JSONDecoder().decode([Vendor].self, from: data) else {
-            print("📋 No local vendors found to migrate")
+            Logger.cloudKitVendor.info(
+                "No local vendors were found for CloudKit migration [organization=\(organizationID, privacy: .private(mask: .hash))]"
+            )
             return
         }
         
@@ -298,14 +329,18 @@ class CloudKitVendorService: ObservableObject {
                 try await saveVendorToCloudKit(vendor)
                 migratedCount += 1
             } catch {
-                print("❌ Failed to migrate vendor: \(vendor.name) - \(error)")
+                Logger.cloudKitVendor.error(
+                    "Failed to migrate vendor to CloudKit [organization=\(organizationID, privacy: .private(mask: .hash)), vendor=\(vendor.name, privacy: .private(mask: .hash)), error=\(error.localizedDescription, privacy: .public)]"
+                )
             }
         }
         
         // Clear local storage after successful migration
         if migratedCount > 0 {
             UserDefaults.standard.removeObject(forKey: key)
-            print("✅ Migrated \(migratedCount) vendors to CloudKit and cleared local storage")
+            Logger.cloudKitVendor.notice(
+                "Migrated local vendors to CloudKit and cleared local storage [organization=\(organizationID, privacy: .private(mask: .hash)), count=\(migratedCount, privacy: .public)]"
+            )
         }
     }
     
@@ -313,7 +348,9 @@ class CloudKitVendorService: ObservableObject {
     
     /// Sync local changes to CloudKit when coming back online
     func syncLocalChangesToCloudKit() async {
-        print("🔄 Syncing local vendor changes to CloudKit...")
+        Logger.cloudKitVendor.info(
+            "Syncing pending local vendor changes to CloudKit [organization=\(organizationID, privacy: .private(mask: .hash))]"
+        )
         
         // Load any pending local changes
         let localChanges = loadPendingLocalChanges()
@@ -335,12 +372,16 @@ class CloudKitVendorService: ObservableObject {
                 removePendingLocalChange(vendorChange)
                 
             } catch {
-                print("❌ Failed to sync vendor change: \(vendorChange.vendor.name) - \(error)")
+                Logger.cloudKitVendor.error(
+                    "Failed to sync vendor change to CloudKit [organization=\(organizationID, privacy: .private(mask: .hash)), vendor=\(vendorChange.vendor.name, privacy: .private(mask: .hash)), operation=\(vendorChange.operation.rawValue, privacy: .public), error=\(error.localizedDescription, privacy: .public)]"
+                )
                 // Keep in pending changes for retry later
             }
         }
         
-        print("✅ Synced \(syncedCount) vendor changes to CloudKit")
+        Logger.cloudKitVendor.notice(
+            "Synced vendor changes to CloudKit [organization=\(organizationID, privacy: .private(mask: .hash)), count=\(syncedCount, privacy: .public)]"
+        )
     }
     
     /// Save vendor locally when offline, queue for sync when online
@@ -359,7 +400,9 @@ class CloudKitVendorService: ObservableObject {
         // Queue for CloudKit sync when online
         queuePendingLocalChange(VendorSyncChange(vendor: vendor, operation: operation))
         
-        print("📱 Saved vendor offline: \(vendor.name) (queued for sync)")
+        Logger.cloudKitVendor.notice(
+            "Saved vendor offline and queued for sync [organization=\(organizationID, privacy: .private(mask: .hash)), vendor=\(vendor.name, privacy: .private(mask: .hash)), operation=\(operation.rawValue, privacy: .public)]"
+        )
     }
     
     /// Merge CloudKit data with local data, handling conflicts
@@ -376,10 +419,14 @@ class CloudKitVendorService: ObservableObject {
                 
                 if useCloudKit >= useLocal {
                     mergedVendors.append(cloudKitVendor)
-                    print("🔄 Using CloudKit version of vendor: \(cloudKitVendor.name)")
+                    Logger.cloudKitVendor.info(
+                        "Resolved vendor merge in favor of CloudKit version [organization=\(organizationID, privacy: .private(mask: .hash)), vendor=\(cloudKitVendor.name, privacy: .private(mask: .hash))]"
+                    )
                 } else {
                     mergedVendors.append(localVendor)
-                    print("🔄 Using local version of vendor: \(localVendor.name)")
+                    Logger.cloudKitVendor.info(
+                        "Resolved vendor merge in favor of local version [organization=\(organizationID, privacy: .private(mask: .hash)), vendor=\(localVendor.name, privacy: .private(mask: .hash))]"
+                    )
                     
                     // Queue local version for sync to CloudKit
                     queuePendingLocalChange(VendorSyncChange(vendor: localVendor, operation: .update))
@@ -394,7 +441,9 @@ class CloudKitVendorService: ObservableObject {
         for localVendor in vendors {
             if !cloudKitVendors.contains(where: { $0.id == localVendor.id }) {
                 mergedVendors.append(localVendor)
-                print("📱 Found local-only vendor: \(localVendor.name) (queued for sync)")
+                Logger.cloudKitVendor.info(
+                    "Found local-only vendor during merge and queued it for sync [organization=\(organizationID, privacy: .private(mask: .hash)), vendor=\(localVendor.name, privacy: .private(mask: .hash))]"
+                )
                 
                 // Queue for sync to CloudKit
                 queuePendingLocalChange(VendorSyncChange(vendor: localVendor, operation: .create))
@@ -408,7 +457,9 @@ class CloudKitVendorService: ObservableObject {
         // Save merged data locally
         saveVendorsToLocalStorage()
         
-        print("🔄 Merged vendor data: \(mergedVendors.count) total vendors")
+        Logger.cloudKitVendor.notice(
+            "Merged vendor data from local and CloudKit sources [organization=\(organizationID, privacy: .private(mask: .hash)), count=\(mergedVendors.count, privacy: .public)]"
+        )
     }
     
     // MARK: - Local Storage for Offline-First
@@ -417,12 +468,16 @@ class CloudKitVendorService: ObservableObject {
         let key = "vendors_\(organizationID)"
         
         guard let data = try? JSONEncoder().encode(vendors) else {
-            print("❌ Failed to encode vendors for local storage")
+            Logger.cloudKitVendor.error(
+                "Failed to encode vendors for local storage [organization=\(organizationID, privacy: .private(mask: .hash))]"
+            )
             return
         }
         
         UserDefaults.standard.set(data, forKey: key)
-        print("💾 Saved \(vendors.count) vendors to local storage")
+        Logger.cloudKitVendor.notice(
+            "Saved vendors to local storage [organization=\(organizationID, privacy: .private(mask: .hash)), count=\(vendors.count, privacy: .public)]"
+        )
     }
     
     private func loadVendorsFromLocalStorage() -> [Vendor] {
