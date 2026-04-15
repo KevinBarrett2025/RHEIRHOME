@@ -20,9 +20,7 @@ struct FAB: View {
 
 struct FAB_Previews: PreviewProvider {
     static var previews: some View {
-        FAB(icon: "plus") {
-            print("FAB tapped")
-        }
+        FAB(icon: "plus") { }
         .padding()
         .previewLayout(.sizeThatFits)
     }

@@ -3,12 +3,12 @@
 ## Repo Truth
 - Repo Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Active Branch: `gm/rheir-hardening-phase1`
-- HEAD SHA: `1ca9ed0b8c05604b78ef83c00933ef0b5da6ed0e`
-- Last Commit: `1ca9ed0 Phase 1: replace directory employee row print tracing`
+- HEAD SHA: `d42865a3fcaec69d5064f1278077c8de0e5f2db1`
+- Last Commit: `d42865a Phase 1: remove subscription badge preview print tracing`
 
 ## Current Objective
-- Preserve the repo-tracked ship-readiness checklist and checkpoint the `Shared/Views/Components/SubscriptionBadgeView.swift` logging cleanup slice.
-- Queue `Shared/Utilities/Shared/FAB.swift` as the next highest-value remaining production seam after the `SubscriptionBadgeView.swift` checkpoint lands.
+- Preserve the repo-tracked ship-readiness checklist and checkpoint the `Shared/Utilities/Shared/FAB.swift` logging cleanup slice.
+- Queue `Shared/Features/TeamMembers/EnhancedTeamMemberDetailView.swift` as the next highest-value remaining production seam after the `FAB.swift` checkpoint lands.
 
 ## Current Working Set
 - Session flow now routes through `Shared/Views/Auth/AppSessionSupport.swift`.
@@ -88,13 +88,14 @@
 - `Shared/Features/Progress/DailyProgressComponents.swift` now uses structured `Logger.cloudKitPhoto` calls instead of raw `print(...)` tracing for progress-photo load failures in both card and full-screen detail paths.
 - `Shared/Features/Directory/DirectoryEmployeeRowView.swift` now uses structured `Logger.teamMember` calls instead of raw `print(...)` tracing for team-member invitation success/failure results.
 - `Shared/Views/Components/SubscriptionBadgeView.swift` no longer emits preview-only console tracing in the tier-selection card preview.
-- `Shared/Utilities/Shared/FAB.swift` is now the next highest-value remaining production seam by fresh raw `print(...)` residue count.
+- `Shared/Utilities/Shared/FAB.swift` no longer emits preview-only console tracing in its preview action closure.
+- `Shared/Features/TeamMembers/EnhancedTeamMemberDetailView.swift` is now the next highest-value remaining production seam by fresh raw `print(...)` residue count.
 - Other non-hardened seams still contain raw `print(...)` tracing.
 - Focused tests for invite parsing, cache migration, project-store persistence, receipt-intelligence retention, cache clearing, labor aggregation/validation, company-state bucketing, team-member store behavior, and receipt project-resolution behavior now live in `RHEIRTests/RHEIRTests.swift`.
 - Focused tests for project access normalization and assignment filtering now live in `RHEIRTests/RHEIRTests.swift`.
 - The current working slice has exact simulator evidence recorded:
-  - Gate A `build_sim`: PASS (`mcp__xcodebuildmcp__build_sim` with `-derivedDataPath /tmp/rheir_gateA_phase1bg_mcp_dd`)
-  - Focused parity `test_sim -only-testing:RHEIRTests`: PASS (`mcp__xcodebuildmcp__test_sim` with `-derivedDataPath /tmp/rheir_parity_phase1bg_mcp_dd`, `27/27`)
+  - Gate A `build_sim`: PASS (`mcp__xcodebuildmcp__build_sim` with `-derivedDataPath /tmp/rheir_gateA_phase1bh_mcp_dd`)
+  - Focused parity `test_sim -only-testing:RHEIRTests`: PASS (`mcp__xcodebuildmcp__test_sim` with `-derivedDataPath /tmp/rheir_parity_phase1bh_mcp_dd`, `27/27`)
   - Direct `xcodebuild` CLI evidence remains less stable than the MCP simulator path in the current local CoreSimulator environment
 
 ## Known Constraints
@@ -104,6 +105,6 @@
 - This repo follows a repo-local STS equivalent defined in the root governance docs because the original STS spine docs were not present here.
 
 ## Next Required Action
-1. Commit the `Shared/Views/Components/SubscriptionBadgeView.swift` cleanup slice without staging `Shared/Views/Auth/LoginView.swift`, `rheir_knowledge_database.json`, `RHEIRmemories.csv`, or `RheirLogo 1024x1024.png`.
+1. Commit the `Shared/Utilities/Shared/FAB.swift` cleanup slice without staging `Shared/Views/Auth/LoginView.swift`, `rheir_knowledge_database.json`, `RHEIRmemories.csv`, or `RheirLogo 1024x1024.png`.
 2. Preserve the repo-local STS docs and `SHIP_READINESS_CHECKLIST.md` as the current release-planning truth for this repository.
-3. Continue with `Shared/Utilities/Shared/FAB.swift` after the `SubscriptionBadgeView.swift` checkpoint lands.
+3. Continue with `Shared/Features/TeamMembers/EnhancedTeamMemberDetailView.swift` after the `FAB.swift` checkpoint lands.

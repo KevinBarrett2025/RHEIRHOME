@@ -63,14 +63,15 @@
 - `DailyProgressComponents.swift` now uses structured `Logger.cloudKitPhoto` logging instead of raw `print(...)` tracing.
 - `DirectoryEmployeeRowView.swift` now uses structured `Logger.teamMember` logging instead of raw `print(...)` tracing.
 - `SubscriptionBadgeView.swift` no longer emits preview-only raw `print(...)` tracing.
+- `FAB.swift` no longer emits preview-only raw `print(...)` tracing.
 - Stable simulator evidence is green on the staged checkpoint:
-  - Gate A `build_sim`: PASS (`mcp__xcodebuildmcp__build_sim` with `-derivedDataPath /tmp/rheir_gateA_phase1bg_mcp_dd`)
-  - Focused parity `test_sim -only-testing:RHEIRTests`: PASS (`mcp__xcodebuildmcp__test_sim` with `-derivedDataPath /tmp/rheir_parity_phase1bg_mcp_dd`, `27/27`)
+  - Gate A `build_sim`: PASS (`mcp__xcodebuildmcp__build_sim` with `-derivedDataPath /tmp/rheir_gateA_phase1bh_mcp_dd`)
+  - Focused parity `test_sim -only-testing:RHEIRTests`: PASS (`mcp__xcodebuildmcp__test_sim` with `-derivedDataPath /tmp/rheir_parity_phase1bh_mcp_dd`, `27/27`)
 
 ## Open Work
-- Finish replacing raw `print(...)` tracing in the other non-hardened production seams, starting with `Shared/Utilities/Shared/FAB.swift`.
+- Finish replacing raw `print(...)` tracing in the other non-hardened production seams, starting with `Shared/Features/TeamMembers/EnhancedTeamMemberDetailView.swift`.
 - Continue shrinking the remaining oversized active state owners.
-- After the `Shared/Utilities/Shared/FAB.swift` checkpoint, continue the next highest-value non-hardened seam.
+- After the `Shared/Features/TeamMembers/EnhancedTeamMemberDetailView.swift` checkpoint, continue the next highest-value non-hardened seam.
 - Use `SHIP_READINESS_CHECKLIST.md` as the current release-progress reference alongside the STS docs.
 
 ## Blockers
