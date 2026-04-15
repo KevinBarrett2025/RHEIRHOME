@@ -3,7 +3,7 @@
 ## Repo
 - Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Branch: `gm/rheir-hardening-phase1`
-- HEAD: `d74a669e7eab5f575db48b8cfa42efbacbbad5db`
+- HEAD: `803cb5844cfafc137a1fd7cb416d9ab27ea5f0a6`
 
 ## Active Initiative
 - RHEIR hardening and streamlining, phase 1 foundation pass.
@@ -40,11 +40,12 @@
 - Replaced raw `print(...)` tracing in the active organization directory, vendor intelligence, and payment intelligence services with structured `Logger` usage.
 - Replaced raw `print(...)` tracing in the active deep-link, organization-entry, and Sign in with Apple coordination flow with structured `Logger` usage.
 - Replaced raw `print(...)` tracing in `OfflineDataManager`, `CloudKitProjectService`, `CloudKitZoneManager`, and `RHEIRCloudKitManager` with structured `Logger` usage and lower-noise runtime sync logging.
+- Replaced raw `print(...)` tracing in the active company/project UI assignment, team-member, organization-edit, payment-method, and team-management views with structured `Logger` usage.
 - Added focused persistence/session tests in `RHEIRTests/RHEIRTests.swift` for invite parsing, legacy cache migration, project storage, receipt intelligence retention, cache clearing, labor aggregation/validation, company-state bucketing, team-member store behavior, and receipt project-resolution behavior.
 - Added focused parity for project access normalization and assignment filtering in `RHEIRTests/RHEIRTests.swift`.
 
 ## In Progress
-- Replace remaining unsafe logging/state hacks in the rest of the active codebase outside the hardened runtime sync slice.
+- Replace remaining unsafe logging/state hacks in the debug/support settings paths and other non-hardened production seams.
 - Continue shrinking the remaining oversized active state owners around the new sync and access store boundaries.
 - Expand deterministic parity beyond the focused `RHEIRTests` suite.
 
@@ -53,9 +54,9 @@
 - Device-targeted Gate A remains blocked by signing because automatic provisioning is disabled for `com.RheirHome.RHEIR`.
 
 ## Latest Evidence
-- Gate A: `mcp__xcodebuildmcp__build_sim` with `extraArgs=["-derivedDataPath","/tmp/rheir_gateA_phase1g_mcp_dd"]` -> PASS
-- Focused parity: `mcp__xcodebuildmcp__test_sim` with `extraArgs=["-derivedDataPath","/tmp/rheir_parity_phase1g_mcp_dd","-only-testing:RHEIRTests"]` -> PASS (`27/27`)
+- Gate A: `mcp__xcodebuildmcp__build_sim` with `extraArgs=["-derivedDataPath","/tmp/rheir_gateA_phase1h_mcp_dd"]` -> PASS
+- Focused parity: `mcp__xcodebuildmcp__test_sim` with `extraArgs=["-derivedDataPath","/tmp/rheir_parity_phase1h_mcp_dd","-only-testing:RHEIRTests"]` -> PASS (`27/27`)
 - Direct CLI gate path remains less stable than the MCP simulator path in the local simulator environment
 
 ## Next Milestone
-- Checkpoint the `CompanyStore` relocation slice, then continue the remaining production logging cleanup and the next company/project coordination cleanup on top of the extracted store seams.
+- Checkpoint the active company/project UI logging cleanup slice, then continue the remaining debug/support logging cleanup and the next company/project coordination extraction on top of the extracted store seams.

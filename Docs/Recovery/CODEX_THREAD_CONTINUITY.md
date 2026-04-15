@@ -3,12 +3,12 @@
 ## Repo Truth
 - Repo Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Active Branch: `gm/rheir-hardening-phase1`
-- HEAD SHA: `5c710d905cc1f55d179c922a72bda72fc3785b51`
-- Last Commit: `5c710d9 Phase 1: extract project access coordination store`
+- HEAD SHA: `803cb5844cfafc137a1fd7cb416d9ab27ea5f0a6`
+- Last Commit: `803cb58 Phase 1: relocate company store out of settings view`
 
 ## Current Objective
 - Stabilize the streamlined repo after the file-tree cleanup and sync-store extraction checkpoints.
-- Continue phase 1 hardening by checkpointing the `CompanyStore` relocation out of `MasterCompanySettingsView.swift`.
+- Continue phase 1 hardening by replacing the remaining raw `print(...)` tracing in the active company/project UI paths.
 
 ## Current Working Set
 - Session flow now routes through `Shared/Views/Auth/AppSessionSupport.swift`.
@@ -25,6 +25,7 @@
 - Receipt-to-project resolution and project-list resynchronization now route through `ReceiptProjectStore`.
 - Labor aggregation and validation now route through `LaborStore` instead of living inline inside `recomputeLaborData()`.
 - Company team-member bucketing and organization summary logic now route through `CompanyStore` in the compiled state layer instead of staying embedded in `MasterCompanySettingsView.swift`.
+- `CompanyStore`, `CompanyTeamBuckets`, and `CompanySummary` now live in the compiled state layer instead of `MasterCompanySettingsView.swift`.
 - Receipt intelligence persistence now routes through `ReceiptIntelligenceStore` instead of raw `UserDefaults` dictionaries.
 - Auth cache clearing now routes through `LocalCacheStore.clearAllKnownSessionKeys()` instead of ad hoc `UserDefaults` removals.
 - Active auth/session logging now uses structured `Logger` calls instead of raw `print(...)` tracing in `AuthViewModel.swift`.
@@ -44,7 +45,7 @@
 - This repo follows a repo-local STS equivalent defined in the root governance docs because the original STS spine docs were not present here.
 
 ## Next Required Action
-1. Commit the `CompanyStore` relocation slice without staging `Shared/Views/Auth/LoginView.swift`, `rheir_knowledge_database.json`, or `RHEIRmemories.csv`.
-2. Continue the remaining company/project coordination cleanup on top of the extracted access and company-store seams.
-3. Replace the remaining raw `print(...)` tracing in the active production files outside the hardened sync/runtime slice.
+1. Replace the remaining raw `print(...)` tracing in the active company/project UI, starting with `Shared/Views/Organization/ProjectAssignmentView.swift`.
+2. Gate that narrowed UI logging slice with `build_sim` and focused `RHEIRTests` parity.
+3. Commit the slice without staging `Shared/Views/Auth/LoginView.swift`, `rheir_knowledge_database.json`, or `RHEIRmemories.csv`.
 4. Preserve the repo-local STS docs as the source of workflow truth until a canonical authority/promo structure exists for this repository.

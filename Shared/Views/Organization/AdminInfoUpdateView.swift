@@ -1,4 +1,5 @@
 import SwiftUI
+import OSLog
 
 struct AdminInfoUpdateView: View {
     @EnvironmentObject private var authVM: AuthViewModel
@@ -107,7 +108,7 @@ struct AdminInfoUpdateView: View {
             // Find the current user's team member record
             guard let userID = authVM.user?.id,
                   let adminMember = projectVM.teamMembers.first(where: { $0.appUserID == userID }) else {
-                print("❌ Cannot find admin team member to update")
+                Logger.teamMember.error("Cannot update admin profile because the current admin team-member record was not found.")
                 isUpdating = false
                 return
             }

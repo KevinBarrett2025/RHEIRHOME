@@ -1,4 +1,5 @@
 import SwiftUI
+import OSLog
 
 struct EnhancedTeamMemberDetailView: View {
     let member: TeamMember
@@ -327,7 +328,9 @@ struct EnhancedTeamMemberDetailView: View {
     private func deleteTeamMember() {
         // Use the ProjectViewModel method to properly delete the team member
         projectVM.deleteTeamMember(member)
-        print("🗑️ Successfully deleted team member: \(member.name)")
+        Logger.teamMember.notice(
+            "Deleted team member from detail view [teamMember=\(member.id.uuidString, privacy: .private(mask: .hash))]"
+        )
         dismiss()
     }
 }
@@ -406,11 +409,10 @@ struct TeamMemberTerminationView: View {
         )
         
         projectVM.updateTeamMember(terminatedMember)
-        
-        print("📋 Successfully terminated employee: \(member.name)")
-        print("   Date: \(terminationDate)")
-        print("   Type: \(terminationType.displayName)")
-        print("   Reason: \(terminationReason)")
+
+        Logger.teamMember.notice(
+            "Terminated team member from detail view [teamMember=\(member.id.uuidString, privacy: .private(mask: .hash)), terminationType=\(terminationType.displayName, privacy: .public), terminationDate=\(terminationDate.formatted(date: .abbreviated, time: .omitted), privacy: .public)]"
+        )
         
         isSaving = false
         dismiss()

@@ -1,4 +1,5 @@
 import SwiftUI
+import OSLog
 
 struct OrganizationEditView: View {
     @EnvironmentObject var authVM: AuthViewModel
@@ -257,7 +258,9 @@ struct OrganizationEditView: View {
                 authVM.setCurrentOrganization(currentOrg)
             }
             
-            print("✅ Organization updated: \(name)")
+            Logger.company.notice(
+                "Updated organization details in organization editor [organization=\(organization.id, privacy: .private(mask: .hash))]"
+            )
         }
     }
 }

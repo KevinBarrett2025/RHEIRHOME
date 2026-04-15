@@ -1,5 +1,6 @@
 import SwiftUI
 import MessageUI
+import OSLog
 
 struct InviteTeamMemberToProjectView: View {
     @EnvironmentObject var authVM: AuthViewModel
@@ -20,26 +21,16 @@ struct InviteTeamMemberToProjectView: View {
     private var availableTeamMembers: [TeamMember] {
         let allMembers = projectVM.teamMembers
         let currentOrgID = authVM.currentOrg?.id
-        
-        print("🔍 DEBUG: Filtering team members for invites")
-        print("🔍 Total team members in ProjectVM: \(allMembers.count)")
-        print("🔍 Current organization ID: \(currentOrgID ?? "none")")
-        
-        for member in allMembers {
-            print("🔍 Member: \(member.name) | OrgID: \(member.organizationID) | Email: \(member.email) | Phone: \(member.phone)")
-        }
-        
+
         let filtered = allMembers.filter { member in
             let matchesOrg = member.organizationID == currentOrgID
             let notCurrentUser = member.appUserID != authVM.user?.id
-            let result = matchesOrg && notCurrentUser
-            
-            print("🔍 \(member.name): MatchesOrg=\(matchesOrg), NotCurrentUser=\(notCurrentUser), Final=\(result)")
-            
-            return result
+            return matchesOrg && notCurrentUser
         }
-        
-        print("🔍 Available team members after filtering: \(filtered.count)")
+
+        Logger.teamMember.debug(
+            "Invite-to-project view filtered team members [total=\(allMembers.count, privacy: .public), available=\(filtered.count, privacy: .public), currentOrganization=\(currentOrgID ?? "none", privacy: .private(mask: .hash))]"
+        )
         return filtered
     }
     
@@ -428,7 +419,9 @@ struct InviteTeamMemberToProjectView: View {
                     if !project.assignedUserIDs.contains(memberID.uuidString) {
                         project.assignUser(memberID.uuidString)
                         await projectVM.updateProject(project)
-                        print("✅ Assigned team member \(memberID.uuidString.prefix(8))... to project: \(project.name)")
+                        Logger.teamMember.notice(
+                            "Assigned invited team member to project [teamMember=\(memberID.uuidString, privacy: .private(mask: .hash)), project=\(project.id.uuidString, privacy: .private(mask: .hash))]"
+                        )
                     }
                 }
             }

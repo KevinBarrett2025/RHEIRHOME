@@ -1,4 +1,5 @@
 import SwiftUI
+import OSLog
 import Combine
 
 struct PaymentMethodManagementView: View {
@@ -155,7 +156,7 @@ struct PaymentMethodManagementView: View {
         
         guard let project = projectViewModel.selectedProject else { return }
         
-        print(" Syncing payment methods with receipt data...")
+        Logger.company.info("Synchronizing payment methods with selected-project receipt data.")
         
         // First, clean up any duplicate payment methods
         paymentMethodService.cleanupDuplicatePaymentMethods()
@@ -188,7 +189,9 @@ struct PaymentMethodManagementView: View {
                 // Update the total spending to match the actual receipt data
                 if let index = paymentMethodService.paymentMethods.firstIndex(where: { $0.id == paymentMethod.id }) {
                     paymentMethodService.paymentMethods[index].totalSpent = totalSpent
-                    print(" Updated \(paymentMethod.displayName): \(totalSpent.formatAsCurrency())")
+                    Logger.company.debug(
+                        "Updated payment-method spending from receipts [paymentMethod=\(paymentMethod.id.uuidString, privacy: .private(mask: .hash)), totalSpent=\(totalSpent, privacy: .public)]"
+                    )
                 }
             }
         }
@@ -198,7 +201,9 @@ struct PaymentMethodManagementView: View {
             paymentMethodService.savePaymentMethod(paymentMethodService.paymentMethods[i])
         }
         
-        print(" Sync complete - showing \(paymentMethodService.paymentMethods.filter { $0.totalSpent > 0 }.count) payment methods with spending")
+        Logger.company.notice(
+            "Completed payment-method receipt sync [activePaymentMethods=\(paymentMethodService.paymentMethods.filter { $0.totalSpent > 0 }.count, privacy: .public)]"
+        )
     }
     
     // Helper function to guess payment type from payment method name

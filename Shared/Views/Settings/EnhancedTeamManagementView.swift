@@ -1,4 +1,5 @@
 import SwiftUI
+import OSLog
 
 struct EnhancedTeamManagementView: View {
     @EnvironmentObject private var authVM: AuthViewModel
@@ -666,7 +667,7 @@ struct CreateTeamInviteView: View {
                     // Generate a share URL from the result message or create one
                     self.inviteURL = authVM.getTeamMemberInviteLink() ?? "https://app.rheirhome.com/invite"
                 } else {
-                    print("Failed to create invite: \(result.message)")
+                    Logger.company.error("Failed to create team-management invite: \(result.message, privacy: .public)")
                 }
             }
         }

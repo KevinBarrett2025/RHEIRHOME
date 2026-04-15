@@ -1,4 +1,5 @@
 import SwiftUI
+import OSLog
 
 struct EnhancedAddTeamMemberView: View {
     @EnvironmentObject var projectVM: ProjectViewModel
@@ -131,7 +132,9 @@ struct EnhancedAddTeamMemberView: View {
         
         // Actually save the team member through ProjectViewModel
         projectVM.addTeamMember(newMember)
-        print("👥 Successfully added new team member: \(trimmedName) with \(updatedRates.count) pay rates")
+        Logger.teamMember.notice(
+            "Added team member from company settings [teamMember=\(newMember.id.uuidString, privacy: .private(mask: .hash)), rateCount=\(updatedRates.count, privacy: .public)]"
+        )
         dismiss()
     }
     
@@ -505,7 +508,9 @@ struct EnhancedEditTeamMemberView: View {
         
         // Actually update the team member through ProjectViewModel
         projectVM.updateTeamMember(updatedMember)
-        print("💾 Successfully updated team member: \(updatedMember.name) with \(updatedRates.count) pay rates")
+        Logger.teamMember.notice(
+            "Updated team member from company settings [teamMember=\(updatedMember.id.uuidString, privacy: .private(mask: .hash)), rateCount=\(updatedRates.count, privacy: .public)]"
+        )
         dismiss()
     }
     
