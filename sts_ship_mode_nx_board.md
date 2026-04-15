@@ -55,14 +55,15 @@
 - `LogHoursView.swift` now uses structured `Logger.labor` / `Logger.teamMember` logging instead of raw `print(...)` tracing.
 - `NewProjectView.swift` now uses structured `Logger.project` logging instead of raw `print(...)` tracing and no longer carries the unused `intelligenceData` warning.
 - `ProjectDetailview.swift` now uses structured `Logger.project` logging instead of raw `print(...)` tracing.
+- `AddTeamMemberView.swift` now uses structured `Logger.teamMember` logging instead of raw `print(...)` tracing.
 - Stable simulator evidence is green on the staged checkpoint:
-  - Gate A `build_sim`: PASS (`mcp__xcodebuildmcp__build_sim` with `-derivedDataPath /tmp/rheir_gateA_phase1ay_mcp_dd`)
-  - Focused parity `test_sim -only-testing:RHEIRTests`: PASS (`mcp__xcodebuildmcp__test_sim` with `-derivedDataPath /tmp/rheir_parity_phase1ay_mcp_dd`, `27/27`)
+  - Gate A `build_sim`: PASS (`mcp__xcodebuildmcp__build_sim` with `-derivedDataPath /tmp/rheir_gateA_phase1az_mcp_dd`)
+  - Focused parity `test_sim -only-testing:RHEIRTests`: PASS (`mcp__xcodebuildmcp__test_sim` with `-derivedDataPath /tmp/rheir_parity_phase1az_mcp_dd`, `27/27`)
 
 ## Open Work
-- Finish replacing raw `print(...)` tracing in the other non-hardened production seams, starting with `Shared/Features/TimeEntry/AddTeamMemberView.swift`.
+- Finish replacing raw `print(...)` tracing in the other non-hardened production seams, starting with `Shared/Features/Receipts/ScannedReceiptEntryView.swift`.
 - Continue shrinking the remaining oversized active state owners.
-- After the `Shared/Features/TimeEntry/AddTeamMemberView.swift` checkpoint, continue the next highest-value non-hardened seam.
+- After the `Shared/Features/Receipts/ScannedReceiptEntryView.swift` checkpoint, continue the next highest-value non-hardened seam.
 - Use `SHIP_READINESS_CHECKLIST.md` as the current release-progress reference alongside the STS docs.
 
 ## Blockers

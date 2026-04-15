@@ -1,4 +1,5 @@
 import SwiftUI
+import OSLog
 
 struct AddTeamMemberView: View {
     @EnvironmentObject var viewModel: ProjectViewModel
@@ -259,7 +260,9 @@ struct AddTeamMemberView: View {
         for i in 0..<rates.count {
             rates[i].isDefault = (rates[i].id == rate.id)
         }
-        print("✅ Set '\(rate.taskType)' as default rate")
+        Logger.teamMember.notice(
+            "Set default rate for team member editor [taskType=\(rate.taskType, privacy: .public)]"
+        )
     }
     
     private func addNewRate(taskType: String, rate: Double, isDefault: Bool) {
@@ -355,7 +358,9 @@ struct AddTeamMemberView: View {
             updatedTeamMember.role = role
             
             viewModel.updateTeamMember(updatedTeamMember)
-            print("✅ Updated team member: \(trimmedName) with \(rates.count) rates")
+            Logger.teamMember.notice(
+                "Updated team member from editor [teamMember=\(trimmedName, privacy: .private(mask: .hash)) rates=\(rates.count, privacy: .public)]"
+            )
         } else {
             // Create new team member
             let newTeamMember = TeamMember(
@@ -369,7 +374,9 @@ struct AddTeamMemberView: View {
                 isActive: true
             )
             viewModel.addTeamMember(newTeamMember)
-            print("✅ Added new team member: \(trimmedName) with \(rates.count) rates")
+            Logger.teamMember.notice(
+                "Added team member from editor [teamMember=\(trimmedName, privacy: .private(mask: .hash)) rates=\(rates.count, privacy: .public)]"
+            )
         }
         
         dismiss()
