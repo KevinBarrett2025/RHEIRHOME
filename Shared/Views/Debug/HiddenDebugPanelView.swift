@@ -1,4 +1,5 @@
 import SwiftUI
+import OSLog
 
 /// Hidden debug panel accessible only via secret gesture
 /// Centralizes all debug tools behind a triple-tap gesture
@@ -133,7 +134,7 @@ struct HiddenDebugPanelView: View {
                     }
                     
                     Button {
-                        print("🗑️ NUCLEAR: Force deleting organization from memory")
+                        Logger.settingsSupport.notice("Hidden debug panel requested nuclear organization reset from memory.")
                         
                         Task {
                             await MainActor.run {
@@ -173,13 +174,15 @@ struct HiddenDebugPanelView: View {
                 // Admin Flow Testing
                 Section(content: {
                     Button {
-                        print("🎯 DEBUG: Triggering admin onboarding manually")
-                        print("   Current showAdminInfoUpdate: \(authVM.showAdminInfoUpdate)")
-                        print("   Current org: \(authVM.currentOrg?.name ?? "nil")")
+                        Logger.settingsSupport.info(
+                            "Hidden debug panel triggering admin onboarding [showAdminInfoUpdate=\(authVM.showAdminInfoUpdate, privacy: .public), hasCurrentOrganization=\(authVM.currentOrg != nil, privacy: .public)]"
+                        )
                         
                         authVM.showAdminInfoUpdate = true
                         
-                        print("   Set showAdminInfoUpdate to: \(authVM.showAdminInfoUpdate)")
+                        Logger.settingsSupport.notice(
+                            "Hidden debug panel updated admin onboarding flag [showAdminInfoUpdate=\(authVM.showAdminInfoUpdate, privacy: .public)]"
+                        )
                         dismiss()
                     } label: {
                         debugRow(
@@ -287,25 +290,27 @@ struct HiddenDebugPanelView: View {
     
     @MainActor
     private func forceCloudKitSync() async {
-        print("🔄 HIDDEN DEBUG: Force CloudKit Sync starting...")
+        Logger.settingsSupport.info("Hidden debug panel started force CloudKit sync.")
         
         // Step 1: Clear all local cache using AuthViewModel's nuclear clear method
         authVM.clearAllLocalCache()
         
-        print("✅ Step 1: Local cache cleared using nuclear option")
+        Logger.settingsSupport.notice("Hidden debug panel cleared local cache before force sync.")
         
         // Step 2: Force fresh fetch from CloudKit using AuthViewModel's CloudKit sync
         let syncResult = await authVM.forceCloudKitSync()
-        print("✅ Step 2: CloudKit sync completed - \(syncResult)")
+        Logger.settingsSupport.notice("Hidden debug panel force sync completed [result=\(syncResult, privacy: .public)]")
         
         // Step 3: Reload organization data
         authVM.reloadOrganizationData()
-        print("✅ Step 3: Organization data reloaded")
+        Logger.settingsSupport.info("Hidden debug panel reloaded organization data after force sync.")
         
         // Step 4: If current organization is set, trigger ProjectViewModel sync
         if let currentOrg = authVM.currentOrg {
             await projectVM.organizationDidChange(currentOrg.id)
-            print("✅ Step 4: ProjectViewModel synced for organization: \(currentOrg.name)")
+            Logger.settingsSupport.notice(
+                "Hidden debug panel synced project view model for organization [organization=\(currentOrg.id, privacy: .private(mask: .hash))]"
+            )
             
             alertMessage = "✅ CloudKit Sync Complete!\n\nOrganizations: \(authVM.userOrganizations.count)\nCurrent: \(currentOrg.name)\nCloudKit is now the single source of truth!"
         } else {
