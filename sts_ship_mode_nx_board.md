@@ -35,14 +35,15 @@
 - `Core/JWTService.swift` now uses structured `Logger.auth` logging instead of raw `print(...)` tracing.
 - `PaymentMethodManagementService.swift` now uses structured `Logger.company` logging instead of raw `print(...)` tracing.
 - `ReceiptOCRService.swift` now uses structured `Logger.receiptOCR` logging instead of raw `print(...)` tracing.
+- `Core/UserService.swift` now uses structured `Logger.auth` logging instead of raw `print(...)` tracing.
 - Stable simulator evidence is green on the staged checkpoint:
-  - Gate A `build_sim`: PASS (`mcp__xcodebuildmcp__build_sim` with `-derivedDataPath /tmp/rheir_gateA_phase1ae_mcp_dd`)
-  - Focused parity `test_sim -only-testing:RHEIRTests`: PASS (`mcp__xcodebuildmcp__test_sim` with `-derivedDataPath /tmp/rheir_parity_phase1ae_mcp_dd`, `27/27`)
+  - Gate A `build_sim`: PASS (`mcp__xcodebuildmcp__build_sim` with `-derivedDataPath /tmp/rheir_gateA_phase1af_mcp_dd`)
+  - Focused parity `test_sim -only-testing:RHEIRTests`: PASS (`mcp__xcodebuildmcp__test_sim` with `-derivedDataPath /tmp/rheir_parity_phase1af_mcp_dd`, `27/27`)
 
 ## Open Work
-- Finish replacing raw `print(...)` tracing in the other non-hardened production seams, starting with `Core/UserService.swift`.
+- Finish replacing raw `print(...)` tracing in the other non-hardened production seams, starting with `Core/CloudKitService.swift`.
 - Continue shrinking the remaining oversized active state owners.
-- After the `ReceiptOCRService.swift` checkpoint commit, continue the next highest-value non-hardened seam.
+- After the `Core/UserService.swift` checkpoint commit, continue the next highest-value non-hardened seam.
 
 ## Blockers
 - Device-targeted Gate A remains blocked by signing for `com.RheirHome.RHEIR`.

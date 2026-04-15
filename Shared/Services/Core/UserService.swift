@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 import CloudKit
+import OSLog
 
 /// Service responsible for user management operations
 protocol UserServiceProtocol {
@@ -22,7 +23,7 @@ final class CloudKitUserService: UserServiceProtocol {
     // MARK: - Public Methods
     
     func upsertUser(_ user: User) -> AnyPublisher<User, Error> {
-        print("👤 [User] Upserting user: \(user.id)")
+        Logger.auth.info("Upserting CloudKit user record [user=\(user.id, privacy: .private(mask: .hash))]")
         
         let recordID = CKRecord.ID(recordName: user.id)
         
@@ -52,7 +53,7 @@ final class CloudKitUserService: UserServiceProtocol {
     }
     
     func fetchUser(by id: String) -> AnyPublisher<User?, Error> {
-        print("👤 [User] Fetching user: \(id)")
+        Logger.auth.info("Fetching CloudKit user record [user=\(id, privacy: .private(mask: .hash))]")
         
         let recordID = CKRecord.ID(recordName: id)
         
@@ -81,7 +82,7 @@ final class CloudKitUserService: UserServiceProtocol {
     }
     
     func updateUser(_ user: User) -> AnyPublisher<User, Error> {
-        print("👤 [User] Updating user: \(user.id)")
+        Logger.auth.info("Updating CloudKit user record [user=\(user.id, privacy: .private(mask: .hash))]")
         
         let recordID = CKRecord.ID(recordName: user.id)
         
@@ -105,7 +106,7 @@ final class CloudKitUserService: UserServiceProtocol {
     }
     
     func deleteUser(id: String) -> AnyPublisher<Void, Error> {
-        print("👤 [User] Deleting user: \(id)")
+        Logger.auth.notice("Deleting CloudKit user record [user=\(id, privacy: .private(mask: .hash))]")
         
         let recordID = CKRecord.ID(recordName: id)
         
@@ -142,11 +143,11 @@ final class CloudKitUserService: UserServiceProtocol {
         
         privateDB.save(record) { savedRecord, error in
             if let error = error {
-                print("❌ [User] Failed to create user record: \(error)")
+                Logger.auth.error("Failed to create CloudKit user record: \(error.localizedDescription, privacy: .public)")
                 self.handleCloudKitError(error, fallbackUser: user, promise: promise)
             } else if let savedRecord = savedRecord {
                 let createdUser = self.mapRecordToUser(savedRecord)
-                print("✅ [User] Successfully created user record")
+                Logger.auth.notice("Created CloudKit user record successfully.")
                 promise(.success(createdUser))
             }
         }
@@ -161,11 +162,11 @@ final class CloudKitUserService: UserServiceProtocol {
         
         privateDB.save(record) { savedRecord, error in
             if let error = error {
-                print("❌ [User] Failed to update user record: \(error)")
+                Logger.auth.error("Failed to update CloudKit user record: \(error.localizedDescription, privacy: .public)")
                 self.handleCloudKitError(error, fallbackUser: user, promise: promise)
             } else if let savedRecord = savedRecord {
                 let updatedUser = self.mapRecordToUser(savedRecord)
-                print("✅ [User] Successfully updated user record")
+                Logger.auth.notice("Updated CloudKit user record successfully.")
                 promise(.success(updatedUser))
             }
         }
@@ -182,10 +183,10 @@ final class CloudKitUserService: UserServiceProtocol {
         if let ckError = error as? CKError {
             switch ckError.code {
             case .permissionFailure, .notAuthenticated:
-                print("⚠️ [User] CloudKit permission issue, using fallback user")
+                Logger.auth.warning("Using fallback user because CloudKit permissions are unavailable.")
                 promise(.success(fallbackUser))
             case .networkFailure, .networkUnavailable:
-                print("⚠️ [User] Network issue, using fallback user")
+                Logger.auth.warning("Using fallback user because CloudKit networking is unavailable.")
                 promise(.success(fallbackUser))
             default:
                 promise(.failure(error))
