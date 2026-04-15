@@ -205,9 +205,7 @@ private struct SubscriptionCardFeatureRow: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 16) {
                 ForEach(SubscriptionTier.modernTiers, id: \.self) { tier in
-                    SubscriptionTierCard(tier: tier, isSelected: tier == .professional) {
-                        print("Selected: \(tier.displayName)")
-                    }
+                    SubscriptionTierCard(tier: tier, isSelected: tier == .professional) { }
                     .frame(width: 200)
                 }
             }
