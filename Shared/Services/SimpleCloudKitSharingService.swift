@@ -1,5 +1,6 @@
 import CloudKit
 import Foundation
+import OSLog
 
 protocol CloudKitSharingServiceProtocol {
     func isCloudKitEnabled(for organizationID: UUID) async -> Bool
@@ -23,17 +24,23 @@ class SimpleCloudKitSharingService: CloudKitSharingServiceProtocol {
     func isCloudKitEnabled(for organizationID: UUID) async -> Bool {
         do {
             let zoneID = self.zoneID(for: organizationID)
-            let operation = CKFetchRecordZonesOperation(recordZoneIDs: [zoneID])
-            let result = try await sharedDB.modifyRecordZones(saving: [], deleting: [], in: zoneID)
+            _ = try await sharedDB.modifyRecordZones(saving: [], deleting: [], in: zoneID)
+            Logger.organizationSharing.info(
+                "Verified shared CloudKit access for organization [organization=\(organizationID.uuidString, privacy: .private(mask: .hash))]"
+            )
             return true
         } catch {
-            print("DEBUG: CloudKit not enabled for organization \(organizationID): \(error)")
+            Logger.organizationSharing.warning(
+                "Shared CloudKit is not enabled for organization [organization=\(organizationID.uuidString, privacy: .private(mask: .hash)), error=\(error.localizedDescription, privacy: .public)]"
+            )
             return false
         }
     }
     
     func saveProject(_ project: Project, to organizationID: UUID) async throws {
-        print("DEBUG: SimpleCloudKitSharingService.saveProject called for org: \(organizationID)")
+        Logger.organizationSharing.info(
+            "Saving project to shared CloudKit [organization=\(organizationID.uuidString, privacy: .private(mask: .hash)), project=\(project.id.uuidString, privacy: .private(mask: .hash))]"
+        )
         
         let zoneID = self.zoneID(for: organizationID)
         let record = try project.toCKRecord(organizationID: organizationID)
@@ -41,15 +48,21 @@ class SimpleCloudKitSharingService: CloudKitSharingServiceProtocol {
         
         do {
             let savedRecord = try await sharedDB.save(record)
-            print("DEBUG: Project saved successfully with recordID: \(savedRecord.recordID.recordName)")
+            Logger.organizationSharing.notice(
+                "Saved project to shared CloudKit [organization=\(organizationID.uuidString, privacy: .private(mask: .hash)), record=\(savedRecord.recordID.recordName, privacy: .private(mask: .hash))]"
+            )
         } catch {
-            print("DEBUG: Failed to save project to CloudKit: \(error)")
+            Logger.organizationSharing.error(
+                "Failed to save project to shared CloudKit [organization=\(organizationID.uuidString, privacy: .private(mask: .hash)), error=\(error.localizedDescription, privacy: .public)]"
+            )
             throw error
         }
     }
     
     func fetchProjects(for organizationID: UUID) async throws -> [Project] {
-        print("DEBUG: SimpleCloudKitSharingService.fetchProjects called for org: \(organizationID)")
+        Logger.organizationSharing.info(
+            "Fetching shared CloudKit projects [organization=\(organizationID.uuidString, privacy: .private(mask: .hash))]"
+        )
         
         let predicate = NSPredicate(format: "organizationID == %@", organizationID.uuidString)
         let query = CKQuery(recordType: "Project", predicate: predicate)
@@ -60,10 +73,14 @@ class SimpleCloudKitSharingService: CloudKitSharingServiceProtocol {
             let projects = try results.matchResults.map { _, result in
                 try Project(from: result.get())
             }
-            print("DEBUG: Fetched \(projects.count) projects from CloudKit")
+            Logger.organizationSharing.notice(
+                "Fetched shared CloudKit projects [organization=\(organizationID.uuidString, privacy: .private(mask: .hash)), count=\(projects.count, privacy: .public)]"
+            )
             return projects
         } catch {
-            print("DEBUG: Failed to fetch projects from CloudKit: \(error)")
+            Logger.organizationSharing.error(
+                "Failed to fetch shared CloudKit projects [organization=\(organizationID.uuidString, privacy: .private(mask: .hash)), error=\(error.localizedDescription, privacy: .public)]"
+            )
             throw error
         }
     }
@@ -73,9 +90,13 @@ class SimpleCloudKitSharingService: CloudKitSharingServiceProtocol {
         
         do {
             try await sharedDB.deleteRecord(withID: recordID)
-            print("DEBUG: Project deleted from CloudKit: \(recordID.recordName)")
+            Logger.organizationSharing.notice(
+                "Deleted project from shared CloudKit [organization=\(organizationID.uuidString, privacy: .private(mask: .hash)), record=\(recordID.recordName, privacy: .private(mask: .hash))]"
+            )
         } catch {
-            print("DEBUG: Failed to delete project from CloudKit: \(error)")
+            Logger.organizationSharing.error(
+                "Failed to delete project from shared CloudKit [organization=\(organizationID.uuidString, privacy: .private(mask: .hash)), error=\(error.localizedDescription, privacy: .public)]"
+            )
             throw error
         }
     }
@@ -87,9 +108,13 @@ class SimpleCloudKitSharingService: CloudKitSharingServiceProtocol {
         
         do {
             let savedRecord = try await sharedDB.save(record)
-            print("DEBUG: Team member saved successfully with recordID: \(savedRecord.recordID.recordName)")
+            Logger.organizationSharing.notice(
+                "Saved team member to shared CloudKit [organization=\(organizationID.uuidString, privacy: .private(mask: .hash)), record=\(savedRecord.recordID.recordName, privacy: .private(mask: .hash))]"
+            )
         } catch {
-            print("DEBUG: Failed to save team member to CloudKit: \(error)")
+            Logger.organizationSharing.error(
+                "Failed to save team member to shared CloudKit [organization=\(organizationID.uuidString, privacy: .private(mask: .hash)), error=\(error.localizedDescription, privacy: .public)]"
+            )
             throw error
         }
     }
@@ -103,10 +128,14 @@ class SimpleCloudKitSharingService: CloudKitSharingServiceProtocol {
             let teamMembers = try results.matchResults.map { _, result in
                 try TeamMember(from: result.get())
             }
-            print("DEBUG: Fetched \(teamMembers.count) team members from CloudKit")
+            Logger.organizationSharing.notice(
+                "Fetched shared CloudKit team members [organization=\(organizationID.uuidString, privacy: .private(mask: .hash)), count=\(teamMembers.count, privacy: .public)]"
+            )
             return teamMembers
         } catch {
-            print("DEBUG: Failed to fetch team members from CloudKit: \(error)")
+            Logger.organizationSharing.error(
+                "Failed to fetch shared CloudKit team members [organization=\(organizationID.uuidString, privacy: .private(mask: .hash)), error=\(error.localizedDescription, privacy: .public)]"
+            )
             throw error
         }
     }
@@ -116,9 +145,13 @@ class SimpleCloudKitSharingService: CloudKitSharingServiceProtocol {
         
         do {
             try await sharedDB.deleteRecord(withID: recordID)
-            print("DEBUG: Team member deleted from CloudKit: \(recordID.recordName)")
+            Logger.organizationSharing.notice(
+                "Deleted team member from shared CloudKit [organization=\(organizationID.uuidString, privacy: .private(mask: .hash)), record=\(recordID.recordName, privacy: .private(mask: .hash))]"
+            )
         } catch {
-            print("DEBUG: Failed to delete team member from CloudKit: \(error)")
+            Logger.organizationSharing.error(
+                "Failed to delete team member from shared CloudKit [organization=\(organizationID.uuidString, privacy: .private(mask: .hash)), error=\(error.localizedDescription, privacy: .public)]"
+            )
             throw error
         }
     }
