@@ -459,7 +459,7 @@ struct ReceiptScannerView: View {
                 }
                 
                 let ocrText = try await extractTextFromImage(image)
-                Logger.receiptOCR.info(
+                Logger.receiptWorkflow.info(
                     "Extracted OCR text in receipt scanner [characters=\(ocrText.count, privacy: .public)]"
                 )
                 
@@ -475,9 +475,9 @@ struct ReceiptScannerView: View {
                     // Try production AI analysis
                     do {
                         analysisResult = try await performAIAnalysis(ocrText: ocrText, projectName: project.name)
-                        Logger.receiptOCR.notice("Receipt scanner AI analysis completed successfully.")
+                        Logger.receiptWorkflow.notice("Receipt scanner AI analysis completed successfully.")
                     } catch {
-                        Logger.receiptOCR.warning(
+                        Logger.receiptWorkflow.warning(
                             "Receipt scanner AI analysis failed; falling back to basic OCR [error=\(error.localizedDescription, privacy: .public)]"
                         )
                         analysisResult = createBasicAnalysisFromOCR(ocrText)
@@ -495,7 +495,7 @@ struct ReceiptScannerView: View {
                         )
                     }
                 } else {
-                    Logger.receiptOCR.info("Receipt scanner using basic OCR processing for free tier.")
+                    Logger.receiptWorkflow.info("Receipt scanner using basic OCR processing for free tier.")
                     analysisResult = createBasicAnalysisFromOCR(ocrText)
                 }
                 
@@ -1090,7 +1090,7 @@ struct ReceiptScannerView: View {
             )
             
         } catch {
-            Logger.receiptOCR.error(
+            Logger.receiptWorkflow.error(
                 "Failed to parse receipt scanner AI response [error=\(error.localizedDescription, privacy: .public) characters=\(cleanContent.count, privacy: .public)]"
             )
             throw NSError(domain: "AI", code: -6, userInfo: [NSLocalizedDescriptionKey: "Failed to parse AI response: \(error.localizedDescription)"])

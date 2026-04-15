@@ -1,4 +1,5 @@
 import SwiftUI
+import OSLog
 
 struct EditProjectView: View {
     @EnvironmentObject var projectVM: ProjectViewModel
@@ -259,9 +260,9 @@ struct EditProjectView: View {
     }
     
     private func saveProject() {
-        print("🔄 EDIT PROJECT SAVE STARTED")
-        print("  - Original project name: '\(project.name)'")
-        print("  - New project name: '\(name)'")
+        Logger.project.notice(
+            "Edit project save started [projectId=\(project.id, privacy: .private(mask: .hash)) originalName=\(project.name, privacy: .private(mask: .hash)) updatedName=\(name, privacy: .private(mask: .hash))]"
+        )
         
         // Validate all numeric inputs (same as NewProjectView)
         let totalBudgetValue = Double(totalBudget) ?? 0
@@ -275,7 +276,7 @@ struct EditProjectView: View {
               laborCostValue.isFinite && laborCostValue >= 0,
               generalConditionsValue.isFinite && generalConditionsValue >= 0,
               contingencyAmount.isFinite && contingencyAmount >= 0 else {
-            print("❌ Invalid budget values detected, cannot save project")
+            Logger.project.warning("Edit project save aborted because of invalid budget values.")
             return
         }
         
@@ -313,22 +314,18 @@ struct EditProjectView: View {
         finalProject.communications = project.communications
         finalProject.changeOrders = project.changeOrders
         
-        print("💾 PREPARING TO SAVE PROJECT UPDATES:")
-        print("  - Project ID: \(finalProject.id)")
-        print("  - Updated Name: '\(finalProject.name)'")
-        print("  - Updated Client: '\(finalProject.client)'")
-        print("  - Updated Total Budget: $\(finalProject.totalBudget)")
-        print("  - Organization ID: \(finalProject.organizationID)")
-        print("  - Same ID as original? \(finalProject.id == project.id)")
+        Logger.project.notice(
+            "Prepared project edit for save [projectId=\(finalProject.id, privacy: .private(mask: .hash)) updatedName=\(finalProject.name, privacy: .private(mask: .hash)) updatedClient=\(finalProject.client, privacy: .private(mask: .hash)) totalBudget=\(finalProject.totalBudget, privacy: .public) organizationId=\(finalProject.organizationID, privacy: .private(mask: .hash)) sameId=\(finalProject.id == project.id, privacy: .public)]"
+        )
         
         // CRITICAL: Make sure this save completes before dismissing
         Task { @MainActor in
-            print("🔄 Starting async project update...")
+            Logger.project.info("Starting async project update from edit project view.")
             
             // Call updateProject and wait for it to complete
             await projectVM.updateProject(finalProject)
             
-            print("✅ EDIT PROJECT SAVE COMPLETED - dismissing view")
+            Logger.project.notice("Edit project save completed; dismissing edit project view.")
             dismiss()
         }
     }
