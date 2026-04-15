@@ -1,6 +1,7 @@
 import SwiftUI
 import VisionKit
 import Vision
+import OSLog
 
 struct ReceiptScannerView: View {
     @Binding var isPresented: Bool
@@ -324,7 +325,9 @@ struct ReceiptScannerView: View {
                 VStack(spacing: 12) {
                     Button("Upgrade to Premium") {
                         // TODO: Navigate to subscription flow
-                        print("Navigate to subscription upgrade")
+                        Logger.receiptWorkflow.notice(
+                            "Receipt scanner upgrade prompt accepted; subscription navigation is not yet implemented."
+                        )
                     }
                     .font(.headline)
                     .foregroundColor(.white)
@@ -456,9 +459,9 @@ struct ReceiptScannerView: View {
                 }
                 
                 let ocrText = try await extractTextFromImage(image)
-                print("OCR Extracted Text:")
-                print(ocrText)
-                print("---")
+                Logger.receiptOCR.info(
+                    "Extracted OCR text in receipt scanner [characters=\(ocrText.count, privacy: .public)]"
+                )
                 
                 // Step 2: Try AI analysis with subscription checking
                 await MainActor.run {
@@ -472,9 +475,11 @@ struct ReceiptScannerView: View {
                     // Try production AI analysis
                     do {
                         analysisResult = try await performAIAnalysis(ocrText: ocrText, projectName: project.name)
-                        print("AI analysis completed successfully!")
+                        Logger.receiptOCR.notice("Receipt scanner AI analysis completed successfully.")
                     } catch {
-                        print("AI analysis failed, falling back to basic OCR: \(error)")
+                        Logger.receiptOCR.warning(
+                            "Receipt scanner AI analysis failed; falling back to basic OCR [error=\(error.localizedDescription, privacy: .public)]"
+                        )
                         analysisResult = createBasicAnalysisFromOCR(ocrText)
                         analysisResult = ReceiptAnalysisResult(
                             vendor: analysisResult.vendor,
@@ -490,17 +495,13 @@ struct ReceiptScannerView: View {
                         )
                     }
                 } else {
-                    print("Free tier - using basic OCR processing")
+                    Logger.receiptOCR.info("Receipt scanner using basic OCR processing for free tier.")
                     analysisResult = createBasicAnalysisFromOCR(ocrText)
                 }
                 
-                print("Receipt processing completed!")
-                print("Vendor: \(analysisResult.vendor)")
-                print("Amount: $\(analysisResult.amount)")
-                print("Category: \(analysisResult.category)")
-                print("Items: \(analysisResult.items.count)")
-                print("Confidence: \(analysisResult.confidence)")
-                print("---")
+                Logger.receiptWorkflow.notice(
+                    "Receipt processing completed [vendor=\(analysisResult.vendor, privacy: .private(mask: .hash)) amount=\(analysisResult.amount, privacy: .public) category=\(analysisResult.category, privacy: .public) items=\(analysisResult.items.count, privacy: .public) confidence=\(analysisResult.confidence, privacy: .public)]"
+                )
                 
                 await MainActor.run {
                     isProcessing = false
@@ -523,7 +524,9 @@ struct ReceiptScannerView: View {
                     showingError = true
                 }
                 
-                print("Receipt processing failed: \(error)")
+                Logger.receiptWorkflow.error(
+                    "Receipt processing failed [error=\(error.localizedDescription, privacy: .public)]"
+                )
             }
         }
     }
@@ -1087,8 +1090,9 @@ struct ReceiptScannerView: View {
             )
             
         } catch {
-            print("AI Response Parsing Error: \(error)")
-            print("Raw AI Response: \(cleanContent)")
+            Logger.receiptOCR.error(
+                "Failed to parse receipt scanner AI response [error=\(error.localizedDescription, privacy: .public) characters=\(cleanContent.count, privacy: .public)]"
+            )
             throw NSError(domain: "AI", code: -6, userInfo: [NSLocalizedDescriptionKey: "Failed to parse AI response: \(error.localizedDescription)"])
         }
     }

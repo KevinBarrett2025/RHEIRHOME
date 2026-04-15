@@ -3,7 +3,7 @@
 ## Repo
 - Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Branch: `gm/rheir-hardening-phase1`
-- HEAD: `301a3f8a478107eb62221d63fcd7fd95508d9336`
+- HEAD: `2b74635868868cebe07a081c5a25f842faa9bfbc`
 
 ## Active Initiative
 - RHEIR hardening and streamlining, phase 1 foundation pass.
@@ -79,12 +79,13 @@
 - Replaced raw `print(...)` tracing in `Shared/Services/Organization/EnhancedOrganizationService.swift` with structured `Logger.organizationService` usage for service initialization, organization creation success, and organization-fetch failures.
 - Replaced raw `print(...)` tracing in `Shared/Services/GlobalChatGPTService.swift` with structured `Logger.globalChatGPT` usage for global receipt-analysis JSON-parse failures without echoing raw content.
 - Replaced raw `print(...)` tracing in `Shared/Services/Core/ContextAwareReceiptService.swift` with structured `Logger.receiptWorkflow` usage for active project-context updates and receipt-processing start events.
+- Replaced raw `print(...)` tracing in `Shared/Features/Receipts/ReceiptScannerView.swift` with structured `Logger.receiptWorkflow` / `Logger.receiptOCR` usage for scanner upgrade prompts, OCR extraction, AI fallback, completion summaries, and parse failures.
 - Added `SHIP_READINESS_CHECKLIST.md` as the repo-tracked release plan for the remaining foundation, hardening, promo, and submission work.
 - Added focused persistence/session tests in `RHEIRTests/RHEIRTests.swift` for invite parsing, legacy cache migration, project storage, receipt intelligence retention, cache clearing, labor aggregation/validation, company-state bucketing, team-member store behavior, and receipt project-resolution behavior.
 - Added focused parity for project access normalization and assignment filtering in `RHEIRTests/RHEIRTests.swift`.
 
 ## In Progress
-- Keep phase-1 hardening moving with `Shared/Features/Receipts/ReceiptScannerView.swift` as the next code slice after the current checkpoint.
+- Keep phase-1 hardening moving with `Shared/Features/Projects/EditProjectView.swift` as the next code slice after the current checkpoint.
 - Continue shrinking the remaining oversized active state owners around the new sync and access store boundaries.
 - Expand deterministic parity beyond the focused `RHEIRTests` suite.
 
@@ -98,4 +99,4 @@
 - Direct CLI gate path remains less stable than the MCP simulator path in the local simulator environment
 
 ## Next Milestone
-- Checkpoint the `ContextAwareReceiptService.swift` logging cleanup slice, then continue with `Shared/Features/Receipts/ReceiptScannerView.swift`, the next highest-value remaining production seam in the active tree.
+- Checkpoint the `ReceiptScannerView.swift` logging cleanup slice, then continue with `Shared/Features/Projects/EditProjectView.swift`, the next highest-value remaining production seam in the active tree.
