@@ -45,7 +45,8 @@
 ## Open Work
 - Finish replacing raw `print(...)` tracing in the other non-hardened production seams, starting with `ChatGPTService.swift`.
 - Continue shrinking the remaining oversized active state owners.
-- After the `CloudKitSharingService.swift` checkpoint commit, continue the next highest-value non-hardened seam.
+- After the ship-readiness checklist checkpoint, continue the next highest-value non-hardened seam.
+- Use `SHIP_READINESS_CHECKLIST.md` as the current release-progress reference alongside the STS docs.
 
 ## Blockers
 - Device-targeted Gate A remains blocked by signing for `com.RheirHome.RHEIR`.
