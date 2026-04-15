@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 import CloudKit
+import OSLog
 
 extension CloudKitAuthService {
     /// Finds or creates the "Users" record in the *private* database
@@ -22,12 +23,16 @@ extension CloudKitAuthService {
 
                     privateDB.save(newRec) { savedRec, saveErr in
                         if let saveErr = saveErr {
-                            print("❌ Error saving user record: \(saveErr)")
+                            Logger.auth.error(
+                                "Failed to save CloudKit user record [user=\(appleUser.id, privacy: .private(mask: .hash)) error=\(saveErr.localizedDescription, privacy: .public)]"
+                            )
                             // If we can't create the record, still return the user
                             // This allows the app to work even if CloudKit sync fails
                             if let ckError = saveErr as? CKError,
                                ckError.code == .permissionFailure || ckError.code == .notAuthenticated {
-                                print("⚠️ CloudKit permission issue, proceeding with local user")
+                                Logger.auth.warning(
+                                    "CloudKit permission issue while saving user record; proceeding with local user [user=\(appleUser.id, privacy: .private(mask: .hash)) code=\(ckError.code.rawValue, privacy: .public)]"
+                                )
                                 promise(.success(appleUser))
                             } else {
                                 promise(.failure(saveErr))
@@ -43,11 +48,15 @@ extension CloudKitAuthService {
 
                 } else if let err = fetchErr {
                     // some other fetch error
-                    print("❌ Error fetching user record: \(err)")
+                    Logger.auth.error(
+                        "Failed to fetch CloudKit user record [user=\(appleUser.id, privacy: .private(mask: .hash)) error=\(err.localizedDescription, privacy: .public)]"
+                    )
                     // If fetch fails, still return the user for local operation
                     if let ckError = err as? CKError,
                        ckError.code == .permissionFailure || ckError.code == .notAuthenticated {
-                        print("⚠️ CloudKit permission issue, proceeding with local user")
+                        Logger.auth.warning(
+                            "CloudKit permission issue while fetching user record; proceeding with local user [user=\(appleUser.id, privacy: .private(mask: .hash)) code=\(ckError.code.rawValue, privacy: .public)]"
+                        )
                         promise(.success(appleUser))
                     } else {
                         promise(.failure(err))

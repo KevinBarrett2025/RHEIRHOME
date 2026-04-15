@@ -3,7 +3,7 @@
 ## Repo
 - Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Branch: `gm/rheir-hardening-phase1`
-- HEAD: `02d7e288eedb1a4ceff906d684a7d96713c48f6f`
+- HEAD: `2ccc208647cd859a96a212f80476dae228170d28`
 
 ## Active Initiative
 - RHEIR hardening and streamlining, phase 1 foundation pass.
@@ -75,12 +75,13 @@
 - Replaced raw `print(...)` tracing in `Shared/Services/Organization/OrganizationService.swift` with structured `Logger.organizationService` usage for initialization, organization creation/fetch, and CloudKit team-member/project sync events.
 - Replaced raw `print(...)` tracing in `Shared/Services/CloudKitPhotoService.swift` with structured `Logger.cloudKitPhoto` usage for CloudKit photo fetch, upload, identifier lookup, and delete events.
 - Replaced raw `print(...)` tracing in `Shared/Services/ProductionChatGPTService.swift` with structured `Logger.productionChatGPT` usage for receipt AI usage, JSON-parse failures, and receipt-date parsing warnings.
+- Replaced raw `print(...)` tracing in `Shared/Services/CloudKitAuthService+User.swift` with structured `Logger.auth` usage for private user-record save/fetch failures and permission-fallback events.
 - Added `SHIP_READINESS_CHECKLIST.md` as the repo-tracked release plan for the remaining foundation, hardening, promo, and submission work.
 - Added focused persistence/session tests in `RHEIRTests/RHEIRTests.swift` for invite parsing, legacy cache migration, project storage, receipt intelligence retention, cache clearing, labor aggregation/validation, company-state bucketing, team-member store behavior, and receipt project-resolution behavior.
 - Added focused parity for project access normalization and assignment filtering in `RHEIRTests/RHEIRTests.swift`.
 
 ## In Progress
-- Keep phase-1 hardening moving with `Shared/Services/CloudKitAuthService+User.swift` as the next code slice after the current checkpoint.
+- Keep phase-1 hardening moving with `Shared/Services/Organization/EnhancedOrganizationService.swift` as the next code slice after the current checkpoint.
 - Continue shrinking the remaining oversized active state owners around the new sync and access store boundaries.
 - Expand deterministic parity beyond the focused `RHEIRTests` suite.
 
@@ -89,9 +90,9 @@
 - Device-targeted Gate A remains blocked by signing because automatic provisioning is disabled for `com.RheirHome.RHEIR`.
 
 ## Latest Evidence
-- Gate A: `mcp__xcodebuildmcp__build_sim` with `extraArgs=["-derivedDataPath","/tmp/rheir_gateA_phase1aq_mcp_dd"]` -> PASS
-- Focused parity: `mcp__xcodebuildmcp__test_sim` with `extraArgs=["-derivedDataPath","/tmp/rheir_parity_phase1aq_mcp_dd","-only-testing:RHEIRTests"]` -> PASS (`27/27`)
+- Gate A: `mcp__xcodebuildmcp__build_sim` with `extraArgs=["-derivedDataPath","/tmp/rheir_gateA_phase1ar_mcp_dd"]` -> PASS
+- Focused parity: `mcp__xcodebuildmcp__test_sim` with `extraArgs=["-derivedDataPath","/tmp/rheir_parity_phase1ar_mcp_dd","-only-testing:RHEIRTests"]` -> PASS (`27/27`)
 - Direct CLI gate path remains less stable than the MCP simulator path in the local simulator environment
 
 ## Next Milestone
-- Checkpoint the `ProductionChatGPTService.swift` logging cleanup slice, then continue with `Shared/Services/CloudKitAuthService+User.swift`, the next highest-value remaining production service seam in the active tree.
+- Checkpoint the `CloudKitAuthService+User.swift` logging cleanup slice, then continue with `Shared/Services/Organization/EnhancedOrganizationService.swift`, the next highest-value remaining production service seam in the active tree after excluding stub and development-only files.

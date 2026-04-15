@@ -45,14 +45,15 @@
 - `OrganizationService.swift` now uses structured `Logger.organizationService` logging instead of raw `print(...)` tracing.
 - `CloudKitPhotoService.swift` now uses structured `Logger.cloudKitPhoto` logging instead of raw `print(...)` tracing.
 - `ProductionChatGPTService.swift` now uses structured `Logger.productionChatGPT` logging instead of raw `print(...)` tracing.
+- `CloudKitAuthService+User.swift` now uses structured `Logger.auth` logging instead of raw `print(...)` tracing.
 - Stable simulator evidence is green on the staged checkpoint:
-  - Gate A `build_sim`: PASS (`mcp__xcodebuildmcp__build_sim` with `-derivedDataPath /tmp/rheir_gateA_phase1aq_mcp_dd`)
-  - Focused parity `test_sim -only-testing:RHEIRTests`: PASS (`mcp__xcodebuildmcp__test_sim` with `-derivedDataPath /tmp/rheir_parity_phase1aq_mcp_dd`, `27/27`)
+  - Gate A `build_sim`: PASS (`mcp__xcodebuildmcp__build_sim` with `-derivedDataPath /tmp/rheir_gateA_phase1ar_mcp_dd`)
+  - Focused parity `test_sim -only-testing:RHEIRTests`: PASS (`mcp__xcodebuildmcp__test_sim` with `-derivedDataPath /tmp/rheir_parity_phase1ar_mcp_dd`, `27/27`)
 
 ## Open Work
-- Finish replacing raw `print(...)` tracing in the other non-hardened production seams, starting with `Shared/Services/CloudKitAuthService+User.swift`.
+- Finish replacing raw `print(...)` tracing in the other non-hardened production seams, starting with `Shared/Services/Organization/EnhancedOrganizationService.swift`.
 - Continue shrinking the remaining oversized active state owners.
-- After the `Shared/Services/CloudKitAuthService+User.swift` checkpoint, continue the next highest-value non-hardened seam.
+- After the `Shared/Services/Organization/EnhancedOrganizationService.swift` checkpoint, continue the next highest-value non-hardened seam.
 - Use `SHIP_READINESS_CHECKLIST.md` as the current release-progress reference alongside the STS docs.
 
 ## Blockers
