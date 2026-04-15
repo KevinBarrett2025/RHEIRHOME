@@ -1,4 +1,9 @@
 import Foundation
+import OSLog
+
+extension Logger {
+    static let productionChatGPT = Logger(subsystem: "com.RheirHome.RHEIR", category: "productionChatGPT")
+}
 
 /// Production ChatGPT service with hard-coded API key and subscription analytics
 actor ProductionChatGPTService {
@@ -60,7 +65,9 @@ actor ProductionChatGPTService {
         )
         
         // Log for monitoring
-        print("🤖 AI Usage - Org: \(organizationID), Tokens: \(tokensUsed), Cost: $\(String(format: "%.4f", cost))")
+        Logger.productionChatGPT.info(
+            "Recorded receipt AI usage [organization=\(organizationID, privacy: .private(mask: .hash)) tokens=\(tokensUsed, privacy: .public) cost=\(cost, privacy: .public)]"
+        )
         
         return try parseReceiptAnalysis(content)
     }
@@ -269,8 +276,9 @@ actor ProductionChatGPTService {
                 confidence: globalAnalysis.confidence
             )
         } catch {
-            print("❌ JSON Parsing Error: \(error)")
-            print("📄 Raw Content: \(cleanContent)")
+            Logger.productionChatGPT.error(
+                "Failed to parse receipt analysis JSON [error=\(error.localizedDescription, privacy: .public) characters=\(cleanContent.count, privacy: .public)]"
+            )
             throw ProductionChatGPTError.invalidJSON
         }
     }
@@ -307,7 +315,9 @@ actor ProductionChatGPTService {
             }
         }
         
-        print("⚠️ Could not parse receipt date: \(dateString)")
+        Logger.productionChatGPT.warning(
+            "Could not parse receipt date [value=\(dateString, privacy: .private(mask: .hash))]"
+        )
         return nil
     }
     
