@@ -1,6 +1,11 @@
 import Foundation
 import Combine
 import CloudKit
+import OSLog
+
+extension Logger {
+    static let scalableCloudKit = Logger(subsystem: "com.RheirHome.RHEIR", category: "scalableCloudKit")
+}
 
 // MARK: - Scalable Multi-Tenant CloudKit Architecture
 
@@ -78,7 +83,7 @@ class ScalableCloudKitArchitecture: ObservableObject {
         self.privateDatabase = container.privateCloudDatabase
         self.sharedDatabase = container.sharedCloudDatabase
         
-        print("📊 ScalableCloudKitArchitecture initialized")
+        Logger.scalableCloudKit.info("Initialized scalable multi-tenant CloudKit architecture.")
     }
     
     // MARK: - 1. Organization Zone Management
@@ -92,7 +97,9 @@ class ScalableCloudKitArchitecture: ObservableObject {
     ) -> AnyPublisher<(organization: Organization, zone: CKRecordZone, share: CKShare), Error> {
         
         let organizationId = UUID().uuidString
-        print("🏢 Creating organization: \(name) (ID: \(organizationId))")
+        Logger.scalableCloudKit.info(
+            "Creating organization in scalable CloudKit architecture [organization=\(organizationId, privacy: .private(mask: .hash)), name=\(name, privacy: .private(mask: .hash))]"
+        )
         
         return createOrganizationZone(for: organizationId)
             .flatMap { zone in
@@ -129,13 +136,17 @@ class ScalableCloudKitArchitecture: ObservableObject {
         let zoneID = CKRecordZone.ID(zoneName: zoneName)
         let zone = CKRecordZone(zoneID: zoneID)
         
-        print("🏗️ Creating organization zone: \(zoneName)")
+        Logger.scalableCloudKit.info(
+            "Creating scalable organization zone [organization=\(organizationId, privacy: .private(mask: .hash)), zone=\(zoneName, privacy: .private(mask: .hash)), environment=\(environment.rawValue, privacy: .public)]"
+        )
         
         return Future<CKRecordZone, Error> { promise in
             // Check if zone already exists
             self.privateDatabase.fetch(withRecordZoneID: zoneID) { existingZone, error in
                 if let existingZone = existingZone {
-                    print("✅ Organization zone already exists")
+                    Logger.scalableCloudKit.notice(
+                        "Scalable organization zone already exists [organization=\(organizationId, privacy: .private(mask: .hash)), zone=\(zoneName, privacy: .private(mask: .hash))]"
+                    )
                     promise(.success(existingZone))
                     return
                 }
@@ -150,13 +161,17 @@ class ScalableCloudKitArchitecture: ObservableObject {
                     switch result {
                     case .success(let (savedZones, _)):
                         if let savedZone = savedZones.first {
-                            print("✅ Organization zone created: \(zoneName)")
+                            Logger.scalableCloudKit.notice(
+                                "Created scalable organization zone [organization=\(organizationId, privacy: .private(mask: .hash)), zone=\(zoneName, privacy: .private(mask: .hash))]"
+                            )
                             promise(.success(savedZone))
                         } else {
                             promise(.failure(CloudKitArchitectureError.zoneCreationFailed))
                         }
                     case .failure(let error):
-                        print("❌ Failed to create organization zone: \(error)")
+                        Logger.scalableCloudKit.error(
+                            "Failed to create scalable organization zone [organization=\(organizationId, privacy: .private(mask: .hash)), error=\(error.localizedDescription, privacy: .public)]"
+                        )
                         promise(.failure(error))
                     }
                 }
@@ -198,15 +213,21 @@ class ScalableCloudKitArchitecture: ObservableObject {
         record["tenantIsolationLevel"] = "ZONE_ISOLATED" as CKRecordValue
         record["dataResidency"] = "US" as CKRecordValue // Configurable
         
-        print("🏢 Creating organization record in zone")
+        Logger.scalableCloudKit.info(
+            "Creating organization record in scalable CloudKit zone [organization=\(id, privacy: .private(mask: .hash)), zone=\(zone.zoneID.zoneName, privacy: .private(mask: .hash))]"
+        )
         
         return Future<CKRecord, Error> { promise in
             self.privateDatabase.save(record) { savedRecord, error in
                 if let error = error {
-                    print("❌ Failed to create organization record: \(error)")
+                    Logger.scalableCloudKit.error(
+                        "Failed to create scalable organization record [organization=\(id, privacy: .private(mask: .hash)), error=\(error.localizedDescription, privacy: .public)]"
+                    )
                     promise(.failure(error))
                 } else if let savedRecord = savedRecord {
-                    print("✅ Organization record created successfully")
+                    Logger.scalableCloudKit.notice(
+                        "Created scalable organization record [organization=\(id, privacy: .private(mask: .hash))]"
+                    )
                     promise(.success(savedRecord))
                 } else {
                     promise(.failure(CloudKitArchitectureError.recordCreationFailed))
@@ -228,7 +249,9 @@ class ScalableCloudKitArchitecture: ObservableObject {
         share[CKShare.SystemFieldKey.shareTitle] = "Join \(orgRecord["name"] as? String ?? "Organization")"
         share.publicPermission = .none // Private sharing only
         
-        print("🔗 Creating organization share")
+        Logger.scalableCloudKit.info(
+            "Creating scalable organization share [organization=\(orgRecord.recordID.recordName, privacy: .private(mask: .hash)), zone=\(zone.zoneID.zoneName, privacy: .private(mask: .hash))]"
+        )
         
         return Future<CKShare, Error> { promise in
             let operation = CKModifyRecordsOperation(
@@ -240,13 +263,17 @@ class ScalableCloudKitArchitecture: ObservableObject {
                 switch result {
                 case .success(let (savedRecords, _)):
                     if let savedShare = savedRecords.first(where: { $0 is CKShare }) as? CKShare {
-                        print("✅ Organization share created successfully")
+                        Logger.scalableCloudKit.notice(
+                            "Created scalable organization share [organization=\(orgRecord.recordID.recordName, privacy: .private(mask: .hash))]"
+                        )
                         promise(.success(savedShare))
                     } else {
                         promise(.failure(CloudKitArchitectureError.shareCreationFailed))
                     }
                 case .failure(let error):
-                    print("❌ Failed to create organization share: \(error)")
+                    Logger.scalableCloudKit.error(
+                        "Failed to create scalable organization share [organization=\(orgRecord.recordID.recordName, privacy: .private(mask: .hash)), error=\(error.localizedDescription, privacy: .public)]"
+                    )
                     promise(.failure(error))
                 }
             }
@@ -285,15 +312,21 @@ class ScalableCloudKitArchitecture: ObservableObject {
             record["data"] = dataJson as CKRecordValue
         }
         
-        print("💾 Saving \(recordType) to organization zone")
+        Logger.scalableCloudKit.info(
+            "Saving organization-scoped record to scalable zone [organization=\(orgId, privacy: .private(mask: .hash)), recordType=\(recordType, privacy: .public)]"
+        )
         
         return Future<CKRecord, Error> { promise in
             self.privateDatabase.save(record) { savedRecord, error in
                 if let error = error {
-                    print("❌ Failed to save \(recordType): \(error)")
+                    Logger.scalableCloudKit.error(
+                        "Failed to save organization-scoped record in scalable zone [organization=\(orgId, privacy: .private(mask: .hash)), recordType=\(recordType, privacy: .public), error=\(error.localizedDescription, privacy: .public)]"
+                    )
                     promise(.failure(error))
                 } else if let savedRecord = savedRecord {
-                    print("✅ \(recordType) saved successfully")
+                    Logger.scalableCloudKit.notice(
+                        "Saved organization-scoped record in scalable zone [organization=\(orgId, privacy: .private(mask: .hash)), recordType=\(recordType, privacy: .public)]"
+                    )
                     promise(.success(savedRecord))
                 } else {
                     promise(.failure(CloudKitArchitectureError.recordCreationFailed))
@@ -318,7 +351,9 @@ class ScalableCloudKitArchitecture: ObservableObject {
         let predicate = NSPredicate(format: "organizationId == %@", orgId)
         let query = CKQuery(recordType: recordType, predicate: predicate)
         
-        print("📥 Loading \(recordType) from organization zone")
+        Logger.scalableCloudKit.info(
+            "Loading organization-scoped records from scalable zone [organization=\(orgId, privacy: .private(mask: .hash)), recordType=\(recordType, privacy: .public)]"
+        )
         
         return Future<[T], Error> { promise in
             self.privateDatabase.fetch(withQuery: query, inZoneWith: zone.zoneID, desiredKeys: ["data"], resultsLimit: 1000) { result in
@@ -341,11 +376,15 @@ class ScalableCloudKitArchitecture: ObservableObject {
                         return decoded
                     }
                     
-                    print("✅ Loaded \(decodedData.count) \(recordType) records")
+                    Logger.scalableCloudKit.notice(
+                        "Loaded organization-scoped records from scalable zone [organization=\(orgId, privacy: .private(mask: .hash)), recordType=\(recordType, privacy: .public), count=\(decodedData.count, privacy: .public)]"
+                    )
                     promise(.success(decodedData))
                     
                 case .failure(let error):
-                    print("❌ Failed to load \(recordType): \(error)")
+                    Logger.scalableCloudKit.error(
+                        "Failed to load organization-scoped records from scalable zone [organization=\(orgId, privacy: .private(mask: .hash)), recordType=\(recordType, privacy: .public), error=\(error.localizedDescription, privacy: .public)]"
+                    )
                     promise(.failure(error))
                 }
             }
@@ -382,15 +421,21 @@ class ScalableCloudKitArchitecture: ObservableObject {
             record["fullProjectData"] = projectData as CKRecordValue
         }
         
-        print("📋 Saving project '\(project.name)' to organization zone")
+        Logger.scalableCloudKit.info(
+            "Saving project in scalable organization zone [organization=\(orgId, privacy: .private(mask: .hash)), project=\(project.name, privacy: .private(mask: .hash))]"
+        )
         
         return Future<CKRecord, Error> { promise in
             self.privateDatabase.save(record) { savedRecord, error in
                 if let error = error {
-                    print("❌ Failed to save project: \(error)")
+                    Logger.scalableCloudKit.error(
+                        "Failed to save project in scalable organization zone [organization=\(orgId, privacy: .private(mask: .hash)), project=\(project.name, privacy: .private(mask: .hash)), error=\(error.localizedDescription, privacy: .public)]"
+                    )
                     promise(.failure(error))
                 } else if let savedRecord = savedRecord {
-                    print("✅ Project saved successfully")
+                    Logger.scalableCloudKit.notice(
+                        "Saved project in scalable organization zone [organization=\(orgId, privacy: .private(mask: .hash)), project=\(project.name, privacy: .private(mask: .hash))]"
+                    )
                     promise(.success(savedRecord))
                 } else {
                     promise(.failure(CloudKitArchitectureError.recordCreationFailed))
@@ -411,7 +456,9 @@ class ScalableCloudKitArchitecture: ObservableObject {
         let predicate = NSPredicate(format: "organizationId == %@", orgId)
         let query = CKQuery(recordType: "Project", predicate: predicate)
         
-        print("📥 Loading projects from organization zone")
+        Logger.scalableCloudKit.info(
+            "Loading projects from scalable organization zone [organization=\(orgId, privacy: .private(mask: .hash))]"
+        )
         
         return Future<[Project], Error> { promise in
             self.privateDatabase.fetch(withQuery: query, inZoneWith: zone.zoneID, desiredKeys: nil, resultsLimit: 1000) { result in
@@ -437,11 +484,15 @@ class ScalableCloudKitArchitecture: ObservableObject {
                         return self.recordToProject(record)
                     }
                     
-                    print("✅ Loaded \(projects.count) projects")
+                    Logger.scalableCloudKit.notice(
+                        "Loaded projects from scalable organization zone [organization=\(orgId, privacy: .private(mask: .hash)), count=\(projects.count, privacy: .public)]"
+                    )
                     promise(.success(projects))
                     
                 case .failure(let error):
-                    print("❌ Failed to load projects: \(error)")
+                    Logger.scalableCloudKit.error(
+                        "Failed to load projects from scalable organization zone [organization=\(orgId, privacy: .private(mask: .hash)), error=\(error.localizedDescription, privacy: .public)]"
+                    )
                     promise(.failure(error))
                 }
             }
@@ -458,7 +509,9 @@ class ScalableCloudKitArchitecture: ObservableObject {
                 .eraseToAnyPublisher()
         }
         
-        print("👥 Inviting \(email) to organization")
+        Logger.scalableCloudKit.info(
+            "Inviting user to scalable organization share [invitee=\(email, privacy: .private(mask: .hash))]"
+        )
         
         return Future<CKShare.Participant, Error> { promise in
             let lookupInfo = CKUserIdentity.LookupInfo(emailAddress: email)
@@ -468,7 +521,9 @@ class ScalableCloudKitArchitecture: ObservableObject {
                 userIdentityLookupInfo: lookupInfo
             ) { identity, error in
                 if let error = error {
-                    print("❌ Failed to discover user identity: \(error)")
+                    Logger.scalableCloudKit.error(
+                        "Failed to discover CloudKit identity for organization invite [invitee=\(email, privacy: .private(mask: .hash)), error=\(error.localizedDescription, privacy: .public)]"
+                    )
                     promise(.failure(error))
                     return
                 }
@@ -488,10 +543,14 @@ class ScalableCloudKitArchitecture: ObservableObject {
                 // Save updated share
                 self.privateDatabase.save(share) { savedShare, saveError in
                     if let saveError = saveError {
-                        print("❌ Failed to add participant: \(saveError)")
+                        Logger.scalableCloudKit.error(
+                            "Failed to add participant to scalable organization share [invitee=\(email, privacy: .private(mask: .hash)), error=\(saveError.localizedDescription, privacy: .public)]"
+                        )
                         promise(.failure(saveError))
                     } else {
-                        print("✅ Successfully invited \(email)")
+                        Logger.scalableCloudKit.notice(
+                            "Invited user to scalable organization share [invitee=\(email, privacy: .private(mask: .hash))]"
+                        )
                         promise(.success(participant))
                     }
                 }
@@ -502,7 +561,7 @@ class ScalableCloudKitArchitecture: ObservableObject {
     
     /// Accepts an organization share invitation
     func acceptOrganizationInvitation(from url: URL) -> AnyPublisher<Organization, Error> {
-        print("🤝 Accepting organization invitation")
+        Logger.scalableCloudKit.info("Accepting scalable organization share invitation.")
         
         return Future<Organization, Error> { promise in
             let operation = CKFetchShareMetadataOperation(shareURLs: [url])
@@ -524,14 +583,18 @@ class ScalableCloudKitArchitecture: ObservableObject {
                                 // Set up organization zone reference
                                 self.currentOrganizationZone = CKRecordZone(zoneID: rootRecord.recordID.zoneID)
                                 
-                                print("✅ Successfully joined organization: \(organization.name)")
+                                Logger.scalableCloudKit.notice(
+                                    "Accepted scalable organization share invitation [organization=\(organization.id, privacy: .private(mask: .hash)), name=\(organization.name, privacy: .private(mask: .hash))]"
+                                )
                                 promise(.success(organization))
                             } else {
                                 promise(.failure(CloudKitArchitectureError.invalidShare))
                             }
                             
                         case .failure(let error):
-                            print("❌ Failed to accept invitation: \(error)")
+                            Logger.scalableCloudKit.error(
+                                "Failed to accept scalable organization share invitation [error=\(error.localizedDescription, privacy: .public)]"
+                            )
                             promise(.failure(error))
                         }
                     }
@@ -539,7 +602,9 @@ class ScalableCloudKitArchitecture: ObservableObject {
                     self.container.add(acceptOperation)
                     
                 case .failure(let error):
-                    print("❌ Failed to fetch share metadata: \(error)")
+                    Logger.scalableCloudKit.error(
+                        "Failed to fetch scalable organization share metadata [error=\(error.localizedDescription, privacy: .public)]"
+                    )
                     promise(.failure(error))
                 }
             }
@@ -559,7 +624,9 @@ class ScalableCloudKitArchitecture: ObservableObject {
                 .eraseToAnyPublisher()
         }
         
-        print("📊 Gathering organization metrics")
+        Logger.scalableCloudKit.info(
+            "Gathering scalable organization metrics [organization=\(orgId, privacy: .private(mask: .hash))]"
+        )
         
         return Future<OrganizationMetrics, Error> { promise in
             var metrics = OrganizationMetrics(organizationId: orgId)
@@ -593,7 +660,9 @@ class ScalableCloudKitArchitecture: ObservableObject {
             
             group.notify(queue: .main) {
                 metrics.lastUpdated = Date()
-                print("✅ Organization metrics gathered")
+                Logger.scalableCloudKit.notice(
+                    "Gathered scalable organization metrics [organization=\(orgId, privacy: .private(mask: .hash)), projects=\(metrics.totalProjects, privacy: .public), employees=\(metrics.totalEmployees, privacy: .public)]"
+                )
                 promise(.success(metrics))
             }
         }

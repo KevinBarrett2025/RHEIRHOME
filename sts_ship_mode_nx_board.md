@@ -23,14 +23,15 @@
 - The lower invite/zone-management/join/assignment half of `CloudKitAuthService+Organization.swift` now uses structured `Logger.auth` logging instead of raw `print(...)` tracing.
 - `CloudKitAuthService.swift` now uses structured `Logger.auth` logging instead of raw `print(...)` tracing.
 - `OrganizationZoneService.swift` now uses structured `Logger.cloudKitZone` logging instead of raw `print(...)` tracing.
+- `ScalableCloudKitArchitecture.swift` now uses structured `Logger.scalableCloudKit` logging instead of raw `print(...)` tracing.
 - Stable simulator evidence is green on the staged checkpoint:
-  - Gate A `build_sim`: PASS (`mcp__xcodebuildmcp__build_sim` with `-derivedDataPath /tmp/rheir_gateA_phase1s_mcp_dd`)
-  - Focused parity `test_sim -only-testing:RHEIRTests`: PASS (`mcp__xcodebuildmcp__test_sim` with `-derivedDataPath /tmp/rheir_parity_phase1s_mcp_dd`, `27/27`)
+  - Gate A `build_sim`: PASS (`mcp__xcodebuildmcp__build_sim` with `-derivedDataPath /tmp/rheir_gateA_phase1t_mcp_dd`)
+  - Focused parity `test_sim -only-testing:RHEIRTests`: PASS (`mcp__xcodebuildmcp__test_sim` with `-derivedDataPath /tmp/rheir_parity_phase1t_mcp_dd`, `27/27`)
 
 ## Open Work
-- Finish replacing raw `print(...)` tracing in `ScalableCloudKitArchitecture.swift`, `CloudKitOrganizationSharingService.swift`, and the other non-hardened production seams.
+- Finish replacing raw `print(...)` tracing in `Shared/Services/Organization/CloudKitVendorService.swift`, `CloudKitOrganizationSharingService.swift`, and the other non-hardened production seams.
 - Continue shrinking the remaining oversized active state owners.
-- After the `OrganizationZoneService.swift` checkpoint commit, continue the `ScalableCloudKitArchitecture.swift` cleanup slice.
+- After the `ScalableCloudKitArchitecture.swift` checkpoint commit, continue the `Shared/Services/Organization/CloudKitVendorService.swift` cleanup slice.
 
 ## Blockers
 - Device-targeted Gate A remains blocked by signing for `com.RheirHome.RHEIR`.
