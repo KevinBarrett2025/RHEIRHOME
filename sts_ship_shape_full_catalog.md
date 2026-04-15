@@ -15,6 +15,7 @@
 - `LocalCacheStore`
 - `ProjectStore`
 - `ProjectRepository`
+- `OrganizationProjectSyncStore`
 - `ReceiptProjectStore`
 - `ReceiptIntelligenceStore`
 - `LaborStore`
@@ -22,11 +23,11 @@
 - `TeamMemberStore`
 
 ## Current Validation Baseline
-- Simulator build path: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_gateA_dd clean build`
-- Focused parity path: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_parity_dd test -only-testing:RHEIRTests`
-- Latest focused parity count: `22/22`
+- Simulator build path: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_gateA_phase1b_dd clean build`
+- Focused parity path: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_parity_phase1b_dd test -only-testing:RHEIRTests`
+- Latest focused parity count: `26/26`
 
 ## Known Residual Risks
 - Remaining raw `print(...)` statements still exist in active production files outside the hardened receipt/project flow.
-- `ProjectViewModel` is still oversized even after the extracted stores.
+- `ProjectViewModel` is still oversized even after the extracted stores, though organization/project synchronization is now isolated behind `OrganizationProjectSyncStore`.
 - Device signing is still unresolved for physical-device gate execution.

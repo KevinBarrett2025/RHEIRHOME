@@ -2,6 +2,28 @@ import Foundation
 import Testing
 @testable import RHEIR
 
+private final class RecordingProjectRepository: ProjectRepository {
+    var fetchedProjectsByOrganization: [String: [Project]] = [:]
+    var savedProjects: [(project: Project, organizationID: String)] = []
+    var savedAssignmentsByOrganization: [String: [String]] = [:]
+
+    func fetchProjects(for organizationID: String) async throws -> [Project] {
+        fetchedProjectsByOrganization[organizationID] ?? []
+    }
+
+    func saveProject(_ project: Project, organizationID: String) async throws {
+        savedProjects.append((project, organizationID))
+    }
+
+    func saveProjectAssignments(_ projectIDs: [String], organizationID: String) async throws {
+        savedAssignmentsByOrganization[organizationID] = projectIDs
+    }
+
+    func loadProjectAssignments(organizationID: String) async -> [String] {
+        savedAssignmentsByOrganization[organizationID] ?? []
+    }
+}
+
 struct RHEIRTests {
 
     @Test func example() async throws {
@@ -209,6 +231,185 @@ struct ProjectStoreTests {
 
         #expect(store.loadProjectAssignments(for: "org-1") == ["project-1", "project-2"])
         #expect(store.loadProjectAssignments(for: "org-2") == ["project-9"])
+    }
+}
+
+struct OrganizationProjectSyncStoreTests {
+
+    @Test
+    func refreshesOrganizationProjectsFromAllAndCachedSources() {
+        let orgID = "org-sync"
+        let currentProject = Project(
+            name: "Current Project",
+            client: "Client A",
+            totalBudget: 100000,
+            startDate: .now,
+            endDate: .now.addingTimeInterval(86400),
+            organizationID: orgID
+        )
+        let cachedOnlyProject = Project(
+            name: "Cached Only",
+            client: "Client B",
+            totalBudget: 50000,
+            startDate: .now,
+            endDate: .now.addingTimeInterval(86400),
+            organizationID: orgID
+        )
+        let foreignProject = Project(
+            name: "Foreign Project",
+            client: "Client C",
+            totalBudget: 25000,
+            startDate: .now,
+            endDate: .now.addingTimeInterval(86400),
+            organizationID: "org-foreign"
+        )
+
+        let syncStore = OrganizationProjectSyncStore(
+            projectStore: ProjectStore(),
+            projectRepository: RecordingProjectRepository()
+        )
+
+        let result = syncStore.refreshedProjects(
+            allProjects: [currentProject, foreignProject],
+            cachedOrganizationProjects: [cachedOnlyProject, currentProject],
+            organizationID: orgID
+        )
+
+        #expect(result.organizationProjects.map(\.id) == [currentProject.id, cachedOnlyProject.id])
+        #expect(result.accessibleProjects.map(\.id) == [currentProject.id, cachedOnlyProject.id])
+    }
+
+    @Test
+    func mergesCloudKitProjectsWithLocalFallbackPrecedence() {
+        let orgID = "org-cloudkit"
+        let projectID = UUID()
+        let cloudKitProject = Project(
+            id: projectID,
+            name: "CloudKit Version",
+            client: "Client A",
+            totalBudget: 120000,
+            startDate: .now,
+            endDate: .now.addingTimeInterval(86400),
+            organizationID: orgID
+        )
+        let localStaleProject = Project(
+            id: projectID,
+            name: "Local Version",
+            client: "Client A",
+            totalBudget: 90000,
+            startDate: .now,
+            endDate: .now.addingTimeInterval(86400),
+            organizationID: orgID
+        )
+        let localOnlyProject = Project(
+            name: "Local Only",
+            client: "Client B",
+            totalBudget: 45000,
+            startDate: .now,
+            endDate: .now.addingTimeInterval(86400),
+            organizationID: orgID
+        )
+
+        let syncStore = OrganizationProjectSyncStore(
+            projectStore: ProjectStore(),
+            projectRepository: RecordingProjectRepository()
+        )
+
+        let result = syncStore.mergeCloudKitProjects(
+            [cloudKitProject],
+            with: [localStaleProject, localOnlyProject]
+        )
+
+        #expect(result.projects.map(\.name) == ["CloudKit Version", "Local Only"])
+        #expect(result.localFallbackCount == 1)
+    }
+
+    @Test
+    func filtersAssignedProjectsAndClearsUnavailableSelection() {
+        let orgID = "org-assignments"
+        let allowedProject = Project(
+            name: "Allowed Project",
+            client: "Client A",
+            totalBudget: 100000,
+            startDate: .now,
+            endDate: .now.addingTimeInterval(86400),
+            organizationID: orgID
+        )
+        let blockedProject = Project(
+            name: "Blocked Project",
+            client: "Client B",
+            totalBudget: 60000,
+            startDate: .now,
+            endDate: .now.addingTimeInterval(86400),
+            organizationID: orgID
+        )
+
+        let syncStore = OrganizationProjectSyncStore(
+            projectStore: ProjectStore(),
+            projectRepository: RecordingProjectRepository()
+        )
+
+        let result = syncStore.projectAssignmentResult(
+            projectIDs: [allowedProject.id.uuidString],
+            organizationProjects: [allowedProject, blockedProject],
+            selectedProject: blockedProject
+        )
+
+        #expect(result.accessibleProjects.map(\.id) == [allowedProject.id])
+        #expect(result.selectedProject == nil)
+        #expect(result.restrictedCount == 1)
+        #expect(result.appliesRestrictions)
+    }
+
+    @Test
+    func savesSnapshotAndDelegatesRepositoryPersistence() async throws {
+        let suiteName = "OrganizationProjectSyncStoreTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let orgID = "org-persist"
+        let organization = Organization(id: orgID, name: "North Shore Builders")
+        let teamMember = TeamMember(
+            name: "Taylor Mason",
+            email: "taylor@example.com",
+            jobTitle: "Supervisor",
+            organizationID: orgID
+        )
+        let project = Project(
+            name: "Persistent Project",
+            client: "Client A",
+            totalBudget: 110000,
+            startDate: .now,
+            endDate: .now.addingTimeInterval(86400),
+            organizationID: orgID
+        )
+
+        let projectStore = ProjectStore(userDefaults: defaults)
+        let repository = RecordingProjectRepository()
+        let syncStore = OrganizationProjectSyncStore(
+            projectStore: projectStore,
+            projectRepository: repository
+        )
+
+        syncStore.saveSnapshot(
+            projects: [project],
+            organization: organization,
+            teamMembers: [teamMember],
+            for: orgID
+        )
+        try await syncStore.saveProjectToCloudKit(project, organizationID: orgID)
+        try await syncStore.saveProjectAssignmentsToCloudKit([project.id.uuidString], organizationID: orgID)
+
+        #expect(projectStore.loadProjects(for: orgID).map(\.id) == [project.id])
+        #expect(projectStore.loadOrganization(for: orgID)?.id == orgID)
+        #expect(projectStore.loadTeamMembers(for: orgID).map(\.id) == [teamMember.id])
+        #expect(repository.savedProjects.count == 1)
+        #expect(repository.savedProjects.first?.organizationID == orgID)
+        #expect(repository.savedAssignmentsByOrganization[orgID] == [project.id.uuidString])
+        #expect(await syncStore.loadProjectAssignmentsFromCloudKit(organizationID: orgID) == [project.id.uuidString])
     }
 }
 

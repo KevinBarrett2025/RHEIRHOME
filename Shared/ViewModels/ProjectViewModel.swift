@@ -63,6 +63,7 @@ class ProjectViewModel: ObservableObject {
     private let offlineDataManager: OfflineDataManager
     private let projectStore: ProjectStore
     private let projectRepository: ProjectRepository
+    private let organizationProjectSyncStore: OrganizationProjectSyncStore
     let receiptIntelligenceStore: ReceiptIntelligenceStore
     let receiptProjectStore: ReceiptProjectStore
     let laborStore: LaborStore
@@ -81,6 +82,7 @@ class ProjectViewModel: ObservableObject {
         offlineDataManager: OfflineDataManager,
         projectStore: ProjectStore = ProjectStore(),
         projectRepository: ProjectRepository = CloudKitProjectRepository(),
+        organizationProjectSyncStore: OrganizationProjectSyncStore? = nil,
         receiptIntelligenceStore: ReceiptIntelligenceStore = ReceiptIntelligenceStore(),
         receiptProjectStore: ReceiptProjectStore = ReceiptProjectStore(),
         laborStore: LaborStore = LaborStore(),
@@ -97,6 +99,11 @@ class ProjectViewModel: ObservableObject {
         self.offlineDataManager = offlineDataManager
         self.projectStore = projectStore
         self.projectRepository = projectRepository
+        self.organizationProjectSyncStore = organizationProjectSyncStore
+            ?? OrganizationProjectSyncStore(
+                projectStore: projectStore,
+                projectRepository: projectRepository
+            )
         self.receiptIntelligenceStore = receiptIntelligenceStore
         self.receiptProjectStore = receiptProjectStore
         self.laborStore = laborStore
@@ -671,7 +678,7 @@ class ProjectViewModel: ObservableObject {
             return []
         }
 
-        let projects = try await projectRepository.fetchProjects(for: currentOrganizationID)
+        let projects = try await organizationProjectSyncStore.fetchProjectsFromCloudKit(for: currentOrganizationID)
         Logger.project.debug(
             "Fetched projects from CloudKit [org=\(currentOrganizationID, privacy: .private(mask: .hash)) count=\(projects.count, privacy: .public)]"
         )
@@ -680,27 +687,16 @@ class ProjectViewModel: ObservableObject {
     
     /// Merge CloudKit projects with local projects, giving CloudKit precedence
     private func mergeCloudKitProjects(_ cloudKitProjects: [Project]) {
-        var mergedProjects: [Project] = []
-        var processedIDs: Set<UUID> = []
-        
-        // Add all CloudKit projects first (they take precedence)
-        for cloudProject in cloudKitProjects {
-            mergedProjects.append(cloudProject)
-            processedIDs.insert(cloudProject.id)
-        }
-        
-        // Add local projects that aren't in CloudKit
-        for localProject in organizationProjects {
-            if !processedIDs.contains(localProject.id) {
-                mergedProjects.append(localProject)
-            }
-        }
-        
-        organizationProjects = mergedProjects
+        let mergeResult = organizationProjectSyncStore.mergeCloudKitProjects(
+            cloudKitProjects,
+            with: organizationProjects
+        )
+
+        organizationProjects = mergeResult.projects
         updateOrganizationProjects()
 
         Logger.project.debug(
-            "Merged CloudKit and local projects [cloudKit=\(cloudKitProjects.count, privacy: .public) localFallback=\(self.organizationProjects.count - cloudKitProjects.count, privacy: .public)]"
+            "Merged CloudKit and local projects [cloudKit=\(cloudKitProjects.count, privacy: .public) localFallback=\(mergeResult.localFallbackCount, privacy: .public)]"
         )
     }
     
@@ -710,7 +706,10 @@ class ProjectViewModel: ObservableObject {
             throw NSError(domain: "RHEIR", code: -1, userInfo: [NSLocalizedDescriptionKey: "No organization ID"])
         }
 
-        try await projectRepository.saveProject(project, organizationID: currentOrganizationID)
+        try await organizationProjectSyncStore.saveProjectToCloudKit(
+            project,
+            organizationID: currentOrganizationID
+        )
         Logger.project.debug(
             "Saved project to CloudKit [org=\(currentOrganizationID, privacy: .private(mask: .hash))]"
         )
@@ -822,69 +821,47 @@ class ProjectViewModel: ObservableObject {
             return
         }
         lastUpdateTimestamp = now
-        
-        if let currentOrgID = currentOrganizationID {
-            let filteredProjects = projects.filter { project in
-                let matches = project.organizationID == currentOrgID
-                if !matches {
-                    #if DEBUG
-                    Logger.project.debug(
-                        "Excluded project during org filter [projectOrg=\(project.organizationID, privacy: .private(mask: .hash)) currentOrg=\(currentOrgID, privacy: .private(mask: .hash))]"
-                    )
-                    #endif
-                }
-                return matches
-            }
-            
-            let previousCount = organizationProjects.count
 
-            var uniqueProjects: [Project] = []
-            var projectIDs: Set<UUID> = []
-            
-            for project in filteredProjects {
-                if !projectIDs.contains(project.id) {
-                    uniqueProjects.append(project)
-                    projectIDs.insert(project.id)
-                }
-            }
-            
-            for project in organizationProjects {
-                if !projectIDs.contains(project.id) && project.organizationID == currentOrgID {
-                    uniqueProjects.append(project)
-                    projectIDs.insert(project.id)
-                    #if DEBUG
-                    Logger.project.debug("Reconciled missing project from organization-scoped cache.")
-                    #endif
-                }
-            }
-            
-            let hasChanged = uniqueProjects.count != previousCount || 
-                           !Set(uniqueProjects.map { $0.id }).isSubset(of: Set(organizationProjects.map { $0.id }))
-            
-            if hasChanged {
-                organizationProjects = uniqueProjects
-                Logger.project.notice(
-                    "Updated organization project list [org=\(currentOrgID, privacy: .private(mask: .hash)) current=\(self.organizationProjects.count, privacy: .public) previous=\(previousCount, privacy: .public)]"
-                )
-                
-                #if DEBUG
-                Logger.project.debug("Organization project refresh completed with debug tracing enabled.")
-                #endif
-                
-                updateAccessibleProjects()
-            } else {
-                Logger.project.debug(
-                    "Organization project list unchanged [count=\(self.organizationProjects.count, privacy: .public)]"
-                )
-            }
+        let previousOrganizationProjectIDs = Set(organizationProjects.map(\.id))
+        let previousAccessibleProjectIDs = Set(accessibleProjects.map(\.id))
+        let previousOrganizationCount = organizationProjects.count
+
+        let refreshResult = organizationProjectSyncStore.refreshedProjects(
+            allProjects: projects,
+            cachedOrganizationProjects: organizationProjects,
+            organizationID: currentOrganizationID
+        )
+
+        let newOrganizationProjectIDs = Set(refreshResult.organizationProjects.map(\.id))
+        let newAccessibleProjectIDs = Set(refreshResult.accessibleProjects.map(\.id))
+        let hasChanged =
+            previousOrganizationCount != refreshResult.organizationProjects.count
+            || previousOrganizationProjectIDs != newOrganizationProjectIDs
+            || accessibleProjects.count != refreshResult.accessibleProjects.count
+            || previousAccessibleProjectIDs != newAccessibleProjectIDs
+
+        guard hasChanged else {
+            Logger.project.debug(
+                "Organization project list unchanged [count=\(self.organizationProjects.count, privacy: .public)]"
+            )
+            return
+        }
+
+        if let currentOrgID = currentOrganizationID {
+            organizationProjects = refreshResult.organizationProjects
+            accessibleProjects = refreshResult.accessibleProjects
+
+            Logger.project.notice(
+                "Updated organization project list [org=\(currentOrgID, privacy: .private(mask: .hash)) current=\(self.organizationProjects.count, privacy: .public) previous=\(previousOrganizationCount, privacy: .public)]"
+            )
+
+            #if DEBUG
+            Logger.project.debug("Organization project refresh completed with debug tracing enabled.")
+            #endif
         } else {
-            if !organizationProjects.isEmpty || !accessibleProjects.isEmpty {
-                Logger.project.notice("Clearing organization-scoped projects because no organization is active.")
-                organizationProjects = []
-                accessibleProjects = []
-            } else {
-                Logger.project.debug("Organization-scoped project state is already clear.")
-            }
+            Logger.project.notice("Clearing organization-scoped projects because no organization is active.")
+            organizationProjects = refreshResult.organizationProjects
+            accessibleProjects = refreshResult.accessibleProjects
         }
     }
     
@@ -1063,30 +1040,8 @@ class ProjectViewModel: ObservableObject {
         
         isUsingCloudKitForOrganizationData = true
         zoneSetupError = nil
-        
-        do {
-            let container = CKContainer(identifier: "iCloud.com.rheirhome.rheirhomeappV3")
-            let privateDatabase = container.privateCloudDatabase
-            
-            let zoneName = "Org-\(orgIDString)"
-            let zoneID = CKRecordZone.ID(zoneName: zoneName, ownerName: CKCurrentUserDefaultName)
-            let zone = CKRecordZone(zoneID: zoneID)
-            
-            let savedZone = try await privateDatabase.save(zone)
-            Logger.project.notice(
-                "Created CloudKit zone [zone=\(savedZone.zoneID.zoneName, privacy: .private(mask: .hash))]"
-            )
-            
-        } catch let error as CKError where error.code == .serverRecordChanged {
-            Logger.project.debug(
-                "CloudKit zone already exists [org=\(orgIDString, privacy: .private(mask: .hash))]"
-            )
-        } catch {
-            Logger.project.error(
-                "Failed to create CloudKit zone: \(error.localizedDescription, privacy: .public)"
-            )
-            zoneSetupError = error
-        }
+
+        zoneSetupError = await organizationProjectSyncStore.setupCloudKitZone(for: orgIDString)
         
         Logger.project.notice(
             "Finished CloudKit zone setup [org=\(orgIDString, privacy: .private(mask: .hash))]"
@@ -1101,30 +1056,8 @@ class ProjectViewModel: ObservableObject {
         currentOrganizationID = organizationID
         isUsingCloudKitForOrganizationData = true
         zoneSetupError = nil
-        
-        do {
-            let container = CKContainer(identifier: "iCloud.com.rheirhome.rheirhomeappV3")
-            let privateDatabase = container.privateCloudDatabase
-            
-            let zoneName = "Org-\(organizationID)"
-            let zoneID = CKRecordZone.ID(zoneName: zoneName, ownerName: CKCurrentUserDefaultName)
-            let zone = CKRecordZone(zoneID: zoneID)
-            
-            let savedZone = try await privateDatabase.save(zone)
-            Logger.project.notice(
-                "Created CloudKit zone [zone=\(savedZone.zoneID.zoneName, privacy: .private(mask: .hash))]"
-            )
-            
-        } catch let error as CKError where error.code == .serverRecordChanged {
-            Logger.project.debug(
-                "CloudKit zone already exists [org=\(organizationID, privacy: .private(mask: .hash))]"
-            )
-        } catch {
-            Logger.project.error(
-                "Failed to create CloudKit zone: \(error.localizedDescription, privacy: .public)"
-            )
-            zoneSetupError = error
-        }
+
+        zoneSetupError = await organizationProjectSyncStore.setupCloudKitZone(for: organizationID)
         
         Logger.project.notice(
             "Finished CloudKit zone setup [org=\(organizationID, privacy: .private(mask: .hash))]"
@@ -1555,7 +1488,7 @@ class ProjectViewModel: ObservableObject {
             return
         }
 
-        projectStore.saveSnapshot(
+        organizationProjectSyncStore.saveSnapshot(
             projects: organizationProjects,
             organization: currentOrganization,
             teamMembers: teamMembers,
@@ -1573,9 +1506,9 @@ class ProjectViewModel: ObservableObject {
             "Loading organization snapshot [org=\(organizationID, privacy: .private(mask: .hash))]"
         )
 
-        let projects = projectStore.loadProjects(for: organizationID)
+        let loadResult = organizationProjectSyncStore.loadStoredProjects(for: organizationID)
 
-        guard !projects.isEmpty else {
+        guard !loadResult.projects.isEmpty else {
             Logger.project.notice(
                 "No organization snapshot projects found [org=\(organizationID, privacy: .private(mask: .hash))]"
             )
@@ -1587,19 +1520,15 @@ class ProjectViewModel: ObservableObject {
         }
         
         await MainActor.run {
-            let verifiedProjects = projects.filter { project in
-                project.organizationID == organizationID
-            }
-            
-            if verifiedProjects.count != projects.count {
+            if loadResult.filteredCount > 0 {
                 Logger.project.warning(
-                    "Filtered projects that did not match active organization [org=\(organizationID, privacy: .private(mask: .hash)) filtered=\(projects.count - verifiedProjects.count, privacy: .public)]"
+                    "Filtered projects that did not match active organization [org=\(organizationID, privacy: .private(mask: .hash)) filtered=\(loadResult.filteredCount, privacy: .public)]"
                 )
             }
             
-            self.organizationProjects = verifiedProjects
+            self.organizationProjects = loadResult.projects
             Logger.project.notice(
-                "Loaded verified organization snapshot [org=\(organizationID, privacy: .private(mask: .hash)) count=\(verifiedProjects.count, privacy: .public)]"
+                "Loaded verified organization snapshot [org=\(organizationID, privacy: .private(mask: .hash)) count=\(loadResult.projects.count, privacy: .public)]"
             )
         }
     }
@@ -1674,37 +1603,36 @@ class ProjectViewModel: ObservableObject {
             return
         }
 
-        projectStore.saveProjectAssignments(projectIDs, for: currentOrgID)
+        organizationProjectSyncStore.saveProjectAssignmentsLocally(projectIDs, organizationID: currentOrgID)
         Logger.project.debug(
             "Saved project assignment snapshot [org=\(currentOrgID, privacy: .private(mask: .hash)) count=\(projectIDs.count, privacy: .public)]"
         )
 
-        let assignedUUIDs = projectIDs.compactMap { UUID(uuidString: $0) }
-        let filteredProjects: [Project]
-        
-        if assignedUUIDs.isEmpty {
-            filteredProjects = organizationProjects
+        let assignmentResult = organizationProjectSyncStore.projectAssignmentResult(
+            projectIDs: projectIDs,
+            organizationProjects: organizationProjects,
+            selectedProject: selectedProject
+        )
+
+        if assignmentResult.appliesRestrictions {
+            if assignmentResult.restrictedCount > 0 {
+                Logger.project.notice(
+                    "Applied restricted project access [allowed=\(assignmentResult.accessibleProjects.count, privacy: .public) restricted=\(assignmentResult.restrictedCount, privacy: .public)]"
+                )
+            }
+        } else {
             Logger.project.notice(
                 "Applied unrestricted project access [orgProjects=\(self.organizationProjects.count, privacy: .public)]"
             )
-        } else {
-            filteredProjects = organizationProjects.filter { project in
-                assignedUUIDs.contains(project.id)
-            }
-
-            let restrictedCount = organizationProjects.count - filteredProjects.count
-            if restrictedCount > 0 {
-                Logger.project.notice(
-                    "Applied restricted project access [allowed=\(filteredProjects.count, privacy: .public) restricted=\(restrictedCount, privacy: .public)]"
-                )
-            }
         }
-        
-        accessibleProjects = filteredProjects
-        
-        if let selected = selectedProject, !filteredProjects.contains(where: { $0.id == selected.id }) {
+
+        accessibleProjects = assignmentResult.accessibleProjects
+
+        if assignmentResult.selectedProject == nil, selectedProject != nil {
             selectedProject = nil
             Logger.project.notice("Deselected project because it is no longer accessible.")
+        } else {
+            selectedProject = assignmentResult.selectedProject
         }
         
         if isUsingCloudKitForOrganizationData {
@@ -1714,7 +1642,7 @@ class ProjectViewModel: ObservableObject {
         }
 
         Logger.project.notice(
-            "Configured project access control [orgProjects=\(self.organizationProjects.count, privacy: .public) accessible=\(self.accessibleProjects.count, privacy: .public) restricted=\(!assignedUUIDs.isEmpty, privacy: .public)]"
+            "Configured project access control [orgProjects=\(self.organizationProjects.count, privacy: .public) accessible=\(self.accessibleProjects.count, privacy: .public) restricted=\(assignmentResult.appliesRestrictions, privacy: .public)]"
         )
     }
     
@@ -1723,7 +1651,10 @@ class ProjectViewModel: ObservableObject {
         guard let currentOrgID = currentOrganizationID else { return }
         
         do {
-            try await projectRepository.saveProjectAssignments(projectIDs, organizationID: currentOrgID)
+            try await organizationProjectSyncStore.saveProjectAssignmentsToCloudKit(
+                projectIDs,
+                organizationID: currentOrgID
+            )
             Logger.project.info(
                 "Synced project assignments to CloudKit [org=\(currentOrgID, privacy: .private(mask: .hash)) count=\(projectIDs.count, privacy: .public)]"
             )
@@ -1738,13 +1669,223 @@ class ProjectViewModel: ObservableObject {
     private func loadProjectAssignmentsFromCloudKit() async -> [String] {
         guard let currentOrgID = currentOrganizationID else { return [] }
 
-        let assignments = await projectRepository.loadProjectAssignments(organizationID: currentOrgID)
+        let assignments = await organizationProjectSyncStore.loadProjectAssignmentsFromCloudKit(
+            organizationID: currentOrgID
+        )
         if !assignments.isEmpty {
             Logger.project.debug(
                 "Loaded project assignments from CloudKit [org=\(currentOrgID, privacy: .private(mask: .hash)) count=\(assignments.count, privacy: .public)]"
             )
         }
         return assignments
+    }
+}
+
+extension Logger {
+    static let projectSync = Logger(subsystem: "com.RheirHome.RHEIR", category: "projectSync")
+}
+
+struct OrganizationProjectLoadResult {
+    let projects: [Project]
+    let filteredCount: Int
+}
+
+struct OrganizationProjectRefreshResult {
+    let organizationProjects: [Project]
+    let accessibleProjects: [Project]
+}
+
+struct OrganizationProjectMergeResult {
+    let projects: [Project]
+    let localFallbackCount: Int
+}
+
+struct OrganizationProjectAssignmentResult {
+    let accessibleProjects: [Project]
+    let selectedProject: Project?
+    let restrictedCount: Int
+    let appliesRestrictions: Bool
+}
+
+final class OrganizationProjectSyncStore {
+    private let projectStore: ProjectStore
+    private let projectRepository: ProjectRepository
+    private let container: CKContainer
+
+    init(
+        projectStore: ProjectStore,
+        projectRepository: ProjectRepository,
+        container: CKContainer = CKContainer(identifier: "iCloud.com.rheirhome.rheirhomeappV3")
+    ) {
+        self.projectStore = projectStore
+        self.projectRepository = projectRepository
+        self.container = container
+    }
+
+    func saveSnapshot(
+        projects: [Project],
+        organization: Organization?,
+        teamMembers: [TeamMember],
+        for organizationID: String
+    ) {
+        projectStore.saveSnapshot(
+            projects: projects,
+            organization: organization,
+            teamMembers: teamMembers,
+            for: organizationID
+        )
+    }
+
+    func loadStoredProjects(for organizationID: String) -> OrganizationProjectLoadResult {
+        let projects = projectStore.loadProjects(for: organizationID)
+        let verifiedProjects = projects.filter { $0.organizationID == organizationID }
+
+        return OrganizationProjectLoadResult(
+            projects: verifiedProjects,
+            filteredCount: projects.count - verifiedProjects.count
+        )
+    }
+
+    func refreshedProjects(
+        allProjects: [Project],
+        cachedOrganizationProjects: [Project],
+        organizationID: String?
+    ) -> OrganizationProjectRefreshResult {
+        guard let organizationID else {
+            return OrganizationProjectRefreshResult(
+                organizationProjects: [],
+                accessibleProjects: []
+            )
+        }
+
+        let uniqueProjects = uniqueOrganizationProjects(
+            organizationID: organizationID,
+            primary: allProjects,
+            secondary: cachedOrganizationProjects
+        )
+
+        return OrganizationProjectRefreshResult(
+            organizationProjects: uniqueProjects,
+            accessibleProjects: uniqueProjects
+        )
+    }
+
+    func mergeCloudKitProjects(_ cloudKitProjects: [Project], with localProjects: [Project]) -> OrganizationProjectMergeResult {
+        var mergedProjects: [Project] = []
+        var processedIDs: Set<UUID> = []
+
+        for cloudProject in cloudKitProjects where processedIDs.insert(cloudProject.id).inserted {
+            mergedProjects.append(cloudProject)
+        }
+
+        for localProject in localProjects where processedIDs.insert(localProject.id).inserted {
+            mergedProjects.append(localProject)
+        }
+
+        return OrganizationProjectMergeResult(
+            projects: mergedProjects,
+            localFallbackCount: mergedProjects.count - cloudKitProjects.count
+        )
+    }
+
+    func projectAssignmentResult(
+        projectIDs: [String],
+        organizationProjects: [Project],
+        selectedProject: Project?
+    ) -> OrganizationProjectAssignmentResult {
+        let assignedUUIDs = projectIDs.compactMap(UUID.init(uuidString:))
+        let appliesRestrictions = !assignedUUIDs.isEmpty
+        let accessibleProjects: [Project]
+
+        if appliesRestrictions {
+            accessibleProjects = organizationProjects.filter { assignedUUIDs.contains($0.id) }
+        } else {
+            accessibleProjects = organizationProjects
+        }
+
+        let updatedSelectedProject: Project?
+        if let selectedProject,
+           accessibleProjects.contains(where: { $0.id == selectedProject.id }) {
+            updatedSelectedProject = selectedProject
+        } else {
+            updatedSelectedProject = nil
+        }
+
+        return OrganizationProjectAssignmentResult(
+            accessibleProjects: accessibleProjects,
+            selectedProject: updatedSelectedProject,
+            restrictedCount: organizationProjects.count - accessibleProjects.count,
+            appliesRestrictions: appliesRestrictions
+        )
+    }
+
+    func saveProjectAssignmentsLocally(_ projectIDs: [String], organizationID: String) {
+        projectStore.saveProjectAssignments(projectIDs, for: organizationID)
+    }
+
+    func fetchProjectsFromCloudKit(for organizationID: String) async throws -> [Project] {
+        try await projectRepository.fetchProjects(for: organizationID)
+    }
+
+    func saveProjectToCloudKit(_ project: Project, organizationID: String) async throws {
+        try await projectRepository.saveProject(project, organizationID: organizationID)
+    }
+
+    func saveProjectAssignmentsToCloudKit(_ projectIDs: [String], organizationID: String) async throws {
+        try await projectRepository.saveProjectAssignments(projectIDs, organizationID: organizationID)
+    }
+
+    func loadProjectAssignmentsFromCloudKit(organizationID: String) async -> [String] {
+        await projectRepository.loadProjectAssignments(organizationID: organizationID)
+    }
+
+    func setupCloudKitZone(for organizationID: String) async -> Error? {
+        do {
+            let privateDatabase = container.privateCloudDatabase
+            let zoneID = CKRecordZone.ID(
+                zoneName: "Org-\(organizationID)",
+                ownerName: CKCurrentUserDefaultName
+            )
+            let zone = CKRecordZone(zoneID: zoneID)
+            _ = try await privateDatabase.save(zone)
+            Logger.projectSync.notice(
+                "Created CloudKit zone [zone=\(zoneID.zoneName, privacy: .private(mask: .hash))]"
+            )
+            return nil
+        } catch let error as CKError where error.code == .serverRecordChanged {
+            Logger.projectSync.debug(
+                "CloudKit zone already exists [org=\(organizationID, privacy: .private(mask: .hash))]"
+            )
+            return nil
+        } catch {
+            Logger.projectSync.error(
+                "Failed to create CloudKit zone: \(error.localizedDescription, privacy: .public)"
+            )
+            return error
+        }
+    }
+
+    private func uniqueOrganizationProjects(
+        organizationID: String,
+        primary: [Project],
+        secondary: [Project]
+    ) -> [Project] {
+        var uniqueProjects: [Project] = []
+        var projectIDs: Set<UUID> = []
+
+        for project in primary where project.organizationID == organizationID {
+            if projectIDs.insert(project.id).inserted {
+                uniqueProjects.append(project)
+            }
+        }
+
+        for project in secondary where project.organizationID == organizationID {
+            if projectIDs.insert(project.id).inserted {
+                uniqueProjects.append(project)
+            }
+        }
+
+        return uniqueProjects
     }
 }
 
