@@ -503,7 +503,9 @@ extension CloudKitAuthService {
     // MARK: - Existing Methods Continue Below...
 
     public func leaveOrganization(organizationID: String, userID: String) -> AnyPublisher<Bool, Error> {
-        print("🚪 [CloudKit] User \(userID.prefix(8))... leaving organization: \(organizationID.prefix(8))...")
+        Logger.auth.notice(
+            "Leaving organization [org=\(organizationID, privacy: .private(mask: .hash)), user=\(userID, privacy: .private(mask: .hash))]"
+        )
         
         return checkCloudKitAvailability()
             .flatMap { _ -> AnyPublisher<Bool, Error> in
@@ -515,7 +517,9 @@ extension CloudKitAuthService {
                     
                     privateDB.fetch(withRecordID: orgRecordID) { orgRecord, error in
                         if let error = error {
-                            print("❌ [CloudKit] Failed to fetch organization: \(error)")
+                            Logger.auth.error(
+                                "Failed to fetch organization before leave [org=\(organizationID, privacy: .private(mask: .hash)), error=\(error.localizedDescription, privacy: .public)]"
+                            )
                             promise(.failure(error))
                             return
                         }
@@ -541,7 +545,9 @@ extension CloudKitAuthService {
                         // Save organization record
                         privateDB.save(orgRecord) { _, saveError in
                             if let saveError = saveError {
-                                print("❌ [CloudKit] Failed to update organization: \(saveError)")
+                                Logger.auth.error(
+                                    "Failed to update organization during leave [org=\(organizationID, privacy: .private(mask: .hash)), error=\(saveError.localizedDescription, privacy: .public)]"
+                                )
                                 promise(.failure(saveError))
                                 return
                             }
@@ -553,7 +559,9 @@ extension CloudKitAuthService {
                             privateDB.fetch(withQuery: memberQuery, inZoneWith: nil, desiredKeys: nil, resultsLimit: 1) { result in
                                 switch result {
                                 case .failure(let error):
-                                    print("❌ [CloudKit] Failed to fetch member record: \(error)")
+                                    Logger.auth.error(
+                                        "Failed to fetch organization member record during leave [org=\(organizationID, privacy: .private(mask: .hash)), user=\(userID, privacy: .private(mask: .hash)), error=\(error.localizedDescription, privacy: .public)]"
+                                    )
                                     // Don't fail the whole operation if member record is missing
                                     promise(.success(true))
                                 case .success(let matchInfo):
@@ -563,15 +571,21 @@ extension CloudKitAuthService {
                                         privateDB.delete(withRecordID: memberRecord.recordID) { _, deleteError in
                                             DispatchQueue.main.async {
                                                 if let deleteError = deleteError {
-                                                    print("⚠️ [CloudKit] Failed to delete member record: \(deleteError)")
+                                                    Logger.auth.warning(
+                                                        "Failed to delete organization member record during leave [org=\(organizationID, privacy: .private(mask: .hash)), user=\(userID, privacy: .private(mask: .hash)), error=\(deleteError.localizedDescription, privacy: .public)]"
+                                                    )
                                                     // Don't fail if member record deletion fails
                                                 }
-                                                print("✅ [CloudKit] User successfully left organization")
+                                                Logger.auth.notice(
+                                                    "User left organization [org=\(organizationID, privacy: .private(mask: .hash)), user=\(userID, privacy: .private(mask: .hash))]"
+                                                )
                                                 promise(.success(true))
                                             }
                                         }
                                     } else {
-                                        print("✅ [CloudKit] User successfully left organization (no member record found)")
+                                        Logger.auth.notice(
+                                            "User left organization without a member record to delete [org=\(organizationID, privacy: .private(mask: .hash)), user=\(userID, privacy: .private(mask: .hash))]"
+                                        )
                                         promise(.success(true))
                                     }
                                 }
@@ -593,7 +607,9 @@ extension CloudKitAuthService {
         organizationID: String,
         role: OrganizationRole
     ) async throws {
-        print("📧 [CloudKit] Inviting \(email) to organization \(organizationID.prefix(8))... as \(role.displayName)")
+        Logger.auth.notice(
+            "Creating organization invite [org=\(organizationID, privacy: .private(mask: .hash)), invitee=\(email, privacy: .private(mask: .hash)), role=\(role.displayName, privacy: .public)]"
+        )
         
         // Create invitation record
         let inviteRecord = CKRecord(recordType: "OrganizationInvite")
@@ -610,17 +626,20 @@ extension CloudKitAuthService {
         
         do {
             _ = try await container.privateCloudDatabase.save(inviteRecord)
-            print("✅ [CloudKit] Invitation created successfully for \(email)")
+            Logger.auth.notice(
+                "Created organization invite [org=\(organizationID, privacy: .private(mask: .hash)), invitee=\(email, privacy: .private(mask: .hash))]"
+            )
             
             // TODO: Send actual email invitation here
             // For now, just log the invitation details
-            print("📧 [CloudKit] EMAIL INVITATION (Stub):")
-            print("   To: \(email)")
-            print("   Organization: \(organizationID)")
-            print("   Role: \(role.displayName)")
+            Logger.auth.info(
+                "Recorded invitation email stub [org=\(organizationID, privacy: .private(mask: .hash)), invitee=\(email, privacy: .private(mask: .hash)), role=\(role.displayName, privacy: .public)]"
+            )
             
         } catch {
-            print("❌ [CloudKit] Failed to create invitation: \(error)")
+            Logger.auth.error(
+                "Failed to create organization invite [org=\(organizationID, privacy: .private(mask: .hash)), invitee=\(email, privacy: .private(mask: .hash)), error=\(error.localizedDescription, privacy: .public)]"
+            )
             throw error
         }
     }
@@ -632,7 +651,9 @@ extension CloudKitAuthService {
         role: OrganizationRole,
         allowedProjectIDs: [String]
     ) async throws {
-        print("📧 [CloudKit] Inviting \(email) to organization with \(allowedProjectIDs.count) project assignments")
+        Logger.auth.notice(
+            "Creating project-scoped organization invite [org=\(organizationID, privacy: .private(mask: .hash)), invitee=\(email, privacy: .private(mask: .hash)), assignments=\(allowedProjectIDs.count, privacy: .public)]"
+        )
         
         // Create invitation record with project assignments
         let inviteRecord = CKRecord(recordType: "OrganizationInvite")
@@ -650,20 +671,26 @@ extension CloudKitAuthService {
         
         do {
             _ = try await container.privateCloudDatabase.save(inviteRecord)
-            print("✅ [CloudKit] Project-specific invitation created for \(email)")
+            Logger.auth.notice(
+                "Created project-scoped organization invite [org=\(organizationID, privacy: .private(mask: .hash)), invitee=\(email, privacy: .private(mask: .hash))]"
+            )
         } catch {
-            print("❌ [CloudKit] Failed to create project invitation: \(error)")
+            Logger.auth.error(
+                "Failed to create project-scoped invite [org=\(organizationID, privacy: .private(mask: .hash)), invitee=\(email, privacy: .private(mask: .hash)), error=\(error.localizedDescription, privacy: .public)]"
+            )
             throw error
         }
     }
     
     /// Fetch pending invites for a user
     public func fetchPendingInvitesForUser(_ userID: String) async throws -> [String] {
-        print("📧 [CloudKit] Fetching pending invites for user: \(userID.prefix(8))...")
+        Logger.auth.info(
+            "Fetching pending invites [user=\(userID, privacy: .private(mask: .hash))]"
+        )
         
         // Get user's email to search for invitations
         guard let currentUser = currentUser else {
-            print("❌ [CloudKit] No current user available")
+            Logger.auth.warning("Cannot fetch pending invites without a current user.")
             return []
         }
         
@@ -675,7 +702,9 @@ extension CloudKitAuthService {
             container.privateCloudDatabase.fetch(withQuery: query, inZoneWith: nil, desiredKeys: nil, resultsLimit: 50) { result in
                 switch result {
                 case .failure(let error):
-                    print("❌ [CloudKit] Failed to fetch pending invites: \(error)")
+                    Logger.auth.error(
+                        "Failed to fetch pending invites [user=\(userID, privacy: .private(mask: .hash)), error=\(error.localizedDescription, privacy: .public)]"
+                    )
                     continuation.resume(throwing: error)
                 case .success(let matchInfo):
                     let inviteEmails = matchInfo.matchResults.compactMap { pair -> String? in
@@ -686,7 +715,9 @@ extension CloudKitAuthService {
                         return nil
                     }
                     
-                    print("✅ [CloudKit] Found \(inviteEmails.count) pending invites")
+                    Logger.auth.debug(
+                        "Fetched pending invites [user=\(userID, privacy: .private(mask: .hash)), count=\(inviteEmails.count, privacy: .public)]"
+                    )
                     continuation.resume(returning: inviteEmails)
                 }
             }
@@ -695,7 +726,9 @@ extension CloudKitAuthService {
     
     /// Check if organization zone exists
     public func checkOrganizationZoneExists(_ organizationID: String) async throws -> Bool {
-        print("🔧 [CloudKit] Checking if zone exists for organization: \(organizationID.prefix(8))...")
+        Logger.auth.info(
+            "Checking organization zone existence [org=\(organizationID, privacy: .private(mask: .hash))]"
+        )
         
         let zoneID = CKRecordZone.ID(zoneName: "Organization_\(organizationID)", ownerName: CKCurrentUserDefaultName)
         
@@ -703,34 +736,46 @@ extension CloudKitAuthService {
             let fetchedZones = try await container.privateCloudDatabase.allRecordZones()
             let zoneExists = fetchedZones.contains { $0.zoneID == zoneID }
             
-            print("🔧 [CloudKit] Zone exists: \(zoneExists)")
+            Logger.auth.debug(
+                "Checked organization zone existence [org=\(organizationID, privacy: .private(mask: .hash)), exists=\(zoneExists, privacy: .public)]"
+            )
             return zoneExists
             
         } catch {
-            print("❌ [CloudKit] Failed to check zone existence: \(error)")
+            Logger.auth.error(
+                "Failed to check organization zone existence [org=\(organizationID, privacy: .private(mask: .hash)), error=\(error.localizedDescription, privacy: .public)]"
+            )
             throw error
         }
     }
     
     /// Create organization zone
     public func createOrganizationZone(_ organizationID: String) async throws {
-        print("🔧 [CloudKit] Creating zone for organization: \(organizationID.prefix(8))...")
+        Logger.auth.notice(
+            "Creating organization zone [org=\(organizationID, privacy: .private(mask: .hash))]"
+        )
         
         let zoneID = CKRecordZone.ID(zoneName: "Organization_\(organizationID)", ownerName: CKCurrentUserDefaultName)
         let zone = CKRecordZone(zoneID: zoneID)
         
         do {
             _ = try await container.privateCloudDatabase.save(zone)
-            print("✅ [CloudKit] Zone created successfully")
+            Logger.auth.notice(
+                "Created organization zone [org=\(organizationID, privacy: .private(mask: .hash))]"
+            )
         } catch {
-            print("❌ [CloudKit] Failed to create zone: \(error)")
+            Logger.auth.error(
+                "Failed to create organization zone [org=\(organizationID, privacy: .private(mask: .hash)), error=\(error.localizedDescription, privacy: .public)]"
+            )
             throw error
         }
     }
     
     /// Get record count in organization zone
     public func getOrganizationRecordCount(_ organizationID: String) async throws -> Int {
-        print("🔧 [CloudKit] Counting records in organization zone: \(organizationID.prefix(8))...")
+        Logger.auth.info(
+            "Counting organization-zone records [org=\(organizationID, privacy: .private(mask: .hash))]"
+        )
         
         let zoneID = CKRecordZone.ID(zoneName: "Organization_\(organizationID)", ownerName: CKCurrentUserDefaultName)
         
@@ -742,11 +787,15 @@ extension CloudKitAuthService {
             container.privateCloudDatabase.fetch(withQuery: query, inZoneWith: zoneID, desiredKeys: nil, resultsLimit: 200) { result in
                 switch result {
                 case .failure(let error):
-                    print("❌ [CloudKit] Failed to count records: \(error)")
+                    Logger.auth.error(
+                        "Failed to count organization-zone records [org=\(organizationID, privacy: .private(mask: .hash)), error=\(error.localizedDescription, privacy: .public)]"
+                    )
                     continuation.resume(returning: 0) // Return 0 instead of throwing
                 case .success(let matchInfo):
                     let count = matchInfo.matchResults.count
-                    print("✅ [CloudKit] Found \(count) records in zone")
+                    Logger.auth.debug(
+                        "Counted organization-zone records [org=\(organizationID, privacy: .private(mask: .hash)), count=\(count, privacy: .public)]"
+                    )
                     continuation.resume(returning: count)
                 }
             }
@@ -759,7 +808,9 @@ extension CloudKitAuthService {
         userID: String,
         role: OrganizationRole
     ) async throws -> Organization {
-        print("🔗 [CloudKit] User \(userID.prefix(8))... joining organization: \(organizationID.prefix(8))...")
+        Logger.auth.notice(
+            "Joining organization [org=\(organizationID, privacy: .private(mask: .hash)), user=\(userID, privacy: .private(mask: .hash)), role=\(role.displayName, privacy: .public)]"
+        )
         
         // For now, implement a simplified version that just fetches the organization
         // TODO: Implement actual user addition to organization
@@ -776,7 +827,9 @@ extension CloudKitAuthService {
             cloudKitRecordID: orgRecord.recordID.recordName
         )
         
-        print("✅ [CloudKit] Successfully joined organization: \(organization.name)")
+        Logger.auth.notice(
+            "Joined organization [org=\(organizationID, privacy: .private(mask: .hash)), name=\(organization.name, privacy: .public)]"
+        )
         return organization
     }
     
@@ -785,7 +838,9 @@ extension CloudKitAuthService {
         organizationID: String,
         userID: String
     ) async throws -> [String] {
-        print("📋 [CloudKit] Fetching project assignments for user \(userID.prefix(8))... in org \(organizationID.prefix(8))...")
+        Logger.auth.info(
+            "Fetching project assignments [org=\(organizationID, privacy: .private(mask: .hash)), user=\(userID, privacy: .private(mask: .hash))]"
+        )
         
         // Query for OrganizationMember records
         let predicate = NSPredicate(format: "organizationID == %@ AND userID == %@", organizationID, userID)
@@ -795,16 +850,22 @@ extension CloudKitAuthService {
             container.privateCloudDatabase.fetch(withQuery: query, inZoneWith: nil, desiredKeys: nil, resultsLimit: 1) { result in
                 switch result {
                 case .failure(let error):
-                    print("❌ [CloudKit] Failed to fetch project assignments: \(error)")
+                    Logger.auth.error(
+                        "Failed to fetch project assignments [org=\(organizationID, privacy: .private(mask: .hash)), user=\(userID, privacy: .private(mask: .hash)), error=\(error.localizedDescription, privacy: .public)]"
+                    )
                     continuation.resume(returning: []) // Return empty array instead of throwing
                 case .success(let matchInfo):
                     if let (_, recordResult) = matchInfo.matchResults.first,
                        case .success(let memberRecord) = recordResult {
                         let assignments = memberRecord["projectAssignments"] as? [String] ?? []
-                        print("✅ [CloudKit] Found \(assignments.count) project assignments")
+                        Logger.auth.debug(
+                            "Fetched project assignments [org=\(organizationID, privacy: .private(mask: .hash)), user=\(userID, privacy: .private(mask: .hash)), count=\(assignments.count, privacy: .public)]"
+                        )
                         continuation.resume(returning: assignments)
                     } else {
-                        print("✅ [CloudKit] No project assignments found")
+                        Logger.auth.debug(
+                            "No project assignments found [org=\(organizationID, privacy: .private(mask: .hash)), user=\(userID, privacy: .private(mask: .hash))]"
+                        )
                         continuation.resume(returning: [])
                     }
                 }
