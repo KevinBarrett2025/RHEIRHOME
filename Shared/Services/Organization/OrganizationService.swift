@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 import CloudKit
+import OSLog
 
 /// Enhanced organization service with unique name validation and subscription management
 @MainActor
@@ -25,7 +26,9 @@ public class OrganizationService: ObservableObject {
         self.sharedDatabase = container.sharedCloudDatabase
         self.zoneManager = organizationID != nil ? CloudKitZoneManager(organizationID: organizationID!) : nil
         
-        print("🏢 OrganizationService initialized with container: \(containerIdentifier)")
+        Logger.organizationService.info(
+            "Initialized OrganizationService [container=\(containerIdentifier, privacy: .private(mask: .hash)) hasZoneManager=\(organizationID != nil, privacy: .public)]"
+        )
         
         // Set up zone if organization ID is provided
         if let orgID = organizationID {
@@ -137,7 +140,9 @@ public class OrganizationService: ObservableObject {
         organizations.append(finalOrganization)
         currentOrganization = finalOrganization
         
-        print("✅ Organization created successfully: \(name) (\(slug))")
+        Logger.organizationService.notice(
+            "Created organization successfully [name=\(name, privacy: .private(mask: .hash)) slug=\(slug, privacy: .private(mask: .hash))]"
+        )
         return finalOrganization
     }
     
@@ -158,7 +163,9 @@ public class OrganizationService: ObservableObject {
             case .success(let record):
                 return parseOrganizationFromRecord(record)
             case .failure(let error):
-                print("❌ Error fetching organization: \(error)")
+                Logger.organizationService.error(
+                    "Failed to fetch organization during user lookup [error=\(error.localizedDescription, privacy: .public)]"
+                )
                 return nil
             }
         }
@@ -259,7 +266,9 @@ public class OrganizationService: ObservableObject {
         defer { isLoading = false }
         
         try await zoneManager.saveTeamMembers(teamMembers)
-        print("✅ Team members saved to CloudKit")
+        Logger.organizationService.notice(
+            "Saved team members to CloudKit [count=\(teamMembers.count, privacy: .public)]"
+        )
     }
     
     /// Load team members from CloudKit for the current organization
@@ -272,7 +281,9 @@ public class OrganizationService: ObservableObject {
         defer { isLoading = false }
         
         let teamMembers = try await zoneManager.loadTeamMembers()
-        print("✅ Loaded \(teamMembers.count) team members from CloudKit")
+        Logger.organizationService.notice(
+            "Loaded team members from CloudKit [count=\(teamMembers.count, privacy: .public)]"
+        )
         return teamMembers
     }
     
@@ -288,7 +299,9 @@ public class OrganizationService: ObservableObject {
         defer { isLoading = false }
         
         try await zoneManager.saveProject(project)
-        print("✅ Project saved to CloudKit: \(project.name)")
+        Logger.organizationService.notice(
+            "Saved project to CloudKit [project=\(project.name, privacy: .private(mask: .hash))]"
+        )
     }
     
     /// Load all projects from CloudKit for the current organization
@@ -301,7 +314,9 @@ public class OrganizationService: ObservableObject {
         defer { isLoading = false }
         
         let projects = try await zoneManager.loadProjects()
-        print("✅ Loaded \(projects.count) projects from CloudKit")
+        Logger.organizationService.notice(
+            "Loaded projects from CloudKit [count=\(projects.count, privacy: .public)]"
+        )
         return projects
     }
     
