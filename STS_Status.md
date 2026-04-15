@@ -3,7 +3,7 @@
 ## Repo
 - Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Branch: `gm/rheir-hardening-phase1`
-- HEAD: `7b9210972368fcb60a6b3ac9b10b2c9fe645c2b6`
+- HEAD: `86599cedf5f88731407f075f2ecf55dabf50d081`
 
 ## Active Initiative
 - RHEIR hardening and streamlining, phase 1 foundation pass.
@@ -59,11 +59,12 @@
 - Replaced raw `print(...)` tracing in `AppleIDAuthService.swift` with structured `Logger.auth` usage for restore, Apple sign-in start, request configuration, email persistence, sign-out, and authorization callback events.
 - Replaced raw `print(...)` tracing in `SimpleCloudKitSharingService.swift` with structured `Logger.organizationSharing` usage for shared-database enablement checks, project CRUD, and team-member CRUD events.
 - Replaced raw `print(...)` tracing in `ProjectDataMigrationService.swift` with structured `Logger.organizationMigration` usage for project migration start/completion, organization cleanup, organization query filtering, and delete operations.
+- Replaced raw `print(...)` tracing in `Organization/CloudKitPaymentMethodService.swift` with structured `Logger.cloudKitPaymentMethod` usage for load/save/delete flows, find-or-create behavior, spending updates, record validation, and local migration events.
 - Added focused persistence/session tests in `RHEIRTests/RHEIRTests.swift` for invite parsing, legacy cache migration, project storage, receipt intelligence retention, cache clearing, labor aggregation/validation, company-state bucketing, team-member store behavior, and receipt project-resolution behavior.
 - Added focused parity for project access normalization and assignment filtering in `RHEIRTests/RHEIRTests.swift`.
 
 ## In Progress
-- Replace remaining unsafe logging/state hacks in `Organization/CloudKitPaymentMethodService.swift` and the other non-hardened seams.
+- Replace remaining unsafe logging/state hacks in `DataMigrationService.swift` and the other non-hardened seams.
 - Continue shrinking the remaining oversized active state owners around the new sync and access store boundaries.
 - Expand deterministic parity beyond the focused `RHEIRTests` suite.
 
@@ -72,9 +73,9 @@
 - Device-targeted Gate A remains blocked by signing because automatic provisioning is disabled for `com.RheirHome.RHEIR`.
 
 ## Latest Evidence
-- Gate A: `mcp__xcodebuildmcp__build_sim` with `extraArgs=["-derivedDataPath","/tmp/rheir_gateA_phase1z_mcp_dd"]` -> PASS
-- Focused parity: `mcp__xcodebuildmcp__test_sim` with `extraArgs=["-derivedDataPath","/tmp/rheir_parity_phase1z_mcp_dd","-only-testing:RHEIRTests"]` -> PASS (`27/27`)
+- Gate A: `mcp__xcodebuildmcp__build_sim` with `extraArgs=["-derivedDataPath","/tmp/rheir_gateA_phase1aa_mcp_dd"]` -> PASS
+- Focused parity: `mcp__xcodebuildmcp__test_sim` with `extraArgs=["-derivedDataPath","/tmp/rheir_parity_phase1aa_mcp_dd","-only-testing:RHEIRTests"]` -> PASS (`27/27`)
 - Direct CLI gate path remains less stable than the MCP simulator path in the local simulator environment
 
 ## Next Milestone
-- Checkpoint the `ProjectDataMigrationService.swift` logging cleanup slice, then continue with `Organization/CloudKitPaymentMethodService.swift`, the next highest-value remaining service seam in the active tree.
+- Checkpoint the `Organization/CloudKitPaymentMethodService.swift` logging cleanup slice, then continue with `DataMigrationService.swift`, the next highest-value remaining service seam in the active tree.

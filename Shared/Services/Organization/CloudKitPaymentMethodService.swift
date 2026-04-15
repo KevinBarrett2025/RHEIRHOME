@@ -1,6 +1,11 @@
 import Foundation
 import CloudKit
 import Combine
+import OSLog
+
+extension Logger {
+    static let cloudKitPaymentMethod = Logger(subsystem: "com.RheirHome.RHEIR", category: "cloudKitPaymentMethod")
+}
 
 /// CloudKit-based payment method management service for organization-wide data sharing
 @MainActor
@@ -41,7 +46,9 @@ class CloudKitPaymentMethodService: ObservableObject {
                 case .success(let record):
                     return createPaymentMethodFromRecord(record)
                 case .failure(let error):
-                    print("❌ Failed to load payment method record: \(error)")
+                    Logger.cloudKitPaymentMethod.error(
+                        "Failed to load payment method record from CloudKit: \(error.localizedDescription, privacy: .public)"
+                    )
                     return nil
                 }
             }
@@ -50,11 +57,15 @@ class CloudKitPaymentMethodService: ObservableObject {
                 self.paymentMethods = cloudKitPaymentMethods
                 self.isLoading = false
                 self.errorMessage = nil
-                print("✅ Loaded \(cloudKitPaymentMethods.count) payment methods from CloudKit for organization")
+                Logger.cloudKitPaymentMethod.notice(
+                    "Loaded payment methods from CloudKit [organization=\(self.organizationID, privacy: .private(mask: .hash)), count=\(cloudKitPaymentMethods.count, privacy: .public)]"
+                )
             }
             
         } catch {
-            print("❌ Failed to load payment methods from CloudKit: \(error)")
+            Logger.cloudKitPaymentMethod.error(
+                "Failed to load payment methods from CloudKit [organization=\(organizationID, privacy: .private(mask: .hash)), error=\(error.localizedDescription, privacy: .public)]"
+            )
             await MainActor.run {
                 self.isLoading = false
                 self.errorMessage = "Failed to load payment methods: \(error.localizedDescription)"
@@ -67,7 +78,9 @@ class CloudKitPaymentMethodService: ObservableObject {
         
         do {
             _ = try await privateDatabase.save(record)
-            print("✅ Saved payment method to CloudKit: \(paymentMethod.name)")
+            Logger.cloudKitPaymentMethod.notice(
+                "Saved payment method to CloudKit [organization=\(organizationID, privacy: .private(mask: .hash)), method=\(paymentMethod.name, privacy: .private(mask: .hash))]"
+            )
             
             // Update local array
             await MainActor.run {
@@ -80,7 +93,9 @@ class CloudKitPaymentMethodService: ObservableObject {
             }
             
         } catch {
-            print("❌ Failed to save payment method to CloudKit: \(error)")
+            Logger.cloudKitPaymentMethod.error(
+                "Failed to save payment method to CloudKit [organization=\(organizationID, privacy: .private(mask: .hash)), method=\(paymentMethod.name, privacy: .private(mask: .hash)), error=\(error.localizedDescription, privacy: .public)]"
+            )
             throw error
         }
     }
@@ -90,7 +105,9 @@ class CloudKitPaymentMethodService: ObservableObject {
         
         do {
             _ = try await privateDatabase.deleteRecord(withID: recordID)
-            print("✅ Deleted payment method from CloudKit: \(paymentMethod.name)")
+            Logger.cloudKitPaymentMethod.notice(
+                "Deleted payment method from CloudKit [organization=\(organizationID, privacy: .private(mask: .hash)), method=\(paymentMethod.name, privacy: .private(mask: .hash))]"
+            )
             
             // Update local array
             await MainActor.run {
@@ -98,7 +115,9 @@ class CloudKitPaymentMethodService: ObservableObject {
             }
             
         } catch {
-            print("❌ Failed to delete payment method from CloudKit: \(error)")
+            Logger.cloudKitPaymentMethod.error(
+                "Failed to delete payment method from CloudKit [organization=\(organizationID, privacy: .private(mask: .hash)), method=\(paymentMethod.name, privacy: .private(mask: .hash)), error=\(error.localizedDescription, privacy: .public)]"
+            )
             throw error
         }
     }
@@ -108,7 +127,9 @@ class CloudKitPaymentMethodService: ObservableObject {
     func findOrCreatePaymentMethod(name: String, type: PaymentType, cardBrand: CardBrand? = nil) async -> PaymentMethod? {
         // Check if payment method already exists (case-insensitive)
         if let existingPaymentMethod = paymentMethods.first(where: { $0.name.lowercased() == name.lowercased() }) {
-            print("📍 Found existing payment method: \(existingPaymentMethod.name)")
+            Logger.cloudKitPaymentMethod.info(
+                "Found existing payment method [organization=\(organizationID, privacy: .private(mask: .hash)), method=\(existingPaymentMethod.name, privacy: .private(mask: .hash))]"
+            )
             return existingPaymentMethod
         }
         
@@ -122,7 +143,9 @@ class CloudKitPaymentMethodService: ObservableObject {
         
         do {
             try await savePaymentMethodToCloudKit(newPaymentMethod)
-            print("🆕 Created new payment method: \(newPaymentMethod.name) (\(type.rawValue))")
+            Logger.cloudKitPaymentMethod.notice(
+                "Created new payment method [organization=\(organizationID, privacy: .private(mask: .hash)), method=\(newPaymentMethod.name, privacy: .private(mask: .hash)), type=\(type.rawValue, privacy: .public)]"
+            )
             return newPaymentMethod
         } catch {
             await MainActor.run {
@@ -141,7 +164,9 @@ class CloudKitPaymentMethodService: ObservableObject {
         
         do {
             try await savePaymentMethodToCloudKit(updatedPaymentMethod)
-            print("💰 Updated payment method spending: \(updatedPaymentMethod.name) - Total: $\(updatedPaymentMethod.totalSpent)")
+            Logger.cloudKitPaymentMethod.notice(
+                "Updated payment method spending [organization=\(organizationID, privacy: .private(mask: .hash)), method=\(updatedPaymentMethod.name, privacy: .private(mask: .hash)), total=\(updatedPaymentMethod.totalSpent, privacy: .public)]"
+            )
         } catch {
             await MainActor.run {
                 self.errorMessage = "Failed to update payment method spending: \(error.localizedDescription)"
@@ -252,7 +277,7 @@ class CloudKitPaymentMethodService: ObservableObject {
               let name = record["name"] as? String,
               let typeString = record["type"] as? String,
               let type = PaymentType(rawValue: typeString) else {
-            print("❌ Invalid payment method record format")
+            Logger.cloudKitPaymentMethod.error("Invalid payment method record format encountered.")
             return nil
         }
         
@@ -279,13 +304,17 @@ class CloudKitPaymentMethodService: ObservableObject {
     // MARK: - Migration from Local Storage
     
     func migrateLocalPaymentMethodsToCloudKit() async throws {
-        print("🔄 Migrating local payment methods to CloudKit...")
+        Logger.cloudKitPaymentMethod.notice(
+            "Migrating local payment methods to CloudKit [organization=\(organizationID, privacy: .private(mask: .hash))]"
+        )
         
         // Load payment methods from UserDefaults
         let key = "paymentMethods_\(organizationID)"
         guard let data = UserDefaults.standard.data(forKey: key),
               let localPaymentMethods = try? JSONDecoder().decode([PaymentMethod].self, from: data) else {
-            print("📋 No local payment methods found to migrate")
+            Logger.cloudKitPaymentMethod.info(
+                "No local payment methods were found for migration [organization=\(organizationID, privacy: .private(mask: .hash))]"
+            )
             return
         }
         
@@ -299,14 +328,18 @@ class CloudKitPaymentMethodService: ObservableObject {
                 try await savePaymentMethodToCloudKit(paymentMethod)
                 migratedCount += 1
             } catch {
-                print("❌ Failed to migrate payment method: \(paymentMethod.name) - \(error)")
+                Logger.cloudKitPaymentMethod.error(
+                    "Failed to migrate payment method [organization=\(organizationID, privacy: .private(mask: .hash)), method=\(paymentMethod.name, privacy: .private(mask: .hash)), error=\(error.localizedDescription, privacy: .public)]"
+                )
             }
         }
         
         // Clear local storage after successful migration
         if migratedCount > 0 {
             UserDefaults.standard.removeObject(forKey: key)
-            print("✅ Migrated \(migratedCount) payment methods to CloudKit and cleared local storage")
+            Logger.cloudKitPaymentMethod.notice(
+                "Migrated local payment methods to CloudKit and cleared local storage [organization=\(organizationID, privacy: .private(mask: .hash)), count=\(migratedCount, privacy: .public)]"
+            )
         }
     }
 }
