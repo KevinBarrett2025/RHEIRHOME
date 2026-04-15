@@ -16,6 +16,7 @@
 - `ProjectStore`
 - `ProjectRepository`
 - `OrganizationProjectSyncStore`
+- `ProjectAccessStore`
 - `ReceiptProjectStore`
 - `ReceiptIntelligenceStore`
 - `LaborStore`
@@ -33,9 +34,9 @@
 - `SignInWithAppleCoordinator` structured logging
 
 ## Current Validation Baseline
-- Simulator build path: `mcp__xcodebuildmcp__build_sim` with `extraArgs=["-derivedDataPath","/tmp/rheir_gateA_phase1e_mcp_dd"]`
-- Focused parity path: `mcp__xcodebuildmcp__test_sim` with `extraArgs=["-derivedDataPath","/tmp/rheir_parity_phase1e_mcp_dd","-only-testing:RHEIRTests"]`
-- Latest focused parity count: `26/26`
+- Simulator build path: `mcp__xcodebuildmcp__build_sim` with `extraArgs=["-derivedDataPath","/tmp/rheir_gateA_phase1f_mcp_dd"]`
+- Focused parity path: `mcp__xcodebuildmcp__test_sim` with `extraArgs=["-derivedDataPath","/tmp/rheir_parity_phase1f_mcp_dd","-only-testing:RHEIRTests"]`
+- Latest focused parity count: `27/27`
 
 ## Known Residual Risks
 - Remaining raw `print(...)` statements still exist in active production files outside the hardened receipt/project flow.

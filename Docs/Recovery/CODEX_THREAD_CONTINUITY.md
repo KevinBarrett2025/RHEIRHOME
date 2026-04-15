@@ -3,12 +3,12 @@
 ## Repo Truth
 - Repo Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Active Branch: `gm/rheir-hardening-phase1`
-- HEAD SHA: `12c38c0cf2ec69a6ddef025a03585f1da1a03bcb`
-- Last Commit: `12c38c0 Phase 1: replace auth session entry print tracing`
+- HEAD SHA: `d74a669e7eab5f575db48b8cfa42efbacbbad5db`
+- Last Commit: `d74a669 Phase 1: replace runtime sync print tracing`
 
 ## Current Objective
 - Stabilize the streamlined repo after the file-tree cleanup and sync-store extraction checkpoints.
-- Continue phase 1 hardening by reducing the remaining oversized active state owners and checkpoint the runtime sync logging cleanup slice.
+- Continue phase 1 hardening by checkpointing the project access coordination extraction slice.
 
 ## Current Working Set
 - Session flow now routes through `Shared/Views/Auth/AppSessionSupport.swift`.
@@ -16,6 +16,7 @@
 - The repo cleanup removed duplicate source trees and backup directories from the active working tree.
 - `ProjectViewModel` now contains the active `ProjectStore` and `ProjectRepository` seams so the target can compile without `project.pbxproj` edits.
 - `OrganizationProjectSyncStore` now owns organization-scoped project filtering, snapshot persistence, CloudKit merge/fetch/save helpers, zone setup, and assignment gating previously embedded in `ProjectViewModel`.
+- `ProjectAccessStore` now owns accessible-project normalization, assignment filtering, duplicate suppression, and selected-project reconciliation previously embedded in `ProjectViewModel`.
 - Active organization directory, vendor intelligence, and payment intelligence services now use structured `Logger` calls instead of raw `print(...)` tracing.
 - Active invite routing, organization creation, organization selection, and Sign in with Apple coordination now use structured `Logger` calls instead of raw `print(...)` tracing.
 - Active offline sync/storage, CloudKit project service, CloudKit zone management, and top-level CloudKit runtime coordination now use structured `Logger` calls instead of raw `print(...)` tracing.
@@ -31,10 +32,11 @@
 - Active project-lifecycle and landing-page refresh logs now use structured `Logger.project` in the main organization/project flow.
 - Active receipt entry, cache recomputation, and receipt-intelligence flows now use structured `Logger.receiptWorkflow` / `Logger.receiptIntelligence` instead of raw `print(...)` tracing in the compiled receipt paths.
 - Focused tests for invite parsing, cache migration, project-store persistence, receipt-intelligence retention, cache clearing, labor aggregation/validation, company-state bucketing, team-member store behavior, and receipt project-resolution behavior now live in `RHEIRTests/RHEIRTests.swift`.
+- Focused tests for project access normalization and assignment filtering now live in `RHEIRTests/RHEIRTests.swift`.
 - The current working slice has exact simulator evidence recorded:
-  - Gate A `build_sim`: PASS (`mcp__xcodebuildmcp__build_sim` with `-derivedDataPath /tmp/rheir_gateA_phase1e_mcp_dd`)
-  - Focused parity `test_sim -only-testing:RHEIRTests`: PASS (`mcp__xcodebuildmcp__test_sim` with `-derivedDataPath /tmp/rheir_parity_phase1e_mcp_dd`, `26/26`)
-  - Direct `xcodebuild` CLI evidence for this slice is still unstable in the current local CoreSimulator environment (`/tmp/rheir_gateA_20260415_phase1e.log`)
+  - Gate A `build_sim`: PASS (`mcp__xcodebuildmcp__build_sim` with `-derivedDataPath /tmp/rheir_gateA_phase1f_mcp_dd`)
+  - Focused parity `test_sim -only-testing:RHEIRTests`: PASS (`mcp__xcodebuildmcp__test_sim` with `-derivedDataPath /tmp/rheir_parity_phase1f_mcp_dd`, `27/27`)
+  - Direct `xcodebuild` CLI evidence remains less stable than the MCP simulator path in the current local CoreSimulator environment
 
 ## Known Constraints
 - `Shared/Views/Auth/LoginView.swift` already contained user edits before this thread resumed.
@@ -42,7 +44,7 @@
 - This repo follows a repo-local STS equivalent defined in the root governance docs because the original STS spine docs were not present here.
 
 ## Next Required Action
-1. Commit the runtime sync logging cleanup slice without staging `Shared/Views/Auth/LoginView.swift`, `rheir_knowledge_database.json`, or `RHEIRmemories.csv`.
-2. Continue the next oversized-state split on top of `OrganizationProjectSyncStore`, likely around company/project coordination.
+1. Commit the project access coordination extraction slice without staging `Shared/Views/Auth/LoginView.swift`, `rheir_knowledge_database.json`, or `RHEIRmemories.csv`.
+2. Continue the remaining company/project coordination cleanup, starting with moving `CompanyStore` out of `MasterCompanySettingsView.swift`.
 3. Replace the remaining raw `print(...)` tracing in the active production files outside the hardened sync/runtime slice.
 4. Preserve the repo-local STS docs as the source of workflow truth until a canonical authority/promo structure exists for this repository.

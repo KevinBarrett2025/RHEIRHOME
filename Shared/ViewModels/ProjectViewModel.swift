@@ -64,6 +64,7 @@ class ProjectViewModel: ObservableObject {
     private let projectStore: ProjectStore
     private let projectRepository: ProjectRepository
     private let organizationProjectSyncStore: OrganizationProjectSyncStore
+    private let projectAccessStore: ProjectAccessStore
     let receiptIntelligenceStore: ReceiptIntelligenceStore
     let receiptProjectStore: ReceiptProjectStore
     let laborStore: LaborStore
@@ -83,6 +84,7 @@ class ProjectViewModel: ObservableObject {
         projectStore: ProjectStore = ProjectStore(),
         projectRepository: ProjectRepository = CloudKitProjectRepository(),
         organizationProjectSyncStore: OrganizationProjectSyncStore? = nil,
+        projectAccessStore: ProjectAccessStore = ProjectAccessStore(),
         receiptIntelligenceStore: ReceiptIntelligenceStore = ReceiptIntelligenceStore(),
         receiptProjectStore: ReceiptProjectStore = ReceiptProjectStore(),
         laborStore: LaborStore = LaborStore(),
@@ -104,6 +106,7 @@ class ProjectViewModel: ObservableObject {
                 projectStore: projectStore,
                 projectRepository: projectRepository
             )
+        self.projectAccessStore = projectAccessStore
         self.receiptIntelligenceStore = receiptIntelligenceStore
         self.receiptProjectStore = receiptProjectStore
         self.laborStore = laborStore
@@ -831,14 +834,19 @@ class ProjectViewModel: ObservableObject {
             cachedOrganizationProjects: organizationProjects,
             organizationID: currentOrganizationID
         )
+        let accessState = projectAccessStore.unrestrictedState(
+            organizationProjects: refreshResult.organizationProjects,
+            selectedProject: selectedProject
+        )
 
         let newOrganizationProjectIDs = Set(refreshResult.organizationProjects.map(\.id))
-        let newAccessibleProjectIDs = Set(refreshResult.accessibleProjects.map(\.id))
+        let newAccessibleProjectIDs = Set(accessState.accessibleProjects.map(\.id))
         let hasChanged =
             previousOrganizationCount != refreshResult.organizationProjects.count
             || previousOrganizationProjectIDs != newOrganizationProjectIDs
-            || accessibleProjects.count != refreshResult.accessibleProjects.count
+            || accessibleProjects.count != accessState.accessibleProjects.count
             || previousAccessibleProjectIDs != newAccessibleProjectIDs
+            || selectedProject?.id != accessState.selectedProject?.id
 
         guard hasChanged else {
             Logger.project.debug(
@@ -849,7 +857,14 @@ class ProjectViewModel: ObservableObject {
 
         if let currentOrgID = currentOrganizationID {
             organizationProjects = refreshResult.organizationProjects
-            accessibleProjects = refreshResult.accessibleProjects
+            accessibleProjects = accessState.accessibleProjects
+            selectedProject = accessState.selectedProject
+
+            if accessState.duplicateCount > 0 {
+                Logger.project.warning(
+                    "Normalized duplicate organization projects during refresh [org=\(currentOrgID, privacy: .private(mask: .hash)) removed=\(accessState.duplicateCount, privacy: .public)]"
+                )
+            }
 
             Logger.project.notice(
                 "Updated organization project list [org=\(currentOrgID, privacy: .private(mask: .hash)) current=\(self.organizationProjects.count, privacy: .public) previous=\(previousOrganizationCount, privacy: .public)]"
@@ -861,40 +876,43 @@ class ProjectViewModel: ObservableObject {
         } else {
             Logger.project.notice("Clearing organization-scoped projects because no organization is active.")
             organizationProjects = refreshResult.organizationProjects
-            accessibleProjects = refreshResult.accessibleProjects
+            accessibleProjects = accessState.accessibleProjects
+            selectedProject = accessState.selectedProject
         }
     }
     
     internal func updateAccessibleProjects() {
         let previousCount = accessibleProjects.count
-        let newAccessibleProjects = organizationProjects
-        
-        let hasChanged = newAccessibleProjects.count != previousCount ||
-                        !Set(newAccessibleProjects.map { $0.id }).isSubset(of: Set(accessibleProjects.map { $0.id }))
+        let previousSelectedProjectID = selectedProject?.id
+        let accessState = projectAccessStore.unrestrictedState(
+            organizationProjects: organizationProjects,
+            selectedProject: selectedProject
+        )
+        let newAccessibleProjects = accessState.accessibleProjects
+        let newAccessibleProjectIDs = Set(newAccessibleProjects.map(\.id))
+        let previousAccessibleProjectIDs = Set(accessibleProjects.map(\.id))
+
+        let hasChanged = newAccessibleProjects.count != previousCount
+            || newAccessibleProjectIDs != previousAccessibleProjectIDs
+            || previousSelectedProjectID != accessState.selectedProject?.id
         
         if hasChanged {
             accessibleProjects = newAccessibleProjects
+            selectedProject = accessState.selectedProject
 
             Logger.project.notice(
                 "Updated accessible projects [current=\(self.accessibleProjects.count, privacy: .public) previous=\(previousCount, privacy: .public)]"
             )
 
-            let uniqueIDs = Set(accessibleProjects.map { $0.id })
-            if uniqueIDs.count != accessibleProjects.count {
-                Logger.project.warning("Detected duplicate accessible projects; normalizing list.")
-                var uniqueProjects: [Project] = []
-                var seenIDs: Set<UUID> = []
-                
-                for project in accessibleProjects {
-                    if !seenIDs.contains(project.id) {
-                        uniqueProjects.append(project)
-                        seenIDs.insert(project.id)
-                    }
-                }
-                
-                accessibleProjects = uniqueProjects
+            if accessState.duplicateCount > 0 {
+                Logger.project.warning(
+                    "Normalized duplicate accessible projects [removed=\(accessState.duplicateCount, privacy: .public)]"
+                )
+            }
+
+            if previousSelectedProjectID != nil, accessState.selectedProject == nil {
                 Logger.project.notice(
-                    "Normalized accessible project list [count=\(self.accessibleProjects.count, privacy: .public)]"
+                    "Deselected project because it is no longer accessible."
                 )
             }
         } else {
@@ -1608,7 +1626,8 @@ class ProjectViewModel: ObservableObject {
             "Saved project assignment snapshot [org=\(currentOrgID, privacy: .private(mask: .hash)) count=\(projectIDs.count, privacy: .public)]"
         )
 
-        let assignmentResult = organizationProjectSyncStore.projectAssignmentResult(
+        let previousSelectedProjectID = selectedProject?.id
+        let assignmentResult = projectAccessStore.assignmentState(
             projectIDs: projectIDs,
             organizationProjects: organizationProjects,
             selectedProject: selectedProject
@@ -1617,7 +1636,7 @@ class ProjectViewModel: ObservableObject {
         if assignmentResult.appliesRestrictions {
             if assignmentResult.restrictedCount > 0 {
                 Logger.project.notice(
-                    "Applied restricted project access [allowed=\(assignmentResult.accessibleProjects.count, privacy: .public) restricted=\(assignmentResult.restrictedCount, privacy: .public)]"
+                    "Applied restricted project access [allowed=\(assignmentResult.accessState.accessibleProjects.count, privacy: .public) restricted=\(assignmentResult.restrictedCount, privacy: .public)]"
                 )
             }
         } else {
@@ -1626,13 +1645,19 @@ class ProjectViewModel: ObservableObject {
             )
         }
 
-        accessibleProjects = assignmentResult.accessibleProjects
+        accessibleProjects = assignmentResult.accessState.accessibleProjects
 
-        if assignmentResult.selectedProject == nil, selectedProject != nil {
+        if assignmentResult.accessState.duplicateCount > 0 {
+            Logger.project.warning(
+                "Normalized duplicate projects while applying access restrictions [removed=\(assignmentResult.accessState.duplicateCount, privacy: .public)]"
+            )
+        }
+
+        if previousSelectedProjectID != nil, assignmentResult.accessState.selectedProject == nil {
             selectedProject = nil
             Logger.project.notice("Deselected project because it is no longer accessible.")
         } else {
-            selectedProject = assignmentResult.selectedProject
+            selectedProject = assignmentResult.accessState.selectedProject
         }
         
         if isUsingCloudKitForOrganizationData {
@@ -1700,11 +1725,91 @@ struct OrganizationProjectMergeResult {
     let localFallbackCount: Int
 }
 
-struct OrganizationProjectAssignmentResult {
+struct ProjectAccessState {
     let accessibleProjects: [Project]
     let selectedProject: Project?
+    let duplicateCount: Int
+}
+
+struct ProjectAssignmentAccessState {
+    let accessState: ProjectAccessState
     let restrictedCount: Int
     let appliesRestrictions: Bool
+}
+
+final class ProjectAccessStore {
+    func unrestrictedState(
+        organizationProjects: [Project],
+        selectedProject: Project?
+    ) -> ProjectAccessState {
+        let normalizedProjects = normalizedProjects(from: organizationProjects)
+
+        return ProjectAccessState(
+            accessibleProjects: normalizedProjects,
+            selectedProject: resolvedSelectedProject(
+                selectedProject,
+                accessibleProjects: normalizedProjects
+            ),
+            duplicateCount: organizationProjects.count - normalizedProjects.count
+        )
+    }
+
+    func assignmentState(
+        projectIDs: [String],
+        organizationProjects: [Project],
+        selectedProject: Project?
+    ) -> ProjectAssignmentAccessState {
+        let unrestrictedState = unrestrictedState(
+            organizationProjects: organizationProjects,
+            selectedProject: selectedProject
+        )
+        let assignedUUIDs = projectIDs.compactMap(UUID.init(uuidString:))
+        let appliesRestrictions = !assignedUUIDs.isEmpty
+        let accessibleProjects: [Project]
+
+        if appliesRestrictions {
+            accessibleProjects = unrestrictedState.accessibleProjects.filter { assignedUUIDs.contains($0.id) }
+        } else {
+            accessibleProjects = unrestrictedState.accessibleProjects
+        }
+
+        return ProjectAssignmentAccessState(
+            accessState: ProjectAccessState(
+                accessibleProjects: accessibleProjects,
+                selectedProject: resolvedSelectedProject(
+                    unrestrictedState.selectedProject,
+                    accessibleProjects: accessibleProjects
+                ),
+                duplicateCount: unrestrictedState.duplicateCount
+            ),
+            restrictedCount: unrestrictedState.accessibleProjects.count - accessibleProjects.count,
+            appliesRestrictions: appliesRestrictions
+        )
+    }
+
+    private func resolvedSelectedProject(
+        _ selectedProject: Project?,
+        accessibleProjects: [Project]
+    ) -> Project? {
+        guard let selectedProject else {
+            return nil
+        }
+
+        return accessibleProjects.contains(where: { $0.id == selectedProject.id })
+            ? selectedProject
+            : nil
+    }
+
+    private func normalizedProjects(from projects: [Project]) -> [Project] {
+        var normalizedProjects: [Project] = []
+        var seenIDs: Set<UUID> = []
+
+        for project in projects where seenIDs.insert(project.id).inserted {
+            normalizedProjects.append(project)
+        }
+
+        return normalizedProjects
+    }
 }
 
 final class OrganizationProjectSyncStore {
@@ -1785,37 +1890,6 @@ final class OrganizationProjectSyncStore {
         return OrganizationProjectMergeResult(
             projects: mergedProjects,
             localFallbackCount: mergedProjects.count - cloudKitProjects.count
-        )
-    }
-
-    func projectAssignmentResult(
-        projectIDs: [String],
-        organizationProjects: [Project],
-        selectedProject: Project?
-    ) -> OrganizationProjectAssignmentResult {
-        let assignedUUIDs = projectIDs.compactMap(UUID.init(uuidString:))
-        let appliesRestrictions = !assignedUUIDs.isEmpty
-        let accessibleProjects: [Project]
-
-        if appliesRestrictions {
-            accessibleProjects = organizationProjects.filter { assignedUUIDs.contains($0.id) }
-        } else {
-            accessibleProjects = organizationProjects
-        }
-
-        let updatedSelectedProject: Project?
-        if let selectedProject,
-           accessibleProjects.contains(where: { $0.id == selectedProject.id }) {
-            updatedSelectedProject = selectedProject
-        } else {
-            updatedSelectedProject = nil
-        }
-
-        return OrganizationProjectAssignmentResult(
-            accessibleProjects: accessibleProjects,
-            selectedProject: updatedSelectedProject,
-            restrictedCount: organizationProjects.count - accessibleProjects.count,
-            appliesRestrictions: appliesRestrictions
         )
     }
 

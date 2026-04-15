@@ -3,7 +3,7 @@
 ## Repo
 - Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Branch: `gm/rheir-hardening-phase1`
-- HEAD: `12c38c0cf2ec69a6ddef025a03585f1da1a03bcb`
+- HEAD: `d74a669e7eab5f575db48b8cfa42efbacbbad5db`
 
 ## Active Initiative
 - RHEIR hardening and streamlining, phase 1 foundation pass.
@@ -19,6 +19,7 @@
 - Added `ProjectStore` for organization-scoped local project/team-member/assignment persistence.
 - Added `ProjectRepository` for CloudKit project fetch/save and project assignment persistence.
 - Added `OrganizationProjectSyncStore` for organization-scoped project filtering, snapshot persistence, CloudKit merge/fetch/save helpers, zone setup, and assignment gating.
+- Added `ProjectAccessStore` for accessible-project normalization, assignment filtering, duplicate suppression, and selected-project reconciliation.
 - Added `TeamMemberStore` for team-member directory merges, organization verification, cache building, and logged-hour cleanup.
 - Added `ReceiptProjectStore` for receipt target resolution, cross-list project resynchronization, and hardened project-scoped receipt updates.
 - Added `LaborStore` for labor-hour aggregation, totals, and validation.
@@ -39,10 +40,11 @@
 - Replaced raw `print(...)` tracing in the active deep-link, organization-entry, and Sign in with Apple coordination flow with structured `Logger` usage.
 - Replaced raw `print(...)` tracing in `OfflineDataManager`, `CloudKitProjectService`, `CloudKitZoneManager`, and `RHEIRCloudKitManager` with structured `Logger` usage and lower-noise runtime sync logging.
 - Added focused persistence/session tests in `RHEIRTests/RHEIRTests.swift` for invite parsing, legacy cache migration, project storage, receipt intelligence retention, cache clearing, labor aggregation/validation, company-state bucketing, team-member store behavior, and receipt project-resolution behavior.
+- Added focused parity for project access normalization and assignment filtering in `RHEIRTests/RHEIRTests.swift`.
 
 ## In Progress
 - Replace remaining unsafe logging/state hacks in the rest of the active codebase outside the hardened runtime sync slice.
-- Continue shrinking the remaining oversized active state owners around the new sync store boundary.
+- Continue shrinking the remaining oversized active state owners around the new sync and access store boundaries.
 - Expand deterministic parity beyond the focused `RHEIRTests` suite.
 
 ## Blockers
@@ -50,9 +52,9 @@
 - Device-targeted Gate A remains blocked by signing because automatic provisioning is disabled for `com.RheirHome.RHEIR`.
 
 ## Latest Evidence
-- Gate A: `mcp__xcodebuildmcp__build_sim` with `extraArgs=["-derivedDataPath","/tmp/rheir_gateA_phase1e_mcp_dd"]` -> PASS
-- Focused parity: `mcp__xcodebuildmcp__test_sim` with `extraArgs=["-derivedDataPath","/tmp/rheir_parity_phase1e_mcp_dd","-only-testing:RHEIRTests"]` -> PASS (`26/26`)
-- Direct CLI gate path for the same slice remains unstable in the local simulator environment (`/tmp/rheir_gateA_20260415_phase1e.log`)
+- Gate A: `mcp__xcodebuildmcp__build_sim` with `extraArgs=["-derivedDataPath","/tmp/rheir_gateA_phase1f_mcp_dd"]` -> PASS
+- Focused parity: `mcp__xcodebuildmcp__test_sim` with `extraArgs=["-derivedDataPath","/tmp/rheir_parity_phase1f_mcp_dd","-only-testing:RHEIRTests"]` -> PASS (`27/27`)
+- Direct CLI gate path remains less stable than the MCP simulator path in the local simulator environment
 
 ## Next Milestone
-- Checkpoint the runtime sync logging cleanup slice, then continue the remaining production logging cleanup and the next oversized-state split around company/project coordination.
+- Checkpoint the project access coordination extraction slice, then continue the remaining production logging cleanup and the next company/project coordination split around `CompanyStore`.

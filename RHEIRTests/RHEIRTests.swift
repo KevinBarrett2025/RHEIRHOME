@@ -325,43 +325,6 @@ struct OrganizationProjectSyncStoreTests {
     }
 
     @Test
-    func filtersAssignedProjectsAndClearsUnavailableSelection() {
-        let orgID = "org-assignments"
-        let allowedProject = Project(
-            name: "Allowed Project",
-            client: "Client A",
-            totalBudget: 100000,
-            startDate: .now,
-            endDate: .now.addingTimeInterval(86400),
-            organizationID: orgID
-        )
-        let blockedProject = Project(
-            name: "Blocked Project",
-            client: "Client B",
-            totalBudget: 60000,
-            startDate: .now,
-            endDate: .now.addingTimeInterval(86400),
-            organizationID: orgID
-        )
-
-        let syncStore = OrganizationProjectSyncStore(
-            projectStore: ProjectStore(),
-            projectRepository: RecordingProjectRepository()
-        )
-
-        let result = syncStore.projectAssignmentResult(
-            projectIDs: [allowedProject.id.uuidString],
-            organizationProjects: [allowedProject, blockedProject],
-            selectedProject: blockedProject
-        )
-
-        #expect(result.accessibleProjects.map(\.id) == [allowedProject.id])
-        #expect(result.selectedProject == nil)
-        #expect(result.restrictedCount == 1)
-        #expect(result.appliesRestrictions)
-    }
-
-    @Test
     func savesSnapshotAndDelegatesRepositoryPersistence() async throws {
         let suiteName = "OrganizationProjectSyncStoreTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
@@ -410,6 +373,84 @@ struct OrganizationProjectSyncStoreTests {
         #expect(repository.savedProjects.first?.organizationID == orgID)
         #expect(repository.savedAssignmentsByOrganization[orgID] == [project.id.uuidString])
         #expect(await syncStore.loadProjectAssignmentsFromCloudKit(organizationID: orgID) == [project.id.uuidString])
+    }
+}
+
+struct ProjectAccessStoreTests {
+
+    @Test
+    func filtersAssignedProjectsAndClearsUnavailableSelection() {
+        let orgID = "org-assignments"
+        let allowedProject = Project(
+            name: "Allowed Project",
+            client: "Client A",
+            totalBudget: 100000,
+            startDate: .now,
+            endDate: .now.addingTimeInterval(86400),
+            organizationID: orgID
+        )
+        let blockedProject = Project(
+            name: "Blocked Project",
+            client: "Client B",
+            totalBudget: 60000,
+            startDate: .now,
+            endDate: .now.addingTimeInterval(86400),
+            organizationID: orgID
+        )
+
+        let store = ProjectAccessStore()
+        let result = store.assignmentState(
+            projectIDs: [allowedProject.id.uuidString],
+            organizationProjects: [allowedProject, blockedProject],
+            selectedProject: blockedProject
+        )
+
+        #expect(result.accessState.accessibleProjects.map(\.id) == [allowedProject.id])
+        #expect(result.accessState.selectedProject == nil)
+        #expect(result.restrictedCount == 1)
+        #expect(result.appliesRestrictions)
+    }
+
+    @Test
+    func normalizesDuplicateProjectsBeforeApplyingSelection() {
+        let orgID = "org-project-access"
+        let selectedID = UUID()
+        let primaryProject = Project(
+            id: selectedID,
+            name: "Primary Project",
+            client: "Client A",
+            totalBudget: 100000,
+            startDate: .now,
+            endDate: .now.addingTimeInterval(86400),
+            organizationID: orgID
+        )
+        let duplicateProject = Project(
+            id: selectedID,
+            name: "Duplicate Project",
+            client: "Client A",
+            totalBudget: 100000,
+            startDate: .now,
+            endDate: .now.addingTimeInterval(86400),
+            organizationID: orgID
+        )
+        let secondaryProject = Project(
+            name: "Secondary Project",
+            client: "Client B",
+            totalBudget: 50000,
+            startDate: .now,
+            endDate: .now.addingTimeInterval(86400),
+            organizationID: orgID
+        )
+
+        let store = ProjectAccessStore()
+        let result = store.unrestrictedState(
+            organizationProjects: [primaryProject, duplicateProject, secondaryProject],
+            selectedProject: duplicateProject
+        )
+
+        #expect(result.accessibleProjects.map(\.id) == [selectedID, secondaryProject.id])
+        #expect(result.selectedProject?.id == selectedID)
+        #expect(result.duplicateCount == 1)
     }
 }
 
