@@ -2,6 +2,11 @@ import Foundation
 import CloudKit
 import UIKit
 import Combine
+import OSLog
+
+extension Logger {
+    static let cloudKitPhoto = Logger(subsystem: "com.RheirHome.RHEIR", category: "cloudKitPhoto")
+}
 
 /// Service for managing receipt, progress, and task photos with CloudKit CKAssets
 public class CloudKitPhotoService: ObservableObject {
@@ -63,7 +68,9 @@ public class CloudKitPhotoService: ObservableObject {
             case .success(let record):
                 return ReceiptPhoto.fromCKRecord(record)
             case .failure(let error):
-                print("❌ Error fetching receipt photo: \(error)")
+                Logger.cloudKitPhoto.error(
+                    "Failed to fetch receipt photo [error=\(error.localizedDescription, privacy: .public)]"
+                )
                 return nil
             }
         }
@@ -117,7 +124,9 @@ public class CloudKitPhotoService: ObservableObject {
             case .success(let record):
                 return ProgressPhoto.fromCKRecord(record)
             case .failure(let error):
-                print("❌ Error fetching progress photo: \(error)")
+                Logger.cloudKitPhoto.error(
+                    "Failed to fetch progress photo [error=\(error.localizedDescription, privacy: .public)]"
+                )
                 return nil
             }
         }
@@ -171,7 +180,9 @@ public class CloudKitPhotoService: ObservableObject {
             case .success(let record):
                 return TaskPhoto.fromCKRecord(record)
             case .failure(let error):
-                print("❌ Error fetching task photo: \(error)")
+                Logger.cloudKitPhoto.error(
+                    "Failed to fetch task photo [error=\(error.localizedDescription, privacy: .public)]"
+                )
                 return nil
             }
         }
@@ -203,10 +214,14 @@ public class CloudKitPhotoService: ObservableObject {
                 )
                 uploadedPhotos.append(taskPhoto)
                 
-                print("✅ TaskPhoto uploaded: \(taskPhoto.id)")
+                Logger.cloudKitPhoto.notice(
+                    "Uploaded task photo to CloudKit [photo=\(taskPhoto.id.uuidString, privacy: .private(mask: .hash))]"
+                )
                 
             } catch {
-                print("❌ Failed to upload task photo \(index): \(error)")
+                Logger.cloudKitPhoto.error(
+                    "Failed to upload task photo [index=\(index, privacy: .public) error=\(error.localizedDescription, privacy: .public)]"
+                )
                 // Continue with other photos even if one fails
             }
         }
@@ -412,7 +427,9 @@ public class CloudKitPhotoService: ObservableObject {
             case .success(let record):
                 return TaskPhoto.fromCKRecord(record)
             case .failure(let error):
-                print("❌ Error fetching task photo by ID: \(error)")
+                Logger.cloudKitPhoto.error(
+                    "Failed to fetch task photo by identifier [error=\(error.localizedDescription, privacy: .public)]"
+                )
                 return nil
             }
         }
@@ -474,6 +491,8 @@ public class CloudKitPhotoService: ObservableObject {
             try await deletePhoto(recordID: recordID)
         }
         
-        print("✅ Deleted \(photoIDs.count) task photos from CloudKit")
+        Logger.cloudKitPhoto.notice(
+            "Deleted task photos from CloudKit [count=\(photoIDs.count, privacy: .public)]"
+        )
     }
 }

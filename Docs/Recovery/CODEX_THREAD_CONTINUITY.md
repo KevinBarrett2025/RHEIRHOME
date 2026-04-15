@@ -7,8 +7,8 @@
 - Last Commit: `9ff2a80 Phase 1: replace vendor management service print tracing`
 
 ## Current Objective
-- Preserve the repo-tracked ship-readiness checklist and checkpoint the `Shared/Services/Organization/OrganizationService.swift` logging cleanup slice.
-- Queue the next highest-value remaining production service seam in `Shared/Services/CloudKitPhotoService.swift` after this checkpoint lands.
+- Preserve the repo-tracked ship-readiness checklist and checkpoint the `Shared/Services/CloudKitPhotoService.swift` logging cleanup slice.
+- Queue the next highest-value remaining production service seam in `Shared/Services/ProductionChatGPTService.swift` after this checkpoint lands.
 
 ## Current Working Set
 - Session flow now routes through `Shared/Views/Auth/AppSessionSupport.swift`.
@@ -66,13 +66,14 @@
 - `Shared/Services/EnhancedReceiptService.swift` now uses structured `Logger.receiptOCR` calls instead of raw `print(...)` tracing.
 - `Shared/Services/VendorManagementService.swift` now uses structured `Logger.company` calls instead of raw `print(...)` tracing.
 - `Shared/Services/Organization/OrganizationService.swift` now uses structured `Logger.organizationService` calls instead of raw `print(...)` tracing.
-- `Shared/Services/CloudKitPhotoService.swift` is the next highest-value remaining production service seam by fresh raw `print(...)` residue count.
+- `Shared/Services/CloudKitPhotoService.swift` now uses structured `Logger.cloudKitPhoto` calls instead of raw `print(...)` tracing.
+- `Shared/Services/ProductionChatGPTService.swift` is the next highest-value remaining production service seam by fresh raw `print(...)` residue count.
 - Other non-hardened seams still contain raw `print(...)` tracing.
 - Focused tests for invite parsing, cache migration, project-store persistence, receipt-intelligence retention, cache clearing, labor aggregation/validation, company-state bucketing, team-member store behavior, and receipt project-resolution behavior now live in `RHEIRTests/RHEIRTests.swift`.
 - Focused tests for project access normalization and assignment filtering now live in `RHEIRTests/RHEIRTests.swift`.
 - The current working slice has exact simulator evidence recorded:
-  - Gate A `build_sim`: PASS (`mcp__xcodebuildmcp__build_sim` with `-derivedDataPath /tmp/rheir_gateA_phase1ao_mcp_dd`)
-  - Focused parity `test_sim -only-testing:RHEIRTests`: PASS (`mcp__xcodebuildmcp__test_sim` with `-derivedDataPath /tmp/rheir_parity_phase1ao_mcp_dd`, `27/27`)
+  - Gate A `build_sim`: PASS (`mcp__xcodebuildmcp__build_sim` with `-derivedDataPath /tmp/rheir_gateA_phase1ap_mcp_dd`)
+  - Focused parity `test_sim -only-testing:RHEIRTests`: PASS (`mcp__xcodebuildmcp__test_sim` with `-derivedDataPath /tmp/rheir_parity_phase1ap_mcp_dd`, `27/27`)
   - Direct `xcodebuild` CLI evidence remains less stable than the MCP simulator path in the current local CoreSimulator environment
 
 ## Known Constraints
@@ -82,6 +83,6 @@
 - This repo follows a repo-local STS equivalent defined in the root governance docs because the original STS spine docs were not present here.
 
 ## Next Required Action
-1. Commit the `Shared/Services/Organization/OrganizationService.swift` logging slice without staging `Shared/Views/Auth/LoginView.swift`, `rheir_knowledge_database.json`, `RHEIRmemories.csv`, or `RheirLogo 1024x1024.png`.
+1. Commit the `Shared/Services/CloudKitPhotoService.swift` logging slice without staging `Shared/Views/Auth/LoginView.swift`, `rheir_knowledge_database.json`, `RHEIRmemories.csv`, or `RheirLogo 1024x1024.png`.
 2. Preserve the repo-local STS docs and `SHIP_READINESS_CHECKLIST.md` as the current release-planning truth for this repository.
-3. Continue the next logging-hardening seam in `Shared/Services/CloudKitPhotoService.swift` after the `OrganizationService.swift` checkpoint lands.
+3. Continue the next logging-hardening seam in `Shared/Services/ProductionChatGPTService.swift` after the `CloudKitPhotoService.swift` checkpoint lands.
