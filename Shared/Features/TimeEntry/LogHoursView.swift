@@ -1,4 +1,5 @@
 import SwiftUI
+import OSLog
 
 struct LogHoursView: View {
     @EnvironmentObject var projectVM: ProjectViewModel
@@ -27,7 +28,9 @@ struct LogHoursView: View {
         // FALLBACK: If no organization team members, create from project work activity
         guard let project = projectVM.selectedProject else { return [] }
         
-        print("🔧 FALLBACK: Creating team member options from project work activity")
+        Logger.teamMember.notice(
+            "Creating fallback team-member options from project work activity [project=\(project.id.uuidString, privacy: .private(mask: .hash))]"
+        )
         
         // Get unique employee names from logged hours
         let uniqueEmployeeNames = Set(project.loggedHours.map { $0.employee })
@@ -87,10 +90,14 @@ struct LogHoursView: View {
                             // Find default rate or use first available rate
                             if let defaultRate = member.rates.first(where: { $0.isDefault }) {
                                 selectedRate = defaultRate
-                                print("✅ Auto-filled default rate: $\(defaultRate.rate)/hr for \(member.name)")
+                                Logger.labor.info(
+                                    "Auto-filled default labor rate [teamMember=\(member.name, privacy: .private(mask: .hash)) rate=\(defaultRate.rate, privacy: .public)]"
+                                )
                             } else if let firstRate = member.rates.first {
                                 selectedRate = firstRate
-                                print("✅ Auto-filled first available rate: $\(firstRate.rate)/hr for \(member.name)")
+                                Logger.labor.info(
+                                    "Auto-filled first available labor rate [teamMember=\(member.name, privacy: .private(mask: .hash)) rate=\(firstRate.rate, privacy: .public)]"
+                                )
                             }
                         } else {
                             selectedRate = nil
@@ -267,9 +274,13 @@ struct LogHoursView: View {
                     selectedEmployee = availableTeamMembers.first
                 }
                 
-                print("📱 LogHoursView appeared - Available team members: \(availableTeamMembers.count)")
+                Logger.labor.info(
+                    "LogHoursView appeared [availableTeamMembers=\(availableTeamMembers.count, privacy: .public)]"
+                )
                 for member in availableTeamMembers {
-                    print("  👤 \(member.name) - \(member.rates.count) rates")
+                    Logger.teamMember.debug(
+                        "LogHoursView team member option [teamMember=\(member.name, privacy: .private(mask: .hash)) rates=\(member.rates.count, privacy: .public)]"
+                    )
                 }
             }
         }
@@ -279,11 +290,13 @@ struct LogHoursView: View {
         guard let employee = selectedEmployee,
               let rate = selectedRate,
               let project = projectVM.selectedProject else { 
-            print("❌ Cannot save hours - missing required data")
+            Logger.labor.error("Cannot save hours because required data is missing in LogHoursView.")
             return 
         }
         
-        print("💾 Saving hours for \(employee.name) on project \(project.name)")
+        Logger.labor.notice(
+            "Saving hours from LogHoursView [teamMember=\(employee.name, privacy: .private(mask: .hash)) project=\(project.id.uuidString, privacy: .private(mask: .hash)) rate=\(rate.rate, privacy: .public)]"
+        )
         
         // Calculate lunch break duration if present
         let lunchDuration: Double? = {
@@ -304,7 +317,7 @@ struct LogHoursView: View {
             employeeID: employee.id // CRITICAL: Pass the team member ID
         )
         
-        print("✅ Hours logged successfully")
+        Logger.labor.notice("Hours logged successfully from LogHoursView.")
         isPresented = false
     }
 }
