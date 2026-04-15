@@ -1,7 +1,12 @@
 import Foundation
 import Combine
 import CloudKit
+import OSLog
 import SwiftUI
+
+extension Logger {
+    static let organizationSharing = Logger(subsystem: "com.RheirHome.RHEIR", category: "organizationSharing")
+}
 
 /// Service to manage organization-based CloudKit zones and sharing
 class CloudKitOrganizationSharingService: ObservableObject {
@@ -19,7 +24,7 @@ class CloudKitOrganizationSharingService: ObservableObject {
         self.container = CKContainer(identifier: containerIdentifier)
         self.privateDatabase = container.privateCloudDatabase
         self.sharedDatabase = container.sharedCloudDatabase
-        print("🏢 CloudKitOrganizationSharingService initialized")
+        Logger.organizationSharing.info("Initialized organization sharing service.")
     }
     
     // MARK: - Zone Creation & Management
@@ -30,7 +35,9 @@ class CloudKitOrganizationSharingService: ObservableObject {
         let zoneID = CKRecordZone.ID(zoneName: zoneName)
         let zone = CKRecordZone(zoneID: zoneID)
         
-        print("🏢 Creating organization zone: \(zoneName)")
+        Logger.organizationSharing.info(
+            "Creating organization sharing zone [organization=\(organizationID, privacy: .private(mask: .hash)), zone=\(zoneName, privacy: .private(mask: .hash))]"
+        )
         
         return Future<CKRecordZone, Error> { promise in
             let operation = CKModifyRecordZonesOperation(recordZonesToSave: [zone], recordZoneIDsToDelete: nil)
@@ -40,13 +47,17 @@ class CloudKitOrganizationSharingService: ObservableObject {
                 case .success(let (savedZones, _)):
                     if let savedZone = savedZones.first {
                         self.organizationZones[organizationID] = savedZone
-                        print("✅ Organization zone created: \(zoneName)")
+                        Logger.organizationSharing.notice(
+                            "Created organization sharing zone [organization=\(organizationID, privacy: .private(mask: .hash)), zone=\(zoneName, privacy: .private(mask: .hash))]"
+                        )
                         promise(.success(savedZone))
                     } else {
                         promise(.failure(CloudKitSharingError.zoneCreationFailed))
                     }
                 case .failure(let error):
-                    print("❌ Failed to create organization zone: \(error)")
+                    Logger.organizationSharing.error(
+                        "Failed to create organization sharing zone [organization=\(organizationID, privacy: .private(mask: .hash)), error=\(error.localizedDescription, privacy: .public)]"
+                    )
                     promise(.failure(error))
                 }
             }
@@ -69,7 +80,9 @@ class CloudKitOrganizationSharingService: ObservableObject {
                     zone.zoneID.zoneName.hasPrefix("zone_org_")
                 } ?? []
                 
-                print("🏢 Found \(orgZones.count) organization zones")
+                Logger.organizationSharing.notice(
+                    "Fetched organization sharing zones [count=\(orgZones.count, privacy: .public)]"
+                )
                 promise(.success(orgZones))
             }
         }
@@ -97,15 +110,21 @@ class CloudKitOrganizationSharingService: ObservableObject {
         record["maxMembers"] = 50 as CKRecordValue
         record["createdAt"] = Date() as CKRecordValue
         
-        print("🏢 Creating organization record in zone: \(zone.zoneID.zoneName)")
+        Logger.organizationSharing.info(
+            "Creating organization record in sharing zone [organization=\(organizationID, privacy: .private(mask: .hash)), zone=\(zone.zoneID.zoneName, privacy: .private(mask: .hash))]"
+        )
         
         return Future<CKRecord, Error> { promise in
             self.privateDatabase.save(record) { savedRecord, error in
                 if let error = error {
-                    print("❌ Failed to create organization record: \(error)")
+                    Logger.organizationSharing.error(
+                        "Failed to create organization record in sharing zone [organization=\(organizationID, privacy: .private(mask: .hash)), error=\(error.localizedDescription, privacy: .public)]"
+                    )
                     promise(.failure(error))
                 } else if let savedRecord = savedRecord {
-                    print("✅ Organization record created: \(name)")
+                    Logger.organizationSharing.notice(
+                        "Created organization record in sharing zone [organization=\(organizationID, privacy: .private(mask: .hash)), name=\(name, privacy: .private(mask: .hash))]"
+                    )
                     promise(.success(savedRecord))
                 } else {
                     promise(.failure(CloudKitSharingError.recordCreationFailed))
@@ -128,7 +147,9 @@ class CloudKitOrganizationSharingService: ObservableObject {
         share[CKShare.SystemFieldKey.title] = organizationRecord["name"] as? String
         share.publicPermission = .none // Private sharing only
         
-        print("🔗 Creating organization share for: \(organizationRecord.recordID.recordName)")
+        Logger.organizationSharing.info(
+            "Creating organization share [organization=\(organizationRecord.recordID.recordName, privacy: .private(mask: .hash))]"
+        )
         
         return Future<CKShare, Error> { promise in
             let operation = CKModifyRecordsOperation(
@@ -142,13 +163,17 @@ class CloudKitOrganizationSharingService: ObservableObject {
                     if let savedShare = savedRecords.first(where: { $0 is CKShare }) as? CKShare {
                         let orgID = organizationRecord.recordID.recordName
                         self.organizationShares[orgID] = savedShare
-                        print("✅ Organization share created successfully")
+                        Logger.organizationSharing.notice(
+                            "Created organization share [organization=\(orgID, privacy: .private(mask: .hash))]"
+                        )
                         promise(.success(savedShare))
                     } else {
                         promise(.failure(CloudKitSharingError.shareCreationFailed))
                     }
                 case .failure(let error):
-                    print("❌ Failed to create organization share: \(error)")
+                    Logger.organizationSharing.error(
+                        "Failed to create organization share [organization=\(organizationRecord.recordID.recordName, privacy: .private(mask: .hash)), error=\(error.localizedDescription, privacy: .public)]"
+                    )
                     promise(.failure(error))
                 }
             }
@@ -170,14 +195,18 @@ class CloudKitOrganizationSharingService: ObservableObject {
                 .eraseToAnyPublisher()
         }
         
-        print("👥 Adding participant \(email) to organization \(organizationID)")
+        Logger.organizationSharing.info(
+            "Adding participant to organization share [organization=\(organizationID, privacy: .private(mask: .hash)), invitee=\(email, privacy: .private(mask: .hash))]"
+        )
         
         return Future<CKShare.Participant, Error> { promise in
             let lookupInfo = CKUserIdentity.LookupInfo(emailAddress: email)
             
             self.container.discoverUserIdentity(withUserRecordID: nil, userIdentityLookupInfo: lookupInfo) { identity, error in
                 if let error = error {
-                    print("❌ Failed to discover user identity: \(error)")
+                    Logger.organizationSharing.error(
+                        "Failed to discover identity for organization participant [organization=\(organizationID, privacy: .private(mask: .hash)), invitee=\(email, privacy: .private(mask: .hash)), error=\(error.localizedDescription, privacy: .public)]"
+                    )
                     promise(.failure(error))
                     return
                 }
@@ -197,10 +226,14 @@ class CloudKitOrganizationSharingService: ObservableObject {
                 // Save the updated share
                 self.privateDatabase.save(share) { savedShare, saveError in
                     if let saveError = saveError {
-                        print("❌ Failed to save updated share: \(saveError)")
+                        Logger.organizationSharing.error(
+                            "Failed to save updated organization share [organization=\(organizationID, privacy: .private(mask: .hash)), invitee=\(email, privacy: .private(mask: .hash)), error=\(saveError.localizedDescription, privacy: .public)]"
+                        )
                         promise(.failure(saveError))
                     } else {
-                        print("✅ Participant \(email) added to organization share")
+                        Logger.organizationSharing.notice(
+                            "Added participant to organization share [organization=\(organizationID, privacy: .private(mask: .hash)), invitee=\(email, privacy: .private(mask: .hash))]"
+                        )
                         promise(.success(participant))
                     }
                 }
@@ -266,15 +299,21 @@ class CloudKitOrganizationSharingService: ObservableObject {
             record["fullProjectData"] = projectData as CKRecordValue
         }
         
-        print("📋 Saving project '\(project.name)' to organization zone")
+        Logger.organizationSharing.info(
+            "Saving project to organization sharing zone [organization=\(organizationID, privacy: .private(mask: .hash)), project=\(project.name, privacy: .private(mask: .hash))]"
+        )
         
         return Future<CKRecord, Error> { promise in
             self.privateDatabase.save(record) { savedRecord, error in
                 if let error = error {
-                    print("❌ Failed to save project: \(error)")
+                    Logger.organizationSharing.error(
+                        "Failed to save project to organization sharing zone [organization=\(organizationID, privacy: .private(mask: .hash)), project=\(project.name, privacy: .private(mask: .hash)), error=\(error.localizedDescription, privacy: .public)]"
+                    )
                     promise(.failure(error))
                 } else if let savedRecord = savedRecord {
-                    print("✅ Project saved to organization zone")
+                    Logger.organizationSharing.notice(
+                        "Saved project to organization sharing zone [organization=\(organizationID, privacy: .private(mask: .hash)), project=\(project.name, privacy: .private(mask: .hash))]"
+                    )
                     promise(.success(savedRecord))
                 } else {
                     promise(.failure(CloudKitSharingError.recordCreationFailed))
@@ -289,11 +328,15 @@ class CloudKitOrganizationSharingService: ObservableObject {
     /// Generates a shareable URL for an organization
     func generateShareURL(for organizationID: String) -> URL? {
         guard let share = organizationShares[organizationID] else {
-            print("❌ No share found for organization: \(organizationID)")
+            Logger.organizationSharing.error(
+                "No organization share found when generating URL [organization=\(organizationID, privacy: .private(mask: .hash))]"
+            )
             return nil
         }
         
-        print("🔗 Generated share URL for organization: \(organizationID)")
+        Logger.organizationSharing.notice(
+            "Generated share URL for organization [organization=\(organizationID, privacy: .private(mask: .hash))]"
+        )
         return share.url
     }
     
@@ -312,11 +355,13 @@ class CloudKitOrganizationSharingService: ObservableObject {
                     
                     acceptOperation.perShareResultBlock = { metadata, result in
                         switch result {
-                        case .success(let share):
-                            print("✅ Successfully accepted organization share")
+                        case .success:
+                            Logger.organizationSharing.notice("Accepted organization share successfully.")
                             promise(.success(metadata))
                         case .failure(let error):
-                            print("❌ Failed to accept share: \(error)")
+                            Logger.organizationSharing.error(
+                                "Failed to accept organization share [error=\(error.localizedDescription, privacy: .public)]"
+                            )
                             promise(.failure(error))
                         }
                     }
@@ -324,7 +369,9 @@ class CloudKitOrganizationSharingService: ObservableObject {
                     self.container.add(acceptOperation)
                     
                 case .failure(let error):
-                    print("❌ Failed to fetch share metadata: \(error)")
+                    Logger.organizationSharing.error(
+                        "Failed to fetch organization share metadata [error=\(error.localizedDescription, privacy: .public)]"
+                    )
                     promise(.failure(error))
                 }
             }
