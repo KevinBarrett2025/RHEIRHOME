@@ -2,6 +2,7 @@ import Foundation
 import Combine
 import CloudKit
 import AuthenticationServices
+import OSLog
 
 /// CloudKitAuthService implements AuthService using CloudKit + Sign in with Apple.
 /// Its one credential‐based entry point is:
@@ -57,13 +58,15 @@ public class CloudKitAuthService: ObservableObject, AuthService {
         UserDefaults.standard.removeObject(forKey: "rheir_jwt_token")
         UserDefaults.standard.removeObject(forKey: "apple_user_id")
         
-        print("🔒 [CloudKit] User signed out and data cleared")
+        Logger.auth.notice("Signed out current CloudKit user and cleared local auth state.")
     }
     
     // MARK: - AuthService Protocol Implementation - Invite Method
     
     public func invite(email: String, orgID: String) -> AnyPublisher<Void, Error> {
-        print(" [CloudKit] Inviting \(email) to organization \(orgID)")
+        Logger.auth.notice(
+            "Creating basic organization invite [org=\(orgID, privacy: .private(mask: .hash)), invitee=\(email, privacy: .private(mask: .hash))]"
+        )
         
         return checkCloudKitAvailability()
             .flatMap { _ -> AnyPublisher<Void, Error> in
@@ -83,10 +86,14 @@ public class CloudKitAuthService: ObservableObject, AuthService {
                     privateDB.save(inviteRecord) { _, error in
                         DispatchQueue.main.async {
                             if let error = error {
-                                print(" [CloudKit] Failed to save invite: \(error)")
+                                Logger.auth.error(
+                                    "Failed to save basic organization invite [org=\(orgID, privacy: .private(mask: .hash)), invitee=\(email, privacy: .private(mask: .hash)), error=\(error.localizedDescription, privacy: .public)]"
+                                )
                                 promise(.failure(error))
                             } else {
-                                print(" [CloudKit] Invite saved successfully")
+                                Logger.auth.notice(
+                                    "Saved basic organization invite [org=\(orgID, privacy: .private(mask: .hash)), invitee=\(email, privacy: .private(mask: .hash))]"
+                                )
                                 promise(.success(()))
                             }
                         }
@@ -101,41 +108,45 @@ public class CloudKitAuthService: ObservableObject, AuthService {
     /// Check CloudKit account status before attempting operations
     internal func checkCloudKitAvailability() -> AnyPublisher<Void, Error> {  // Changed to internal
         return Future<Void, Error> { promise in
-            print(" [CloudKit] Checking account status...")
+            Logger.auth.info("Checking CloudKit account status before performing auth work.")
             self.container.accountStatus { status, error in
                 DispatchQueue.main.async {
                     if let error = error {
-                        print(" [CloudKit] Account status check failed: \(error)")
+                        Logger.auth.error(
+                            "CloudKit account status check failed [error=\(error.localizedDescription, privacy: .public)]"
+                        )
                         promise(.failure(error))
                         return
                     }
                     
                     switch status {
                     case .available:
-                        print(" [CloudKit] Account available")
+                        Logger.auth.info("CloudKit account is available.")
                         promise(.success(()))
                     case .noAccount:
-                        print(" [CloudKit] No iCloud account found")
+                        Logger.auth.warning("No iCloud account is available for CloudKit auth.")
                         let error = NSError(domain: "CloudKitAuthService", code: -1, 
                                           userInfo: [NSLocalizedDescriptionKey: "No iCloud account found. Please sign in to iCloud in Settings → [Your Name] → iCloud and try again."])
                         promise(.failure(error))
                     case .couldNotDetermine:
-                        print(" [CloudKit] Could not determine account status")
+                        Logger.auth.warning("Could not determine CloudKit account status.")
                         let error = NSError(domain: "CloudKitAuthService", code: -2, 
                                           userInfo: [NSLocalizedDescriptionKey: "Could not determine iCloud account status. Please check your internet connection and try again."])
                         promise(.failure(error))
                     case .restricted:
-                        print(" [CloudKit] Account is restricted")
+                        Logger.auth.warning("CloudKit account is restricted.")
                         let error = NSError(domain: "CloudKitAuthService", code: -3, 
                                           userInfo: [NSLocalizedDescriptionKey: "iCloud account is restricted. Please check your Screen Time or parental control settings."])
                         promise(.failure(error))
                     case .temporarilyUnavailable:
-                        print(" [CloudKit] Account temporarily unavailable")
+                        Logger.auth.warning("CloudKit account is temporarily unavailable.")
                         let error = NSError(domain: "CloudKitAuthService", code: -4, 
                                           userInfo: [NSLocalizedDescriptionKey: "iCloud is temporarily unavailable. Please try again in a few minutes."])
                         promise(.failure(error))
                     @unknown default:
-                        print(" [CloudKit] Unknown account status: \(status.rawValue)")
+                        Logger.auth.error(
+                            "Encountered unknown CloudKit account status [raw=\(status.rawValue, privacy: .public)]"
+                        )
                         let error = NSError(domain: "CloudKitAuthService", code: -5, 
                                           userInfo: [NSLocalizedDescriptionKey: "Unknown iCloud account status. Please try signing out and back into iCloud."])
                         promise(.failure(error))
@@ -153,15 +164,15 @@ public class CloudKitAuthService: ObservableObject, AuthService {
     ) -> AnyPublisher<User, Error> {
         let userID = credential.user
         
-        // CRITICAL DEBUG: Log the exact userID being used
-        print("🔍 [CloudKit] APPLE SIGN-IN DEBUG:")
-        print("🔍 Current UserID: \(userID)")
-        print("🔍 UserID Length: \(userID.count)")
-        print("🔍 Has Email: \(credential.email != nil)")
+        Logger.auth.info(
+            "Processing credential-based Apple Sign-In [user=\(userID, privacy: .private(mask: .hash)), idLength=\(userID.count, privacy: .public), hasEmail=\(credential.email != nil, privacy: .public)]"
+        )
         
         // Check for stored previous userIDs (handle Apple ID changes)
         let previousUserIDs = getAllStoredUserIDs()
-        print("🔍 Previously stored userIDs: \(previousUserIDs)")
+        Logger.auth.debug(
+            "Loaded stored Apple user identifier history [count=\(previousUserIDs.count, privacy: .public)]"
+        )
         
         // Get email from credential or retrieve from storage
         let email: String
@@ -169,17 +180,24 @@ public class CloudKitAuthService: ObservableObject, AuthService {
             // First time sign in - Apple provided email
             email = credentialEmail
             storeEmail(email, for: userID)
-            print("✅ [CloudKit] First-time Apple Sign-In - email stored: \(email)")
+            Logger.auth.notice(
+                "Stored Apple Sign-In email from credential [user=\(userID, privacy: .private(mask: .hash))]"
+            )
         } else {
             // Subsequent sign in - Apple doesn't provide email
             email = getStoredEmail(for: userID)
-            print("🔄 [CloudKit] Subsequent Apple Sign-In - email retrieved: \(email)")
+            let hasStoredEmail = email != "user.email.not.available@rheir.com"
+            Logger.auth.info(
+                "Resolved Apple Sign-In email from local storage [user=\(userID, privacy: .private(mask: .hash)), hasStoredEmail=\(hasStoredEmail, privacy: .public)]"
+            )
             
             // If no email found for this userID, try to find it from previous sessions
             if email == "user.email.not.available@rheir.com" {
                 if let recoveredEmail = findEmailFromPreviousUserIDs(previousUserIDs) {
                     storeEmail(recoveredEmail, for: userID) // Store for this new userID
-                    print("🔧 [CloudKit] Recovered email from previous session: \(recoveredEmail)")
+                    Logger.auth.notice(
+                        "Recovered Apple Sign-In email from prior user identifier history [user=\(userID, privacy: .private(mask: .hash))]"
+                    )
                 }
             }
         }
@@ -191,9 +209,10 @@ public class CloudKitAuthService: ObservableObject, AuthService {
         UserDefaults.standard.set(userID, forKey: "apple_user_id")
         addToUserIDHistory(userID)
         
-        print("✅ [CloudKit] Apple Sign-In successful")
-        print("   • User ID: \(userID)")
-        print("   • Email: \(email)")
+        let hasEmail = email != "user.email.not.available@rheir.com"
+        Logger.auth.notice(
+            "Completed Apple Sign-In [user=\(userID, privacy: .private(mask: .hash)), hasEmail=\(hasEmail, privacy: .public)]"
+        )
         
         return Just(user)
             .setFailureType(to: Error.self)
@@ -211,8 +230,10 @@ public class CloudKitAuthService: ObservableObject, AuthService {
         // Store user ID for persistence
         UserDefaults.standard.set(userID, forKey: "apple_user_id")
         
-        print("✅ [CloudKit] Silent Apple Sign-In successful for user: \(userID)")
-        print("   • Email: \(finalEmail)")
+        let hasEmail = finalEmail != "user.email.not.available@rheir.com"
+        Logger.auth.notice(
+            "Completed silent Apple Sign-In [user=\(userID, privacy: .private(mask: .hash)), hasEmail=\(hasEmail, privacy: .public)]"
+        )
         
         return Just(user)
             .setFailureType(to: Error.self)
@@ -223,7 +244,9 @@ public class CloudKitAuthService: ObservableObject, AuthService {
     
     private func storeEmail(_ email: String, for userID: String) {
         UserDefaults.standard.set(email, forKey: "apple_user_email_\(userID)")
-        print("🔐 [CloudKit] Email stored for user: \(userID)")
+        Logger.auth.debug(
+            "Stored Apple Sign-In email locally [user=\(userID, privacy: .private(mask: .hash))]"
+        )
     }
     
     private func getStoredEmail(for userID: String) -> String {
@@ -231,7 +254,9 @@ public class CloudKitAuthService: ObservableObject, AuthService {
             return storedEmail
         }
         
-        print("⚠️ [CloudKit] No stored email found for user: \(userID)")
+        Logger.auth.warning(
+            "No stored Apple Sign-In email found [user=\(userID, privacy: .private(mask: .hash))]"
+        )
         return "user.email.not.available@rheir.com"
     }
     
@@ -252,7 +277,9 @@ public class CloudKitAuthService: ObservableObject, AuthService {
                 history = Array(history.suffix(5))
             }
             UserDefaults.standard.set(history, forKey: "apple_user_id_history")
-            print("🔍 [CloudKit] Added userID to history: \(userID.prefix(8))...")
+            Logger.auth.debug(
+                "Added Apple user identifier to local history [user=\(userID, privacy: .private(mask: .hash)), count=\(history.count, privacy: .public)]"
+            )
         }
     }
     
@@ -261,7 +288,9 @@ public class CloudKitAuthService: ObservableObject, AuthService {
         for previousUserID in userIDs {
             let email = UserDefaults.standard.string(forKey: "apple_user_email_\(previousUserID)")
             if let email = email, !email.isEmpty, email != "user.email.not.available@rheir.com" {
-                print("🔧 [CloudKit] Found email from previous userID \(previousUserID.prefix(8))...: \(email)")
+                Logger.auth.debug(
+                    "Recovered Apple Sign-In email from prior user identifier [user=\(previousUserID, privacy: .private(mask: .hash))]"
+                )
                 return email
             }
         }
@@ -303,7 +332,10 @@ public class CloudKitAuthService: ObservableObject, AuthService {
             let storedEmail = getStoredEmail(for: storedUserID)
             let user = User(id: storedUserID, email: storedEmail)
             _currentUser = user
-            print("🔄 [CloudKit] Restored user from storage: \(storedUserID), email: \(storedEmail)")
+            let hasEmail = storedEmail != "user.email.not.available@rheir.com"
+            Logger.auth.notice(
+                "Restored CloudKit user from local storage [user=\(storedUserID, privacy: .private(mask: .hash)), hasEmail=\(hasEmail, privacy: .public)]"
+            )
             return user
         }
         
@@ -316,9 +348,13 @@ public class CloudKitAuthService: ObservableObject, AuthService {
         do {
             let status = try await container.accountStatus()
             accountStatus = status
-            print(" [CloudKit] Account status: \(status)")
+            Logger.auth.info(
+                "Loaded CloudKit account status [raw=\(status.rawValue, privacy: .public)]"
+            )
         } catch {
-            print(" [CloudKit] Failed to check account status: \(error)")
+            Logger.auth.error(
+                "Failed to load CloudKit account status [error=\(error.localizedDescription, privacy: .public)]"
+            )
             errorMessage = "Failed to check account status. Please try again later."
         }
     }
