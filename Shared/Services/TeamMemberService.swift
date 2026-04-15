@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 import CloudKit
+import OSLog
 
 /// Enterprise team member management service
 /// Manages team members as part of the organization's single source of truth
@@ -31,7 +32,7 @@ public class TeamMemberService: ObservableObject {
             await saveTeamMembersToOrganization()
         }
         
-        print("✅ Added team member: \(member.name) to organization")
+        Logger.teamMember.notice("Added team member to organization directory.")
     }
     
     /// Update an existing team member
@@ -50,7 +51,7 @@ public class TeamMemberService: ObservableObject {
             await saveTeamMembersToOrganization()
         }
         
-        print("✅ Updated team member: \(member.name)")
+        Logger.teamMember.notice("Updated team member in organization directory.")
     }
     
     /// Remove a team member (soft delete - marks as terminated)
@@ -67,7 +68,7 @@ public class TeamMemberService: ObservableObject {
             await saveTeamMembersToOrganization()
         }
         
-        print("✅ Terminated team member: \(teamMembers[index].name)")
+        Logger.teamMember.notice("Terminated team member in organization directory.")
     }
     
     /// Permanently delete a team member (only for duplicates or never worked)
@@ -78,14 +79,13 @@ public class TeamMemberService: ObservableObject {
             return false
         }
         
-        let memberName = teamMembers[index].name
         teamMembers.remove(at: index)
         
         Task {
             await saveTeamMembersToOrganization()
         }
         
-        print("🗑️ Permanently deleted team member: \(memberName)")
+        Logger.teamMember.notice("Permanently deleted team member from organization directory.")
         return true
     }
     
@@ -176,7 +176,7 @@ public class TeamMemberService: ObservableObject {
         teamMembers[index].photoID = photoID
         await saveTeamMembersToOrganization()
         
-        print("📸 Uploaded photo for team member: \(teamMembers[index].name)")
+        Logger.teamMember.info("Uploaded team-member photo metadata.")
         return true
     }
     
@@ -192,7 +192,7 @@ public class TeamMemberService: ObservableObject {
             await saveTeamMembersToOrganization()
         }
         
-        print("🗑️ Removed photo for team member: \(teamMembers[index].name)")
+        Logger.teamMember.info("Removed team-member photo metadata.")
     }
     
     // MARK: - Status Management
@@ -207,7 +207,7 @@ public class TeamMemberService: ObservableObject {
             await saveTeamMembersToOrganization()
         }
         
-        print("🔄 Updated all team member statuses")
+        Logger.teamMember.notice("Updated team-member statuses from project activity.")
     }
     
     /// Get payroll summary for the organization
@@ -243,7 +243,7 @@ public class TeamMemberService: ObservableObject {
             }
         }
         
-        print("📋 Loaded \(teamMembers.count) team members for organization")
+        Logger.teamMember.info("Loaded team members for organization [count=\(teamMembers.count, privacy: .public)]")
     }
     
     /// Save team members to organization (both local and CloudKit)
@@ -256,7 +256,7 @@ public class TeamMemberService: ObservableObject {
         // TODO: Save to CloudKit organization record
         // This would update the organization's teamMembers array in CloudKit
         
-        print("💾 Saved \(teamMembers.count) team members to organization")
+        Logger.teamMember.info("Saved team members for organization [count=\(teamMembers.count, privacy: .public)]")
     }
 }
 
