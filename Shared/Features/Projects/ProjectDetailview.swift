@@ -1,4 +1,5 @@
 import SwiftUI
+import OSLog
 
 struct ProjectDetailView: View {
     let project: Project
@@ -30,14 +31,16 @@ struct ProjectDetailView: View {
     
     private func shareProject() {
         guard authVM.currentOrg != nil else {
-            print("❌ No organization selected")
+            Logger.project.error("Project share aborted because no organization is selected.")
             return
         }
         
         isSharing = true
         
         // TODO: Re-implement when CloudKit methods are ready
-        print("🔄 Project sharing will be implemented soon...")
+        Logger.project.notice(
+            "Project share requested but the CloudKit sharing flow is still pending implementation [project=\(project.id.uuidString, privacy: .private(mask: .hash))]"
+        )
         isSharing = false
         
         /*
@@ -45,9 +48,9 @@ struct ProjectDetailView: View {
             DispatchQueue.main.async {
                 isSharing = false
                 if success {
-                    print("✅ Project shared successfully")
+                    Logger.project.notice("Project shared successfully.")
                 } else {
-                    print("❌ Failed to share project")
+                    Logger.project.error("Project share failed.")
                 }
             }
         }

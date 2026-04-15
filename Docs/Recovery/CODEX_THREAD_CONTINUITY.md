@@ -7,8 +7,8 @@
 - Last Commit: `edc3cd0 Phase 1: replace log hours print tracing`
 
 ## Current Objective
-- Preserve the repo-tracked ship-readiness checklist and checkpoint the `Shared/Features/Projects/NewProjectView.swift` logging cleanup slice.
-- Queue `Shared/Features/Projects/ProjectDetailview.swift` as the next highest-value remaining production seam after the `NewProjectView.swift` checkpoint lands.
+- Preserve the repo-tracked ship-readiness checklist and checkpoint the `Shared/Features/Projects/ProjectDetailview.swift` logging cleanup slice.
+- Queue `Shared/Features/TimeEntry/AddTeamMemberView.swift` as the next highest-value remaining production seam after the `ProjectDetailview.swift` checkpoint lands.
 
 ## Current Working Set
 - Session flow now routes through `Shared/Views/Auth/AppSessionSupport.swift`.
@@ -79,13 +79,14 @@
 - `Shared/Features/TimeEntry/LogHoursView.swift` now uses structured `Logger.labor` / `Logger.teamMember` calls instead of raw `print(...)` tracing for fallback member discovery, rate autofill, appearance diagnostics, and save events.
 - `Shared/Features/Projects/NewProjectView.swift` now uses structured `Logger.project` calls instead of raw `print(...)` tracing for invalid-budget validation, intelligence-loading status, and AI suggestion application.
 - `Shared/Features/Projects/NewProjectView.swift` no longer carries the unused `intelligenceData` binding warning.
-- `Shared/Features/Projects/ProjectDetailview.swift` is now the next highest-value remaining production seam by fresh raw `print(...)` residue count.
+- `Shared/Features/Projects/ProjectDetailview.swift` now uses structured `Logger.project` calls instead of raw `print(...)` tracing for organization validation and share-flow placeholder events.
+- `Shared/Features/TimeEntry/AddTeamMemberView.swift` is now the next highest-value remaining production seam by fresh raw `print(...)` residue count.
 - Other non-hardened seams still contain raw `print(...)` tracing.
 - Focused tests for invite parsing, cache migration, project-store persistence, receipt-intelligence retention, cache clearing, labor aggregation/validation, company-state bucketing, team-member store behavior, and receipt project-resolution behavior now live in `RHEIRTests/RHEIRTests.swift`.
 - Focused tests for project access normalization and assignment filtering now live in `RHEIRTests/RHEIRTests.swift`.
 - The current working slice has exact simulator evidence recorded:
-  - Gate A `build_sim`: PASS (`mcp__xcodebuildmcp__build_sim` with `-derivedDataPath /tmp/rheir_gateA_phase1ax_mcp_dd`)
-  - Focused parity `test_sim -only-testing:RHEIRTests`: PASS (`mcp__xcodebuildmcp__test_sim` with `-derivedDataPath /tmp/rheir_parity_phase1ax_mcp_dd`, `27/27`)
+  - Gate A `build_sim`: PASS (`mcp__xcodebuildmcp__build_sim` with `-derivedDataPath /tmp/rheir_gateA_phase1ay_mcp_dd`)
+  - Focused parity `test_sim -only-testing:RHEIRTests`: PASS (`mcp__xcodebuildmcp__test_sim` with `-derivedDataPath /tmp/rheir_parity_phase1ay_mcp_dd`, `27/27`)
   - Direct `xcodebuild` CLI evidence remains less stable than the MCP simulator path in the current local CoreSimulator environment
 
 ## Known Constraints
@@ -95,6 +96,6 @@
 - This repo follows a repo-local STS equivalent defined in the root governance docs because the original STS spine docs were not present here.
 
 ## Next Required Action
-1. Commit the `Shared/Features/Projects/NewProjectView.swift` logging slice without staging `Shared/Views/Auth/LoginView.swift`, `rheir_knowledge_database.json`, `RHEIRmemories.csv`, or `RheirLogo 1024x1024.png`.
+1. Commit the `Shared/Features/Projects/ProjectDetailview.swift` logging slice without staging `Shared/Views/Auth/LoginView.swift`, `rheir_knowledge_database.json`, `RHEIRmemories.csv`, or `RheirLogo 1024x1024.png`.
 2. Preserve the repo-local STS docs and `SHIP_READINESS_CHECKLIST.md` as the current release-planning truth for this repository.
-3. Continue with `Shared/Features/Projects/ProjectDetailview.swift` after the `NewProjectView.swift` checkpoint lands.
+3. Continue with `Shared/Features/TimeEntry/AddTeamMemberView.swift` after the `ProjectDetailview.swift` checkpoint lands.
