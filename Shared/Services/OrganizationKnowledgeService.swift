@@ -1,6 +1,11 @@
 import Foundation
 import Combine
 import CloudKit
+import OSLog
+
+extension Logger {
+    static let organizationKnowledge = Logger(subsystem: "com.RheirHome.RHEIR", category: "organization-knowledge")
+}
 
 /// Master coordination service for enterprise organizational intelligence
 /// Orchestrates vendor and payment method knowledge across the entire organization
@@ -50,7 +55,7 @@ class OrganizationKnowledgeService: ObservableObject {
     
     /// Initialize the complete organizational knowledge system
     func initializeOrganizationKnowledge() async {
-        print("🚀 Initializing Enterprise Receipt Knowledge System...")
+        Logger.organizationKnowledge.info("Initializing enterprise organization knowledge system.")
         
         // Start both services concurrently
         async let vendorLoad = vendorKnowledgeService.loadOrganizationVendors()
@@ -74,7 +79,7 @@ class OrganizationKnowledgeService: ObservableObject {
             self.lastFullSync = Date()
         }
         
-        print("✅ Enterprise Receipt Knowledge System initialized successfully!")
+        Logger.organizationKnowledge.notice("Completed enterprise organization knowledge initialization.")
     }
     
     /// Process new receipt and update organizational knowledge
@@ -84,8 +89,9 @@ class OrganizationKnowledgeService: ObservableObject {
         amount: Double,
         projectID: String
     ) async -> (updatedVendor: Vendor, updatedPaymentMethod: PaymentMethod) {
-        
-        print("🧠 Processing new receipt for organizational intelligence...")
+        Logger.organizationKnowledge.info(
+            "Processing receipt for organizational intelligence [project=\(projectID, privacy: .private(mask: .hash)), amount=\(amount, privacy: .public)]"
+        )
         
         // Update vendor knowledge
         let updatedVendor = await vendorKnowledgeService.findOrCreateVendor(
@@ -107,7 +113,7 @@ class OrganizationKnowledgeService: ObservableObject {
         // Sync with organization model
         await updateOrganizationModel()
         
-        print("💡 Organizational knowledge updated with new receipt data")
+        Logger.organizationKnowledge.notice("Updated organizational knowledge from new receipt data.")
         
         return (updatedVendor, updatedPaymentMethod)
     }
@@ -160,7 +166,7 @@ class OrganizationKnowledgeService: ObservableObject {
     // MARK: - Data Migration & Aggregation
     
     private func aggregateDataFromAllProjects() async {
-        print("🔄 Aggregating organizational knowledge from existing receipts...")
+        Logger.organizationKnowledge.info("Aggregating organizational knowledge from existing receipts.")
         
         // Run both aggregations concurrently
         async let vendorAggregation = vendorKnowledgeService.aggregateVendorDataFromAllProjects()
@@ -169,7 +175,7 @@ class OrganizationKnowledgeService: ObservableObject {
         await vendorAggregation
         await paymentAggregation
         
-        print("✅ Data aggregation completed")
+        Logger.organizationKnowledge.notice("Completed organizational knowledge aggregation.")
     }
     
     private func updateOrganizationInsights() async {
@@ -201,8 +207,10 @@ class OrganizationKnowledgeService: ObservableObject {
         organization.lastModified = Date()
         
         await organizationService.updateOrganization(organization)
-        
-        print("🏢 Updated organization model with knowledge directories")
+
+        Logger.organizationKnowledge.notice(
+            "Updated organization model with knowledge directories [organization=\(organization.id, privacy: .private(mask: .hash))]"
+        )
     }
     
     // MARK: - Knowledge Sync Setup

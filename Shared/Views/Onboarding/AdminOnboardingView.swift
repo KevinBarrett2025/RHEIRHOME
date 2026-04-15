@@ -1,5 +1,6 @@
 import SwiftUI
 import CloudKit
+import OSLog
 
 /// Professional admin onboarding flow for construction company administrators
 /// This replaces the messy "ensure admin exists" logic with proper upfront profile setup
@@ -471,8 +472,8 @@ struct AdminOnboardingView: View {
                     authVM.showAdminInfoUpdate = false
                     dismiss()
                 }
-                
-                print("✅ ADMIN ONBOARDING: Professional setup completed successfully!")
+
+                Logger.auth.notice("Admin onboarding completed with professional setup.")
                 
             } catch {
                 await MainActor.run {
@@ -494,8 +495,8 @@ struct AdminOnboardingView: View {
                     authVM.showAdminInfoUpdate = false
                     dismiss()
                 }
-                
-                print("✅ ADMIN ONBOARDING: Basic setup completed!")
+
+                Logger.auth.notice("Admin onboarding completed with basic setup.")
                 
             } catch {
                 await MainActor.run {
@@ -511,11 +512,10 @@ struct AdminOnboardingView: View {
         guard let userID = authVM.user?.id else {
             throw NSError(domain: "AdminOnboarding", code: -1, userInfo: [NSLocalizedDescriptionKey: "No user logged in"])
         }
-        
-        print("🎯 ADMIN CREATION: Creating single professional admin profile...")
-        print("   Organization: \(organization.name)")
-        print("   Admin User ID: \(userID.prefix(8))...")
-        print("   Is Basic Setup: \(isBasic)")
+
+        Logger.auth.info(
+            "Creating admin onboarding profile [organization=\(organization.id, privacy: .private(mask: .hash)), user=\(userID, privacy: .private(mask: .hash)), isBasic=\(isBasic, privacy: .public)]"
+        )
         
         // CRITICAL: Check for existing admin first to prevent duplicates
         let existingAdmin = await MainActor.run {
@@ -527,7 +527,7 @@ struct AdminOnboardingView: View {
         }
         
         if existingAdmin != nil {
-            print("✅ ADMIN CREATION: Admin already exists - skipping creation")
+            Logger.auth.notice("Skipped admin onboarding profile creation because an admin record already exists.")
             return
         }
         
@@ -586,17 +586,15 @@ struct AdminOnboardingView: View {
         // CRITICAL: Add admin to ProjectViewModel (single source of truth)
         await MainActor.run {
             projectVM.teamMembers.append(finalTeamMember)
-            print("✅ ADMIN CREATION: Added admin to ProjectViewModel teamMembers")
+            Logger.auth.info("Added admin onboarding profile to the in-memory team-member directory.")
         }
         
         // Save to CloudKit TeamMember record
         try await saveAdminToCloudKit(finalTeamMember)
-        
-        print("✅ ADMIN CREATION: Professional admin profile created successfully!")
-        print("   Name: \(finalAdminName)")
-        print("   Rate: $\(finalRate)/hr")
-        print("   Email: \(finalEmail)")
-        print("   Organization: \(organization.id.prefix(8))...")
+
+        Logger.auth.notice(
+            "Created admin onboarding profile successfully [organization=\(organization.id, privacy: .private(mask: .hash)), rate=\(finalRate, privacy: .public)]"
+        )
     }
     
     /// Save admin team member to CloudKit using proper schema
@@ -637,7 +635,7 @@ struct AdminOnboardingView: View {
         }
         
         _ = try await privateDatabase.save(record)
-        print("✅ CLOUDKIT: Admin TeamMember saved to CloudKit successfully")
+        Logger.auth.notice("Saved admin onboarding team-member record to CloudKit.")
     }
     
     /// Update organization with business details collected during onboarding
@@ -669,7 +667,7 @@ struct AdminOnboardingView: View {
             }
         }
         
-        print("✅ BUSINESS DETAILS: Updated organization with business information")
+        Logger.auth.notice("Updated organization business details during admin onboarding.")
     }
 }
 

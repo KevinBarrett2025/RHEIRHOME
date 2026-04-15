@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 
 /// Team Member model (formerly Employee)
 /// Represents organization team members with roles, rates, and permissions
@@ -338,6 +339,9 @@ extension TeamMember {
     
     /// Terminate team member with reason
     public mutating func terminate(reason: String, type: TerminationType, date: Date = Date()) {
+        let teamMemberID = self.id.uuidString
+        let terminationTypeName = type.displayName
+
         self.terminationDate = date
         self.terminationReason = reason
         self.terminationType = type
@@ -346,7 +350,9 @@ extension TeamMember {
         
         // Preserve all historical data for legal/tax purposes
         // Don't delete rates, hours, or associated project data
-        print("📋 Team member terminated: \(name) - Reason: \(reason)")
+        Logger.teamMember.notice(
+            "Employee model marked team member terminated [teamMember=\(teamMemberID, privacy: .private(mask: .hash)), terminationType=\(terminationTypeName, privacy: .public)]"
+        )
     }
     
     /// Check if team member can be deleted (only duplicates or never worked)
@@ -447,11 +453,15 @@ extension TeamMember {
     /// Update status automatically when projects change
     public mutating func updateStatusFromProjects(_ allProjects: [Project]) {
         let newStatus = calculateStatusFromProjects(allProjects)
+        let teamMemberID = self.id.uuidString
+        let statusName = newStatus.displayName
         
         // Only update if it's not a manual status (don't override termination, suspension, etc.)
         if employmentStatus.isWorkingStatus || employmentStatus == .completed {
             employmentStatus = newStatus
-            print("🔄 Updated \(name) status to: \(newStatus.displayName)")
+            Logger.teamMember.info(
+                "Employee model updated employment status from project state [teamMember=\(teamMemberID, privacy: .private(mask: .hash)), status=\(statusName, privacy: .public)]"
+            )
         }
     }
     
