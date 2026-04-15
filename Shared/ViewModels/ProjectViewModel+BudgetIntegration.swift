@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import OSLog
 
 // MARK: - ProjectViewModel Budget Integration Extension for Phase 2I Step 4
 
@@ -382,9 +383,10 @@ extension ProjectViewModel {
     
     /// Scan existing receipts to populate organizational intelligence
     func scanExistingReceiptsForIntelligence() async {
-        print("🧠 INTELLIGENCE: Scanning \(organizationProjects.flatMap { $0.receipts }.count) receipts for organizational intelligence...")
-        
         let allReceipts = organizationProjects.flatMap { $0.receipts }
+        Logger.receiptIntelligence.info(
+            "Scanning existing receipts for budget intelligence [receiptCount=\(allReceipts.count, privacy: .public)]"
+        )
         var intelligenceRecords: [[String: Any]] = []
         
         for receipt in allReceipts {
@@ -417,7 +419,9 @@ extension ProjectViewModel {
             }
         }
         
-        print("✅ INTELLIGENCE: Scanned and stored intelligence for \(allReceipts.count) receipts")
+        Logger.receiptIntelligence.notice(
+            "Stored budget intelligence receipt scan [receiptCount=\(allReceipts.count, privacy: .public)]"
+        )
     }
     
     // MARK: - CloudKit Team Member Integration Methods
@@ -461,8 +465,10 @@ extension ProjectViewModel {
         }
         
         updateTeamMemberInOrganization(updatedMember)
-        
-        print("👥 Updated team member activity: \(member.name) - \(receipt.amount.formatAsCurrency())")
+
+        Logger.teamMember.info(
+            "Updated team-member activity from receipt [teamMember=\(member.id.uuidString, privacy: .private(mask: .hash)), amount=\(receipt.amount, privacy: .public)]"
+        )
     }
 }
 

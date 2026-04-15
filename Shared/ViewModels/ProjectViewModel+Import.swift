@@ -1,6 +1,7 @@
 // ProjectViewModel+Import.swift
 
 import Foundation
+import OSLog
 #if canImport(UIKit)
 import UIKit
 #endif
@@ -81,23 +82,25 @@ extension ProjectViewModel {
     
     /// Save team members to local storage
     private func saveTeamMembersLocal() {
+        let teamMemberCount = teamMembers.count
         do {
             let data = try JSONEncoder().encode(teamMembers)
             UserDefaults.standard.set(data, forKey: "teamMembers")
-            print("💾 [ProjectViewModel] Saved \(teamMembers.count) team members to local backup")
+            Logger.projectStore.notice("Saved team members to local backup [count=\(teamMemberCount, privacy: .public)]")
         } catch {
-            print("❌ [ProjectViewModel] Failed to save team members locally: \(error)")
+            Logger.projectStore.error("Failed to save team members to local backup: \(error.localizedDescription, privacy: .public)")
         }
     }
     
     /// Save local backup of projects
     private func saveLocalBackup() {
+        let projectCount = organizationProjects.count
         do {
             let data = try JSONEncoder().encode(organizationProjects)
             UserDefaults.standard.set(data, forKey: "projects_backup")
-            print("💾 [ProjectViewModel] Saved local project backup (\(organizationProjects.count) projects)")
+            Logger.projectStore.notice("Saved local project backup [count=\(projectCount, privacy: .public)]")
         } catch {
-            print("❌ [ProjectViewModel] Failed to save local project backup: \(error)")
+            Logger.projectStore.error("Failed to save local project backup: \(error.localizedDescription, privacy: .public)")
         }
     }
 }
