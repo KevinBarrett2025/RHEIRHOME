@@ -1,5 +1,6 @@
 import Foundation
 import CloudKit
+import OSLog
 import SwiftUI
 
 /// Simple CloudKit sharing service for organization data
@@ -16,7 +17,9 @@ class CloudKitSharingService: ObservableObject {
     
     /// Create a shareable link for an organization
     func createOrganizationShare(for organizationID: String, completion: @escaping (Result<URL, Error>) -> Void) {
-        print("🔗 Creating shareable link for organization: \(organizationID)")
+        Logger.organizationSharing.info(
+            "Creating simple organization share [organization=\(organizationID, privacy: .private(mask: .hash))]"
+        )
         
         // Fetch the organization record first
         let recordID = CKRecord.ID(recordName: organizationID)
@@ -25,7 +28,9 @@ class CloudKitSharingService: ObservableObject {
             guard let self = self else { return }
             
             if let error = error {
-                print("❌ Failed to fetch organization record: \(error)")
+                Logger.organizationSharing.error(
+                    "Failed to fetch organization record before share creation [organization=\(organizationID, privacy: .private(mask: .hash)), error=\(error.localizedDescription, privacy: .public)]"
+                )
                 completion(.failure(error))
                 return
             }
@@ -48,14 +53,18 @@ class CloudKitSharingService: ObservableObject {
             
             operation.modifyRecordsCompletionBlock = { savedRecords, deletedRecordIDs, error in
                 if let error = error {
-                    print("❌ Failed to create share: \(error)")
+                    Logger.organizationSharing.error(
+                        "Failed to create simple organization share [organization=\(organizationID, privacy: .private(mask: .hash)), error=\(error.localizedDescription, privacy: .public)]"
+                    )
                     completion(.failure(error))
                     return
                 }
                 
                 // Generate the share URL
                 if let shareURL = share.url {
-                    print("✅ Successfully created share URL: \(shareURL)")
+                    Logger.organizationSharing.notice(
+                        "Created simple organization share URL [organization=\(organizationID, privacy: .private(mask: .hash))]"
+                    )
                     completion(.success(shareURL))
                 } else {
                     let error = NSError(domain: "CloudKitSharingService", code: -2,
@@ -70,18 +79,20 @@ class CloudKitSharingService: ObservableObject {
     
     /// Accept a shared organization (when someone clicks a shared link)
     func acceptSharedOrganization(from url: URL, completion: @escaping (Result<String, Error>) -> Void) {
-        print("🔗 Accepting shared organization from URL: \(url)")
+        Logger.organizationSharing.info("Accepting shared organization from incoming URL.")
         
         let operation = CKAcceptSharesOperation(shareURLs: [url])
         
         operation.acceptSharesCompletionBlock = { error in
             if let error = error {
-                print("❌ Failed to accept shared organization: \(error)")
+                Logger.organizationSharing.error(
+                    "Failed to accept shared organization [error=\(error.localizedDescription, privacy: .public)]"
+                )
                 completion(.failure(error))
                 return
             }
             
-            print("✅ Successfully accepted shared organization")
+            Logger.organizationSharing.notice("Accepted shared organization successfully.")
             // Extract organization ID from the accepted share
             // This is simplified - in production you'd want to fetch the actual organization details
             let organizationID = url.lastPathComponent
@@ -131,7 +142,7 @@ struct OrganizationShareView: UIViewControllerRepresentable {
         }
         
         func cloudSharingController(_ csc: UICloudSharingController, failedToSaveShareWithError error: Error) {
-            print("❌ Failed to save share: \(error)")
+            Logger.organizationSharing.error("Failed to save CloudKit share controller state: \(error.localizedDescription, privacy: .public)")
             parent.dismiss()
         }
         
@@ -140,12 +151,12 @@ struct OrganizationShareView: UIViewControllerRepresentable {
         }
         
         func cloudSharingControllerDidSaveShare(_ csc: UICloudSharingController) {
-            print("✅ Successfully saved organization share")
+            Logger.organizationSharing.notice("Saved organization share from CloudKit sharing controller.")
             parent.dismiss()
         }
         
         func cloudSharingControllerDidStopSharing(_ csc: UICloudSharingController) {
-            print("🛑 Stopped sharing organization")
+            Logger.organizationSharing.notice("Stopped sharing organization from CloudKit sharing controller.")
             parent.dismiss()
         }
     }

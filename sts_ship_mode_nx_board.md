@@ -37,14 +37,15 @@
 - `ReceiptOCRService.swift` now uses structured `Logger.receiptOCR` logging instead of raw `print(...)` tracing.
 - `Core/UserService.swift` now uses structured `Logger.auth` logging instead of raw `print(...)` tracing.
 - `Core/CloudKitService.swift` now uses structured `Logger.auth` logging instead of raw `print(...)` tracing.
+- `CloudKitSharingService.swift` now uses structured `Logger.organizationSharing` logging instead of raw `print(...)` tracing.
 - Stable simulator evidence is green on the staged checkpoint:
-  - Gate A `build_sim`: PASS (`mcp__xcodebuildmcp__build_sim` with `-derivedDataPath /tmp/rheir_gateA_phase1ag_mcp_dd`)
-  - Focused parity `test_sim -only-testing:RHEIRTests`: PASS (`mcp__xcodebuildmcp__test_sim` with `-derivedDataPath /tmp/rheir_parity_phase1ag_mcp_dd`, `27/27`)
+  - Gate A `build_sim`: PASS (`mcp__xcodebuildmcp__build_sim` with `-derivedDataPath /tmp/rheir_gateA_phase1ah_mcp_dd`)
+  - Focused parity `test_sim -only-testing:RHEIRTests`: PASS (`mcp__xcodebuildmcp__test_sim` with `-derivedDataPath /tmp/rheir_parity_phase1ah_mcp_dd`, `27/27`)
 
 ## Open Work
-- Finish replacing raw `print(...)` tracing in the other non-hardened production seams, starting with `CloudKitSharingService.swift`.
+- Finish replacing raw `print(...)` tracing in the other non-hardened production seams, starting with `ChatGPTService.swift`.
 - Continue shrinking the remaining oversized active state owners.
-- After the `Core/CloudKitService.swift` checkpoint commit, continue the next highest-value non-hardened seam.
+- After the `CloudKitSharingService.swift` checkpoint commit, continue the next highest-value non-hardened seam.
 
 ## Blockers
 - Device-targeted Gate A remains blocked by signing for `com.RheirHome.RHEIR`.
