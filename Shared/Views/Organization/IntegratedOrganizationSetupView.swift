@@ -1,4 +1,5 @@
 import SwiftUI
+import OSLog
 
 /// Integrated organization setup flow - combines org creation with admin onboarding
 /// This replaces the fragmented approach with a single cohesive experience
@@ -447,12 +448,16 @@ struct IntegratedOrganizationSetupView: View {
         
         Task {
             do {
-                print("🏗️ INTEGRATED SETUP: Creating organization: \(trimmedName)")
+                Logger.auth.info(
+                    "Integrated setup creating organization [organization=\(trimmedName, privacy: .private(mask: .hash))]"
+                )
                 
                 let newOrg = try await authVM.createOrganization(named: trimmedName, industry: selectedIndustry)
                 
                 await MainActor.run {
-                    print("✅ INTEGRATED SETUP: Organization created: \(newOrg.name)")
+                    Logger.auth.notice(
+                        "Integrated setup created organization [organization=\(newOrg.id, privacy: .private(mask: .hash))]"
+                    )
                     isProcessing = false
                     processingMessage = ""
                     goToNextStep()
@@ -482,7 +487,7 @@ struct IntegratedOrganizationSetupView: View {
             // Find and update the admin team member
             guard let userID = authVM.user?.id,
                   let adminMember = projectVM.teamMembers.first(where: { $0.appUserID == userID }) else {
-                print("❌ INTEGRATED SETUP: Cannot find admin team member")
+                Logger.auth.error("Integrated setup could not find the admin team member.")
                 isProcessing = false
                 processingMessage = ""
                 // Continue anyway - this is not critical
@@ -490,7 +495,9 @@ struct IntegratedOrganizationSetupView: View {
                 return
             }
             
-            print("🔧 INTEGRATED SETUP: Updating admin profile: \(trimmedName)")
+            Logger.auth.info(
+                "Integrated setup updating admin profile [user=\(userID, privacy: .private(mask: .hash))]"
+            )
             
             var updatedAdmin = adminMember
             updatedAdmin.name = trimmedName
@@ -505,16 +512,15 @@ struct IntegratedOrganizationSetupView: View {
             isProcessing = false
             processingMessage = ""
             
-            print("✅ INTEGRATED SETUP: Admin profile updated")
+            Logger.auth.notice("Integrated setup updated the admin profile.")
             goToNextStep()
         }
     }
     
     private func completeSetup() {
-        print("🎯 INTEGRATED SETUP: Setup completed successfully")
-        print("   Organization: \(authVM.currentOrg?.name ?? "Unknown")")
-        print("   Admin: \(adminName)")
-        print("   Selected features: \(selectedFeatures)")
+        Logger.session.notice(
+            "Integrated setup completed [organization=\((authVM.currentOrg?.id ?? "unknown"), privacy: .private(mask: .hash)) features=\(selectedFeatures.count, privacy: .public)]"
+        )
         
         // CRITICAL FIX: Ensure proper state management
         authVM.needsOrganizationSetup = false
@@ -524,7 +530,7 @@ struct IntegratedOrganizationSetupView: View {
         // Force UI state refresh to ensure MainTabView appears
         authVM.objectWillChange.send()
         
-        print("✅ INTEGRATED SETUP: All state flags cleared - should show MainTabView")
+        Logger.session.info("Integrated setup cleared onboarding state flags.")
         dismiss()
     }
 }

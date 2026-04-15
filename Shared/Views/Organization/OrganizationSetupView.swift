@@ -1,4 +1,5 @@
 import SwiftUI
+import OSLog
 
 struct OrganizationSetupView: View {
     @EnvironmentObject private var authVM: AuthViewModel
@@ -158,7 +159,9 @@ struct OrganizationSetupView: View {
             return
         }
         
-        print("🏗️ Creating organization: \(trimmedName)")
+        Logger.auth.info(
+            "Creating organization from setup flow [organization=\(trimmedName, privacy: .private(mask: .hash))]"
+        )
         isCreating = true
         
         Task {
@@ -169,7 +172,9 @@ struct OrganizationSetupView: View {
                 )
                 
                 await MainActor.run {
-                    print("✅ Organization created successfully: \(newOrg.name)")
+                    Logger.auth.notice(
+                        "Organization setup flow created organization [organization=\(newOrg.id, privacy: .private(mask: .hash))]"
+                    )
                     isCreating = false
                     createdOrganizationName = newOrg.name
                     showSuccess = true
@@ -178,7 +183,9 @@ struct OrganizationSetupView: View {
             } catch {
                 await MainActor.run {
                     isCreating = false
-                    print("❌ Failed to create organization: \(error)")
+                    Logger.auth.error(
+                        "Organization setup flow failed to create organization: \(error.localizedDescription, privacy: .public)"
+                    )
                     errorMessage = "Failed to create organization. Please try again."
                     showError = true
                 }

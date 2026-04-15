@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import OSLog
 
 class DeepLinkRouter: ObservableObject {
     static let shared = DeepLinkRouter()
@@ -13,7 +14,7 @@ class DeepLinkRouter: ObservableObject {
     private init() {}
     
     func handleInviteURL(_ url: URL) {
-        print("🔗 DEEP LINK ▶︎ Handling invite URL: \(url)")
+        Logger.session.info("Handling invite URL.")
         
         // Parse the invite URL - expecting format: https://app.rheirhome.com/invite?token=xyz
         guard url.host == "app.rheirhome.com",
@@ -21,11 +22,13 @@ class DeepLinkRouter: ObservableObject {
               let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
               let queryItems = components.queryItems,
               let token = queryItems.first(where: { $0.name == "token" })?.value else {
-            print("🔗 DEEP LINK ▶︎ Invalid invite URL format")
+            Logger.session.warning("Rejected invite URL because it did not match the expected format.")
             return
         }
         
-        print("🔗 DEEP LINK ▶︎ Extracted invite token: \(token)")
+        Logger.session.notice(
+            "Stored pending invite token [token=\(token, privacy: .private(mask: .hash))]"
+        )
         
         // Store the token and trigger the accept invite flow
         DispatchQueue.main.async {
@@ -35,7 +38,7 @@ class DeepLinkRouter: ObservableObject {
     }
     
     func handleURL(_ url: URL) {
-        print("🔗 DEEP LINK ▶︎ Handling URL: \(url)")
+        Logger.session.info("Handling incoming URL.")
         
         // Handle organization join URLs - expecting format: rheirhome://join-org?orgID=xyz
         if url.scheme == "rheirhome" && url.host == "join-org" {
@@ -49,20 +52,22 @@ class DeepLinkRouter: ObservableObject {
             return
         }
         
-        print("🔗 DEEP LINK ▶︎ Unrecognized URL format")
+        Logger.session.warning("Ignored unrecognized incoming URL.")
     }
     
     private func handleOrgJoinURL(_ url: URL) {
-        print("🔗 DEEP LINK ▶︎ Handling organization join URL: \(url)")
+        Logger.session.info("Handling organization join URL.")
         
         guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
               let queryItems = components.queryItems,
               let orgID = queryItems.first(where: { $0.name == "orgID" })?.value else {
-            print("🔗 DEEP LINK ▶︎ Invalid organization join URL format")
+            Logger.session.warning("Rejected organization join URL because it did not match the expected format.")
             return
         }
         
-        print("🔗 DEEP LINK ▶︎ Extracted organization ID: \(orgID)")
+        Logger.session.notice(
+            "Stored pending organization join [organization=\(orgID, privacy: .private(mask: .hash))]"
+        )
         
         // Store the org ID and trigger the join flow
         DispatchQueue.main.async {

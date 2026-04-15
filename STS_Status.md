@@ -3,7 +3,7 @@
 ## Repo
 - Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Branch: `gm/rheir-hardening-phase1`
-- HEAD: `f2041f646391b4c01ba057ac016dce2d0e4535cf`
+- HEAD: `2e8b62329642867f02d851c2b577e992ff6abec8`
 
 ## Active Initiative
 - RHEIR hardening and streamlining, phase 1 foundation pass.
@@ -36,6 +36,7 @@
 - Replaced raw `print(...)` tracing in the active receipt entry, receipt cache recompute, and receipt-intelligence paths with `Logger.receiptWorkflow` / `Logger.receiptIntelligence`.
 - Replaced raw company-settings prints with structured `Logger.company` usage in the active organization settings flow.
 - Replaced raw `print(...)` tracing in the active organization directory, vendor intelligence, and payment intelligence services with structured `Logger` usage.
+- Replaced raw `print(...)` tracing in the active deep-link, organization-entry, and Sign in with Apple coordination flow with structured `Logger` usage.
 - Added focused persistence/session tests in `RHEIRTests/RHEIRTests.swift` for invite parsing, legacy cache migration, project storage, receipt intelligence retention, cache clearing, labor aggregation/validation, company-state bucketing, team-member store behavior, and receipt project-resolution behavior.
 
 ## In Progress
@@ -48,8 +49,8 @@
 - Device-targeted Gate A remains blocked by signing because automatic provisioning is disabled for `com.RheirHome.RHEIR`.
 
 ## Latest Evidence
-- Gate A: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_gateA_phase1c_dd clean build` -> PASS (`/tmp/rheir_gateA_20260415_phase1c.log`)
-- Focused parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_parity_phase1c_dd test -only-testing:RHEIRTests` -> PASS (`/tmp/rheir_parity_RHEIRTests_20260415_phase1c.log`, `26/26`)
+- Gate A: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_gateA_phase1d_dd clean build` -> PASS (`/tmp/rheir_gateA_20260415_phase1d.log`)
+- Focused parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_parity_phase1d_dd test -only-testing:RHEIRTests` -> PASS (`/tmp/rheir_parity_RHEIRTests_20260415_phase1d.log`, `26/26`)
 
 ## Next Milestone
-- Checkpoint the organization intelligence logging cleanup slice, then continue the remaining production logging cleanup and the next oversized-state split around company/project coordination.
+- Checkpoint the auth/session-entry logging cleanup slice, then continue the remaining production logging cleanup and the next oversized-state split around company/project coordination.

@@ -1,6 +1,7 @@
 // CreateOrganizationView.swift
 
 import SwiftUI
+import OSLog
 
 #if DEBUG
 /// Deprecated: Use OrganizationSetupView for production organization creation
@@ -69,7 +70,7 @@ struct CreateOrganizationView: View {
             }
             .onChange(of: vm.currentOrg) { _, currentOrg in
                 if currentOrg != nil {
-                    print("✅ Organization created successfully, dismissing sheet")
+                    Logger.auth.info("Development organization sheet is dismissing after organization creation.")
                     // Organization was successfully created, dismiss the sheet
                     dismiss()
                 }

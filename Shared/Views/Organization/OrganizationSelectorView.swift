@@ -1,4 +1,5 @@
 import SwiftUI
+import OSLog
 
 struct OrganizationSelectorView: View {
     @EnvironmentObject private var authVM: AuthViewModel
@@ -136,7 +137,7 @@ struct OrganizationSelectorView: View {
     
     private func deleteOrganization(_ organization: Organization) {
         guard let role = authVM.organizationRoles[organization.id] else {
-            print("❌ Unable to determine role for organization")
+            Logger.auth.error("Unable to determine organization role before delete/leave action.")
             return
         }
         
@@ -144,18 +145,26 @@ struct OrganizationSelectorView: View {
             // Delete organization
             authVM.deleteOrganization(organization) { success, message in
                 if success {
-                    print("✅ Organization deleted: \(message ?? "")")
+                    Logger.auth.notice(
+                        "Deleted organization [organization=\(organization.id, privacy: .private(mask: .hash))]"
+                    )
                 } else {
-                    print("❌ Failed to delete organization: \(message ?? "")")
+                    Logger.auth.error(
+                        "Failed to delete organization: \((message ?? "Unknown error"), privacy: .public)"
+                    )
                 }
             }
         } else {
             // Leave organization
             authVM.leaveOrganization(organization) { success, message in
                 if success {
-                    print("✅ Left organization: \(message ?? "")")
+                    Logger.auth.notice(
+                        "Left organization [organization=\(organization.id, privacy: .private(mask: .hash))]"
+                    )
                 } else {
-                    print("❌ Failed to leave organization: \(message ?? "")")
+                    Logger.auth.error(
+                        "Failed to leave organization: \((message ?? "Unknown error"), privacy: .public)"
+                    )
                 }
             }
         }

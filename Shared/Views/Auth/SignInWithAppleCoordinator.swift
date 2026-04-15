@@ -1,6 +1,7 @@
 import Foundation
 import AuthenticationServices
 import UIKit
+import OSLog
 
 /// A more verbose SignInWithAppleCoordinator that logs every step.
 /// It publishes:
@@ -20,7 +21,7 @@ final class SignInWithAppleCoordinator: NSObject,
 
     private func log(_ msg: String) {
         #if DEBUG
-        print("🔑 [SignInCoordinator] \(msg)")
+        Logger.auth.debug("\(msg, privacy: .public)")
         #endif
     }
 
@@ -28,14 +29,16 @@ final class SignInWithAppleCoordinator: NSObject,
     func handle(result: Result<ASAuthorization, Error>) {
         switch result {
         case .success(let auth):
-            log("🟢 handle(result:) got .success, credential type = \(type(of: auth.credential))")
+            log("Received Sign in with Apple success callback [credentialType=\(String(describing: type(of: auth.credential)))]")
             if let appleID = auth.credential as? ASAuthorizationAppleIDCredential {
-                log("   → Got AppleID credential - userID=\(appleID.user), email=\(appleID.email ?? "nil")")
+                Logger.auth.info(
+                    "Received Apple credential [user=\(appleID.user, privacy: .private(mask: .hash)) email=\((appleID.email ?? "nil"), privacy: .private(mask: .hash))]"
+                )
                 DispatchQueue.main.async {
                     self.credential = appleID
                 }
             } else {
-                log("   → credential was not ASAuthorizationAppleIDCredential, it was \(auth.credential)")
+                log("Received non-AppleID credential in success callback.")
             }
 
         case .failure(let error):
@@ -48,7 +51,7 @@ final class SignInWithAppleCoordinator: NSObject,
             DispatchQueue.main.async {
                 self.coordinatorError = errMsg
             }
-            log("❌ handle(result:) \(errMsg)")
+            Logger.auth.error("Sign in with Apple callback failed: \(errMsg, privacy: .public)")
         }
     }
 
@@ -58,14 +61,16 @@ final class SignInWithAppleCoordinator: NSObject,
         controller: ASAuthorizationController,
         didCompleteWithAuthorization authorization: ASAuthorization
     ) {
-        log("🟢 didCompleteWithAuthorization called, credential = \(authorization.credential)")
+        log("Authorization controller completed successfully.")
         if let appleID = authorization.credential as? ASAuthorizationAppleIDCredential {
-            log("   → DID get AppleID credential - userID=\(appleID.user), email=\(appleID.email ?? "nil")")
+            Logger.auth.info(
+                "Authorization controller produced Apple credential [user=\(appleID.user, privacy: .private(mask: .hash)) email=\((appleID.email ?? "nil"), privacy: .private(mask: .hash))]"
+            )
             DispatchQueue.main.async {
                 self.credential = appleID
             }
         } else {
-            log("   → credentials were not AppleID, they were \(type(of: authorization.credential))")
+            log("Authorization controller produced a non-AppleID credential.")
         }
     }
 
@@ -82,7 +87,7 @@ final class SignInWithAppleCoordinator: NSObject,
         DispatchQueue.main.async {
             self.coordinatorError = errMsg
         }
-        log("❌ didCompleteWithError \(errMsg)")
+        Logger.auth.error("Authorization controller failed: \(errMsg, privacy: .public)")
     }
 
     // MARK: - Presentation Context
@@ -96,8 +101,7 @@ final class SignInWithAppleCoordinator: NSObject,
             .flatMap { $0.windows }
             .first { $0.isKeyWindow }
             ?? UIWindow()
-        log("🖼 presentationAnchor returning \(anchor) for ASAuthorizationController")
+        log("Resolved presentation anchor for Sign in with Apple.")
         return anchor
     }
 }
-
