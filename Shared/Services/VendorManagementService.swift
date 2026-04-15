@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import OSLog
 
 /// Service for managing vendors across the organization
 @MainActor
@@ -22,7 +23,7 @@ class VendorManagementService: ObservableObject {
     func findOrCreateVendor(name: String, category: VendorCategory = .other) -> Vendor {
         // Check if vendor already exists (case-insensitive)
         if let existingVendor = vendors.first(where: { $0.name.lowercased() == name.lowercased() }) {
-            print("📍 Found existing vendor: \(existingVendor.name)")
+            Logger.company.debug("Resolved existing vendor from organization directory.")
             return existingVendor
         }
         
@@ -36,7 +37,7 @@ class VendorManagementService: ObservableObject {
         vendors.append(newVendor)
         saveVendors()
         
-        print("🆕 Created new vendor: \(newVendor.name) (\(category.rawValue))")
+        Logger.company.notice("Created vendor in organization directory [category=\(category.rawValue, privacy: .public)]")
         return newVendor
     }
     
@@ -47,7 +48,7 @@ class VendorManagementService: ObservableObject {
         vendors[index].totalSpent += amount
         saveVendors()
         
-        print("💰 Updated vendor spending: \(vendors[index].name) - Total: $\(vendors[index].totalSpent)")
+        Logger.company.info("Updated vendor spending total.")
     }
     
     /// Get vendor by ID
@@ -112,19 +113,19 @@ class VendorManagementService: ObservableObject {
         }
         
         vendors = loadedVendors
-        print("📚 Loaded \(vendors.count) vendors for organization")
+        Logger.company.info("Loaded vendors for organization [count=\(self.vendors.count, privacy: .public)]")
     }
     
     private func saveVendors() {
         let key = "vendors_\(organizationID)"
         
         guard let data = try? JSONEncoder().encode(vendors) else {
-            print("❌ Failed to encode vendors")
+            Logger.company.error("Failed to encode vendors for persistence.")
             return
         }
         
         userDefaults.set(data, forKey: key)
-        print("💾 Saved \(vendors.count) vendors")
+        Logger.company.info("Saved vendors for organization [count=\(self.vendors.count, privacy: .public)]")
     }
     
     private func createDefaultVendors() {
@@ -139,6 +140,6 @@ class VendorManagementService: ObservableObject {
         
         vendors = defaultVendors
         saveVendors()
-        print("🏗️ Created default vendors")
+        Logger.company.notice("Seeded default vendors for empty organization directory.")
     }
 }

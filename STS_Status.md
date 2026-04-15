@@ -71,12 +71,13 @@
 - Replaced raw `print(...)` tracing in `Shared/Services/TeamMemberService.swift` with structured `Logger.teamMember` usage for team-member CRUD, photo metadata, status refresh, and organization persistence events.
 - Replaced raw `print(...)` tracing in `Shared/Services/Core/AuthenticationService.swift` with structured `Logger.auth` usage for Apple Sign-In, silent sign-in, JWT refresh/reuse, persisted-user restore, and local Apple ID persistence events.
 - Replaced raw `print(...)` tracing in `Shared/Services/EnhancedReceiptService.swift` with structured `Logger.receiptOCR` usage for enhanced receipt OCR, AI-analysis orchestration, and fallback-path events.
+- Replaced raw `print(...)` tracing in `Shared/Services/VendorManagementService.swift` with structured `Logger.company` usage for vendor lookup, creation, spending updates, local persistence, and default-directory seeding events.
 - Added `SHIP_READINESS_CHECKLIST.md` as the repo-tracked release plan for the remaining foundation, hardening, promo, and submission work.
 - Added focused persistence/session tests in `RHEIRTests/RHEIRTests.swift` for invite parsing, legacy cache migration, project storage, receipt intelligence retention, cache clearing, labor aggregation/validation, company-state bucketing, team-member store behavior, and receipt project-resolution behavior.
 - Added focused parity for project access normalization and assignment filtering in `RHEIRTests/RHEIRTests.swift`.
 
 ## In Progress
-- Keep phase-1 hardening moving with `Shared/Services/VendorManagementService.swift` as the next code slice after the current checkpoint.
+- Keep phase-1 hardening moving with `Shared/Services/Organization/OrganizationService.swift` as the next code slice after the current checkpoint.
 - Continue shrinking the remaining oversized active state owners around the new sync and access store boundaries.
 - Expand deterministic parity beyond the focused `RHEIRTests` suite.
 
@@ -85,9 +86,9 @@
 - Device-targeted Gate A remains blocked by signing because automatic provisioning is disabled for `com.RheirHome.RHEIR`.
 
 ## Latest Evidence
-- Gate A: `mcp__xcodebuildmcp__build_sim` with `extraArgs=["-derivedDataPath","/tmp/rheir_gateA_phase1am_mcp_dd"]` -> PASS
-- Focused parity: `mcp__xcodebuildmcp__test_sim` with `extraArgs=["-derivedDataPath","/tmp/rheir_parity_phase1am_mcp_dd","-only-testing:RHEIRTests"]` -> PASS (`27/27`)
+- Gate A: `mcp__xcodebuildmcp__build_sim` with `extraArgs=["-derivedDataPath","/tmp/rheir_gateA_phase1an_mcp_dd"]` -> PASS
+- Focused parity: `mcp__xcodebuildmcp__test_sim` with `extraArgs=["-derivedDataPath","/tmp/rheir_parity_phase1an_mcp_dd","-only-testing:RHEIRTests"]` -> PASS (`27/27`)
 - Direct CLI gate path remains less stable than the MCP simulator path in the local simulator environment
 
 ## Next Milestone
-- Checkpoint the `EnhancedReceiptService.swift` logging cleanup slice, then continue with `Shared/Services/VendorManagementService.swift`, the next highest-value remaining production service seam in the active tree.
+- Checkpoint the `VendorManagementService.swift` logging cleanup slice, then continue with `Shared/Services/Organization/OrganizationService.swift`, the next highest-value remaining production service seam in the active tree.
