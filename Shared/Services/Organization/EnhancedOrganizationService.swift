@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 import CloudKit
+import OSLog
 
 /// Enhanced organization service with unique name validation and subscription management
 @MainActor
@@ -23,7 +24,9 @@ public class EnhancedOrganizationService: ObservableObject {
         self.privateDatabase = container.privateCloudDatabase
         self.sharedDatabase = container.sharedCloudDatabase
         
-        print("🏢 EnhancedOrganizationService initialized with container: \(containerIdentifier)")
+        Logger.organizationService.info(
+            "Initialized EnhancedOrganizationService [container=\(containerIdentifier, privacy: .private(mask: .hash))]"
+        )
     }
     
     // MARK: - Name Validation
@@ -128,7 +131,9 @@ public class EnhancedOrganizationService: ObservableObject {
         organizations.append(finalOrganization)
         currentOrganization = finalOrganization
         
-        print("✅ Organization created successfully: \(name) (\(slug))")
+        Logger.organizationService.notice(
+            "Created organization successfully [name=\(name, privacy: .private(mask: .hash)) slug=\(slug, privacy: .private(mask: .hash))]"
+        )
         return finalOrganization
     }
     
@@ -149,7 +154,9 @@ public class EnhancedOrganizationService: ObservableObject {
             case .success(let record):
                 return parseOrganizationFromRecord(record)
             case .failure(let error):
-                print("❌ Error fetching organization: \(error)")
+                Logger.organizationService.error(
+                    "Failed to fetch organization record [error=\(error.localizedDescription, privacy: .public)]"
+                )
                 return nil
             }
         }
