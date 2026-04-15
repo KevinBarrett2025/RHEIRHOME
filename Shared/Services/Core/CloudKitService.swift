@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 import CloudKit
+import OSLog
 
 /// Core CloudKit service providing infrastructure and account management
 protocol CloudKitServiceProtocol {
@@ -45,40 +46,40 @@ final class CloudKitService: ObservableObject, CloudKitServiceProtocol {
             self.container.accountStatus { status, error in
                 DispatchQueue.main.async {
                     if let error = error {
-                        print("❌ [CloudKit] Account status check failed: \(error)")
+                        Logger.auth.error("CloudKit account status check failed: \(error.localizedDescription, privacy: .public)")
                         promise(.failure(error))
                         return
                     }
                     
                     switch status {
                     case .available:
-                        print("✅ [CloudKit] Account available")
+                        Logger.auth.notice("CloudKit account is available.")
                         self.isSignedIn = true
                         self.accountStatus = status
                         promise(.success(()))
                     case .noAccount:
                         let error = CloudKitError.noAccount
-                        print("❌ [CloudKit] \(error.localizedDescription)")
+                        Logger.auth.warning("\(error.localizedDescription ?? "No iCloud account found.", privacy: .public)")
                         self.errorMessage = error.localizedDescription
                         promise(.failure(error))
                     case .couldNotDetermine:
                         let error = CloudKitError.couldNotDetermineStatus
-                        print("❌ [CloudKit] \(error.localizedDescription)")
+                        Logger.auth.warning("\(error.localizedDescription ?? "Could not determine iCloud account status.", privacy: .public)")
                         self.errorMessage = error.localizedDescription
                         promise(.failure(error))
                     case .restricted:
                         let error = CloudKitError.accountRestricted
-                        print("❌ [CloudKit] \(error.localizedDescription)")
+                        Logger.auth.warning("\(error.localizedDescription ?? "iCloud account is restricted.", privacy: .public)")
                         self.errorMessage = error.localizedDescription
                         promise(.failure(error))
                     case .temporarilyUnavailable:
                         let error = CloudKitError.temporarilyUnavailable
-                        print("⚠️ [CloudKit] \(error.localizedDescription)")
+                        Logger.auth.warning("\(error.localizedDescription ?? "iCloud is temporarily unavailable.", privacy: .public)")
                         self.errorMessage = error.localizedDescription
                         promise(.failure(error))
                     @unknown default:
                         let error = CloudKitError.unknownStatus
-                        print("❌ [CloudKit] \(error.localizedDescription)")
+                        Logger.auth.error("\(error.localizedDescription ?? "Unknown iCloud account status.", privacy: .public)")
                         self.errorMessage = error.localizedDescription
                         promise(.failure(error))
                     }
@@ -97,13 +98,13 @@ final class CloudKitService: ObservableObject, CloudKitServiceProtocol {
             
             self.container.fetchUserRecordID { recordID, error in
                 if let error = error {
-                    print("❌ [CloudKit] Failed to fetch user record ID: \(error)")
+                    Logger.auth.error("Failed to fetch CloudKit user record ID: \(error.localizedDescription, privacy: .public)")
                     promise(.failure(error))
                 } else if let recordID = recordID {
-                    print("✅ [CloudKit] User record ID: \(recordID.recordName)")
+                    Logger.auth.notice("Fetched CloudKit user record ID [record=\(recordID.recordName, privacy: .private(mask: .hash))]")
                     promise(.success(recordID))
                 } else {
-                    print("❌ [CloudKit] No user record ID returned")
+                    Logger.auth.error("CloudKit did not return a user record ID.")
                     promise(.failure(CloudKitError.noUserRecord))
                 }
             }

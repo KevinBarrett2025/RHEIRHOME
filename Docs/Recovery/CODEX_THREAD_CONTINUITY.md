@@ -3,12 +3,12 @@
 ## Repo Truth
 - Repo Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Active Branch: `gm/rheir-hardening-phase1`
-- HEAD SHA: `acef98651395f2fafc5b78d3dd96716a99557441`
-- Last Commit: `acef986 Phase 1: replace receipt OCR print tracing`
+- HEAD SHA: `5cb6ed1b9201c781ff9e1229c38949d0f606777e`
+- Last Commit: `5cb6ed1 Phase 1: replace core user service print tracing`
 
 ## Current Objective
 - Stabilize the streamlined repo after the file-tree cleanup and sync-store extraction checkpoints.
-- Continue phase 1 hardening by checkpointing the `Core/UserService.swift` logging cleanup and then moving to the next non-hardened service seam by residue count.
+- Continue phase 1 hardening by checkpointing the `Core/CloudKitService.swift` logging cleanup and then moving to the next non-hardened service seam by residue count.
 
 ## Current Working Set
 - Session flow now routes through `Shared/Views/Auth/AppSessionSupport.swift`.
@@ -57,12 +57,13 @@
 - `PaymentMethodManagementService.swift` now uses structured `Logger.company` calls instead of raw `print(...)` tracing.
 - `ReceiptOCRService.swift` now uses structured `Logger.receiptOCR` calls instead of raw `print(...)` tracing.
 - `Core/UserService.swift` now uses structured `Logger.auth` calls instead of raw `print(...)` tracing.
+- `Core/CloudKitService.swift` now uses structured `Logger.auth` calls instead of raw `print(...)` tracing.
 - Other non-hardened seams still contain raw `print(...)` tracing.
 - Focused tests for invite parsing, cache migration, project-store persistence, receipt-intelligence retention, cache clearing, labor aggregation/validation, company-state bucketing, team-member store behavior, and receipt project-resolution behavior now live in `RHEIRTests/RHEIRTests.swift`.
 - Focused tests for project access normalization and assignment filtering now live in `RHEIRTests/RHEIRTests.swift`.
 - The current working slice has exact simulator evidence recorded:
-  - Gate A `build_sim`: PASS (`mcp__xcodebuildmcp__build_sim` with `-derivedDataPath /tmp/rheir_gateA_phase1af_mcp_dd`)
-  - Focused parity `test_sim -only-testing:RHEIRTests`: PASS (`mcp__xcodebuildmcp__test_sim` with `-derivedDataPath /tmp/rheir_parity_phase1af_mcp_dd`, `27/27`)
+  - Gate A `build_sim`: PASS (`mcp__xcodebuildmcp__build_sim` with `-derivedDataPath /tmp/rheir_gateA_phase1ag_mcp_dd`)
+  - Focused parity `test_sim -only-testing:RHEIRTests`: PASS (`mcp__xcodebuildmcp__test_sim` with `-derivedDataPath /tmp/rheir_parity_phase1ag_mcp_dd`, `27/27`)
   - Direct `xcodebuild` CLI evidence remains less stable than the MCP simulator path in the current local CoreSimulator environment
 
 ## Known Constraints
@@ -72,6 +73,6 @@
 - This repo follows a repo-local STS equivalent defined in the root governance docs because the original STS spine docs were not present here.
 
 ## Next Required Action
-1. Commit the `Core/UserService.swift` logging slice without staging `Shared/Views/Auth/LoginView.swift`, `rheir_knowledge_database.json`, `RHEIRmemories.csv`, or `RheirLogo 1024x1024.png`.
+1. Commit the `Core/CloudKitService.swift` logging slice without staging `Shared/Views/Auth/LoginView.swift`, `rheir_knowledge_database.json`, `RHEIRmemories.csv`, or `RheirLogo 1024x1024.png`.
 2. Preserve the repo-local STS docs as the source of workflow truth until a canonical authority/promo structure exists for this repository.
-3. Continue the next logging-hardening seam by fresh raw-`print(...)` residue count after the user-service checkpoint lands, starting with `Core/CloudKitService.swift`.
+3. Continue the next logging-hardening seam by fresh raw-`print(...)` residue count after the CloudKit-service checkpoint lands, starting with `CloudKitSharingService.swift`.
