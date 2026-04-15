@@ -67,7 +67,7 @@
 - Latest focused parity count: `27/27`
 
 ## Known Residual Risks
-- Remaining raw `print(...)` statements still exist in `ChatGPTService.swift`, `ReceiptScannerView.swift`, and other non-hardened seams.
+- Remaining raw `print(...)` statements still exist in `Shared/Services/TeamMemberService.swift`, `ReceiptScannerView.swift`, and other non-hardened seams.
 - `ProjectViewModel` is still oversized even after the extracted stores, though organization/project synchronization is now isolated behind `OrganizationProjectSyncStore`.
 - `CompanyStore` now lives in the compiled state layer rather than the settings view, but the broader company/project coordination flow still spans multiple UI files.
 - Direct CLI `xcodebuild` evidence remains less stable than the MCP simulator path in the local CoreSimulator environment.

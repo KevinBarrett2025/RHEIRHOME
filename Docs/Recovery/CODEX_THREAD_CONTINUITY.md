@@ -3,12 +3,12 @@
 ## Repo Truth
 - Repo Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Active Branch: `gm/rheir-hardening-phase1`
-- HEAD SHA: `629cffb4f8f394c0d58f613a18a4ef62d4ca51b6`
-- Last Commit: `629cffb Phase 1: replace CloudKit sharing service print tracing`
+- HEAD SHA: `bcb122dc9e997663141b5f69209aa85aa031eea4`
+- Last Commit: `bcb122d Phase 1: add ship readiness checklist (docs only)`
 
 ## Current Objective
-- Add a repo-tracked ship-readiness checklist and sync the release plan into the working tree.
-- Preserve the current phase-1 hardening checkpoint and point the next code slice to `ChatGPTService.swift`.
+- Preserve the repo-tracked ship-readiness checklist and continue phase 1 hardening with the next residue seam in `Shared/Services/ChatGPTService.swift`.
+- Note: `Shared/Services/ChatGPTService.swift` currently contains `OrganizationService` logic; this checkpoint is limited to logging cleanup in that file path.
 
 ## Current Working Set
 - Session flow now routes through `Shared/Views/Auth/AppSessionSupport.swift`.
@@ -60,12 +60,13 @@
 - `Core/CloudKitService.swift` now uses structured `Logger.auth` calls instead of raw `print(...)` tracing.
 - `CloudKitSharingService.swift` now uses structured `Logger.organizationSharing` calls instead of raw `print(...)` tracing.
 - `SHIP_READINESS_CHECKLIST.md` is the repo-tracked release plan for foundation completion, release hardening, promo candidacy, and App Store submission.
+- `Shared/Services/ChatGPTService.swift` now uses structured `Logger.organizationService` calls instead of raw `print(...)` tracing, even though the file currently houses `OrganizationService`.
 - Other non-hardened seams still contain raw `print(...)` tracing.
 - Focused tests for invite parsing, cache migration, project-store persistence, receipt-intelligence retention, cache clearing, labor aggregation/validation, company-state bucketing, team-member store behavior, and receipt project-resolution behavior now live in `RHEIRTests/RHEIRTests.swift`.
 - Focused tests for project access normalization and assignment filtering now live in `RHEIRTests/RHEIRTests.swift`.
 - The current working slice has exact simulator evidence recorded:
-  - Gate A `build_sim`: PASS (`mcp__xcodebuildmcp__build_sim` with `-derivedDataPath /tmp/rheir_gateA_phase1ai_mcp_dd`)
-  - Focused parity `test_sim -only-testing:RHEIRTests`: PASS (`mcp__xcodebuildmcp__test_sim` with `-derivedDataPath /tmp/rheir_parity_phase1ai_mcp_dd`, `27/27`)
+  - Gate A `build_sim`: PASS (`mcp__xcodebuildmcp__build_sim` with `-derivedDataPath /tmp/rheir_gateA_phase1aj_mcp_dd`)
+  - Focused parity `test_sim -only-testing:RHEIRTests`: PASS (`mcp__xcodebuildmcp__test_sim` with `-derivedDataPath /tmp/rheir_parity_phase1aj_mcp_dd`, `27/27`)
   - Direct `xcodebuild` CLI evidence remains less stable than the MCP simulator path in the current local CoreSimulator environment
 
 ## Known Constraints
@@ -75,6 +76,6 @@
 - This repo follows a repo-local STS equivalent defined in the root governance docs because the original STS spine docs were not present here.
 
 ## Next Required Action
-1. Commit the repo-tracked ship-readiness checklist without staging `Shared/Views/Auth/LoginView.swift`, `rheir_knowledge_database.json`, `RHEIRmemories.csv`, or `RheirLogo 1024x1024.png`.
+1. Commit the `Shared/Services/ChatGPTService.swift` logging slice without staging `Shared/Views/Auth/LoginView.swift`, `rheir_knowledge_database.json`, `RHEIRmemories.csv`, or `RheirLogo 1024x1024.png`.
 2. Preserve the repo-local STS docs and `SHIP_READINESS_CHECKLIST.md` as the current release-planning truth for this repository.
-3. Continue the next logging-hardening seam with `Shared/Services/ChatGPTService.swift`.
+3. Continue the next logging-hardening seam by fresh raw-`print(...)` residue count after the `ChatGPTService.swift` checkpoint lands, starting with `Shared/Services/TeamMemberService.swift`.

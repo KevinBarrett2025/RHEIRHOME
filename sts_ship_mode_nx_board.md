@@ -43,9 +43,9 @@
   - Focused parity `test_sim -only-testing:RHEIRTests`: PASS (`mcp__xcodebuildmcp__test_sim` with `-derivedDataPath /tmp/rheir_parity_phase1ah_mcp_dd`, `27/27`)
 
 ## Open Work
-- Finish replacing raw `print(...)` tracing in the other non-hardened production seams, starting with `ChatGPTService.swift`.
+- Finish replacing raw `print(...)` tracing in the other non-hardened production seams, starting with `TeamMemberService.swift`.
 - Continue shrinking the remaining oversized active state owners.
-- After the ship-readiness checklist checkpoint, continue the next highest-value non-hardened seam.
+- After the `ChatGPTService.swift` checkpoint, continue the next highest-value non-hardened seam.
 - Use `SHIP_READINESS_CHECKLIST.md` as the current release-progress reference alongside the STS docs.
 
 ## Blockers

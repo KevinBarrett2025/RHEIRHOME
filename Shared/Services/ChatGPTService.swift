@@ -1,5 +1,10 @@
 import Foundation
 import CloudKit
+import OSLog
+
+extension Logger {
+    static let organizationService = Logger(subsystem: "com.RheirHome.RHEIR", category: "organizationService")
+}
 
 /// Centralized service for managing organization-wide vendor and payment method directories
 /// Handles both master directories and project-specific tracking
@@ -52,7 +57,7 @@ actor OrganizationService {
         // Save to CloudKit (implementation depends on your CloudKit setup)
         await saveMasterVendor(newVendor)
         
-        print("📁 Added new vendor to master directory: \(vendorName)")
+        Logger.organizationService.notice("Added vendor to master directory [organization=\(organizationId, privacy: .private(mask: .hash))]")
         return newVendor.id
     }
     
@@ -85,7 +90,7 @@ actor OrganizationService {
         // Save to CloudKit
         await saveMasterPaymentMethod(newMethod)
         
-        print("💳 Added new payment method to master directory: \(paymentMethod)")
+        Logger.organizationService.notice("Added payment method to master directory [organization=\(organizationId, privacy: .private(mask: .hash))]")
         return newMethod.id
     }
     
@@ -120,7 +125,9 @@ actor OrganizationService {
         // Update master vendor totals
         await updateMasterVendorTotals(vendorId: vendorId, projectId: projectId, amount: amount)
         
-        print("📊 Updated vendor tracking for project \(projectId): $\(amount)")
+        Logger.organizationService.info(
+            "Updated vendor tracking for project [project=\(projectId, privacy: .private(mask: .hash)) amount=\(amount, privacy: .public)]"
+        )
     }
     
     func trackPaymentMethodForProject(
@@ -152,7 +159,9 @@ actor OrganizationService {
         // Update master payment method totals
         await updateMasterPaymentMethodTotals(paymentMethodId: paymentMethodId, projectId: projectId, amount: amount)
         
-        print("💳 Updated payment method tracking for project \(projectId): $\(amount)")
+        Logger.organizationService.info(
+            "Updated payment method tracking for project [project=\(projectId, privacy: .private(mask: .hash)) amount=\(amount, privacy: .public)]"
+        )
     }
     
     // MARK: - Reporting
@@ -212,12 +221,12 @@ actor OrganizationService {
     
     private func saveMasterVendor(_ vendor: OrganizationVendor) async {
         // Implementation: Save to CloudKit
-        print("💾 Saving master vendor: \(vendor.name)")
+        Logger.organizationService.debug("Saving master vendor placeholder implementation.")
     }
     
     private func saveMasterPaymentMethod(_ method: OrganizationPaymentMethod) async {
         // Implementation: Save to CloudKit
-        print("💾 Saving master payment method: \(method.name)")
+        Logger.organizationService.debug("Saving master payment method placeholder implementation.")
     }
     
     private func fetchProjectVendorUsage(projectId: String, vendorId: String) async -> ProjectVendorUsage? {
@@ -232,22 +241,22 @@ actor OrganizationService {
     
     private func saveProjectVendorUsage(_ usage: ProjectVendorUsage) async {
         // Implementation: Save project vendor usage
-        print("💾 Saving project vendor usage: \(usage.vendorId) for project \(usage.projectId)")
+        Logger.organizationService.debug("Saving project vendor usage placeholder implementation.")
     }
     
     private func saveProjectPaymentMethodUsage(_ usage: ProjectPaymentMethodUsage) async {
         // Implementation: Save project payment method usage
-        print("💾 Saving project payment method usage: \(usage.paymentMethodId) for project \(usage.projectId)")
+        Logger.organizationService.debug("Saving project payment method usage placeholder implementation.")
     }
     
     private func updateMasterVendorTotals(vendorId: String, projectId: String, amount: Double) async {
         // Implementation: Update master vendor totals and project list
-        print("📈 Updating master vendor totals: +$\(amount)")
+        Logger.organizationService.debug("Updating master vendor totals placeholder implementation.")
     }
     
     private func updateMasterPaymentMethodTotals(paymentMethodId: String, projectId: String, amount: Double) async {
         // Implementation: Update master payment method totals and project list
-        print("📈 Updating master payment method totals: +$\(amount)")
+        Logger.organizationService.debug("Updating master payment method totals placeholder implementation.")
     }
     
     private func fetchAllProjectVendorUsages(projectId: String) async -> [ProjectVendorUsage] {
