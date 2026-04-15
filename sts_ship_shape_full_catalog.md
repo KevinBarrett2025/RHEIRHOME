@@ -49,6 +49,7 @@
 - `DataMigrationService` structured logging
 - `JWTService` structured logging
 - `PaymentMethodManagementService` structured logging
+- `ReceiptOCRService` structured logging
 - `VendorKnowledgeService` structured logging
 - `PaymentMethodKnowledgeService` structured logging
 - `OrganizationService` structured logging
@@ -57,12 +58,12 @@
 - `SignInWithAppleCoordinator` structured logging
 
 ## Current Validation Baseline
-- Simulator build path: `mcp__xcodebuildmcp__build_sim` with `extraArgs=["-derivedDataPath","/tmp/rheir_gateA_phase1ad_retry_mcp_dd"]`
-- Focused parity path: `mcp__xcodebuildmcp__test_sim` with `extraArgs=["-derivedDataPath","/tmp/rheir_parity_phase1ad_retry_mcp_dd","-only-testing:RHEIRTests"]`
+- Simulator build path: `mcp__xcodebuildmcp__build_sim` with `extraArgs=["-derivedDataPath","/tmp/rheir_gateA_phase1ae_mcp_dd"]`
+- Focused parity path: `mcp__xcodebuildmcp__test_sim` with `extraArgs=["-derivedDataPath","/tmp/rheir_parity_phase1ae_mcp_dd","-only-testing:RHEIRTests"]`
 - Latest focused parity count: `27/27`
 
 ## Known Residual Risks
-- Remaining raw `print(...)` statements still exist in `ReceiptOCRService.swift`, `ReceiptScannerView.swift`, and other non-hardened seams.
+- Remaining raw `print(...)` statements still exist in `Core/UserService.swift`, `ReceiptScannerView.swift`, and other non-hardened seams.
 - `ProjectViewModel` is still oversized even after the extracted stores, though organization/project synchronization is now isolated behind `OrganizationProjectSyncStore`.
 - `CompanyStore` now lives in the compiled state layer rather than the settings view, but the broader company/project coordination flow still spans multiple UI files.
 - Direct CLI `xcodebuild` evidence remains less stable than the MCP simulator path in the local CoreSimulator environment.

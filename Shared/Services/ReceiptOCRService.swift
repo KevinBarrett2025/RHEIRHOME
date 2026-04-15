@@ -1,6 +1,11 @@
 import Foundation
+import OSLog
 import Vision
 import UIKit
+
+extension Logger {
+    static let receiptOCR = Logger(subsystem: "com.RheirHome.RHEIR", category: "receiptOCR")
+}
 
 /// Service for extracting text from receipt images using Vision framework
 public actor ReceiptOCRService {
@@ -63,10 +68,7 @@ public actor ReceiptOCRService {
     ) async throws -> ReceiptAnalysisResult {
         // Step 1: Extract text using OCR
         let ocrText = try await extractText(from: image)
-        
-        print("📄 OCR Extracted Text:")
-        print(ocrText)
-        print("---")
+        Logger.receiptOCR.info("Extracted OCR text for receipt analysis [characters=\(ocrText.count, privacy: .public)]")
         
         // Step 2: Analyze with Production ChatGPT (includes analytics)
         let analysis = try await ProductionChatGPTService.shared.analyzeReceipt(
@@ -75,14 +77,9 @@ public actor ReceiptOCRService {
             organizationID: organizationID,
             subscriptionTier: subscriptionTier
         )
-        
-        print("🤖 AI Analysis:")
-        print("Vendor: \(analysis.vendor)")
-        print("Amount: $\(analysis.amount)")
-        print("Category: \(analysis.category)")
-        print("Items: \(analysis.items.count)")
-        print("Confidence: \(analysis.confidence)")
-        print("---")
+        Logger.receiptOCR.notice(
+            "Completed receipt AI analysis [items=\(analysis.items.count, privacy: .public) confidence=\(analysis.confidence, privacy: .public)]"
+        )
         
         // Convert to shared type from ReceiptAnalysisTypes
         return ReceiptAnalysisResult(
