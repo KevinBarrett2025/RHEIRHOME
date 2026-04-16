@@ -100,7 +100,5 @@ struct QuickVendorCreateView: View {
 }
 
 #Preview {
-    QuickVendorCreateView { vendor in
-        print("Created vendor: \(vendor.name)")
-    }
+    QuickVendorCreateView { _ in }
 }
