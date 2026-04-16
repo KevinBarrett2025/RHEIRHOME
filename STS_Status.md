@@ -3,7 +3,7 @@
 ## Repo
 - Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Branch: `gm/rheir-hardening-phase1`
-- HEAD: `031fd334f3b6bfd8806e7a3a113081a4eecb4a2c`
+- HEAD: `683392717751c4054de0770c57479c76ff23e262`
 
 ## Active Initiative
 - RHEIR hardening and streamlining, phase 1 foundation pass.
@@ -117,7 +117,7 @@
 - Added focused parity for project access normalization and assignment filtering in `RHEIRTests/RHEIRTests.swift`.
 
 ## In Progress
-- Continue release hardening by expanding deterministic UI smoke coverage in `RHEIRUITests` beyond shell coverage, moving from deterministic project-selection coverage into deterministic selected-project workflow routes.
+- Continue release hardening by expanding deterministic UI smoke coverage in `RHEIRUITests` beyond shell coverage, moving from deterministic selected-project labor coverage into deterministic selected-project admin/company workflow routes.
 - Continue shrinking the remaining oversized active state owners around the new sync and access store boundaries.
 - Expand deterministic parity beyond the focused `RHEIRTests` suite.
 
@@ -126,9 +126,9 @@
 - Device-targeted Gate A remains blocked by signing because automatic provisioning is disabled for `com.RheirHome.RHEIR`.
 
 ## Latest Evidence
-- Gate A: `mcp__xcodebuildmcp__build_sim` with `extraArgs=["-derivedDataPath","/tmp/rheir_gateA_phase1cb_final_mcp_dd"]` -> PASS
-- Focused parity: `mcp__xcodebuildmcp__test_sim` with `extraArgs=["-derivedDataPath","/tmp/rheir_parity_phase1cb_final_retry_mcp_dd","-only-testing:RHEIRTests","-only-testing:RHEIRUITests/RHEIRUITests/testSignedOutModeShowsAppleSignIn","-only-testing:RHEIRUITests/RHEIRUITests/testReadyModeShowsMainTabShell","-only-testing:RHEIRUITests/RHEIRUITests/testOrganizationSelectionModeShowsOrganizationList","-only-testing:RHEIRUITests/RHEIRUITests/testProjectSelectionModeRequiresAndAppliesProjectContext","-only-testing:RHEIRUITests/RHEIRUITestsLaunchTests/testLaunch"]` -> PASS (`32/32`)
+- Gate A: `mcp__xcodebuildmcp__build_sim` with `extraArgs=["-derivedDataPath","/tmp/rheir_gateA_phase1cc_mcp_dd"]` -> PASS
+- Focused parity: `mcp__xcodebuildmcp__test_sim` with `extraArgs=["-derivedDataPath","/tmp/rheir_parity_phase1cc_mcp_dd","-only-testing:RHEIRTests","-only-testing:RHEIRUITests/RHEIRUITests/testSignedOutModeShowsAppleSignIn","-only-testing:RHEIRUITests/RHEIRUITests/testReadyModeShowsMainTabShell","-only-testing:RHEIRUITests/RHEIRUITests/testOrganizationSelectionModeShowsOrganizationList","-only-testing:RHEIRUITests/RHEIRUITests/testProjectSelectionModeRequiresAndAppliesProjectContext","-only-testing:RHEIRUITests/RHEIRUITests/testLaborModeRequiresAndUsesSelectedProjectContext","-only-testing:RHEIRUITests/RHEIRUITestsLaunchTests/testLaunch"]` -> PASS (`33/33`)
 - Direct CLI gate path remains less stable than the MCP simulator path in the local simulator environment
 
 ## Next Milestone
-- Checkpoint deterministic selected-project labor `RHEIRUITests` smoke coverage, then expand deterministic selected-project workflow coverage.
+- Checkpoint deterministic company-admin `RHEIRUITests` smoke coverage, then expand deterministic selected-project workflow coverage.

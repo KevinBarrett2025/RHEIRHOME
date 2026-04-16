@@ -158,6 +158,34 @@ final class RHEIRUITests: XCTestCase {
     }
 
     @MainActor
+    func testCompanyModeShowsAdminManagementSurface() throws {
+        let app = makeApp(mode: .selectedProject)
+        app.launch()
+        app.tabBars.buttons["Company"].tap()
+
+        XCTAssertTrue(
+            app.navigationBars["Company Settings"].waitForExistence(timeout: 5),
+            "Expected selected-project admin mode to open the Company settings surface."
+        )
+        XCTAssertTrue(
+            app.staticTexts["Team Status Overview"].waitForExistence(timeout: 5),
+            "Expected the admin company team overview to render."
+        )
+        XCTAssertTrue(
+            app.staticTexts["Manage Team"].exists,
+            "Expected the admin-only team management section."
+        )
+        XCTAssertTrue(
+            app.buttons["Add Internal Team Member"].exists,
+            "Expected the admin-only add team member action."
+        )
+        XCTAssertFalse(
+            app.staticTexts["Administrator Access Required"].exists,
+            "Expected admin mode to avoid the restricted company access state."
+        )
+    }
+
+    @MainActor
     func testLaunchPerformance() throws {
         // This measures how long it takes to launch your application.
         measure(metrics: [XCTApplicationLaunchMetric()]) {

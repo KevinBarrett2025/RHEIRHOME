@@ -3,12 +3,12 @@
 ## Repo Truth
 - Repo Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Active Branch: `gm/rheir-hardening-phase1`
-- HEAD SHA: `031fd334f3b6bfd8806e7a3a113081a4eecb4a2c`
-- Last Commit: `031fd33 Phase 1: add project selection UI smoke coverage`
+- HEAD SHA: `683392717751c4054de0770c57479c76ff23e262`
+- Last Commit: `6833927 Phase 1: add labor UI smoke coverage`
 
 ## Current Objective
-- Extend the deterministic `RHEIRUITests` harness with a selected-project labor workflow route.
-- Prove the app’s labor tab honors project-required gating when no project is selected and shows project-scoped labor content once project context is seeded.
+- Extend the deterministic `RHEIRUITests` harness with an admin company-management route.
+- Prove the Company tab shows the real admin management surface in deterministic selected-project mode without falling back to the restricted-access state.
 
 ## Current Working Set
 - Session flow now routes through `Shared/Views/Auth/AppSessionSupport.swift`.
@@ -115,7 +115,8 @@
 - `RHEIRUITests.swift` now also contains a deterministic ready-state smoke test that asserts the main tab shell renders with the five core tabs.
 - `RHEIRUITests.swift` now also contains a deterministic organization-selection smoke test that asserts the org picker and seeded organizations render.
 - `RHEIRUITests.swift` now also contains a deterministic project-selection smoke test that proves the no-selection warning and the receipts gate/state transition.
-- Deterministic project-context labor coverage is the active release-hardening seam now that the signed-out, ready-state, organization-selection, and project-selection launch routes are stable.
+- `RHEIRUITests.swift` now also contains a deterministic labor smoke test that proves the labor gate and project-scoped labor content states.
+- Deterministic company admin coverage is the active release-hardening seam now that the signed-out, ready-state, organization-selection, project-selection, and labor launch routes are stable.
 - `RHEIRUITestsLaunchTests.swift` now launches in deterministic signed-out mode before capturing launch evidence.
 - Deterministic organization/project workflow coverage is now the next highest-value release-hardening seam in the active tree.
 - Focused tests for invite parsing, cache migration, project-store persistence, receipt-intelligence retention, cache clearing, labor aggregation/validation, company-state bucketing, team-member store behavior, and receipt project-resolution behavior now live in `RHEIRTests/RHEIRTests.swift`.
@@ -134,6 +135,6 @@
 - This repo follows a repo-local STS equivalent defined in the root governance docs because the original STS spine docs were not present here.
 
 ## Next Required Action
-1. Checkpoint the deterministic selected-project labor `RHEIRUITests` smoke coverage slice without staging `Shared/Views/Auth/LoginView.swift`, `rheir_knowledge_database.json`, `RHEIRmemories.csv`, or `RheirLogo 1024x1024.png`.
+1. Checkpoint the deterministic company-admin `RHEIRUITests` smoke coverage slice without staging `Shared/Views/Auth/LoginView.swift`, `rheir_knowledge_database.json`, `RHEIRmemories.csv`, or `RheirLogo 1024x1024.png`.
 2. Preserve the repo-local STS docs and `SHIP_READINESS_CHECKLIST.md` as the current release-planning truth for this repository.
-3. Continue with deterministic selected-project workflow coverage after the labor UI checkpoint lands.
+3. Continue with deterministic selected-project workflow coverage after the company-admin UI checkpoint lands.
