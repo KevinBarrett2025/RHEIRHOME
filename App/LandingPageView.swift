@@ -172,6 +172,7 @@ struct LandingPageView: View {
                 )
                 .font(.subheadline)
                 .lineLimit(1)
+                .accessibilityIdentifier("project-selection-current-project")
 
                 Spacer()
 
@@ -196,6 +197,7 @@ struct LandingPageView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(activeProjects.isEmpty)
+                .accessibilityIdentifier("project-selection-menu")
             }
 
             if viewModel.selectedProject == nil && activeProjects.count > 1 {
@@ -203,6 +205,7 @@ struct LandingPageView: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("project-selection-guidance")
             }
         }
         .padding(.horizontal)
@@ -440,6 +443,9 @@ struct LandingPageView: View {
                 sessionStore.selectProject(project)
             }
         )
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(project.name)
+        .accessibilityIdentifier("project-card-\(project.id.uuidString)")
     }
     
     // MARK: - Project Loading Methods

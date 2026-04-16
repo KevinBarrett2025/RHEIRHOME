@@ -17,6 +17,8 @@ final class RHEIRUITests: XCTestCase {
         case signedOut = "signed_out"
         case ready = "ready"
         case selectingOrganization = "selecting_organization"
+        case projectSelection = "project_selection"
+        case selectedProject = "selected_project"
     }
 
     override func setUpWithError() throws {
@@ -77,6 +79,46 @@ final class RHEIRUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["UI Test Builders"].exists, "Expected the seeded builder organization.")
         XCTAssertTrue(app.staticTexts["Ready Roofing Co"].exists, "Expected the seeded contractor organization.")
         XCTAssertTrue(app.buttons["Create"].exists, "Expected the organization create action in organization-selection mode.")
+    }
+
+    @MainActor
+    func testProjectSelectionModeRequiresAndAppliesProjectContext() throws {
+        let app = makeApp(mode: .projectSelection)
+        app.launch()
+
+        let chooseProjectButton = app.buttons["project-selection-menu"]
+        XCTAssertTrue(
+            chooseProjectButton.waitForExistence(timeout: 5),
+            "Expected deterministic project-selection UI test mode to expose the project picker."
+        )
+
+        XCTAssertTrue(
+            app.staticTexts["project-selection-guidance"].waitForExistence(timeout: 5),
+            "Expected the multi-project no-selection guidance before a project is chosen."
+        )
+
+        app.tabBars.buttons["Receipts"].tap()
+
+        let receiptsGateMessage = app.staticTexts["Choose a project from the Projects tab before viewing receipts."]
+        XCTAssertTrue(
+            receiptsGateMessage.waitForExistence(timeout: 5),
+            "Expected Receipts to require a selected project before showing receipt content."
+        )
+
+        app.terminate()
+
+        let selectedProjectApp = makeApp(mode: .selectedProject)
+        selectedProjectApp.launch()
+        selectedProjectApp.tabBars.buttons["Receipts"].tap()
+
+        XCTAssertTrue(
+            selectedProjectApp.staticTexts["No Receipts Yet"].waitForExistence(timeout: 5),
+            "Expected Receipts to show project-scoped content when a deterministic selected project is seeded."
+        )
+        XCTAssertFalse(
+            selectedProjectApp.staticTexts["Choose a project from the Projects tab before viewing receipts."].exists,
+            "Expected the project-selection gate to disappear when project context is already seeded."
+        )
     }
 
     @MainActor

@@ -6,6 +6,8 @@ private enum UITestLaunchMode: String {
     case signedOut = "signed_out"
     case ready = "ready"
     case selectingOrganization = "selecting_organization"
+    case projectSelection = "project_selection"
+    case selectedProject = "selected_project"
 }
 
 private enum UITestLaunchEnvironment {
@@ -79,6 +81,48 @@ private struct AppLaunchConfiguration {
             )
             authViewModel.currentOrg = nil
 
+        case .projectSelection, .selectedProject:
+            let user = User(id: "ui-test-project-user", email: "project-ui-test@rheirhome.com")
+            let organization = Organization(
+                id: "ui-test-project-org",
+                name: "Project Picker Builders",
+                members: [user.id, "project-member-2"],
+                adminUserID: user.id
+            )
+            let kitchenProject = makeUITestProject(
+                id: UUID(uuidString: "A7A92AF6-2E2B-4F51-BEA4-4B53CF2A7D11")!,
+                name: "Kitchen Remodel",
+                client: "Avery Homes",
+                organizationID: organization.id
+            )
+            let bathProject = makeUITestProject(
+                id: UUID(uuidString: "4F874307-DB41-446C-9A9E-DB94283E4E28")!,
+                name: "Primary Bath Upgrade",
+                client: "Northline Custom",
+                organizationID: organization.id
+            )
+
+            applyCommonBootstrap(
+                authViewModel: authViewModel,
+                projectViewModel: projectViewModel,
+                user: user,
+                organizations: [organization],
+                organizationRoles: [organization.id: .admin]
+            )
+            authViewModel.setCurrentOrganization(organization)
+            projectViewModel.currentOrganization = organization
+            projectViewModel.currentOrganizationRole = .admin
+            projectViewModel.currentOrganizationID = organization.id
+            projectViewModel.isUsingCloudKitForOrganizationData = false
+            projectViewModel.projects = [kitchenProject, bathProject]
+            projectViewModel.organizationProjects = [kitchenProject, bathProject]
+            projectViewModel.accessibleProjects = [kitchenProject, bathProject]
+            if uiTestMode == .selectedProject {
+                projectViewModel.selectProject(kitchenProject)
+            } else {
+                projectViewModel.deselectProject()
+            }
+
         case .signedOut, .none:
             break
         }
@@ -108,6 +152,29 @@ private struct AppLaunchConfiguration {
         projectViewModel.organizationProjects = []
         projectViewModel.accessibleProjects = []
         projectViewModel.deselectProject()
+    }
+
+    private func makeUITestProject(
+        id: UUID,
+        name: String,
+        client: String,
+        organizationID: String
+    ) -> Project {
+        Project(
+            id: id,
+            name: name,
+            client: client,
+            description: "\(name) UI smoke project",
+            totalBudget: 48_000,
+            materialCost: 12_500,
+            laborCost: 8_000,
+            startDate: Date(timeIntervalSince1970: 1_735_171_200),
+            endDate: Date(timeIntervalSince1970: 1_741_392_000),
+            status: .active,
+            priority: .high,
+            assignedUserIDs: [],
+            organizationID: organizationID
+        )
     }
 }
 
@@ -159,6 +226,9 @@ struct RheirApp: App {
 
     init() {
         let launchConfiguration = AppLaunchConfiguration()
+        if launchConfiguration.uiTestMode != nil {
+            LocalCacheStore.shared.clearAllKnownSessionKeys()
+        }
         let authService: AuthService
 
         switch launchConfiguration.uiTestMode {
@@ -167,6 +237,10 @@ struct RheirApp: App {
         case .ready:
             authService = SignedOutUITestAuthService()
         case .selectingOrganization:
+            authService = SignedOutUITestAuthService()
+        case .projectSelection:
+            authService = SignedOutUITestAuthService()
+        case .selectedProject:
             authService = SignedOutUITestAuthService()
         case .none:
             authService = CloudKitAuthService()

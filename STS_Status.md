@@ -3,7 +3,7 @@
 ## Repo
 - Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Branch: `gm/rheir-hardening-phase1`
-- HEAD: `5222526b5d693071301786ec2abd00b0abc21ed5`
+- HEAD: `d7f289ff9417e91549196ada7aa6aa7a5b93f24d`
 
 ## Active Initiative
 - RHEIR hardening and streamlining, phase 1 foundation pass.
@@ -117,7 +117,7 @@
 - Added focused parity for project access normalization and assignment filtering in `RHEIRTests/RHEIRTests.swift`.
 
 ## In Progress
-- Continue release hardening by expanding deterministic UI smoke coverage in `RHEIRUITests` beyond shell coverage, starting with deterministic organization-selection coverage and then deterministic project workflow routes.
+- Continue release hardening by expanding deterministic UI smoke coverage in `RHEIRUITests` beyond shell coverage, moving from deterministic organization-selection coverage into deterministic project-selection and project-context workflow routes.
 - Continue shrinking the remaining oversized active state owners around the new sync and access store boundaries.
 - Expand deterministic parity beyond the focused `RHEIRTests` suite.
 
@@ -131,4 +131,4 @@
 - Direct CLI gate path remains less stable than the MCP simulator path in the local simulator environment
 
 ## Next Milestone
-- Checkpoint deterministic organization-selection `RHEIRUITests` smoke coverage, then expand deterministic project-selection and project-context workflow coverage.
+- Checkpoint deterministic project-selection `RHEIRUITests` smoke coverage, then expand deterministic project-context workflow coverage.

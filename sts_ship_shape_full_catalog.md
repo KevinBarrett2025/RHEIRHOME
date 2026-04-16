@@ -96,7 +96,8 @@
 - `WorkHour` warning cleanup
 - `RHEIRUITests` signed-out launch smoke coverage
 - `RHEIRUITests` ready-state tab-shell smoke coverage
-- `RHEIRUITests` organization-selection smoke coverage (in progress)
+- `RHEIRUITests` organization-selection smoke coverage
+- `RHEIRUITests` project-selection smoke coverage (in progress)
 - `VendorKnowledgeService` structured logging
 - `PaymentMethodKnowledgeService` structured logging
 - `OrganizationService` structured logging
@@ -112,7 +113,7 @@
 ## Known Residual Risks
 - Remaining raw `print(...)` statements are now limited to development-only seams such as `Shared/Services/Development/DevelopmentDataManager.swift`, `Shared/Services/StubServices.swift`, and `Shared/Services/PreviewAuthService.swift`.
 - Stable MCP simulator path is warning-clean for the active target; remaining release hardening now centers on broader deterministic coverage and runtime QA.
-- `RHEIRUITests` is now deterministic for signed-out and ready-state shell coverage, and the current release-hardening slice is adding dedicated organization-selection launch coverage before project workflow coverage.
+- `RHEIRUITests` is now deterministic for signed-out, ready-state, and organization-selection shell coverage, and the current release-hardening slice is adding dedicated project-selection launch coverage before deeper project workflow coverage.
 - `ProjectViewModel` is still oversized even after the extracted stores, though organization/project synchronization is now isolated behind `OrganizationProjectSyncStore`.
 - `CompanyStore` now lives in the compiled state layer rather than the settings view, but the broader company/project coordination flow still spans multiple UI files.
 - Direct CLI `xcodebuild` evidence remains less stable than the MCP simulator path in the local CoreSimulator environment.
