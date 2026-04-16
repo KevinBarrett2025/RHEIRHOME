@@ -101,7 +101,5 @@ struct QuickPaymentMethodCreateView: View {
 }
 
 #Preview {
-    QuickPaymentMethodCreateView { paymentMethod in
-        print("Created payment method: \(paymentMethod.displayName)")
-    }
+    QuickPaymentMethodCreateView { _ in }
 }

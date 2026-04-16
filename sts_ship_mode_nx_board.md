@@ -77,7 +77,7 @@
 ## Open Work
 - Finish replacing raw `print(...)` tracing in the other non-hardened production seams, starting with `Shared/Features/Receipts/QuickPaymentMethodCreateView.swift`.
 - Continue shrinking the remaining oversized active state owners.
-- After the `Shared/Features/Receipts/QuickPaymentMethodCreateView.swift` checkpoint, continue the next highest-value non-hardened seam.
+- After the `Shared/Features/Receipts/QuickPaymentMethodCreateView.swift` checkpoint, continue with `Shared/Features/Receipts/ManualReceiptEntryView.swift`.
 - Use `SHIP_READINESS_CHECKLIST.md` as the current release-progress reference alongside the STS docs.
 
 ## Blockers
