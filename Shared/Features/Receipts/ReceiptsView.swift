@@ -180,6 +180,7 @@ struct ReceiptsView: View {
                         .foregroundColor(selectedViewMode == mode ? .white : .primary)
                     }
                     .accessibilityIdentifier("receipts-view-mode-\(receiptsAccessibilitySlug(mode.rawValue))")
+                    .accessibilityValue(selectedViewMode == mode ? "selected" : "not selected")
                 }
             }
             .padding(.horizontal)
@@ -924,6 +925,10 @@ struct VendorGroupCard: View {
     let onReceiptEdit: (Receipt) -> Void
     let onReceiptDelete: (Receipt) -> Void
     @State private var isExpanded = false
+
+    private var accessibilitySlug: String {
+        receiptsAccessibilitySlug(vendorName)
+    }
     
     var body: some View {
         VStack(spacing: 0) {
@@ -943,6 +948,7 @@ struct VendorGroupCard: View {
                         Text("\(receipts.count) receipt\(receipts.count == 1 ? "" : "s")")
                             .font(.subheadline)
                             .foregroundColor(.secondary)
+                            .accessibilityIdentifier("receipts-vendor-group-count-\(accessibilitySlug)")
                     }
                     
                     Spacer()
@@ -952,6 +958,7 @@ struct VendorGroupCard: View {
                             .font(.title3)
                             .fontWeight(.bold)
                             .foregroundColor(totalSpent >= 0 ? .primary : .red)
+                            .accessibilityIdentifier("receipts-vendor-group-total-\(accessibilitySlug)")
                         
                         Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
                             .font(.caption)
@@ -960,6 +967,8 @@ struct VendorGroupCard: View {
                 }
                 .padding()
             }
+            .accessibilityIdentifier("receipts-vendor-group-\(accessibilitySlug)")
+            .accessibilityValue(isExpanded ? "expanded" : "collapsed")
             .buttonStyle(PlainButtonStyle())
             
             // Expandable receipts list
@@ -975,6 +984,7 @@ struct VendorGroupCard: View {
                         .padding(.horizontal, 12)
                     }
                 }
+                .accessibilityIdentifier("receipts-vendor-group-list-\(accessibilitySlug)")
                 .padding(.bottom, 12)
             }
         }

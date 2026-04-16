@@ -666,6 +666,59 @@ final class RHEIRUITests: XCTestCase {
     }
 
     @MainActor
+    func testReceiptsByVendorModeShowsGroupedSummaryForSavedReceipt() throws {
+        let app = makeApp(mode: .selectedProject)
+        app.launch()
+        app.tabBars.buttons["Receipts"].tap()
+
+        let alphaVendorName = "UI Test Vendor Group Alpha"
+        saveManualReceipt(in: app, vendorName: alphaVendorName, amount: "10.00")
+
+        let alphaReceiptCard = app.buttons["receipt-card-\(alphaVendorName)"]
+        XCTAssertTrue(
+            alphaReceiptCard.waitForExistence(timeout: 5),
+            "Expected the saved receipt card to render in the default receipts list before switching view modes."
+        )
+
+        let byVendorViewModeButton = app.buttons["receipts-view-mode-by-vendor"]
+        XCTAssertTrue(
+            byVendorViewModeButton.waitForExistence(timeout: 5),
+            "Expected the receipts screen to expose the By Vendor view mode."
+        )
+        byVendorViewModeButton.tap()
+
+        XCTAssertTrue(
+            waitForSelectedValue(on: byVendorViewModeButton, timeout: 5),
+            "Expected tapping By Vendor to mark the grouped receipts mode as active."
+        )
+
+        let alphaGroupButton = app.buttons["receipts-vendor-group-ui-test-vendor-group-alpha"]
+        XCTAssertTrue(
+            alphaGroupButton.waitForExistence(timeout: 5),
+            "Expected vendor-grouped receipts mode to render a group header for the first saved vendor."
+        )
+        XCTAssertEqual(
+            alphaGroupButton.value as? String,
+            "collapsed",
+            "Expected vendor groups to start collapsed before the test expands one."
+        )
+        XCTAssertEqual(
+            app.staticTexts["receipts-vendor-group-count-ui-test-vendor-group-alpha"].label,
+            "1 receipt",
+            "Expected the Alpha vendor group to expose its receipt count."
+        )
+        XCTAssertEqual(
+            app.staticTexts["receipts-vendor-group-total-ui-test-vendor-group-alpha"].label,
+            "$10.00",
+            "Expected the Alpha vendor group to expose its grouped total."
+        )
+        XCTAssertFalse(
+            alphaReceiptCard.exists,
+            "Expected grouped vendor mode to hide the flat receipt-card row until a vendor group is expanded."
+        )
+    }
+
+    @MainActor
     func testManualReceiptEntryOpensPaymentMethodPicker() throws {
         let app = makeApp(mode: .selectedProject)
         app.launch()
@@ -830,9 +883,13 @@ final class RHEIRUITests: XCTestCase {
         var element = resolveElement(app)
 
         for _ in 0..<maxSwipes where !element.exists {
-            let start = sheetCollection.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.78))
-            let end = sheetCollection.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.48))
-            start.press(forDuration: 0.01, thenDragTo: end)
+            if sheetCollection.exists {
+                let start = sheetCollection.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.78))
+                let end = sheetCollection.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.48))
+                start.press(forDuration: 0.01, thenDragTo: end)
+            } else {
+                app.swipeUp()
+            }
             element = resolveElement(app)
         }
 
@@ -1027,7 +1084,15 @@ final class RHEIRUITests: XCTestCase {
     }
 
     private func waitForSelectedValue(on element: XCUIElement, timeout: TimeInterval) -> Bool {
-        let predicate = NSPredicate(format: "value == %@", "selected")
+        waitForAccessibilityValue(on: element, equals: "selected", timeout: timeout)
+    }
+
+    private func waitForAccessibilityValue(
+        on element: XCUIElement,
+        equals expectedValue: String,
+        timeout: TimeInterval
+    ) -> Bool {
+        let predicate = NSPredicate(format: "value == %@", expectedValue)
         let expectation = XCTNSPredicateExpectation(predicate: predicate, object: element)
         return XCTWaiter.wait(for: [expectation], timeout: timeout) == .completed
     }
