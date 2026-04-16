@@ -3,12 +3,12 @@
 ## Repo Truth
 - Repo Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Active Branch: `gm/rheir-hardening-phase1`
-- HEAD SHA: `860cd9d6a0ef4f73897654e0e5f3faf4d9f3da5f`
-- Last Commit: `860cd9d Phase 1: replace category receipts print tracing`
+- HEAD SHA: `d3e96bea37579fc6dc5f75acf90cef362741e4f9`
+- Last Commit: `d3e96be Phase 1: replace labor payment print tracing`
 
 ## Current Objective
-- Preserve the repo-tracked ship-readiness checklist and checkpoint the `Shared/Features/Labor/LaborPaymentView.swift` payment-processing logging cleanup slice.
-- Queue `Shared/Features/Progress/ProgressDetailView.swift` as the next highest-value remaining production seam after the `LaborPaymentView.swift` checkpoint lands.
+- Preserve the repo-tracked ship-readiness checklist and checkpoint the `Shared/Features/Progress/ProgressDetailView.swift` progress-detail placeholder logging cleanup slice.
+- Queue `Shared/Features/Receipts/ReceiptScannerView.swift` warning cleanup as the next highest-value ship-readiness seam after the `ProgressDetailView.swift` checkpoint lands.
 
 ## Current Working Set
 - Session flow now routes through `Shared/Views/Auth/AppSessionSupport.swift`.
@@ -100,14 +100,15 @@
 - `Shared/Features/Projects/CommunicationLogsView.swift` no longer emits preview-only console tracing in its preview closure.
 - `Shared/Features/Budget/CategoryReceiptsView.swift` now uses structured `Logger.receiptWorkflow` calls instead of raw `print(...)` tracing for category receipt deletion completion events.
 - `Shared/Features/Labor/LaborPaymentView.swift` now uses structured `Logger.labor` calls instead of raw `print(...)` tracing for payment-batch completion events, and the logged batch count now reflects the pre-clear selection size.
-- `Shared/Features/Progress/ProgressDetailView.swift` is now the active highest-value remaining production seam by fresh raw `print(...)` residue count.
+- `Shared/Features/Progress/ProgressDetailView.swift` now uses structured `Logger.project` calls instead of raw `print(...)` tracing for progress-photo placeholder tap events.
 - `Shared/Features/Labor/LaborPaymentView.swift` no longer contains the stale post-clear processed-count logging bug.
-- Other non-hardened seams still contain raw `print(...)` tracing.
+- Production raw `print(...)` cleanup is effectively complete; remaining raw `print(...)` residue is limited to development-only seams such as `Shared/Services/Development/DevelopmentDataManager.swift`, `Shared/Services/StubServices.swift`, and `Shared/Services/PreviewAuthService.swift`.
+- `Shared/Features/Receipts/ReceiptScannerView.swift` warning cleanup is now the next highest-value ship-readiness seam in the active tree.
 - Focused tests for invite parsing, cache migration, project-store persistence, receipt-intelligence retention, cache clearing, labor aggregation/validation, company-state bucketing, team-member store behavior, and receipt project-resolution behavior now live in `RHEIRTests/RHEIRTests.swift`.
 - Focused tests for project access normalization and assignment filtering now live in `RHEIRTests/RHEIRTests.swift`.
 - The current working slice has exact simulator evidence recorded:
-  - Gate A `build_sim`: PASS (`mcp__xcodebuildmcp__build_sim` with `-derivedDataPath /tmp/rheir_gateA_phase1bs_mcp_dd`)
-  - Focused parity `test_sim -only-testing:RHEIRTests`: PASS (`mcp__xcodebuildmcp__test_sim` with `-derivedDataPath /tmp/rheir_parity_phase1bs_mcp_dd`, `27/27`)
+  - Gate A `build_sim`: PASS (`mcp__xcodebuildmcp__build_sim` with `-derivedDataPath /tmp/rheir_gateA_phase1bt_mcp_dd`)
+  - Focused parity `test_sim -only-testing:RHEIRTests`: PASS (`mcp__xcodebuildmcp__test_sim` with `-derivedDataPath /tmp/rheir_parity_phase1bt_mcp_dd`, `27/27`)
   - Direct `xcodebuild` CLI evidence remains less stable than the MCP simulator path in the current local CoreSimulator environment
 
 ## Known Constraints
@@ -117,6 +118,6 @@
 - This repo follows a repo-local STS equivalent defined in the root governance docs because the original STS spine docs were not present here.
 
 ## Next Required Action
-1. Commit the `Shared/Features/Labor/LaborPaymentView.swift` payment-processing logging slice without staging `Shared/Views/Auth/LoginView.swift`, `rheir_knowledge_database.json`, `RHEIRmemories.csv`, or `RheirLogo 1024x1024.png`.
+1. Commit the `Shared/Features/Progress/ProgressDetailView.swift` progress-detail placeholder logging slice without staging `Shared/Views/Auth/LoginView.swift`, `rheir_knowledge_database.json`, `RHEIRmemories.csv`, or `RheirLogo 1024x1024.png`.
 2. Preserve the repo-local STS docs and `SHIP_READINESS_CHECKLIST.md` as the current release-planning truth for this repository.
-3. Continue with `Shared/Features/Progress/ProgressDetailView.swift` after the `LaborPaymentView.swift` checkpoint lands.
+3. Continue with `Shared/Features/Receipts/ReceiptScannerView.swift` warning cleanup after the `ProgressDetailView.swift` checkpoint lands.

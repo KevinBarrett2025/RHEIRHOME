@@ -75,14 +75,15 @@
 - `CommunicationLogsView.swift` no longer emits preview-only raw `print(...)` tracing.
 - `CategoryReceiptsView.swift` now uses structured `Logger.receiptWorkflow` logging instead of raw `print(...)` tracing.
 - `LaborPaymentView.swift` now uses structured `Logger.labor` logging instead of raw `print(...)` tracing, and its logged payment batch count now reflects the pre-clear selection size.
+- `ProgressDetailView.swift` now uses structured `Logger.project` logging instead of raw `print(...)` tracing for the photo placeholder tap path.
 - Stable simulator evidence is green on the staged checkpoint:
-  - Gate A `build_sim`: PASS (`mcp__xcodebuildmcp__build_sim` with `-derivedDataPath /tmp/rheir_gateA_phase1bs_mcp_dd`)
-  - Focused parity `test_sim -only-testing:RHEIRTests`: PASS (`mcp__xcodebuildmcp__test_sim` with `-derivedDataPath /tmp/rheir_parity_phase1bs_mcp_dd`, `27/27`)
+  - Gate A `build_sim`: PASS (`mcp__xcodebuildmcp__build_sim` with `-derivedDataPath /tmp/rheir_gateA_phase1bt_mcp_dd`)
+  - Focused parity `test_sim -only-testing:RHEIRTests`: PASS (`mcp__xcodebuildmcp__test_sim` with `-derivedDataPath /tmp/rheir_parity_phase1bt_mcp_dd`, `27/27`)
 
 ## Open Work
-- Finish replacing raw `print(...)` tracing in the other non-hardened production seams, starting with `Shared/Features/Progress/ProgressDetailView.swift`.
+- Production raw `print(...)` cleanup is effectively complete; only development-only seams still emit raw tracing.
 - Continue shrinking the remaining oversized active state owners.
-- After the `Shared/Features/Progress/ProgressDetailView.swift` checkpoint, continue with the next highest-value non-hardened production seam.
+- After the `Shared/Features/Progress/ProgressDetailView.swift` checkpoint, move to warning cleanup starting with `Shared/Features/Receipts/ReceiptScannerView.swift`.
 - Use `SHIP_READINESS_CHECKLIST.md` as the current release-progress reference alongside the STS docs.
 
 ## Blockers

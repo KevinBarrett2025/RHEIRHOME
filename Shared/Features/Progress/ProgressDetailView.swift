@@ -1,3 +1,4 @@
+import OSLog
 import SwiftUI
 
 struct ProgressDetailView: View {
@@ -40,7 +41,9 @@ struct ProgressDetailView: View {
                                 }
                                 .onTapGesture {
                                     // TODO: Load and display actual image when photo service is implemented
-                                    print("Tapped photo ID: \(photoID)")
+                                    Logger.project.info(
+                                        "Progress detail photo placeholder tapped [photo=\(photoID.uuidString, privacy: .private(mask: .hash))]"
+                                    )
                                 }
                             }
                         }
