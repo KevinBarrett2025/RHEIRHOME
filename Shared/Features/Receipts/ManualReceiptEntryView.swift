@@ -1,3 +1,4 @@
+import OSLog
 import SwiftUI
 
 // MARK: - Inline Simple Vendor Picker
@@ -804,7 +805,9 @@ struct ManualReceiptEntryView: View {
             }
         }
         
-        print("✅ Receipt data synced to company settings - Vendor: \(receipt.vendor), Payment: \(receipt.paymentMethod)")
+        Logger.receiptWorkflow.notice(
+            "Manual receipt company sync completed [vendor=\(receipt.vendor, privacy: .public) payment=\(receipt.paymentMethod, privacy: .public)]"
+        )
     }
     
     private func mapReceiptCategoryToVendorCategory(_ receiptCategory: ReceiptCategory) -> VendorCategory {

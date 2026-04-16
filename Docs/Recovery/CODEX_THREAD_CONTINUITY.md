@@ -3,12 +3,12 @@
 ## Repo Truth
 - Repo Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Active Branch: `gm/rheir-hardening-phase1`
-- HEAD SHA: `4f274126fef37a812eb5841ffd557274b97e1972`
-- Last Commit: `4f27412 Phase 1: remove quick vendor preview print tracing`
+- HEAD SHA: `3065d09eae742a55c78b465fd2dc76b18b2c7902`
+- Last Commit: `3065d09 Phase 1: remove quick payment method preview print tracing`
 
 ## Current Objective
-- Preserve the repo-tracked ship-readiness checklist and checkpoint the `Shared/Features/Receipts/QuickPaymentMethodCreateView.swift` preview-tracing cleanup slice.
-- Queue `Shared/Features/Receipts/ManualReceiptEntryView.swift` as the next highest-value remaining production seam after the `QuickPaymentMethodCreateView.swift` checkpoint lands.
+- Preserve the repo-tracked ship-readiness checklist and checkpoint the `Shared/Features/Receipts/ManualReceiptEntryView.swift` company-sync logging cleanup slice.
+- Queue `Shared/Features/Projects/CommunicationLogsView.swift` as the next highest-value remaining production seam after the `ManualReceiptEntryView.swift` checkpoint lands.
 
 ## Current Working Set
 - Session flow now routes through `Shared/Views/Auth/AppSessionSupport.swift`.
@@ -96,13 +96,15 @@
 - `Shared/Features/Receipts/ReceiptDetailView.swift` now uses structured `Logger.receiptWorkflow` calls instead of raw `print(...)` tracing for receipt-delete completion events.
 - `Shared/Features/Receipts/QuickVendorCreateView.swift` no longer emits preview-only console tracing in its preview closure.
 - `Shared/Features/Receipts/QuickPaymentMethodCreateView.swift` no longer emits preview-only console tracing in its preview closure.
-- `Shared/Features/Receipts/ManualReceiptEntryView.swift` is now the active highest-value remaining production seam by fresh raw `print(...)` residue count.
+- `Shared/Features/Receipts/ManualReceiptEntryView.swift` now uses structured `Logger.receiptWorkflow` calls instead of raw `print(...)` tracing for manual receipt company-settings sync completion events.
+- `Shared/Features/Projects/CommunicationLogsView.swift` is now the active highest-value remaining production seam by fresh raw `print(...)` residue count.
+- `Shared/Features/Budget/CategoryReceiptsView.swift` and `Shared/Features/Labor/LaborPaymentView.swift` are the next queued production seams after `CommunicationLogsView.swift`.
 - Other non-hardened seams still contain raw `print(...)` tracing.
 - Focused tests for invite parsing, cache migration, project-store persistence, receipt-intelligence retention, cache clearing, labor aggregation/validation, company-state bucketing, team-member store behavior, and receipt project-resolution behavior now live in `RHEIRTests/RHEIRTests.swift`.
 - Focused tests for project access normalization and assignment filtering now live in `RHEIRTests/RHEIRTests.swift`.
 - The current working slice has exact simulator evidence recorded:
-  - Gate A `build_sim`: PASS (`mcp__xcodebuildmcp__build_sim` with `-derivedDataPath /tmp/rheir_gateA_phase1bo_mcp_dd`)
-  - Focused parity `test_sim -only-testing:RHEIRTests`: PASS (`mcp__xcodebuildmcp__test_sim` with `-derivedDataPath /tmp/rheir_parity_phase1bo_mcp_dd`, `27/27`)
+  - Gate A `build_sim`: PASS (`mcp__xcodebuildmcp__build_sim` with `-derivedDataPath /tmp/rheir_gateA_phase1bp_mcp_dd`)
+  - Focused parity `test_sim -only-testing:RHEIRTests`: PASS (`mcp__xcodebuildmcp__test_sim` with `-derivedDataPath /tmp/rheir_parity_phase1bp_mcp_dd`, `27/27`)
   - Direct `xcodebuild` CLI evidence remains less stable than the MCP simulator path in the current local CoreSimulator environment
 
 ## Known Constraints
@@ -112,6 +114,6 @@
 - This repo follows a repo-local STS equivalent defined in the root governance docs because the original STS spine docs were not present here.
 
 ## Next Required Action
-1. Commit the `Shared/Features/Receipts/QuickPaymentMethodCreateView.swift` preview-tracing cleanup slice without staging `Shared/Views/Auth/LoginView.swift`, `rheir_knowledge_database.json`, `RHEIRmemories.csv`, or `RheirLogo 1024x1024.png`.
+1. Commit the `Shared/Features/Receipts/ManualReceiptEntryView.swift` company-sync logging slice without staging `Shared/Views/Auth/LoginView.swift`, `rheir_knowledge_database.json`, `RHEIRmemories.csv`, or `RheirLogo 1024x1024.png`.
 2. Preserve the repo-local STS docs and `SHIP_READINESS_CHECKLIST.md` as the current release-planning truth for this repository.
-3. Continue with `Shared/Features/Receipts/ManualReceiptEntryView.swift` after the `QuickPaymentMethodCreateView.swift` checkpoint lands.
+3. Continue with `Shared/Features/Projects/CommunicationLogsView.swift` after the `ManualReceiptEntryView.swift` checkpoint lands.
