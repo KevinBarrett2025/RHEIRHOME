@@ -186,6 +186,41 @@ final class RHEIRUITests: XCTestCase {
     }
 
     @MainActor
+    func testReceiptsModeShowsEntryActionsAndManualEntrySheet() throws {
+        let app = makeApp(mode: .selectedProject)
+        app.launch()
+        app.tabBars.buttons["Receipts"].tap()
+
+        XCTAssertTrue(
+            app.staticTexts["No Receipts Yet"].waitForExistence(timeout: 5),
+            "Expected selected-project mode to show the empty receipts state."
+        )
+        XCTAssertTrue(
+            app.buttons["Scan Receipt"].exists,
+            "Expected the empty receipts state to expose the scan entry action."
+        )
+        XCTAssertTrue(
+            app.buttons["Manual Entry"].exists,
+            "Expected the empty receipts state to expose the manual entry action."
+        )
+
+        app.buttons["Manual Entry"].tap()
+
+        XCTAssertTrue(
+            app.navigationBars["Add Receipt"].waitForExistence(timeout: 5),
+            "Expected Manual Entry to open the Add Receipt sheet."
+        )
+        XCTAssertTrue(
+            app.staticTexts["Receipt Details"].exists,
+            "Expected the Add Receipt sheet to render the receipt details section."
+        )
+        XCTAssertTrue(
+            app.buttons["Cancel"].exists,
+            "Expected the Add Receipt sheet to expose a cancel action."
+        )
+    }
+
+    @MainActor
     func testLaunchPerformance() throws {
         // This measures how long it takes to launch your application.
         measure(metrics: [XCTApplicationLaunchMetric()]) {

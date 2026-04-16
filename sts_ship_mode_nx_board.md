@@ -84,15 +84,17 @@
 - `RheirApp.swift`, `SessionStore`, and `RHEIRUITests` now also support deterministic organization-selection UI launch smoke coverage with a seeded logged-in user and multiple organizations.
 - `RheirApp.swift`, `SessionStore`, and `RHEIRUITests` now also support deterministic project-selection / selected-project UI launch smoke coverage with a seeded active organization and multiple active projects.
 - `RHEIRUITests` now also covers selected-project labor behavior in deterministic UI mode.
-- The next deterministic UI harness seam is selected-project company admin coverage.
+- `RHEIRUITests` now also covers selected-project company admin behavior in deterministic UI mode.
+- `RHEIRUITests` now also covers selected-project receipts entry behavior in deterministic UI mode.
+- The next deterministic UI harness seam is a deeper selected-project receipt workflow route.
 - Stable simulator evidence is green on the staged checkpoint:
-  - Gate A `build_sim`: PASS (`mcp__xcodebuildmcp__build_sim` with `-derivedDataPath /tmp/rheir_gateA_phase1cc_mcp_dd`)
-  - Focused parity `test_sim -only-testing:RHEIRTests -only-testing:RHEIRUITests/RHEIRUITests/testSignedOutModeShowsAppleSignIn -only-testing:RHEIRUITests/RHEIRUITests/testReadyModeShowsMainTabShell -only-testing:RHEIRUITests/RHEIRUITests/testOrganizationSelectionModeShowsOrganizationList -only-testing:RHEIRUITests/RHEIRUITests/testProjectSelectionModeRequiresAndAppliesProjectContext -only-testing:RHEIRUITests/RHEIRUITests/testLaborModeRequiresAndUsesSelectedProjectContext -only-testing:RHEIRUITests/RHEIRUITestsLaunchTests/testLaunch`: PASS (`mcp__xcodebuildmcp__test_sim` with `-derivedDataPath /tmp/rheir_parity_phase1cc_mcp_dd`, `33/33`)
+  - Gate A `build_sim`: PASS (`mcp__xcodebuildmcp__build_sim` with `-derivedDataPath /tmp/rheir_gateA_phase1ce_mcp_dd`)
+  - Focused parity `test_sim -only-testing:RHEIRTests -only-testing:RHEIRUITests/RHEIRUITests/testSignedOutModeShowsAppleSignIn -only-testing:RHEIRUITests/RHEIRUITests/testReadyModeShowsMainTabShell -only-testing:RHEIRUITests/RHEIRUITests/testOrganizationSelectionModeShowsOrganizationList -only-testing:RHEIRUITests/RHEIRUITests/testProjectSelectionModeRequiresAndAppliesProjectContext -only-testing:RHEIRUITests/RHEIRUITests/testLaborModeRequiresAndUsesSelectedProjectContext -only-testing:RHEIRUITests/RHEIRUITests/testCompanyModeShowsAdminManagementSurface -only-testing:RHEIRUITests/RHEIRUITests/testReceiptsModeShowsEntryActionsAndManualEntrySheet -only-testing:RHEIRUITests/RHEIRUITestsLaunchTests/testLaunch`: PASS (`mcp__xcodebuildmcp__test_sim` with `-derivedDataPath /tmp/rheir_parity_phase1ce_mcp_dd`, `35/35`)
 
 ## Open Work
 - Production raw `print(...)` cleanup is effectively complete; only development-only seams still emit raw tracing.
 - Continue shrinking the remaining oversized active state owners.
-- The stable simulator path is now warning-clean, and deterministic signed-out, ready-state, organization-selection, project-selection, and labor coverage are in place; the next release-hardening seam is deterministic selected-project company-admin coverage in `RHEIRUITests`, followed by deeper selected-project workflow coverage.
+- The stable simulator path is now warning-clean, and deterministic signed-out, ready-state, organization-selection, project-selection, labor, company-admin, and receipts-entry coverage are in place; the next release-hardening seam is a deeper deterministic selected-project receipt workflow route in `RHEIRUITests`.
 - Use `SHIP_READINESS_CHECKLIST.md` as the current release-progress reference alongside the STS docs.
 
 ## Blockers
