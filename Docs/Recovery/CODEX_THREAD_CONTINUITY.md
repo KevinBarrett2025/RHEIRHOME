@@ -143,7 +143,7 @@
 - `RHEIRUITests.swift` now also contains deterministic selected-project `By Vendor` grouped-summary coverage that saves a manual receipt, switches to the real grouped surface, and asserts the collapsed vendor header, count, and total metadata.
 - Deterministic selected-project manual receipt submission, saved receipt detail, receipt-detail action, persisted saved-receipt edit mutation, saved-receipt search/browse, category/filter drilldown, and `By Vendor` grouped-summary coverage are now validated on the stable simulator path, and the next release-hardening seam is vendor-group expansion/collapse interaction before broader receipt workflow runtime QA.
 - `RHEIRUITestsLaunchTests.swift` now launches in deterministic signed-out mode before capturing launch evidence.
-- Deterministic organization/project workflow coverage is now the next highest-value release-hardening seam in the active tree.
+- Deterministic selected-project receipt runtime coverage remains the next highest-value release-hardening seam in the active tree.
 - Focused tests for invite parsing, cache migration, project-store persistence, receipt-intelligence retention, cache clearing, labor aggregation/validation, company-state bucketing, team-member store behavior, and receipt project-resolution behavior now live in `RHEIRTests/RHEIRTests.swift`.
 - Focused tests for project access normalization and assignment filtering now live in `RHEIRTests/RHEIRTests.swift`.
 - The current working slice has exact simulator evidence recorded:
