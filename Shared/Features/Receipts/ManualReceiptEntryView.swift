@@ -645,6 +645,7 @@ struct ManualReceiptEntryView: View {
                             Text(category.rawValue).tag(category)
                         }
                     }
+                    .accessibilityIdentifier("manual-receipt-category")
                     
                     Toggle("Return/Refund", isOn: $isReturn)
                 }

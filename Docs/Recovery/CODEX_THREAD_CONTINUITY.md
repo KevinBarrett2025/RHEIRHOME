@@ -3,12 +3,12 @@
 ## Repo Truth
 - Repo Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Active Branch: `gm/rheir-hardening-phase1`
-- HEAD SHA: `d51087593fad8f5c89efbe828ec0616a94840bdd`
-- Last Commit: `d510875 Phase 1: add receipt edit mutation UI smoke coverage`
+- HEAD SHA: `e9e1ca9e5aaef46c9a27748d25f2a08efa3aaf5a`
+- Last Commit: `e9e1ca9 Phase 2: add receipt browse search smoke coverage`
 
 ## Current Objective
-- Preserve deterministic selected-project saved-receipt edit persistence and the new saved-receipt browsing/search seam across the real receipts surface.
-- Expand the next release-hardening seam beyond saved-receipt browsing/search into category/filter drilldown and broader selected-project receipt runtime QA.
+- Preserve deterministic selected-project saved-receipt edit persistence, browsing/search, and category/filter drilldown coverage across the real receipts surface.
+- Expand the next release-hardening seam beyond the now-green receipts category/filter drilldown path into broader selected-project receipt runtime QA.
 
 ## Current Working Set
 - Session flow now routes through `Shared/Views/Auth/AppSessionSupport.swift`.
@@ -33,7 +33,10 @@
 - Active project-lifecycle and landing-page refresh logs now use structured `Logger.project` in the main organization/project flow.
 - Active receipt entry, cache recomputation, and receipt-intelligence flows now use structured `Logger.receiptWorkflow` / `Logger.receiptIntelligence` instead of raw `print(...)` tracing in the compiled receipt paths.
 - `Shared/Features/Receipts/ReceiptsView.swift` now exposes deterministic search, clear, floating manual-entry, and category/filter accessibility hooks for the selected-project receipts surface.
+- `Shared/Features/Receipts/ManualReceiptEntryView.swift` now exposes a deterministic receipt-category picker hook for the seeded manual-entry receipts path.
+- `Shared/Features/Receipts/ReceiptsView.swift` now exposes selected-state accessibility values on the category filter controls so deterministic drilldown assertions can stay on the real receipts surface.
 - `RHEIRUITests.swift` now covers saved-receipt search/browse behavior on top of the committed persisted-edit mutation path.
+- `RHEIRUITests.swift` now also covers selected-project receipt category/filter drilldown and restoration behavior on top of the committed saved-receipt browse/search path.
 - Active company/project UI assignment, team-member, organization-edit, payment-method, and team-management views now use structured `Logger` calls instead of raw `print(...)` tracing.
 - Debug/support settings views and data-management helpers now use structured `Logger.settingsSupport` calls instead of raw `print(...)` tracing.
 - `HiddenDebugPanelView.swift` now uses structured `Logger.settingsSupport` calls instead of raw `print(...)` tracing.
@@ -156,4 +159,4 @@
 ## Next Required Action
 1. Preserve the repo-local STS docs and `SHIP_READINESS_CHECKLIST.md` as the current release-planning truth for this repository.
 2. Keep `Shared/Views/Auth/LoginView.swift`, `rheir_knowledge_database.json`, `RHEIRmemories.csv`, and `RheirLogo 1024x1024.png` out of the staged set for this checkpoint.
-3. Continue with the next deterministic selected-project receipt category/filter drilldown seam beyond saved-receipt search/browse on the stable simulator path.
+3. Continue with the next deterministic selected-project receipt runtime QA seam beyond the now-green saved-receipt search/browse and category/filter drilldown coverage on the stable simulator path.

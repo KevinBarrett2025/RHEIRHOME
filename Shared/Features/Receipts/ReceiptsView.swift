@@ -234,6 +234,7 @@ struct ReceiptsView: View {
                         .foregroundColor(selectedCategory == nil ? .white : .primary)
                 }
                 .accessibilityIdentifier("receipts-category-filter-all")
+                .accessibilityValue(selectedCategory == nil ? "selected" : "not selected")
                 
                 ForEach(activeCategories, id: \.self) { category in
                     Button {
@@ -255,6 +256,7 @@ struct ReceiptsView: View {
                         .foregroundColor(selectedCategory == category ? .white : .primary)
                     }
                     .accessibilityIdentifier("receipts-category-filter-\(receiptsAccessibilitySlug(category.rawValue))")
+                    .accessibilityValue(selectedCategory == category ? "selected" : "not selected")
                 }
             }
             .padding(.horizontal)

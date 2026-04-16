@@ -587,6 +587,85 @@ final class RHEIRUITests: XCTestCase {
     }
 
     @MainActor
+    func testReceiptsCategoryDrilldownFiltersAndRestoresSavedReceipts() throws {
+        let app = makeApp(mode: .selectedProject)
+        app.launch()
+        app.tabBars.buttons["Receipts"].tap()
+
+        let materialsVendorName = "UI Test Category Material Vendor"
+        let generalVendorName = "UI Test Category General Vendor"
+        saveManualReceipt(in: app, vendorName: materialsVendorName, amount: "11.00")
+        saveManualReceipt(
+            in: app,
+            vendorName: generalVendorName,
+            amount: "22.00",
+            category: "General Conditions"
+        )
+
+        let categoriesViewModeButton = app.buttons["receipts-view-mode-categories"]
+        XCTAssertTrue(
+            categoriesViewModeButton.waitForExistence(timeout: 5),
+            "Expected the receipts screen to expose the Categories view mode."
+        )
+        categoriesViewModeButton.tap()
+
+        let generalFilterButton = app.buttons["receipts-category-filter-general-conditions"]
+        XCTAssertTrue(
+            generalFilterButton.waitForExistence(timeout: 5),
+            "Expected category mode to expose the General Conditions filter button."
+        )
+
+        let materialsFilterButton = app.buttons["receipts-category-filter-materials"]
+        XCTAssertTrue(
+            materialsFilterButton.waitForExistence(timeout: 5),
+            "Expected category mode to expose the Materials filter button."
+        )
+        let allCategoriesButton = app.buttons["receipts-category-filter-all"]
+        XCTAssertEqual(
+            allCategoriesButton.value as? String,
+            "selected",
+            "Expected category mode to start in the All-categories state."
+        )
+        generalFilterButton.tap()
+
+        XCTAssertTrue(
+            waitForSelectedValue(on: generalFilterButton, timeout: 5),
+            "Expected tapping the General Conditions filter to mark it as the active drilldown state."
+        )
+        XCTAssertTrue(
+            waitForNonExistence(of: materialsFilterButton, timeout: 5),
+            "Expected the Materials filter to disappear while the receipts surface is drilled into General Conditions."
+        )
+
+        allCategoriesButton.tap()
+
+        XCTAssertTrue(
+            generalFilterButton.waitForExistence(timeout: 5),
+            "Expected returning to All categories to keep the category filter controls visible."
+        )
+        XCTAssertTrue(
+            materialsFilterButton.waitForExistence(timeout: 5),
+            "Expected returning to All categories to restore the Materials filter control."
+        )
+        XCTAssertEqual(
+            allCategoriesButton.value as? String,
+            "selected",
+            "Expected the All filter to become active again after clearing the category drilldown."
+        )
+
+        materialsFilterButton.tap()
+
+        XCTAssertTrue(
+            waitForSelectedValue(on: materialsFilterButton, timeout: 5),
+            "Expected tapping the Materials filter to mark it as the active drilldown state."
+        )
+        XCTAssertTrue(
+            waitForNonExistence(of: generalFilterButton, timeout: 5),
+            "Expected the General Conditions filter to disappear while the receipts surface is drilled into Materials."
+        )
+    }
+
+    @MainActor
     func testManualReceiptEntryOpensPaymentMethodPicker() throws {
         let app = makeApp(mode: .selectedProject)
         app.launch()
@@ -722,17 +801,42 @@ final class RHEIRUITests: XCTestCase {
     }
 
     private func revealButton(identifier: String, in app: XCUIApplication, maxSwipes: Int = 4) -> XCUIElement {
-        let sheetCollection = app.collectionViews.firstMatch
-        var button = app.buttons[identifier]
+        revealElement(identifier: identifier, in: app, maxSwipes: maxSwipes, query: { $0.buttons[identifier] })
+    }
 
-        for _ in 0..<maxSwipes where !button.exists {
+    private func revealElement(
+        identifier: String,
+        in app: XCUIApplication,
+        maxSwipes: Int = 4,
+        query: ((XCUIApplication) -> XCUIElement)? = nil
+    ) -> XCUIElement {
+        let sheetCollection = app.collectionViews.firstMatch
+        let resolveElement = query ?? { application in
+            let button = application.buttons[identifier]
+            if button.exists { return button }
+
+            let otherElement = application.otherElements[identifier]
+            if otherElement.exists { return otherElement }
+
+            let picker = application.pickers[identifier]
+            if picker.exists { return picker }
+
+            let staticText = application.staticTexts[identifier]
+            if staticText.exists { return staticText }
+
+            return application.otherElements[identifier]
+        }
+
+        var element = resolveElement(app)
+
+        for _ in 0..<maxSwipes where !element.exists {
             let start = sheetCollection.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.78))
             let end = sheetCollection.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.48))
             start.press(forDuration: 0.01, thenDragTo: end)
-            button = app.buttons[identifier]
+            element = resolveElement(app)
         }
 
-        return button
+        return element
     }
 
     private func openManualReceiptEntry(in app: XCUIApplication) {
@@ -750,7 +854,12 @@ final class RHEIRUITests: XCTestCase {
         manualFAB.tap()
     }
 
-    private func saveManualReceipt(in app: XCUIApplication, vendorName: String, amount: String) {
+    private func saveManualReceipt(
+        in app: XCUIApplication,
+        vendorName: String,
+        amount: String,
+        category: String? = nil
+    ) {
         openManualReceiptEntry(in: app)
 
         let addReceiptNavBar = app.navigationBars["Add Receipt"]
@@ -799,6 +908,10 @@ final class RHEIRUITests: XCTestCase {
             "Expected adding a vendor to return directly to the Add Receipt sheet."
         )
 
+        if let category {
+            selectReceiptCategory(category, in: app, navigationBar: addReceiptNavBar)
+        }
+
         let amountField = app.textFields["manual-receipt-amount"]
         XCTAssertTrue(
             amountField.waitForExistence(timeout: 5),
@@ -817,6 +930,56 @@ final class RHEIRUITests: XCTestCase {
         XCTAssertTrue(
             waitForNonExistence(of: addReceiptNavBar, timeout: 5),
             "Expected saving the receipt to dismiss the Add Receipt sheet."
+        )
+    }
+
+    private func selectReceiptCategory(
+        _ categoryName: String,
+        in app: XCUIApplication,
+        navigationBar: XCUIElement
+    ) {
+        let categoryPicker = revealElement(identifier: "manual-receipt-category", in: app)
+        XCTAssertTrue(
+            categoryPicker.waitForExistence(timeout: 5),
+            "Expected the Add Receipt sheet to expose the category picker."
+        )
+
+        if categoryPicker.isHittable {
+            categoryPicker.tap()
+        } else {
+            categoryPicker.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        }
+
+        let categoryButton = app.buttons[categoryName]
+        if categoryButton.waitForExistence(timeout: 2) {
+            categoryButton.tap()
+        } else {
+            let categoryCellLabel = app.cells.staticTexts[categoryName]
+            if categoryCellLabel.waitForExistence(timeout: 2) {
+                categoryCellLabel.tap()
+            } else {
+                let categoryText = app.staticTexts[categoryName]
+                if categoryText.waitForExistence(timeout: 2) {
+                    categoryText.tap()
+                } else {
+                    let pickerWheel = app.pickerWheels.firstMatch
+                    XCTAssertTrue(
+                        pickerWheel.waitForExistence(timeout: 2),
+                        "Expected selecting the receipt category to expose a selectable category option or picker wheel."
+                    )
+                    pickerWheel.adjust(toPickerWheelValue: categoryName)
+
+                    let doneButton = app.toolbars.buttons["Done"]
+                    if doneButton.exists {
+                        doneButton.tap()
+                    }
+                }
+            }
+        }
+
+        XCTAssertTrue(
+            navigationBar.waitForExistence(timeout: 5),
+            "Expected selecting the receipt category to keep or return the Add Receipt sheet."
         )
     }
 
@@ -859,6 +1022,12 @@ final class RHEIRUITests: XCTestCase {
 
     private func waitForEnabled(_ element: XCUIElement, timeout: TimeInterval) -> Bool {
         let predicate = NSPredicate(format: "enabled == true")
+        let expectation = XCTNSPredicateExpectation(predicate: predicate, object: element)
+        return XCTWaiter.wait(for: [expectation], timeout: timeout) == .completed
+    }
+
+    private func waitForSelectedValue(on element: XCUIElement, timeout: TimeInterval) -> Bool {
+        let predicate = NSPredicate(format: "value == %@", "selected")
         let expectation = XCTNSPredicateExpectation(predicate: predicate, object: element)
         return XCTWaiter.wait(for: [expectation], timeout: timeout) == .completed
     }

@@ -113,6 +113,9 @@
 - `RHEIRUITests` selected-project persisted receipt-edit mutation smoke coverage
 - `ReceiptsView` deterministic receipt-browsing accessibility hooks
 - `RHEIRUITests` selected-project receipt search/browse smoke coverage
+- `ManualReceiptEntryView` deterministic receipt-category picker hook
+- `ReceiptsView` deterministic category filter selection-state accessibility values
+- `RHEIRUITests` selected-project receipt category/filter drilldown smoke coverage
 - `VendorKnowledgeService` structured logging
 - `PaymentMethodKnowledgeService` structured logging
 - `OrganizationService` structured logging
@@ -121,15 +124,15 @@
 - `SignInWithAppleCoordinator` structured logging
 
 ## Current Validation Baseline
-- Simulator build path: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_phase1cn_cli_dd clean build`
-- Focused receipt-search smoke path: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_phase1cn_browse_smoke_retry6_cli_dd test -only-testing:RHEIRUITests/RHEIRUITests/testReceiptsSearchFiltersAndRestoresSavedReceipts`
-- Receipts-focused parity path: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_parity_phase1cn_cli_dd test -only-testing:RHEIRUITests/RHEIRUITests/testManualReceiptEntrySavesReceiptIntoSelectedProject -only-testing:RHEIRUITests/RHEIRUITests/testManualReceiptEntryNavigatesToSavedReceiptDetails -only-testing:RHEIRUITests/RHEIRUITests/testSavedReceiptDetailPersistsEdits -only-testing:RHEIRUITests/RHEIRUITests/testReceiptsSearchFiltersAndRestoresSavedReceipts`
-- Latest receipts parity result: `PASS` (`/tmp/rheir_parity_phase1cn_cli.log`, `/tmp/rheir_parity_phase1cn_cli_dd/Logs/Test/Test-RHEIR-2026.04.16_12-25-16--0400.xcresult`, `4 total UI tests`)
+- Simulator build path: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_phase1co_cli_dd clean build`
+- Focused receipt-category drilldown smoke path: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_phase1co_category_smoke_retry9_cli_dd test -only-testing:RHEIRUITests/RHEIRUITests/testReceiptsCategoryDrilldownFiltersAndRestoresSavedReceipts`
+- Receipts-focused parity path: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_parity_phase1co_cli_dd test -only-testing:RHEIRUITests/RHEIRUITests/testManualReceiptEntrySavesReceiptIntoSelectedProject -only-testing:RHEIRUITests/RHEIRUITests/testManualReceiptEntryNavigatesToSavedReceiptDetails -only-testing:RHEIRUITests/RHEIRUITests/testSavedReceiptDetailPersistsEdits -only-testing:RHEIRUITests/RHEIRUITests/testReceiptsSearchFiltersAndRestoresSavedReceipts -only-testing:RHEIRUITests/RHEIRUITests/testReceiptsCategoryDrilldownFiltersAndRestoresSavedReceipts`
+- Latest receipts parity result: `PASS` (`/tmp/rheir_parity_phase1co_cli.log`, `/tmp/rheir_parity_phase1co_cli_dd/Logs/Test/Test-RHEIR-2026.04.16_14-35-27--0400.xcresult`, `5 total UI tests`)
 
 ## Known Residual Risks
 - Remaining raw `print(...)` statements are now limited to development-only seams such as `Shared/Services/Development/DevelopmentDataManager.swift`, `Shared/Services/StubServices.swift`, and `Shared/Services/PreviewAuthService.swift`.
 - Stable simulator and elevated CLI simulator paths are warning-clean for the active target; remaining release hardening now centers on broader deterministic coverage and runtime QA.
-- `RHEIRUITests` is now deterministic for signed-out, ready-state, organization-selection, project-selection, labor, company-admin, receipts-entry, manual-entry vendor-picker, manual-entry add-vendor, manual-entry payment-method-picker, manual-entry add-payment-method, manual-entry submission, saved receipt detail, receipt-detail action, persisted receipt-edit mutation, and saved-receipt search/browse coverage; the next release-hardening slice is category/filter drilldown plus broader receipt workflow runtime QA.
+- `RHEIRUITests` is now deterministic for signed-out, ready-state, organization-selection, project-selection, labor, company-admin, receipts-entry, manual-entry vendor-picker, manual-entry add-vendor, manual-entry payment-method-picker, manual-entry add-payment-method, manual-entry submission, saved receipt detail, receipt-detail action, persisted receipt-edit mutation, saved-receipt search/browse, and category/filter drilldown coverage; the next release-hardening slice is broader receipt workflow runtime QA.
 - `ProjectViewModel` is still oversized even after the extracted stores, though organization/project synchronization is now isolated behind `OrganizationProjectSyncStore`.
 - `CompanyStore` now lives in the compiled state layer rather than the settings view, but the broader company/project coordination flow still spans multiple UI files.
 - Direct in-sandbox CLI `xcodebuild` evidence remains less stable than elevated CLI or the MCP simulator path in the local CoreSimulator environment.

@@ -3,7 +3,7 @@
 ## Repo
 - Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Branch: `gm/rheir-hardening-phase1`
-- HEAD: `d51087593fad8f5c89efbe828ec0616a94840bdd`
+- HEAD: `e9e1ca9e5aaef46c9a27748d25f2a08efa3aaf5a`
 
 ## Active Initiative
 - RHEIR release hardening, phase 2 receipt workflow pass.
@@ -112,6 +112,7 @@
 - Hardened `ReceiptEditView.swift` so the edit sheet dismisses only after the async project update returns on `MainActor`, while exposing deterministic edit/save accessibility hooks for UI smoke coverage.
 - Added deterministic saved-receipt edit mutation UI smoke coverage in `RHEIRUITests.swift` that edits vendor and amount, saves, revalidates detail metadata, and proves the updated receipt card replaces the old one in the receipts list.
 - Added deterministic selected-project receipt browsing/search UI smoke coverage by exposing stable search, clear, floating manual-entry, and category/filter accessibility hooks in `Shared/Features/Receipts/ReceiptsView.swift` and asserting in `RHEIRUITests.swift` that receipts created from both the empty-state and floating-action entry paths can be rediscovered through the real receipts search flow.
+- Added deterministic selected-project receipt category/filter drilldown UI smoke coverage by exposing a stable manual-entry category picker hook in `Shared/Features/Receipts/ManualReceiptEntryView.swift`, exposing selected-state accessibility values on the `ReceiptsView.swift` category filter controls, and asserting in `RHEIRUITests.swift` that category drilldown/restoration stays deterministic across the seeded receipts surface.
 - Removed the preview-only `print(...)` tracing from `Shared/Features/Projects/CommunicationLogsView.swift`.
 - Replaced raw `print(...)` tracing in `Shared/Features/Budget/CategoryReceiptsView.swift` with structured `Logger.receiptWorkflow` usage for category receipt deletion completion events.
 - Replaced raw `print(...)` tracing in `Shared/Features/Labor/LaborPaymentView.swift` with structured `Logger.labor` usage for payment-batch completion events and corrected the logged processed-count to use the pre-clear selection size.
@@ -126,7 +127,7 @@
 - Added focused parity for project access normalization and assignment filtering in `RHEIRTests/RHEIRTests.swift`.
 
 ## In Progress
-- Continue release hardening by expanding deterministic selected-project receipt workflow coverage beyond saved-receipt search/browse into category/filter drilldown and broader receipt runtime QA.
+- Continue release hardening beyond the now-green selected-project saved-receipt search/browse and category/filter drilldown seams into broader receipt runtime QA.
 - Continue shrinking the remaining oversized active state owners around the new sync and access store boundaries.
 - Expand deterministic parity beyond the focused `RHEIRTests` suite.
 
@@ -135,9 +136,9 @@
 - Device-targeted Gate A remains blocked by signing because automatic provisioning is disabled for `com.RheirHome.RHEIR`.
 
 ## Latest Evidence
-- Focused receipt-search smoke: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_phase1cn_browse_smoke_retry6_cli_dd test -only-testing:RHEIRUITests/RHEIRUITests/testReceiptsSearchFiltersAndRestoresSavedReceipts` -> PASS (`/tmp/rheir_phase1cn_browse_smoke_retry6_cli.log`, `/tmp/rheir_phase1cn_browse_smoke_retry6_cli_dd/Logs/Test/Test-RHEIR-2026.04.16_12-20-10--0400.xcresult`)
-- Gate A: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_phase1cn_cli_dd clean build` -> PASS (`/tmp/rheir_gateA_phase1cn_cli.log`)
-- Receipts-focused parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_parity_phase1cn_cli_dd test -only-testing:RHEIRUITests/RHEIRUITests/testManualReceiptEntrySavesReceiptIntoSelectedProject -only-testing:RHEIRUITests/RHEIRUITests/testManualReceiptEntryNavigatesToSavedReceiptDetails -only-testing:RHEIRUITests/RHEIRUITests/testSavedReceiptDetailPersistsEdits -only-testing:RHEIRUITests/RHEIRUITests/testReceiptsSearchFiltersAndRestoresSavedReceipts` -> PASS (`/tmp/rheir_parity_phase1cn_cli.log`, `/tmp/rheir_parity_phase1cn_cli_dd/Logs/Test/Test-RHEIR-2026.04.16_12-25-16--0400.xcresult`, `4 total UI tests`)
+- Focused receipt-category drilldown smoke: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_phase1co_category_smoke_retry9_cli_dd test -only-testing:RHEIRUITests/RHEIRUITests/testReceiptsCategoryDrilldownFiltersAndRestoresSavedReceipts` -> PASS (`/tmp/rheir_phase1co_category_smoke_retry9_cli.log`, `/tmp/rheir_phase1co_category_smoke_retry9_cli_dd/Logs/Test/Test-RHEIR-2026.04.16_14-31-18--0400.xcresult`)
+- Gate A: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_phase1co_cli_dd clean build` -> PASS (`/tmp/rheir_gateA_phase1co_cli.log`)
+- Receipts-focused parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_parity_phase1co_cli_dd test -only-testing:RHEIRUITests/RHEIRUITests/testManualReceiptEntrySavesReceiptIntoSelectedProject -only-testing:RHEIRUITests/RHEIRUITests/testManualReceiptEntryNavigatesToSavedReceiptDetails -only-testing:RHEIRUITests/RHEIRUITests/testSavedReceiptDetailPersistsEdits -only-testing:RHEIRUITests/RHEIRUITests/testReceiptsSearchFiltersAndRestoresSavedReceipts -only-testing:RHEIRUITests/RHEIRUITests/testReceiptsCategoryDrilldownFiltersAndRestoresSavedReceipts` -> PASS (`/tmp/rheir_parity_phase1co_cli.log`, `/tmp/rheir_parity_phase1co_cli_dd/Logs/Test/Test-RHEIR-2026.04.16_14-35-27--0400.xcresult`, `5 total UI tests`)
 
 ## Next Milestone
-- Expand deterministic selected-project receipt workflow coverage beyond saved-receipt search/browse and continue release hardening into category/filter drilldown plus broader receipt runtime QA.
+- Expand deterministic selected-project receipt workflow coverage beyond the now-green saved-receipt search/browse and category/filter drilldown seams and continue release hardening into broader receipt runtime QA.
