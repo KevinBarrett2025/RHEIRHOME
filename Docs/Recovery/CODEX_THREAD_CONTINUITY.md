@@ -3,12 +3,12 @@
 ## Repo Truth
 - Repo Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Active Branch: `gm/rheir-hardening-phase1`
-- HEAD SHA: `32effdf355c04dfd7c0e6ba3539ec012f348069f`
-- Last Commit: `32effdf Phase 1: remove personal settings warning`
+- HEAD SHA: `91077a5ddbcdb22c09291a4fc586f174da3c6798`
+- Last Commit: `91077a5 Phase 1: remove work hour warning`
 
 ## Current Objective
-- Preserve the repo-tracked ship-readiness checklist and checkpoint the `Shared/Models/WorkHour.swift` warning cleanup slice.
-- Queue deterministic UI smoke coverage expansion in `RHEIRUITests` as the next highest-value release-hardening seam after the `WorkHour.swift` checkpoint lands.
+- Preserve the repo-tracked ship-readiness checklist and checkpoint the deterministic signed-out launch smoke coverage slice in `RHEIRUITests`.
+- Queue deterministic ready-state smoke coverage expansion in `RHEIRUITests` as the next highest-value release-hardening seam after the signed-out UI checkpoint lands.
 
 ## Current Working Set
 - Session flow now routes through `Shared/Views/Auth/AppSessionSupport.swift`.
@@ -107,12 +107,16 @@
 - `Shared/Views/Settings/PersonalSettingsView.swift` no longer carries the unreachable `catch` warning in its CloudKit status helper.
 - `Shared/Models/WorkHour.swift` no longer carries the redundant local `CLLocation: @unchecked Sendable` conformance.
 - The stable `xcodebuildmcp` simulator path is now warning-clean for the active target.
-- Deterministic UI smoke coverage expansion in `RHEIRUITests` is now the next highest-value release-hardening seam in the active tree.
+- `RheirApp.swift` now supports deterministic signed-out UI test launch mode without touching live CloudKit auth state.
+- `SessionStore` now supports configurable launch delay so UI tests can bypass the splash wait without affecting normal app launches.
+- `RHEIRUITests.swift` now contains a deterministic signed-out smoke test that asserts the Apple Sign-In control renders.
+- `RHEIRUITestsLaunchTests.swift` now launches in deterministic signed-out mode before capturing launch evidence.
+- Deterministic ready-state smoke coverage expansion in `RHEIRUITests` is now the next highest-value release-hardening seam in the active tree.
 - Focused tests for invite parsing, cache migration, project-store persistence, receipt-intelligence retention, cache clearing, labor aggregation/validation, company-state bucketing, team-member store behavior, and receipt project-resolution behavior now live in `RHEIRTests/RHEIRTests.swift`.
 - Focused tests for project access normalization and assignment filtering now live in `RHEIRTests/RHEIRTests.swift`.
 - The current working slice has exact simulator evidence recorded:
-  - Gate A `build_sim`: PASS (`mcp__xcodebuildmcp__build_sim` with `-derivedDataPath /tmp/rheir_gateA_phase1bw_mcp_dd`)
-  - Focused parity `test_sim -only-testing:RHEIRTests`: PASS (`mcp__xcodebuildmcp__test_sim` with `-derivedDataPath /tmp/rheir_parity_phase1bw_mcp_dd`, `27/27`)
+  - Gate A `build_sim`: PASS (`mcp__xcodebuildmcp__build_sim` with `-derivedDataPath /tmp/rheir_gateA_phase1by_mcp_dd`)
+  - Focused parity `test_sim -only-testing:RHEIRTests -only-testing:RHEIRUITests/RHEIRUITests/testSignedOutModeShowsAppleSignIn -only-testing:RHEIRUITests/RHEIRUITestsLaunchTests/testLaunch`: PASS (`mcp__xcodebuildmcp__test_sim` with `-derivedDataPath /tmp/rheir_parity_phase1by_mcp_dd`, `29/29`)
   - Direct `xcodebuild` CLI evidence remains less stable than the MCP simulator path in the current local CoreSimulator environment
 
 ## Known Constraints
@@ -122,6 +126,6 @@
 - This repo follows a repo-local STS equivalent defined in the root governance docs because the original STS spine docs were not present here.
 
 ## Next Required Action
-1. Commit the `Shared/Models/WorkHour.swift` warning cleanup slice without staging `Shared/Views/Auth/LoginView.swift`, `rheir_knowledge_database.json`, `RHEIRmemories.csv`, or `RheirLogo 1024x1024.png`.
+1. Commit the deterministic signed-out `RHEIRUITests` smoke coverage slice without staging `Shared/Views/Auth/LoginView.swift`, `rheir_knowledge_database.json`, `RHEIRmemories.csv`, or `RheirLogo 1024x1024.png`.
 2. Preserve the repo-local STS docs and `SHIP_READINESS_CHECKLIST.md` as the current release-planning truth for this repository.
-3. Continue with deterministic UI smoke coverage expansion in `RHEIRUITests` after the `WorkHour.swift` checkpoint lands.
+3. Continue with deterministic ready-state smoke coverage expansion in `RHEIRUITests` after the signed-out UI checkpoint lands.

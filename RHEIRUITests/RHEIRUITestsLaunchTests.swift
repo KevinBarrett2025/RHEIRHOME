@@ -20,7 +20,15 @@ final class RHEIRUITestsLaunchTests: XCTestCase {
     @MainActor
     func testLaunch() throws {
         let app = XCUIApplication()
+        app.launchEnvironment["RHEIR_UI_TEST_MODE"] = "signed_out"
+        app.launchEnvironment["RHEIR_UI_TEST_SKIP_LAUNCH_DELAY"] = "1"
         app.launch()
+
+        let appleSignInButton = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] %@", "Apple")).firstMatch
+        XCTAssertTrue(
+            appleSignInButton.waitForExistence(timeout: 5),
+            "Expected launch test to render the deterministic signed-out Apple Sign-In control."
+        )
 
         // Insert steps here to perform after app launch but before taking a screenshot,
         // such as logging into a test account or navigating somewhere in the app

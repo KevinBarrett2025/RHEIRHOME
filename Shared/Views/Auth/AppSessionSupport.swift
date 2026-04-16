@@ -247,6 +247,7 @@ final class SessionStore: ObservableObject {
     private let projectViewModel: ProjectViewModel
     private let localCache: LocalCacheStore
     private let organizationRepository: OrganizationRepository
+    private let launchDelayNanoseconds: UInt64
 
     private var cancellables = Set<AnyCancellable>()
     private var hasConnected = false
@@ -258,7 +259,8 @@ final class SessionStore: ObservableObject {
         authViewModel: AuthViewModel,
         projectViewModel: ProjectViewModel,
         localCache: LocalCacheStore = .shared,
-        organizationRepository: OrganizationRepository? = nil
+        organizationRepository: OrganizationRepository? = nil,
+        launchDelayNanoseconds: UInt64 = 900_000_000
     ) {
         self.authViewModel = authViewModel
         self.projectViewModel = projectViewModel
@@ -266,6 +268,7 @@ final class SessionStore: ObservableObject {
         self.pendingInvite = localCache.pendingInvite
         self.selectionState = localCache.selectionState
         self.organizationRepository = organizationRepository ?? CloudKitOrganizationRepository(authViewModel: authViewModel)
+        self.launchDelayNanoseconds = launchDelayNanoseconds
     }
 
     func connectIfNeeded() {
@@ -276,7 +279,9 @@ final class SessionStore: ObservableObject {
         bind()
 
         Task {
-            try? await Task.sleep(nanoseconds: 900_000_000)
+            if launchDelayNanoseconds > 0 {
+                try? await Task.sleep(nanoseconds: launchDelayNanoseconds)
+            }
             hasFinishedLaunch = true
             refreshState(reason: "launch complete")
             processPendingInviteIfPossible()

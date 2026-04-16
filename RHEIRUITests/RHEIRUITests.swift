@@ -8,6 +8,14 @@
 import XCTest
 
 final class RHEIRUITests: XCTestCase {
+    private enum UITestLaunchEnvironment {
+        static let mode = "RHEIR_UI_TEST_MODE"
+        static let skipLaunchDelay = "RHEIR_UI_TEST_SKIP_LAUNCH_DELAY"
+    }
+
+    private enum UITestLaunchMode: String {
+        case signedOut = "signed_out"
+    }
 
     override func setUpWithError() throws {
         // Put setup code here. This method is called before the invocation of each test method in the class.
@@ -23,19 +31,29 @@ final class RHEIRUITests: XCTestCase {
     }
 
     @MainActor
-    func testExample() throws {
-        // UI tests must launch the application that they test.
-        let app = XCUIApplication()
+    func testSignedOutModeShowsAppleSignIn() throws {
+        let app = makeApp(mode: .signedOut)
         app.launch()
 
-        // Use XCTAssert and related functions to verify your tests produce the correct results.
+        let appleSignInButton = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] %@", "Apple")).firstMatch
+        XCTAssertTrue(
+            appleSignInButton.waitForExistence(timeout: 5),
+            "Expected the signed-out screen to present the Sign in with Apple button."
+        )
     }
 
     @MainActor
     func testLaunchPerformance() throws {
         // This measures how long it takes to launch your application.
         measure(metrics: [XCTApplicationLaunchMetric()]) {
-            XCUIApplication().launch()
+            makeApp(mode: .signedOut).launch()
         }
+    }
+
+    private func makeApp(mode: UITestLaunchMode) -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchEnvironment[UITestLaunchEnvironment.mode] = mode.rawValue
+        app.launchEnvironment[UITestLaunchEnvironment.skipLaunchDelay] = "1"
+        return app
     }
 }

@@ -79,14 +79,15 @@
 - `ReceiptScannerView.swift` no longer carries the unused `lowercaseText` warning in its payment-method extraction helper.
 - `PersonalSettingsView.swift` no longer carries the unreachable `catch` warning in its CloudKit status helper.
 - `WorkHour.swift` no longer carries the redundant local `CLLocation: @unchecked Sendable` conformance.
+- `RheirApp.swift`, `SessionStore`, and `RHEIRUITests` now support deterministic signed-out UI launch smoke coverage without touching live auth state.
 - Stable simulator evidence is green on the staged checkpoint:
-  - Gate A `build_sim`: PASS (`mcp__xcodebuildmcp__build_sim` with `-derivedDataPath /tmp/rheir_gateA_phase1bw_mcp_dd`)
-  - Focused parity `test_sim -only-testing:RHEIRTests`: PASS (`mcp__xcodebuildmcp__test_sim` with `-derivedDataPath /tmp/rheir_parity_phase1bw_mcp_dd`, `27/27`)
+  - Gate A `build_sim`: PASS (`mcp__xcodebuildmcp__build_sim` with `-derivedDataPath /tmp/rheir_gateA_phase1by_mcp_dd`)
+  - Focused parity `test_sim -only-testing:RHEIRTests -only-testing:RHEIRUITests/RHEIRUITests/testSignedOutModeShowsAppleSignIn -only-testing:RHEIRUITests/RHEIRUITestsLaunchTests/testLaunch`: PASS (`mcp__xcodebuildmcp__test_sim` with `-derivedDataPath /tmp/rheir_parity_phase1by_mcp_dd`, `29/29`)
 
 ## Open Work
 - Production raw `print(...)` cleanup is effectively complete; only development-only seams still emit raw tracing.
 - Continue shrinking the remaining oversized active state owners.
-- The stable simulator path is now warning-clean; the next release-hardening seam is deterministic UI smoke coverage in `RHEIRUITests`.
+- The stable simulator path is now warning-clean, and the first deterministic signed-out smoke path is in place; the next release-hardening seam is deterministic ready-state coverage in `RHEIRUITests`.
 - Use `SHIP_READINESS_CHECKLIST.md` as the current release-progress reference alongside the STS docs.
 
 ## Blockers
