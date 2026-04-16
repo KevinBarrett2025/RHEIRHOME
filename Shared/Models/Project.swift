@@ -122,8 +122,8 @@ public struct Project: Identifiable, Codable, Equatable, Sendable {
         record["lastModifiedDate"] = lastModifiedDate as CKRecordValue
         record["photoIDs"] = photoIDs as CKRecordValue
         
-        // Serialize child collections as JSON data
-        record["fullProjectData"] = try JSONEncoder().encode(self) as CKRecordValue
+        // Serialize child collections as JSON data without inline receipt image blobs.
+        record["fullProjectData"] = try JSONEncoder().encode(persistenceSafeCopy) as CKRecordValue
         
         return record
     }
@@ -167,6 +167,22 @@ public struct Project: Identifiable, Codable, Equatable, Sendable {
 // MARK: - Helper Extensions  
 
 extension Project {
+    var inlineReceiptImageCount: Int {
+        receipts.reduce(0) { count, receipt in
+            count + (receipt.receiptImageData == nil ? 0 : 1)
+        }
+    }
+
+    var persistenceSafeCopy: Project {
+        guard inlineReceiptImageCount > 0 else {
+            return self
+        }
+
+        var copy = self
+        copy.receipts = receipts.map(\.persistenceSafeCopy)
+        return copy
+    }
+
     public var totalSpent: Double {
         return materialCost + laborCost + generalConditions
     }

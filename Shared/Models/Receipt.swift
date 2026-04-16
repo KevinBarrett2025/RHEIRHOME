@@ -515,6 +515,19 @@ public struct Receipt: Identifiable, Codable, Hashable, Sendable {
     }
 }
 
+extension Receipt {
+    var persistenceSafeCopy: Receipt {
+        guard receiptImageData != nil || receiptImageName != nil else {
+            return self
+        }
+
+        var copy = self
+        copy.receiptImageData = nil
+        copy.receiptImageName = nil
+        return copy
+    }
+}
+
 /// AI Analysis metadata for receipts processed by ChatGPT
 public struct AIAnalysisData: Codable, Hashable, Sendable {
     public let confidence: Double

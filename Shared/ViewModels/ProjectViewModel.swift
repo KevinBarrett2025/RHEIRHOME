@@ -2092,7 +2092,19 @@ final class ProjectStore {
 
     func saveProjects(_ projects: [Project], for organizationID: String) {
         let scopedProjects = projects.filter { $0.organizationID == organizationID }
-        save(scopedProjects, forKey: Key.projectsPrefix + organizationID)
+        let strippedInlineReceiptImages = scopedProjects.reduce(0) { count, project in
+            count + project.inlineReceiptImageCount
+        }
+        let persistenceSafeProjects = scopedProjects.map(\.persistenceSafeCopy)
+
+        save(persistenceSafeProjects, forKey: Key.projectsPrefix + organizationID)
+
+        if strippedInlineReceiptImages > 0 {
+            Logger.projectStore.debug(
+                "Stripped inline receipt images from stored project snapshot [organization=\(organizationID, privacy: .private(mask: .hash)) images=\(strippedInlineReceiptImages, privacy: .public)]"
+            )
+        }
+
         Logger.projectStore.debug(
             "Saved \(scopedProjects.count, privacy: .public) projects for organization \(organizationID, privacy: .private(mask: .hash))"
         )
@@ -2241,6 +2253,7 @@ final class CloudKitProjectRepository: ProjectRepository {
         let privateDatabase = container.privateCloudDatabase
         let recordID = CKRecord.ID(recordName: "project_\(project.id.uuidString)")
         let record = CKRecord(recordType: "Project", recordID: recordID)
+        let persistenceSafeProject = project.persistenceSafeCopy
 
         record["name"] = project.name as CKRecordValue
         record["client"] = project.client as CKRecordValue
@@ -2250,8 +2263,14 @@ final class CloudKitProjectRepository: ProjectRepository {
         record["status"] = project.status.rawValue as CKRecordValue
         record["organizationID"] = organizationID as CKRecordValue
 
-        if let projectData = try? JSONEncoder().encode(project) {
+        if let projectData = try? JSONEncoder().encode(persistenceSafeProject) {
             record["fullProjectData"] = projectData as CKRecordValue
+
+            if project.inlineReceiptImageCount > 0 {
+                Logger.projectRepository.debug(
+                    "Prepared CloudKit project payload without inline receipt images [organization=\(organizationID, privacy: .private(mask: .hash)) images=\(project.inlineReceiptImageCount, privacy: .public) bytes=\(projectData.count, privacy: .public)]"
+                )
+            }
         }
 
         _ = try await privateDatabase.save(record)

@@ -2,7 +2,7 @@
 
 ## Current Status
 - Branch: `gm/rheir-hardening-phase1`
-- Status: between `Foundation Completion` and `Release Hardening`
+- Status: in `Release Hardening`
 - Release posture: not ship-ready yet
 
 ## Phase 1: Foundation Completion
@@ -59,7 +59,7 @@ Exit criteria: the build is realistic QA and release-candidate material.
 ## Phase 4: App Store Submission
 Exit criteria: release candidate is validated on real hardware and ready for submission.
 
-- Resolve physical-device signing for `com.RheirHome.RHEIR`.
+- Use the now-working physical-device path for real-hardware validation of the release candidate.
 - Run device validation for:
   - Sign in with Apple
   - CloudKit org/project flows
@@ -71,7 +71,7 @@ Exit criteria: release candidate is validated on real hardware and ready for sub
 - Freeze scope and submit.
 
 ## Immediate Next Steps
-1. Continue service cleanup with `Shared/Services/ChatGPTService.swift`.
-2. Clear current warning debt.
-3. Add UI smoke coverage for the main contractor flows.
-4. Resolve device signing after simulator hardening is stable.
+1. Re-run the previously failing device project update / scanned-receipt persistence flow now that serialized project payloads strip inline receipt image data.
+2. Continue broader selected-project receipt runtime QA once the device rerun is clean.
+3. Validate end-to-end contractor flows such as receipt OCR and AI analysis, labor logging, and vendor/payment-method updates.
+4. Expand focused parity as simulator and device seams stabilize.

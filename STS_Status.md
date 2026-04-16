@@ -3,7 +3,7 @@
 ## Repo
 - Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Branch: `gm/rheir-hardening-phase1`
-- HEAD: `e9e1ca9e5aaef46c9a27748d25f2a08efa3aaf5a`
+- HEAD: `4f0821c59a540f6df39ac3fb663f24466c25d4f2`
 
 ## Active Initiative
 - RHEIR release hardening, phase 2 receipt workflow pass.
@@ -128,20 +128,23 @@
 - Added `SHIP_READINESS_CHECKLIST.md` as the repo-tracked release plan for the remaining foundation, hardening, promo, and submission work.
 - Added focused persistence/session tests in `RHEIRTests/RHEIRTests.swift` for invite parsing, legacy cache migration, project storage, receipt intelligence retention, cache clearing, labor aggregation/validation, company-state bucketing, team-member store behavior, and receipt project-resolution behavior.
 - Added focused parity for project access normalization and assignment filtering in `RHEIRTests/RHEIRTests.swift`.
+- Hardened oversized organization-scoped project persistence by stripping inline receipt image data from serialized `ProjectStore` snapshots and CloudKit `fullProjectData` payloads via `Receipt.persistenceSafeCopy`, `Project.persistenceSafeCopy`, and the active project save path.
+- Added focused project-payload regression coverage in `RHEIRTests/RHEIRTests.swift` that proves stored projects and persistence-safe serialized payloads retain receipt metadata while removing inline receipt image data and names.
 
 ## In Progress
+- Re-run the previously failing real-device project update / scanned-receipt persistence flow now that serialized project payloads strip inline receipt image blobs.
 - Continue release hardening beyond the now-green selected-project saved-receipt search/browse, category/filter drilldown, and `By Vendor` grouped-summary/expansion seams into broader receipt runtime QA on the real receipts surface.
 - Continue shrinking the remaining oversized active state owners around the new sync and access store boundaries.
 - Expand deterministic parity beyond the focused `RHEIRTests` suite.
 
 ## Blockers
 - Raw in-sandbox `xcodebuild` commands are still less reliable than elevated CLI or `xcodebuildmcp` paths in this environment because CoreSimulator and DerivedData access remain sandbox-sensitive.
-- Device-targeted Gate A remains blocked by signing because automatic provisioning is disabled for `com.RheirHome.RHEIR`.
+- Physical-device build/signing is now unblocked, but the oversized project-payload fix still needs rerun confirmation against the previously observed `NSUserDefaults >= 4 MB` and CloudKit `record too large` failures.
 
 ## Latest Evidence
-- Focused receipt `By Vendor` expansion/collapse smoke: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_phase1cq_vendor_expand_smoke_retry11_cli_dd test -only-testing:RHEIRUITests/RHEIRUITests/testReceiptsByVendorModeExpandsAndCollapsesVendorGroup` -> PASS (`/tmp/rheir_phase1cq_vendor_expand_smoke_retry11_cli.log`, `/tmp/rheir_phase1cq_vendor_expand_smoke_retry11_cli_dd/Logs/Test/Test-RHEIR-2026.04.16_16-12-05--0400.xcresult`)
-- Gate A: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_phase1cq_cli_dd clean build` -> PASS (`/tmp/rheir_gateA_phase1cq_cli.log`)
-- Receipts-focused parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_parity_phase1cq_cli_dd test -only-testing:RHEIRUITests/RHEIRUITests/testManualReceiptEntrySavesReceiptIntoSelectedProject -only-testing:RHEIRUITests/RHEIRUITests/testManualReceiptEntryNavigatesToSavedReceiptDetails -only-testing:RHEIRUITests/RHEIRUITests/testSavedReceiptDetailPersistsEdits -only-testing:RHEIRUITests/RHEIRUITests/testReceiptsSearchFiltersAndRestoresSavedReceipts -only-testing:RHEIRUITests/RHEIRUITests/testReceiptsCategoryDrilldownFiltersAndRestoresSavedReceipts -only-testing:RHEIRUITests/RHEIRUITests/testReceiptsByVendorModeShowsGroupedSummaryForSavedReceipt -only-testing:RHEIRUITests/RHEIRUITests/testReceiptsByVendorModeExpandsAndCollapsesVendorGroup` -> PASS (`/tmp/rheir_parity_phase1cq_cli.log`, `/tmp/rheir_parity_phase1cq_cli_dd/Logs/Test/Test-RHEIR-2026.04.16_16-14-50--0400.xcresult`, `7 total UI tests`)
+- Focused project-payload parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_phase2_payload_targeted_commit_dd -resultBundlePath /tmp/rheir_phase2_payload_targeted_commit.xcresult test -only-testing:RHEIRTests/ProjectStoreTests -only-testing:RHEIRTests/ProjectPersistencePayloadTests` -> PASS (`/tmp/rheir_phase2_payload_targeted_commit.xcresult`, `5 tests in 2 suites`)
+- Gate A: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_phase2_payload_commit_dd -resultBundlePath /tmp/rheir_gateA_phase2_payload_commit.xcresult clean build` -> PASS (`/tmp/rheir_gateA_phase2_payload_commit.xcresult`)
+- User-run iPhone launch/build is now succeeding, and `/Users/kevinbarrett/Downloads/rheirlogs1.md` captured the oversized `NSUserDefaults` and CloudKit `record too large` failures that this hardening slice targets.
 
 ## Next Milestone
-- Extend deterministic selected-project receipt workflow coverage beyond the now-green saved-receipt search/browse, category/filter drilldown, and `By Vendor` grouped-summary/expansion seams into broader receipt runtime QA.
+- Re-run the previously failing real-device project update / scanned-receipt persistence flow, then extend deterministic selected-project receipt workflow coverage into broader receipt runtime QA.

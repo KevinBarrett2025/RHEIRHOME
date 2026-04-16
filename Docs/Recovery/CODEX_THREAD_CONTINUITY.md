@@ -3,12 +3,13 @@
 ## Repo Truth
 - Repo Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Active Branch: `gm/rheir-hardening-phase1`
-- Thread Start SHA: `302b46a3f8ab3c06376f12849489717c0a9e18c2`
-- Last Commit At Thread Start: `302b46a Phase 2: reconcile receipt continuity docs (docs only)`
+- Thread Start SHA: `4f0821c59a540f6df39ac3fb663f24466c25d4f2`
+- Last Commit At Thread Start: `4f0821c Phase 2: add receipt by-vendor expansion smoke coverage`
 
 ## Current Objective
 - Preserve deterministic selected-project saved-receipt edit persistence, browsing/search, category/filter drilldown, and `By Vendor` grouped-summary/expansion coverage across the real receipts surface.
-- Continue the next release-hardening seam into broader selected-project receipt runtime QA on the stable simulator path.
+- Validate the just-landed oversized project persistence hardening against the previously observed real-device `NSUserDefaults >= 4 MB` and CloudKit `record too large` failures.
+- Continue the next release-hardening seam into broader selected-project receipt runtime QA once the device rerun is clean.
 
 ## Current Working Set
 - Session flow now routes through `Shared/Views/Auth/AppSessionSupport.swift`.
@@ -144,14 +145,17 @@
 - `Shared/Features/Receipts/ReceiptsView.swift` now keeps vendor-group expansion state in parent-owned selected-project state, uses the full vendor header as the toggle control, and keeps grouped-list visibility deterministic against the floating-action layout.
 - `RHEIRUITests.swift` now also contains deterministic selected-project `By Vendor` expansion/collapse coverage that toggles the real grouped vendor header and asserts grouped-list appearance/disappearance through stable accessibility state.
 - Deterministic selected-project manual receipt submission, saved receipt detail, receipt-detail action, persisted saved-receipt edit mutation, saved-receipt search/browse, category/filter drilldown, and `By Vendor` grouped-summary/expansion coverage are now validated on the stable simulator path, and the next release-hardening seam is broader receipt workflow runtime QA.
+- `Receipt.persistenceSafeCopy` now strips inline receipt image data and names from serialized persistence payloads without altering the live in-memory receipt metadata used by the UI.
+- `Project.persistenceSafeCopy`, `ProjectStore.saveProjects`, and the CloudKit project-save path now strip inline receipt image blobs from organization-scoped stored project snapshots and `fullProjectData` payloads before encoding.
+- `RHEIRTests.swift` now also proves stored-project snapshots and persistence-safe serialized project payloads retain receipt metadata while removing inline receipt image data.
 - `RHEIRUITestsLaunchTests.swift` now launches in deterministic signed-out mode before capturing launch evidence.
 - Deterministic selected-project receipt runtime coverage remains the next highest-value release-hardening seam in the active tree.
 - Focused tests for invite parsing, cache migration, project-store persistence, receipt-intelligence retention, cache clearing, labor aggregation/validation, company-state bucketing, team-member store behavior, and receipt project-resolution behavior now live in `RHEIRTests/RHEIRTests.swift`.
 - Focused tests for project access normalization and assignment filtering now live in `RHEIRTests/RHEIRTests.swift`.
 - The current working slice has exact simulator evidence recorded:
-  - Focused receipt `By Vendor` expansion/collapse smoke `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_phase1cq_vendor_expand_smoke_retry11_cli_dd test -only-testing:RHEIRUITests/RHEIRUITests/testReceiptsByVendorModeExpandsAndCollapsesVendorGroup`: PASS (`/tmp/rheir_phase1cq_vendor_expand_smoke_retry11_cli.log`, `/tmp/rheir_phase1cq_vendor_expand_smoke_retry11_cli_dd/Logs/Test/Test-RHEIR-2026.04.16_16-12-05--0400.xcresult`)
-  - Gate A CLI clean build `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_phase1cq_cli_dd clean build`: PASS (`/tmp/rheir_gateA_phase1cq_cli.log`)
-  - Receipts-focused parity `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_parity_phase1cq_cli_dd test -only-testing:RHEIRUITests/RHEIRUITests/testManualReceiptEntrySavesReceiptIntoSelectedProject -only-testing:RHEIRUITests/RHEIRUITests/testManualReceiptEntryNavigatesToSavedReceiptDetails -only-testing:RHEIRUITests/RHEIRUITests/testSavedReceiptDetailPersistsEdits -only-testing:RHEIRUITests/RHEIRUITests/testReceiptsSearchFiltersAndRestoresSavedReceipts -only-testing:RHEIRUITests/RHEIRUITests/testReceiptsCategoryDrilldownFiltersAndRestoresSavedReceipts -only-testing:RHEIRUITests/RHEIRUITests/testReceiptsByVendorModeShowsGroupedSummaryForSavedReceipt -only-testing:RHEIRUITests/RHEIRUITests/testReceiptsByVendorModeExpandsAndCollapsesVendorGroup`: PASS (`/tmp/rheir_parity_phase1cq_cli.log`, `/tmp/rheir_parity_phase1cq_cli_dd/Logs/Test/Test-RHEIR-2026.04.16_16-14-50--0400.xcresult`, `7 total UI tests`)
+  - Focused project-payload parity `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_phase2_payload_targeted_commit_dd -resultBundlePath /tmp/rheir_phase2_payload_targeted_commit.xcresult test -only-testing:RHEIRTests/ProjectStoreTests -only-testing:RHEIRTests/ProjectPersistencePayloadTests`: PASS (`/tmp/rheir_phase2_payload_targeted_commit.xcresult`, `5 tests in 2 suites`)
+  - Gate A CLI clean build `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_phase2_payload_commit_dd -resultBundlePath /tmp/rheir_gateA_phase2_payload_commit.xcresult clean build`: PASS (`/tmp/rheir_gateA_phase2_payload_commit.xcresult`)
+  - User-run iPhone build/launch is now succeeding, and `/Users/kevinbarrett/Downloads/rheirlogs1.md` captured the oversized `NSUserDefaults` and CloudKit `record too large` failures that this slice hardens
   - Direct `xcodebuild` CLI evidence remains less stable than the MCP simulator path in the current local CoreSimulator environment
 
 ## Known Constraints
@@ -163,5 +167,5 @@
 ## Next Required Action
 1. Preserve the repo-local STS docs and `SHIP_READINESS_CHECKLIST.md` as the current release-planning truth for this repository.
 2. Keep `Shared/Views/Auth/LoginView.swift`, `rheir_knowledge_database.json`, `RHEIRmemories.csv`, and `RheirLogo 1024x1024.png` out of the staged set for this checkpoint.
-3. Continue with the next deterministic selected-project receipt runtime QA seam beyond the now-green saved-receipt search/browse, category/filter drilldown, and `By Vendor` grouped-summary/expansion coverage on the stable simulator path.
-4. Target the next highest-value broader receipt runtime QA seam on the real receipts surface rather than reopening completed `By Vendor` interaction coverage.
+3. Re-run the previously failing real-device project update / scanned-receipt persistence flow and confirm the `NSUserDefaults >= 4 MB` and CloudKit `record too large` failures no longer appear.
+4. If the device rerun is clean, continue broader selected-project receipt runtime QA and reconcile the repo-local STS docs for the next checkpoint.

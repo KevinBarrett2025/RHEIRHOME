@@ -120,6 +120,10 @@
 - `RHEIRUITests` selected-project receipt `By Vendor` grouped-summary smoke coverage
 - `ReceiptsView` parent-owned `By Vendor` expansion-state and full-row vendor-toggle hardening
 - `RHEIRUITests` selected-project receipt `By Vendor` expansion/collapse smoke coverage
+- `Receipt` persistence-safe payload stripping for inline receipt image blobs
+- `Project` persistence-safe project snapshots and CloudKit payload hardening
+- `ProjectStore` / CloudKit project-save oversized payload hardening
+- `RHEIRTests` project-payload stripping regression coverage
 - `VendorKnowledgeService` structured logging
 - `PaymentMethodKnowledgeService` structured logging
 - `OrganizationService` structured logging
@@ -128,16 +132,15 @@
 - `SignInWithAppleCoordinator` structured logging
 
 ## Current Validation Baseline
-- Simulator build path: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_phase1cq_cli_dd clean build`
-- Focused receipt `By Vendor` expansion/collapse smoke path: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_phase1cq_vendor_expand_smoke_retry11_cli_dd test -only-testing:RHEIRUITests/RHEIRUITests/testReceiptsByVendorModeExpandsAndCollapsesVendorGroup`
-- Receipts-focused parity path: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_parity_phase1cq_cli_dd test -only-testing:RHEIRUITests/RHEIRUITests/testManualReceiptEntrySavesReceiptIntoSelectedProject -only-testing:RHEIRUITests/RHEIRUITests/testManualReceiptEntryNavigatesToSavedReceiptDetails -only-testing:RHEIRUITests/RHEIRUITests/testSavedReceiptDetailPersistsEdits -only-testing:RHEIRUITests/RHEIRUITests/testReceiptsSearchFiltersAndRestoresSavedReceipts -only-testing:RHEIRUITests/RHEIRUITests/testReceiptsCategoryDrilldownFiltersAndRestoresSavedReceipts -only-testing:RHEIRUITests/RHEIRUITests/testReceiptsByVendorModeShowsGroupedSummaryForSavedReceipt -only-testing:RHEIRUITests/RHEIRUITests/testReceiptsByVendorModeExpandsAndCollapsesVendorGroup`
-- Latest receipts parity result: `PASS` (`/tmp/rheir_parity_phase1cq_cli.log`, `/tmp/rheir_parity_phase1cq_cli_dd/Logs/Test/Test-RHEIR-2026.04.16_16-14-50--0400.xcresult`, `7 total UI tests`)
+- Simulator build path: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_phase2_payload_commit_dd -resultBundlePath /tmp/rheir_gateA_phase2_payload_commit.xcresult clean build`
+- Focused project-payload parity path: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_phase2_payload_targeted_commit_dd -resultBundlePath /tmp/rheir_phase2_payload_targeted_commit.xcresult test -only-testing:RHEIRTests/ProjectStoreTests -only-testing:RHEIRTests/ProjectPersistencePayloadTests`
+- Latest focused project-payload parity result: `PASS` (`/tmp/rheir_phase2_payload_targeted_commit.xcresult`, `5 tests in 2 suites`)
 
 ## Known Residual Risks
 - Remaining raw `print(...)` statements are now limited to development-only seams such as `Shared/Services/Development/DevelopmentDataManager.swift`, `Shared/Services/StubServices.swift`, and `Shared/Services/PreviewAuthService.swift`.
-- Stable simulator and elevated CLI simulator paths are warning-clean for the active target; remaining release hardening now centers on broader deterministic coverage and runtime QA.
-- `RHEIRUITests` is now deterministic for signed-out, ready-state, organization-selection, project-selection, labor, company-admin, receipts-entry, manual-entry vendor-picker, manual-entry add-vendor, manual-entry payment-method-picker, manual-entry add-payment-method, manual-entry submission, saved receipt detail, receipt-detail action, persisted receipt-edit mutation, saved-receipt search/browse, category/filter drilldown, and `By Vendor` grouped-summary/expansion coverage; the next release-hardening slice is broader receipt workflow runtime QA.
+- Stable simulator and elevated CLI simulator paths are warning-clean for the active target; remaining release hardening now centers on device confirmation of the payload fix plus broader deterministic coverage and runtime QA.
+- `RHEIRUITests` is now deterministic for signed-out, ready-state, organization-selection, project-selection, labor, company-admin, receipts-entry, manual-entry vendor-picker, manual-entry add-vendor, manual-entry payment-method-picker, manual-entry add-payment-method, manual-entry submission, saved receipt detail, receipt-detail action, persisted receipt-edit mutation, saved-receipt search/browse, category/filter drilldown, and `By Vendor` grouped-summary/expansion coverage; the next release-hardening slice after device confirmation is broader receipt workflow runtime QA.
 - `ProjectViewModel` is still oversized even after the extracted stores, though organization/project synchronization is now isolated behind `OrganizationProjectSyncStore`.
 - `CompanyStore` now lives in the compiled state layer rather than the settings view, but the broader company/project coordination flow still spans multiple UI files.
 - Direct in-sandbox CLI `xcodebuild` evidence remains less stable than elevated CLI or the MCP simulator path in the local CoreSimulator environment.
-- Device signing is still unresolved for physical-device gate execution.
+- Physical-device build/signing is now working, but the previously failing `NSUserDefaults >= 4 MB` / CloudKit `record too large` project-update path still needs rerun confirmation on device.

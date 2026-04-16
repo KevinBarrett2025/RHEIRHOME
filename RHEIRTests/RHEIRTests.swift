@@ -232,6 +232,75 @@ struct ProjectStoreTests {
         #expect(store.loadProjectAssignments(for: "org-1") == ["project-1", "project-2"])
         #expect(store.loadProjectAssignments(for: "org-2") == ["project-9"])
     }
+
+    @Test
+    func stripsInlineReceiptImagesFromStoredProjects() {
+        let suiteName = "ProjectStoreTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = ProjectStore(userDefaults: defaults)
+        let orgID = "org-inline-receipts"
+        var receipt = Receipt(
+            vendor: "North Shore Supply",
+            date: .now,
+            amount: 128.42
+        )
+        receipt.setReceiptImageData(Data(repeating: 0xAB, count: 2048))
+
+        var project = Project(
+            name: "Inline Receipt Payload",
+            client: "Client A",
+            totalBudget: 120000,
+            startDate: .now,
+            endDate: .now.addingTimeInterval(86400),
+            organizationID: orgID
+        )
+        project.receipts = [receipt]
+
+        store.saveProjects([project], for: orgID)
+
+        let loadedProjects = store.loadProjects(for: orgID)
+        #expect(loadedProjects.count == 1)
+        #expect(loadedProjects.first?.receipts.count == 1)
+        #expect(loadedProjects.first?.receipts.first?.vendor == "North Shore Supply")
+        #expect(loadedProjects.first?.receipts.first?.amount == 128.42)
+        #expect(loadedProjects.first?.receipts.first?.receiptImageData == nil)
+        #expect(loadedProjects.first?.receipts.first?.receiptImageName == nil)
+    }
+}
+
+struct ProjectPersistencePayloadTests {
+
+    @Test
+    func stripsInlineReceiptImagesFromPersistenceSafeProjectPayload() throws {
+        var receipt = Receipt(
+            vendor: "Builder Depot",
+            date: .now,
+            amount: 64.99
+        )
+        receipt.setReceiptImageData(Data(repeating: 0xCD, count: 4096))
+
+        var project = Project(
+            name: "Cloud Payload",
+            client: "Client A",
+            totalBudget: 90000,
+            startDate: .now,
+            endDate: .now.addingTimeInterval(86400),
+            organizationID: "org-cloud-payload"
+        )
+        project.receipts = [receipt]
+
+        let payload = try JSONEncoder().encode(project.persistenceSafeCopy)
+        let decodedProject = try JSONDecoder().decode(Project.self, from: payload)
+        #expect(decodedProject.receipts.count == 1)
+        #expect(decodedProject.receipts.first?.vendor == "Builder Depot")
+        #expect(decodedProject.receipts.first?.receiptImageData == nil)
+        #expect(decodedProject.receipts.first?.receiptImageName == nil)
+    }
 }
 
 struct OrganizationProjectSyncStoreTests {
