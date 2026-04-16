@@ -73,14 +73,15 @@
 - `QuickPaymentMethodCreateView.swift` no longer emits preview-only raw `print(...)` tracing.
 - `ManualReceiptEntryView.swift` now uses structured `Logger.receiptWorkflow` logging instead of raw `print(...)` tracing.
 - `CommunicationLogsView.swift` no longer emits preview-only raw `print(...)` tracing.
+- `CategoryReceiptsView.swift` now uses structured `Logger.receiptWorkflow` logging instead of raw `print(...)` tracing.
 - Stable simulator evidence is green on the staged checkpoint:
-  - Gate A `build_sim`: PASS (`mcp__xcodebuildmcp__build_sim` with `-derivedDataPath /tmp/rheir_gateA_phase1bq_mcp_dd`)
-  - Focused parity `test_sim -only-testing:RHEIRTests`: PASS (`mcp__xcodebuildmcp__test_sim` with `-derivedDataPath /tmp/rheir_parity_phase1bq_mcp_dd`, `27/27`)
+  - Gate A `build_sim`: PASS (`mcp__xcodebuildmcp__build_sim` with `-derivedDataPath /tmp/rheir_gateA_phase1br_mcp_dd`)
+  - Focused parity `test_sim -only-testing:RHEIRTests`: PASS (`mcp__xcodebuildmcp__test_sim` with `-derivedDataPath /tmp/rheir_parity_phase1br_mcp_dd`, `27/27`)
 
 ## Open Work
-- Finish replacing raw `print(...)` tracing in the other non-hardened production seams, starting with `Shared/Features/Budget/CategoryReceiptsView.swift`.
+- Finish replacing raw `print(...)` tracing in the other non-hardened production seams, starting with `Shared/Features/Labor/LaborPaymentView.swift`.
 - Continue shrinking the remaining oversized active state owners.
-- After the `Shared/Features/Budget/CategoryReceiptsView.swift` checkpoint, continue with `Shared/Features/Labor/LaborPaymentView.swift`.
+- After the `Shared/Features/Labor/LaborPaymentView.swift` checkpoint, continue with `Shared/Features/Progress/ProgressDetailView.swift`.
 - Use `SHIP_READINESS_CHECKLIST.md` as the current release-progress reference alongside the STS docs.
 
 ## Blockers

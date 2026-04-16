@@ -1,3 +1,4 @@
+import OSLog
 import SwiftUI
 
 struct CategoryReceiptsView: View {
@@ -214,7 +215,9 @@ struct CategoryReceiptsView: View {
         
         receiptToDelete = nil
         
-        print("🗑️ Deleted receipt from \(receipt.vendor) for \(receipt.amount.formatAsCurrency())")
+        Logger.receiptWorkflow.notice(
+            "Category receipt deleted [vendor=\(receipt.vendor, privacy: .public) amount=\(receipt.amount, format: .fixed(precision: 2))]"
+        )
     }
     
     private func updateVendorSpending(for receipt: Receipt, isRemoving: Bool) {
