@@ -1,3 +1,4 @@
+import OSLog
 import SwiftUI
 
 struct ReceiptDetailView: View {
@@ -118,7 +119,9 @@ struct ReceiptDetailView: View {
                 // Navigate back
                 dismiss()
                 
-                print("🗑️ Deleted receipt from \(receipt.vendor) for \(receipt.amount.formatAsCurrency())")
+                Logger.receiptWorkflow.notice(
+                    "Receipt deleted [vendor=\(receipt.vendor, privacy: .public) amount=\(receipt.amount, format: .fixed(precision: 2))]"
+                )
             }
         }
     }
