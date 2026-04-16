@@ -3,7 +3,7 @@
 ## Repo
 - Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Branch: `gm/rheir-hardening-phase1`
-- HEAD: `91077a5ddbcdb22c09291a4fc586f174da3c6798`
+- HEAD: `0a1608e462ca28b7190cd99f5ce5e6253065dcf4`
 
 ## Active Initiative
 - RHEIR hardening and streamlining, phase 1 foundation pass.
@@ -111,12 +111,13 @@
 - Removed the unreachable `catch` warning from `Shared/Views/Settings/PersonalSettingsView.swift` by simplifying the non-throwing CloudKit status helper.
 - Removed the redundant local `CLLocation: @unchecked Sendable` conformance from `Shared/Models/WorkHour.swift`, clearing the final standing simulator warning on the stable MCP path.
 - Added deterministic signed-out UI smoke coverage by introducing a test-only signed-out app launch mode in `RheirApp.swift`, a configurable session launch delay in `SessionStore`, and signed-out launch assertions in `RHEIRUITests.swift` / `RHEIRUITestsLaunchTests.swift`.
+- Added deterministic ready-state UI smoke coverage by extending the app launch harness with a seeded local ready mode and asserting the core tab shell in `RHEIRUITests.swift`.
 - Added `SHIP_READINESS_CHECKLIST.md` as the repo-tracked release plan for the remaining foundation, hardening, promo, and submission work.
 - Added focused persistence/session tests in `RHEIRTests/RHEIRTests.swift` for invite parsing, legacy cache migration, project storage, receipt intelligence retention, cache clearing, labor aggregation/validation, company-state bucketing, team-member store behavior, and receipt project-resolution behavior.
 - Added focused parity for project access normalization and assignment filtering in `RHEIRTests/RHEIRTests.swift`.
 
 ## In Progress
-- Continue release hardening by expanding deterministic UI smoke coverage in `RHEIRUITests` beyond the signed-out launch path.
+- Continue release hardening by expanding deterministic UI smoke coverage in `RHEIRUITests` beyond shell coverage, starting with deterministic organization/project workflow routes.
 - Continue shrinking the remaining oversized active state owners around the new sync and access store boundaries.
 - Expand deterministic parity beyond the focused `RHEIRTests` suite.
 
@@ -125,9 +126,9 @@
 - Device-targeted Gate A remains blocked by signing because automatic provisioning is disabled for `com.RheirHome.RHEIR`.
 
 ## Latest Evidence
-- Gate A: `mcp__xcodebuildmcp__build_sim` with `extraArgs=["-derivedDataPath","/tmp/rheir_gateA_phase1by_mcp_dd"]` -> PASS
-- Focused parity: `mcp__xcodebuildmcp__test_sim` with `extraArgs=["-derivedDataPath","/tmp/rheir_parity_phase1by_mcp_dd","-only-testing:RHEIRTests","-only-testing:RHEIRUITests/RHEIRUITests/testSignedOutModeShowsAppleSignIn","-only-testing:RHEIRUITests/RHEIRUITestsLaunchTests/testLaunch"]` -> PASS (`29/29`)
+- Gate A: `mcp__xcodebuildmcp__build_sim` with `extraArgs=["-derivedDataPath","/tmp/rheir_gateA_phase1bz_mcp_dd"]` -> PASS
+- Focused parity: `mcp__xcodebuildmcp__test_sim` with `extraArgs=["-derivedDataPath","/tmp/rheir_parity_phase1bz_mcp_dd","-only-testing:RHEIRTests","-only-testing:RHEIRUITests/RHEIRUITests/testSignedOutModeShowsAppleSignIn","-only-testing:RHEIRUITests/RHEIRUITests/testReadyModeShowsMainTabShell","-only-testing:RHEIRUITests/RHEIRUITestsLaunchTests/testLaunch"]` -> PASS (`30/30`)
 - Direct CLI gate path remains less stable than the MCP simulator path in the local simulator environment
 
 ## Next Milestone
-- Checkpoint the deterministic signed-out `RHEIRUITests` smoke coverage slice, then expand deterministic ready-state coverage in `RHEIRUITests`.
+- Checkpoint deterministic ready-state `RHEIRUITests` smoke coverage, then expand deterministic organization/project workflow coverage.

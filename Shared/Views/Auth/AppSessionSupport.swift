@@ -248,6 +248,7 @@ final class SessionStore: ObservableObject {
     private let localCache: LocalCacheStore
     private let organizationRepository: OrganizationRepository
     private let launchDelayNanoseconds: UInt64
+    private let shouldConnectProjectViewModel: Bool
 
     private var cancellables = Set<AnyCancellable>()
     private var hasConnected = false
@@ -260,7 +261,8 @@ final class SessionStore: ObservableObject {
         projectViewModel: ProjectViewModel,
         localCache: LocalCacheStore = .shared,
         organizationRepository: OrganizationRepository? = nil,
-        launchDelayNanoseconds: UInt64 = 900_000_000
+        launchDelayNanoseconds: UInt64 = 900_000_000,
+        shouldConnectProjectViewModel: Bool = true
     ) {
         self.authViewModel = authViewModel
         self.projectViewModel = projectViewModel
@@ -269,13 +271,16 @@ final class SessionStore: ObservableObject {
         self.selectionState = localCache.selectionState
         self.organizationRepository = organizationRepository ?? CloudKitOrganizationRepository(authViewModel: authViewModel)
         self.launchDelayNanoseconds = launchDelayNanoseconds
+        self.shouldConnectProjectViewModel = shouldConnectProjectViewModel
     }
 
     func connectIfNeeded() {
         guard !hasConnected else { return }
         hasConnected = true
 
-        authViewModel.setProjectViewModel(projectViewModel)
+        if shouldConnectProjectViewModel {
+            authViewModel.setProjectViewModel(projectViewModel)
+        }
         bind()
 
         Task {

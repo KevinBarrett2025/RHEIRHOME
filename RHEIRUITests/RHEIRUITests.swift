@@ -15,6 +15,7 @@ final class RHEIRUITests: XCTestCase {
 
     private enum UITestLaunchMode: String {
         case signedOut = "signed_out"
+        case ready = "ready"
     }
 
     override func setUpWithError() throws {
@@ -40,6 +41,24 @@ final class RHEIRUITests: XCTestCase {
             appleSignInButton.waitForExistence(timeout: 5),
             "Expected the signed-out screen to present the Sign in with Apple button."
         )
+    }
+
+    @MainActor
+    func testReadyModeShowsMainTabShell() throws {
+        let app = makeApp(mode: .ready)
+        app.launch()
+
+        let tabBar = app.tabBars.firstMatch
+        XCTAssertTrue(
+            tabBar.waitForExistence(timeout: 5),
+            "Expected deterministic ready UI test mode to render the main tab shell."
+        )
+
+        XCTAssertTrue(tabBar.buttons["Projects"].exists, "Expected Projects tab in ready UI test mode.")
+        XCTAssertTrue(tabBar.buttons["Receipts"].exists, "Expected Receipts tab in ready UI test mode.")
+        XCTAssertTrue(tabBar.buttons["Labor"].exists, "Expected Labor tab in ready UI test mode.")
+        XCTAssertTrue(tabBar.buttons["Tasks"].exists, "Expected Tasks tab in ready UI test mode.")
+        XCTAssertTrue(tabBar.buttons["Company"].exists, "Expected Company tab in ready UI test mode.")
     }
 
     @MainActor
