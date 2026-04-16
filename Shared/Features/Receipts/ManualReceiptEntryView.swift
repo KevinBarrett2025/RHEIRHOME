@@ -41,6 +41,7 @@ struct SimpleVendorPickerView: View {
                             .foregroundColor(.blue)
                             .font(.headline)
                     }
+                    .accessibilityIdentifier("vendor-picker-add-new")
                     .listRowBackground(Color.blue.opacity(0.1))
                 }
                 

@@ -263,6 +263,70 @@ final class RHEIRUITests: XCTestCase {
     }
 
     @MainActor
+    func testManualReceiptEntryOpensAddVendorForm() throws {
+        let app = makeApp(mode: .selectedProject)
+        app.launch()
+        app.tabBars.buttons["Receipts"].tap()
+
+        XCTAssertTrue(
+            app.buttons["Manual Entry"].waitForExistence(timeout: 5),
+            "Expected selected-project mode to expose the manual receipt entry action."
+        )
+
+        app.buttons["Manual Entry"].tap()
+
+        let addReceiptNavBar = app.navigationBars["Add Receipt"]
+        XCTAssertTrue(
+            addReceiptNavBar.waitForExistence(timeout: 5),
+            "Expected the Add Receipt sheet to open before exercising the add-vendor route."
+        )
+
+        let vendorPickerButton = app.buttons["manual-receipt-vendor-picker"]
+        XCTAssertTrue(
+            vendorPickerButton.exists,
+            "Expected the Add Receipt sheet to expose the vendor picker button."
+        )
+        vendorPickerButton.tap()
+
+        let vendorNavBar = app.navigationBars["Select Vendor"]
+        XCTAssertTrue(
+            vendorNavBar.waitForExistence(timeout: 5),
+            "Expected tapping the vendor row to open the vendor picker sheet."
+        )
+
+        let addNewVendorButton = app.buttons["vendor-picker-add-new"]
+        XCTAssertTrue(
+            addNewVendorButton.exists,
+            "Expected the vendor picker to expose the add-vendor action."
+        )
+        addNewVendorButton.tap()
+
+        let addVendorNavBar = app.navigationBars["Add New Vendor"]
+        XCTAssertTrue(
+            addVendorNavBar.waitForExistence(timeout: 5),
+            "Expected tapping add new vendor to open the nested vendor form."
+        )
+        XCTAssertTrue(
+            app.textFields["Vendor Name"].exists,
+            "Expected the nested add-vendor form to expose the vendor name field."
+        )
+
+        addVendorNavBar.buttons["Cancel"].tap()
+
+        XCTAssertTrue(
+            vendorNavBar.waitForExistence(timeout: 5),
+            "Expected cancelling the add-vendor form to return to the vendor picker."
+        )
+
+        vendorNavBar.buttons["Cancel"].tap()
+
+        XCTAssertTrue(
+            addReceiptNavBar.waitForExistence(timeout: 5),
+            "Expected cancelling the vendor picker to return to the Add Receipt sheet."
+        )
+    }
+
+    @MainActor
     func testManualReceiptEntryOpensPaymentMethodPicker() throws {
         let app = makeApp(mode: .selectedProject)
         app.launch()
