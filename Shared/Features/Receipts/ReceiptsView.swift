@@ -1,6 +1,13 @@
 import SwiftUI
 import OSLog
 
+private func receiptsAccessibilitySlug(_ value: String) -> String {
+    value
+        .lowercased()
+        .replacingOccurrences(of: "[^a-z0-9]+", with: "-", options: .regularExpression)
+        .trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+}
+
 struct ReceiptsView: View {
     @EnvironmentObject var projectVM: ProjectViewModel
     @EnvironmentObject var authVM: AuthViewModel
@@ -172,6 +179,7 @@ struct ReceiptsView: View {
                         )
                         .foregroundColor(selectedViewMode == mode ? .white : .primary)
                     }
+                    .accessibilityIdentifier("receipts-view-mode-\(receiptsAccessibilitySlug(mode.rawValue))")
                 }
             }
             .padding(.horizontal)
@@ -187,6 +195,7 @@ struct ReceiptsView: View {
             
             TextField("Search receipts...", text: $searchText)
                 .textFieldStyle(PlainTextFieldStyle())
+                .accessibilityIdentifier("receipts-search-field")
             
             if !searchText.isEmpty {
                 Button("Clear") {
@@ -194,6 +203,7 @@ struct ReceiptsView: View {
                 }
                 .font(.caption)
                 .foregroundColor(.blue)
+                .accessibilityIdentifier("receipts-search-clear")
             }
         }
         .padding(.horizontal, 12)
@@ -223,6 +233,7 @@ struct ReceiptsView: View {
                         )
                         .foregroundColor(selectedCategory == nil ? .white : .primary)
                 }
+                .accessibilityIdentifier("receipts-category-filter-all")
                 
                 ForEach(activeCategories, id: \.self) { category in
                     Button {
@@ -243,6 +254,7 @@ struct ReceiptsView: View {
                         )
                         .foregroundColor(selectedCategory == category ? .white : .primary)
                     }
+                    .accessibilityIdentifier("receipts-category-filter-\(receiptsAccessibilitySlug(category.rawValue))")
                 }
             }
             .padding(.horizontal)
@@ -428,6 +440,7 @@ struct ReceiptsView: View {
                         .shadow(color: .blue.opacity(0.3), radius: 8, x: 0, y: 4)
                 )
             }
+            .accessibilityIdentifier("receipts-fab-manual")
             .scaleEffect(1.0)
             .animation(.spring(response: 0.3, dampingFraction: 0.6), value: showingNewReceipt)
             
@@ -455,6 +468,7 @@ struct ReceiptsView: View {
                         .shadow(color: .green.opacity(0.3), radius: 8, x: 0, y: 4)
                 )
             }
+            .accessibilityIdentifier("receipts-fab-scan")
             .scaleEffect(1.0)
             .animation(.spring(response: 0.3, dampingFraction: 0.6), value: showingScanner)
         }
@@ -587,6 +601,7 @@ struct ReceiptsView: View {
                         }
                         .frame(maxWidth: .infinity)
                     }
+                    .accessibilityIdentifier("receipts-empty-scan")
                     .buttonStyle(.borderedProminent)
                     
                     Button {
@@ -598,6 +613,7 @@ struct ReceiptsView: View {
                         }
                         .frame(maxWidth: .infinity)
                     }
+                    .accessibilityIdentifier("receipts-empty-manual-entry")
                     .buttonStyle(.bordered)
                 }
             }
@@ -810,6 +826,10 @@ struct CategorySummaryCard: View {
     let receiptCount: Int
     let totalSpent: Double
     let onTap: () -> Void
+
+    private var accessibilitySlug: String {
+        receiptsAccessibilitySlug(category.rawValue)
+    }
     
     var body: some View {
         Button(action: onTap) {
@@ -832,6 +852,7 @@ struct CategorySummaryCard: View {
                         Text("\(receiptCount) receipt\(receiptCount == 1 ? "" : "s")")
                             .font(.subheadline)
                             .foregroundColor(.secondary)
+                            .accessibilityIdentifier("receipts-category-summary-count-\(accessibilitySlug)")
                         
                         Spacer()
                         
@@ -839,6 +860,7 @@ struct CategorySummaryCard: View {
                             .font(.title3)
                             .fontWeight(.bold)
                             .foregroundColor(totalSpent >= 0 ? .primary : .red)
+                            .accessibilityIdentifier("receipts-category-summary-total-\(accessibilitySlug)")
                     }
                 }
                 
@@ -851,6 +873,7 @@ struct CategorySummaryCard: View {
             .cornerRadius(12)
             .shadow(color: Color.black.opacity(0.1), radius: 2, x: 0, y: 1)
         }
+        .accessibilityIdentifier("receipts-category-summary-\(accessibilitySlug)")
         .buttonStyle(PlainButtonStyle())
     }
     

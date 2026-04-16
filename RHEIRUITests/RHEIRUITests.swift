@@ -532,6 +532,61 @@ final class RHEIRUITests: XCTestCase {
     }
 
     @MainActor
+    func testReceiptsSearchFiltersAndRestoresSavedReceipts() throws {
+        let app = makeApp(mode: .selectedProject)
+        app.launch()
+        app.tabBars.buttons["Receipts"].tap()
+
+        let firstVendorName = "UI Test Browse Vendor Alpha"
+        let secondVendorName = "UI Test Browse Vendor Bravo"
+        saveManualReceipt(in: app, vendorName: firstVendorName, amount: "10.00")
+
+        XCTAssertTrue(
+            app.buttons["receipt-card-\(firstVendorName)"].waitForExistence(timeout: 8),
+            "Expected the first saved receipt card to render before expanding receipt browsing coverage."
+        )
+
+        saveManualReceipt(in: app, vendorName: secondVendorName, amount: "20.00")
+
+        let secondReceiptCard = app.buttons["receipt-card-\(secondVendorName)"]
+        XCTAssertTrue(
+            secondReceiptCard.waitForExistence(timeout: 8),
+            "Expected the second saved receipt card to render before exercising receipts search coverage."
+        )
+
+        let searchField = app.textFields["receipts-search-field"]
+        XCTAssertTrue(
+            searchField.waitForExistence(timeout: 5),
+            "Expected the receipts search field to remain available while browsing saved receipts."
+        )
+        searchField.tap()
+        searchField.typeText("Bravo")
+        dismissKeyboardIfPresent(in: app)
+
+        XCTAssertTrue(
+            secondReceiptCard.waitForExistence(timeout: 5),
+            "Expected searching the receipts list to keep the matching receipt card visible."
+        )
+
+        let clearSearchButton = app.buttons["receipts-search-clear"]
+        XCTAssertTrue(
+            clearSearchButton.waitForExistence(timeout: 5),
+            "Expected entering a receipts search to expose the clear action."
+        )
+        clearSearchButton.tap()
+
+        searchField.tap()
+        searchField.typeText("Alpha")
+        dismissKeyboardIfPresent(in: app)
+
+        let firstReceiptCard = app.buttons["receipt-card-\(firstVendorName)"]
+        XCTAssertTrue(
+            firstReceiptCard.waitForExistence(timeout: 5),
+            "Expected clearing and rerunning the receipts search to surface the older saved receipt card."
+        )
+    }
+
+    @MainActor
     func testManualReceiptEntryOpensPaymentMethodPicker() throws {
         let app = makeApp(mode: .selectedProject)
         app.launch()
@@ -680,17 +735,23 @@ final class RHEIRUITests: XCTestCase {
         return button
     }
 
-    private func saveManualReceipt(in app: XCUIApplication, vendorName: String, amount: String) {
-        XCTAssertTrue(
-            app.staticTexts["No Receipts Yet"].waitForExistence(timeout: 5),
-            "Expected selected-project mode to start from the empty receipts state before saving a manual receipt."
-        )
-        XCTAssertTrue(
-            app.buttons["Manual Entry"].waitForExistence(timeout: 5),
-            "Expected selected-project mode to expose the manual receipt entry action."
-        )
+    private func openManualReceiptEntry(in app: XCUIApplication) {
+        let emptyStateManualEntryButton = app.buttons["Manual Entry"]
+        if emptyStateManualEntryButton.waitForExistence(timeout: 2) {
+            emptyStateManualEntryButton.tap()
+            return
+        }
 
-        app.buttons["Manual Entry"].tap()
+        let manualFAB = app.buttons["receipts-fab-manual"]
+        XCTAssertTrue(
+            manualFAB.waitForExistence(timeout: 5),
+            "Expected the receipts screen to expose either the empty-state Manual Entry action or the floating manual entry button."
+        )
+        manualFAB.tap()
+    }
+
+    private func saveManualReceipt(in app: XCUIApplication, vendorName: String, amount: String) {
+        openManualReceiptEntry(in: app)
 
         let addReceiptNavBar = app.navigationBars["Add Receipt"]
         XCTAssertTrue(
@@ -805,6 +866,21 @@ final class RHEIRUITests: XCTestCase {
     private func dismissEditingFocusIfNeeded(in app: XCUIApplication, navigationBar: XCUIElement) {
         guard app.keyboards.count > 0 else { return }
         navigationBar.tap()
+    }
+
+    private func dismissKeyboardIfPresent(in app: XCUIApplication) {
+        guard app.keyboards.count > 0 else { return }
+
+        let candidateButtons = ["Search", "Done", "Return", "return"]
+        for label in candidateButtons {
+            let button = app.keyboards.buttons[label]
+            if button.exists {
+                button.tap()
+                return
+            }
+        }
+
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1)).tap()
     }
 
 }

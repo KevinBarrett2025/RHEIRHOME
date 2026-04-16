@@ -3,12 +3,12 @@
 ## Repo Truth
 - Repo Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Active Branch: `gm/rheir-hardening-phase1`
-- HEAD SHA: `356c464e27014c6c3f98116a455f09a8b4b7ad72`
-- Last Commit: `356c464 Phase 1: add receipt detail action UI smoke coverage`
+- HEAD SHA: `d51087593fad8f5c89efbe828ec0616a94840bdd`
+- Last Commit: `d510875 Phase 1: add receipt edit mutation UI smoke coverage`
 
 ## Current Objective
-- Preserve deterministic selected-project saved-receipt edit persistence across detail -> edit -> save -> detail/list reconciliation.
-- Queue the next release-hardening seam beyond persisted receipt-edit mutations into broader receipt workflow runtime QA.
+- Preserve deterministic selected-project saved-receipt edit persistence and the new saved-receipt browsing/search seam across the real receipts surface.
+- Expand the next release-hardening seam beyond saved-receipt browsing/search into category/filter drilldown and broader selected-project receipt runtime QA.
 
 ## Current Working Set
 - Session flow now routes through `Shared/Views/Auth/AppSessionSupport.swift`.
@@ -32,6 +32,8 @@
 - Active labor/time-entry logging now uses `Logger.labor` instead of raw `print(...)` calls in `ProjectViewModel+TimeEntry.swift` and `LaborModuleView.swift`.
 - Active project-lifecycle and landing-page refresh logs now use structured `Logger.project` in the main organization/project flow.
 - Active receipt entry, cache recomputation, and receipt-intelligence flows now use structured `Logger.receiptWorkflow` / `Logger.receiptIntelligence` instead of raw `print(...)` tracing in the compiled receipt paths.
+- `Shared/Features/Receipts/ReceiptsView.swift` now exposes deterministic search, clear, floating manual-entry, and category/filter accessibility hooks for the selected-project receipts surface.
+- `RHEIRUITests.swift` now covers saved-receipt search/browse behavior on top of the committed persisted-edit mutation path.
 - Active company/project UI assignment, team-member, organization-edit, payment-method, and team-management views now use structured `Logger` calls instead of raw `print(...)` tracing.
 - Debug/support settings views and data-management helpers now use structured `Logger.settingsSupport` calls instead of raw `print(...)` tracing.
 - `HiddenDebugPanelView.swift` now uses structured `Logger.settingsSupport` calls instead of raw `print(...)` tracing.
@@ -154,4 +156,4 @@
 ## Next Required Action
 1. Preserve the repo-local STS docs and `SHIP_READINESS_CHECKLIST.md` as the current release-planning truth for this repository.
 2. Keep `Shared/Views/Auth/LoginView.swift`, `rheir_knowledge_database.json`, `RHEIRmemories.csv`, and `RheirLogo 1024x1024.png` out of the staged set for this checkpoint.
-3. Continue with the next deterministic selected-project receipt workflow seam beyond persisted edit mutations, or step into broader receipt workflow runtime QA on the stable simulator path.
+3. Continue with the next deterministic selected-project receipt category/filter drilldown seam beyond saved-receipt search/browse on the stable simulator path.
