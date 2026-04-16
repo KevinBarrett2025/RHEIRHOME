@@ -122,6 +122,42 @@ final class RHEIRUITests: XCTestCase {
     }
 
     @MainActor
+    func testLaborModeRequiresAndUsesSelectedProjectContext() throws {
+        let app = makeApp(mode: .projectSelection)
+        app.launch()
+        app.tabBars.buttons["Labor"].tap()
+
+        let laborGateMessage = app.staticTexts["Choose a project before viewing or logging labor hours."]
+        XCTAssertTrue(
+            laborGateMessage.waitForExistence(timeout: 5),
+            "Expected Labor to require a selected project before showing project-scoped labor content."
+        )
+
+        app.terminate()
+
+        let selectedProjectApp = makeApp(mode: .selectedProject)
+        selectedProjectApp.launch()
+        selectedProjectApp.tabBars.buttons["Labor"].tap()
+
+        XCTAssertTrue(
+            selectedProjectApp.staticTexts["Labor Summary"].waitForExistence(timeout: 5),
+            "Expected selected-project mode to show the labor summary."
+        )
+        XCTAssertTrue(
+            selectedProjectApp.staticTexts["No team members found"].exists,
+            "Expected selected-project mode to show the empty labor team-member state."
+        )
+        XCTAssertTrue(
+            selectedProjectApp.buttons["Log Hours for Team Member"].exists,
+            "Expected selected-project mode to keep the log-hours action available."
+        )
+        XCTAssertFalse(
+            selectedProjectApp.staticTexts["Choose a project before viewing or logging labor hours."].exists,
+            "Expected the labor project-selection gate to disappear when project context is already seeded."
+        )
+    }
+
+    @MainActor
     func testLaunchPerformance() throws {
         // This measures how long it takes to launch your application.
         measure(metrics: [XCTApplicationLaunchMetric()]) {
