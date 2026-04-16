@@ -312,6 +312,77 @@ final class RHEIRUITests: XCTestCase {
     }
 
     @MainActor
+    func testManualReceiptEntryOpensAddPaymentMethodForm() throws {
+        let app = makeApp(mode: .selectedProject)
+        app.launch()
+        app.tabBars.buttons["Receipts"].tap()
+
+        XCTAssertTrue(
+            app.buttons["Manual Entry"].waitForExistence(timeout: 5),
+            "Expected selected-project mode to expose the manual receipt entry action."
+        )
+
+        app.buttons["Manual Entry"].tap()
+
+        let addReceiptNavBar = app.navigationBars["Add Receipt"]
+        XCTAssertTrue(
+            addReceiptNavBar.waitForExistence(timeout: 5),
+            "Expected the Add Receipt sheet to open before exercising the add-payment-method route."
+        )
+
+        let paymentMethodPickerButton = revealButton(
+            identifier: "manual-receipt-payment-method-picker",
+            in: app
+        )
+        XCTAssertTrue(
+            paymentMethodPickerButton.exists,
+            "Expected the Add Receipt sheet to expose the payment-method picker button."
+        )
+        paymentMethodPickerButton.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+
+        let paymentMethodNavBar = app.navigationBars["Select Payment Method"]
+        XCTAssertTrue(
+            paymentMethodNavBar.waitForExistence(timeout: 5),
+            "Expected tapping the payment-method row to open the payment picker sheet."
+        )
+
+        let addNewPaymentMethodButton = app.buttons["payment-method-picker-add-new"]
+        XCTAssertTrue(
+            addNewPaymentMethodButton.exists,
+            "Expected the payment picker to expose the add-payment-method action."
+        )
+        addNewPaymentMethodButton.tap()
+
+        let addPaymentMethodNavBar = app.navigationBars["Add Payment Method"]
+        XCTAssertTrue(
+            addPaymentMethodNavBar.waitForExistence(timeout: 5),
+            "Expected tapping add new payment method to open the nested payment-method form."
+        )
+        XCTAssertTrue(
+            app.textFields["Payment Method Name"].exists,
+            "Expected the nested add-payment-method form to expose the payment method name field."
+        )
+        XCTAssertTrue(
+            app.textFields["Nickname (Optional)"].exists,
+            "Expected the nested add-payment-method form to expose the nickname field."
+        )
+
+        addPaymentMethodNavBar.buttons["Cancel"].tap()
+
+        XCTAssertTrue(
+            paymentMethodNavBar.waitForExistence(timeout: 5),
+            "Expected cancelling the add-payment-method form to return to the payment-method picker."
+        )
+
+        paymentMethodNavBar.buttons["Cancel"].tap()
+
+        XCTAssertTrue(
+            addReceiptNavBar.waitForExistence(timeout: 5),
+            "Expected cancelling the payment-method picker to return to the Add Receipt sheet."
+        )
+    }
+
+    @MainActor
     func testLaunchPerformance() throws {
         // This measures how long it takes to launch your application.
         measure(metrics: [XCTApplicationLaunchMetric()]) {

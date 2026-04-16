@@ -315,6 +315,7 @@ struct SimplePaymentMethodPickerView: View {
                             .foregroundColor(.green)
                             .font(.headline)
                     }
+                    .accessibilityIdentifier("payment-method-picker-add-new")
                     .listRowBackground(Color.green.opacity(0.1))
                 }
                 

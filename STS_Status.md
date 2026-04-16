@@ -3,7 +3,7 @@
 ## Repo
 - Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Branch: `gm/rheir-hardening-phase1`
-- HEAD: `f73589fc30f1752a73e0aa128ccaaffb35eece3e`
+- HEAD: `67de6c10a19eca089720d2201366e11f6c661696`
 
 ## Active Initiative
 - RHEIR hardening and streamlining, phase 1 foundation pass.
@@ -103,6 +103,7 @@
 - Removed the preview-only `print(...)` tracing from `Shared/Features/Receipts/QuickVendorCreateView.swift`.
 - Removed the preview-only `print(...)` tracing from `Shared/Features/Receipts/QuickPaymentMethodCreateView.swift`.
 - Replaced raw `print(...)` tracing in `Shared/Features/Receipts/ManualReceiptEntryView.swift` with structured `Logger.receiptWorkflow` usage for manual receipt company-settings sync completion events.
+- Added deterministic manual-entry add-payment-method UI smoke coverage by exposing a stable accessibility hook for the nested `Add New Payment Method` action in `Shared/Features/Receipts/ManualReceiptEntryView.swift` and asserting the add-payment-method open/cancel return path in `RHEIRUITests.swift`.
 - Removed the preview-only `print(...)` tracing from `Shared/Features/Projects/CommunicationLogsView.swift`.
 - Replaced raw `print(...)` tracing in `Shared/Features/Budget/CategoryReceiptsView.swift` with structured `Logger.receiptWorkflow` usage for category receipt deletion completion events.
 - Replaced raw `print(...)` tracing in `Shared/Features/Labor/LaborPaymentView.swift` with structured `Logger.labor` usage for payment-batch completion events and corrected the logged processed-count to use the pre-clear selection size.
@@ -117,7 +118,7 @@
 - Added focused parity for project access normalization and assignment filtering in `RHEIRTests/RHEIRTests.swift`.
 
 ## In Progress
-- Continue release hardening by expanding deterministic UI smoke coverage in `RHEIRUITests` beyond shell coverage, with manual-entry vendor-picker and payment-method-picker coverage now in place and the add-payment-method route queued next.
+- Continue release hardening by expanding deterministic UI smoke coverage in `RHEIRUITests` beyond shell coverage, with manual-entry vendor-picker, payment-method-picker, and add-payment-method coverage now in place and the add-vendor route queued next.
 - Continue shrinking the remaining oversized active state owners around the new sync and access store boundaries.
 - Expand deterministic parity beyond the focused `RHEIRTests` suite.
 
@@ -126,9 +127,9 @@
 - Device-targeted Gate A remains blocked by signing because automatic provisioning is disabled for `com.RheirHome.RHEIR`.
 
 ## Latest Evidence
-- Gate A: `mcp__xcodebuildmcp__build_sim` with `extraArgs=["-derivedDataPath","/tmp/rheir_gateA_phase1cg_mcp_dd"]` -> PASS
-- Focused parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_parity_phase1cg_cli_dd2 test -only-testing:RHEIRTests -only-testing:RHEIRUITests/RHEIRUITests/testSignedOutModeShowsAppleSignIn -only-testing:RHEIRUITests/RHEIRUITests/testReadyModeShowsMainTabShell -only-testing:RHEIRUITests/RHEIRUITests/testOrganizationSelectionModeShowsOrganizationList -only-testing:RHEIRUITests/RHEIRUITests/testProjectSelectionModeRequiresAndAppliesProjectContext -only-testing:RHEIRUITests/RHEIRUITests/testLaborModeRequiresAndUsesSelectedProjectContext -only-testing:RHEIRUITests/RHEIRUITests/testCompanyModeShowsAdminManagementSurface -only-testing:RHEIRUITests/RHEIRUITests/testReceiptsModeShowsEntryActionsAndManualEntrySheet -only-testing:RHEIRUITests/RHEIRUITests/testManualReceiptEntryOpensVendorPicker -only-testing:RHEIRUITests/RHEIRUITests/testManualReceiptEntryOpensPaymentMethodPicker -only-testing:RHEIRUITests/RHEIRUITestsLaunchTests/testLaunch` -> PASS (`/tmp/rheir_parity_phase1cg_cli2.log`)
+- Gate A: `mcp__xcodebuildmcp__build_sim` with `extraArgs=["-derivedDataPath","/tmp/rheir_gateA_phase1ch_mcp_dd"]` -> PASS
+- Focused parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_parity_phase1ch_cli_dd test -only-testing:RHEIRTests -only-testing:RHEIRUITests/RHEIRUITests/testSignedOutModeShowsAppleSignIn -only-testing:RHEIRUITests/RHEIRUITests/testReadyModeShowsMainTabShell -only-testing:RHEIRUITests/RHEIRUITests/testOrganizationSelectionModeShowsOrganizationList -only-testing:RHEIRUITests/RHEIRUITests/testProjectSelectionModeRequiresAndAppliesProjectContext -only-testing:RHEIRUITests/RHEIRUITests/testLaborModeRequiresAndUsesSelectedProjectContext -only-testing:RHEIRUITests/RHEIRUITests/testCompanyModeShowsAdminManagementSurface -only-testing:RHEIRUITests/RHEIRUITests/testReceiptsModeShowsEntryActionsAndManualEntrySheet -only-testing:RHEIRUITests/RHEIRUITests/testManualReceiptEntryOpensVendorPicker -only-testing:RHEIRUITests/RHEIRUITests/testManualReceiptEntryOpensPaymentMethodPicker -only-testing:RHEIRUITests/RHEIRUITests/testManualReceiptEntryOpensAddPaymentMethodForm -only-testing:RHEIRUITests/RHEIRUITestsLaunchTests/testLaunch` -> PASS (`/tmp/rheir_parity_phase1ch_cli.log`, `41/41`)
 - Direct CLI gate path remains less stable than the MCP simulator path in the local simulator environment
 
 ## Next Milestone
-- Checkpoint deterministic manual-entry payment-method-picker `RHEIRUITests` smoke coverage, then expand deterministic selected-project receipt workflow coverage into the add-payment-method route.
+- Checkpoint deterministic manual-entry add-payment-method `RHEIRUITests` smoke coverage, then expand deterministic selected-project receipt workflow coverage into the add-vendor route.
