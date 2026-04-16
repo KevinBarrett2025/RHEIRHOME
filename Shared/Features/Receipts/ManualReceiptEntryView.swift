@@ -633,6 +633,7 @@ struct ManualReceiptEntryView: View {
                         Text("Amount")
                         Spacer()
                         TextField("0.00", text: $amount)
+                            .accessibilityIdentifier("manual-receipt-amount")
                             .keyboardType(.decimalPad)
                             .multilineTextAlignment(.trailing)
                     }
@@ -716,6 +717,7 @@ struct ManualReceiptEntryView: View {
                     Button("Save") {
                         saveReceipt()
                     }
+                    .accessibilityIdentifier("manual-receipt-save")
                     .disabled(!isValidForm)
                 }
             }
