@@ -321,16 +321,10 @@ struct PersonalSettingsView: View {
     
     private func checkCloudKitStatus() {
         Task {
-            do {
-                // Simple CloudKit status check
-                let status = await authVM.checkCloudKitStatus()
-                await MainActor.run {
-                    cloudKitStatus = status
-                }
-            } catch {
-                await MainActor.run {
-                    cloudKitStatus = "Error"
-                }
+            // Simple CloudKit status check
+            let status = await authVM.checkCloudKitStatus()
+            await MainActor.run {
+                cloudKitStatus = status
             }
         }
     }
