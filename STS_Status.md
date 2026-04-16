@@ -3,7 +3,7 @@
 ## Repo
 - Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Branch: `gm/rheir-hardening-phase1`
-- HEAD: `00a80bbbb278931ef64f7f44ca570bae103cd8ec`
+- HEAD: `32effdf355c04dfd7c0e6ba3539ec012f348069f`
 
 ## Active Initiative
 - RHEIR hardening and streamlining, phase 1 foundation pass.
@@ -109,12 +109,13 @@
 - Replaced raw `print(...)` tracing in `Shared/Features/Progress/ProgressDetailView.swift` with structured `Logger.project` usage for progress-photo placeholder tap events.
 - Removed the unused `lowercaseText` binding warning from `Shared/Features/Receipts/ReceiptScannerView.swift`.
 - Removed the unreachable `catch` warning from `Shared/Views/Settings/PersonalSettingsView.swift` by simplifying the non-throwing CloudKit status helper.
+- Removed the redundant local `CLLocation: @unchecked Sendable` conformance from `Shared/Models/WorkHour.swift`, clearing the final standing simulator warning on the stable MCP path.
 - Added `SHIP_READINESS_CHECKLIST.md` as the repo-tracked release plan for the remaining foundation, hardening, promo, and submission work.
 - Added focused persistence/session tests in `RHEIRTests/RHEIRTests.swift` for invite parsing, legacy cache migration, project storage, receipt intelligence retention, cache clearing, labor aggregation/validation, company-state bucketing, team-member store behavior, and receipt project-resolution behavior.
 - Added focused parity for project access normalization and assignment filtering in `RHEIRTests/RHEIRTests.swift`.
 
 ## In Progress
-- Continue phase-1 warning debt cleanup with `Shared/Models/WorkHour.swift` as the final standing warning seam after the current checkpoint.
+- Move phase-1 ship hardening into release-hardening work by expanding deterministic UI smoke coverage in `RHEIRUITests`.
 - Continue shrinking the remaining oversized active state owners around the new sync and access store boundaries.
 - Expand deterministic parity beyond the focused `RHEIRTests` suite.
 
@@ -123,9 +124,9 @@
 - Device-targeted Gate A remains blocked by signing because automatic provisioning is disabled for `com.RheirHome.RHEIR`.
 
 ## Latest Evidence
-- Gate A: `mcp__xcodebuildmcp__build_sim` with `extraArgs=["-derivedDataPath","/tmp/rheir_gateA_phase1bv_mcp_dd"]` -> PASS
-- Focused parity: `mcp__xcodebuildmcp__test_sim` with `extraArgs=["-derivedDataPath","/tmp/rheir_parity_phase1bv_mcp_dd","-only-testing:RHEIRTests"]` -> PASS (`27/27`)
+- Gate A: `mcp__xcodebuildmcp__build_sim` with `extraArgs=["-derivedDataPath","/tmp/rheir_gateA_phase1bw_mcp_dd"]` -> PASS
+- Focused parity: `mcp__xcodebuildmcp__test_sim` with `extraArgs=["-derivedDataPath","/tmp/rheir_parity_phase1bw_mcp_dd","-only-testing:RHEIRTests"]` -> PASS (`27/27`)
 - Direct CLI gate path remains less stable than the MCP simulator path in the local simulator environment
 
 ## Next Milestone
-- Checkpoint the `PersonalSettingsView.swift` warning cleanup slice, then resolve the `CLLocation` `Sendable` warning in `Shared/Models/WorkHour.swift`.
+- Checkpoint the `WorkHour.swift` warning cleanup slice, then expand deterministic UI smoke coverage in `RHEIRUITests`.

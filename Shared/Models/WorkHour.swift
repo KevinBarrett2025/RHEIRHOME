@@ -355,6 +355,3 @@ public struct WorkHour: Identifiable, Codable, Hashable, Sendable {
         case isApproved, approvedBy, approvedAt, validationNotes
     }
 }
-
-// MARK: - CLLocation Extensions
-extension CLLocation: @unchecked Sendable {}
