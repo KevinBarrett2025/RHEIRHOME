@@ -7,6 +7,7 @@ struct ReceiptsView: View {
     @Binding var selectedTab: Tab
     @State private var showingNewReceipt = false
     @State private var showingScanner = false
+    @State private var receiptToView: Receipt? = nil
     @State private var receiptToEdit: Receipt? = nil
     @State private var showingDeleteAlert = false
     @State private var receiptToDelete: Receipt? = nil
@@ -114,6 +115,10 @@ struct ReceiptsView: View {
                     ReceiptScannerView(isPresented: $showingScanner, project: project)
                         .environmentObject(projectVM)
                 }
+            }
+            .navigationDestination(item: $receiptToView) { receipt in
+                ReceiptDetailView(receipt: receipt)
+                    .environmentObject(projectVM)
             }
             .sheet(item: $receiptToEdit) { receipt in
                 ReceiptEditView(receipt: receipt, isPresented: Binding(
@@ -314,7 +319,10 @@ struct ReceiptsView: View {
         ForEach(receipts) { receipt in
             EnhancedReceiptCard(
                 receipt: receipt,
-                onTap: {
+                onView: {
+                    receiptToView = receipt
+                },
+                onEdit: {
                     receiptToEdit = receipt
                 },
                 onDelete: {
@@ -349,7 +357,10 @@ struct ReceiptsView: View {
             ForEach(receipts) { receipt in
                 EnhancedReceiptCard(
                     receipt: receipt,
-                    onTap: {
+                    onView: {
+                        receiptToView = receipt
+                    },
+                    onEdit: {
                         receiptToEdit = receipt
                     },
                     onDelete: {
@@ -374,7 +385,10 @@ struct ReceiptsView: View {
                 vendorName: vendorName,
                 receipts: vendorReceipts,
                 totalSpent: totalSpent,
-                onReceiptTap: { receipt in
+                onReceiptView: { receipt in
+                    receiptToView = receipt
+                },
+                onReceiptEdit: { receipt in
                     receiptToEdit = receipt
                 },
                 onReceiptDelete: { receipt in
@@ -596,13 +610,14 @@ struct ReceiptsView: View {
 
 struct EnhancedReceiptCard: View {
     let receipt: Receipt
-    let onTap: () -> Void
+    let onView: () -> Void
+    let onEdit: () -> Void
     let onDelete: () -> Void
     
     @State private var showingFullImage = false
     
     var body: some View {
-        Button(action: onTap) {
+        Button(action: onView) {
             VStack(spacing: 12) {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
@@ -729,6 +744,7 @@ struct EnhancedReceiptCard: View {
             .cornerRadius(12)
             .shadow(color: Color.black.opacity(0.1), radius: 2, x: 0, y: 1)
         }
+        .accessibilityIdentifier("receipt-card-\(receipt.vendor)")
         .buttonStyle(PlainButtonStyle())
         .contextMenu {
             if receipt.hasReceiptImage {
@@ -738,7 +754,7 @@ struct EnhancedReceiptCard: View {
             }
             
             Button("Edit") {
-                onTap()
+                onEdit()
             }
             
             Button("Delete", role: .destructive) {
@@ -879,7 +895,8 @@ struct VendorGroupCard: View {
     let vendorName: String
     let receipts: [Receipt]
     let totalSpent: Double
-    let onReceiptTap: (Receipt) -> Void
+    let onReceiptView: (Receipt) -> Void
+    let onReceiptEdit: (Receipt) -> Void
     let onReceiptDelete: (Receipt) -> Void
     @State private var isExpanded = false
     
@@ -926,7 +943,8 @@ struct VendorGroupCard: View {
                     ForEach(receipts.sorted { $0.date > $1.date }) { receipt in
                         EnhancedReceiptCard(
                             receipt: receipt,
-                            onTap: { onReceiptTap(receipt) },
+                            onView: { onReceiptView(receipt) },
+                            onEdit: { onReceiptEdit(receipt) },
                             onDelete: { onReceiptDelete(receipt) }
                         )
                         .padding(.horizontal, 12)

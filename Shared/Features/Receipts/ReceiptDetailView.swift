@@ -169,6 +169,7 @@ struct ReceiptDetailView: View {
                 Text(receipt.vendor)
                     .font(.title2)
                     .fontWeight(.bold)
+                    .accessibilityIdentifier("receipt-detail-vendor")
                 
                 if receipt.isReturn {
                     Text("RETURN")
@@ -187,6 +188,7 @@ struct ReceiptDetailView: View {
                     .font(.title2)
                     .fontWeight(.bold)
                     .foregroundColor(receipt.isReturn ? .red : .primary)
+                    .accessibilityIdentifier("receipt-detail-amount")
             }
             
             HStack {
@@ -200,6 +202,7 @@ struct ReceiptDetailView: View {
                     .font(.subheadline)
                     .fontWeight(.medium)
                     .foregroundColor(.blue)
+                    .accessibilityIdentifier("receipt-detail-category")
             }
         }
         .padding()

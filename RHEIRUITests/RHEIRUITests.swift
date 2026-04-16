@@ -332,83 +332,9 @@ final class RHEIRUITests: XCTestCase {
         app.launch()
         app.tabBars.buttons["Receipts"].tap()
 
-        XCTAssertTrue(
-            app.staticTexts["No Receipts Yet"].waitForExistence(timeout: 5),
-            "Expected selected-project mode to start from the empty receipts state before saving a manual receipt."
-        )
-        XCTAssertTrue(
-            app.buttons["Manual Entry"].waitForExistence(timeout: 5),
-            "Expected selected-project mode to expose the manual receipt entry action."
-        )
-
-        app.buttons["Manual Entry"].tap()
-
-        let addReceiptNavBar = app.navigationBars["Add Receipt"]
-        XCTAssertTrue(
-            addReceiptNavBar.waitForExistence(timeout: 5),
-            "Expected the Add Receipt sheet to open before exercising the submission path."
-        )
-
-        let vendorPickerButton = app.buttons["manual-receipt-vendor-picker"]
-        XCTAssertTrue(
-            vendorPickerButton.exists,
-            "Expected the Add Receipt sheet to expose the vendor picker button."
-        )
-        vendorPickerButton.tap()
-
-        let vendorNavBar = app.navigationBars["Select Vendor"]
-        XCTAssertTrue(
-            vendorNavBar.waitForExistence(timeout: 5),
-            "Expected tapping the vendor row to open the vendor picker sheet."
-        )
-
-        let addNewVendorButton = app.buttons["vendor-picker-add-new"]
-        XCTAssertTrue(
-            addNewVendorButton.exists,
-            "Expected the vendor picker to expose the add-vendor action."
-        )
-        addNewVendorButton.tap()
-
-        let addVendorNavBar = app.navigationBars["Add New Vendor"]
-        XCTAssertTrue(
-            addVendorNavBar.waitForExistence(timeout: 5),
-            "Expected tapping add new vendor to open the nested vendor form."
-        )
-
         let vendorName = "UI Test Saved Vendor"
-        let vendorNameField = app.textFields["Vendor Name"]
-        XCTAssertTrue(
-            vendorNameField.waitForExistence(timeout: 5),
-            "Expected the nested add-vendor form to expose the vendor name field."
-        )
-        vendorNameField.tap()
-        vendorNameField.typeText(vendorName)
-        addVendorNavBar.buttons["Add"].tap()
+        saveManualReceipt(in: app, vendorName: vendorName, amount: "123.45")
 
-        XCTAssertTrue(
-            addReceiptNavBar.waitForExistence(timeout: 5),
-            "Expected adding a vendor to return directly to the Add Receipt sheet."
-        )
-
-        let amountField = app.textFields["manual-receipt-amount"]
-        XCTAssertTrue(
-            amountField.waitForExistence(timeout: 5),
-            "Expected the Add Receipt sheet to expose the amount field."
-        )
-        amountField.tap()
-        amountField.typeText("123.45")
-
-        let saveButton = app.buttons["manual-receipt-save"]
-        XCTAssertTrue(
-            saveButton.exists,
-            "Expected the Add Receipt sheet to expose the save action."
-        )
-        saveButton.tap()
-
-        XCTAssertFalse(
-            addReceiptNavBar.waitForExistence(timeout: 2),
-            "Expected saving the receipt to dismiss the Add Receipt sheet."
-        )
         XCTAssertTrue(
             app.staticTexts[vendorName].waitForExistence(timeout: 8),
             "Expected the saved manual receipt to render in the selected-project receipts list."
@@ -416,6 +342,48 @@ final class RHEIRUITests: XCTestCase {
         XCTAssertFalse(
             app.staticTexts["No Receipts Yet"].exists,
             "Expected the empty receipts state to disappear after saving a manual receipt."
+        )
+    }
+
+    @MainActor
+    func testManualReceiptEntryNavigatesToSavedReceiptDetails() throws {
+        let app = makeApp(mode: .selectedProject)
+        app.launch()
+        app.tabBars.buttons["Receipts"].tap()
+
+        let vendorName = "UI Test Saved Vendor"
+        saveManualReceipt(in: app, vendorName: vendorName, amount: "123.45")
+
+        let receiptCard = app.buttons["receipt-card-\(vendorName)"]
+        XCTAssertTrue(
+            receiptCard.waitForExistence(timeout: 8),
+            "Expected the saved receipt card to render before opening its detail view."
+        )
+        receiptCard.tap()
+
+        let detailNavBar = app.navigationBars["Receipt Details"]
+        XCTAssertTrue(
+            detailNavBar.waitForExistence(timeout: 5),
+            "Expected tapping the saved receipt card to navigate to Receipt Details."
+        )
+        XCTAssertTrue(
+            app.staticTexts["receipt-detail-vendor"].waitForExistence(timeout: 5),
+            "Expected the receipt detail header to expose the saved vendor."
+        )
+        XCTAssertEqual(
+            app.staticTexts["receipt-detail-vendor"].label,
+            vendorName,
+            "Expected the receipt detail header to show the saved vendor name."
+        )
+        XCTAssertEqual(
+            app.staticTexts["receipt-detail-category"].label,
+            "Materials",
+            "Expected the receipt detail header to preserve the default manual-entry category."
+        )
+        XCTAssertEqual(
+            app.staticTexts["receipt-detail-amount"].label,
+            "$123.45",
+            "Expected the receipt detail header to show the saved amount."
         )
     }
 
@@ -566,6 +534,85 @@ final class RHEIRUITests: XCTestCase {
         }
 
         return button
+    }
+
+    private func saveManualReceipt(in app: XCUIApplication, vendorName: String, amount: String) {
+        XCTAssertTrue(
+            app.staticTexts["No Receipts Yet"].waitForExistence(timeout: 5),
+            "Expected selected-project mode to start from the empty receipts state before saving a manual receipt."
+        )
+        XCTAssertTrue(
+            app.buttons["Manual Entry"].waitForExistence(timeout: 5),
+            "Expected selected-project mode to expose the manual receipt entry action."
+        )
+
+        app.buttons["Manual Entry"].tap()
+
+        let addReceiptNavBar = app.navigationBars["Add Receipt"]
+        XCTAssertTrue(
+            addReceiptNavBar.waitForExistence(timeout: 5),
+            "Expected the Add Receipt sheet to open before exercising the submission path."
+        )
+
+        let vendorPickerButton = app.buttons["manual-receipt-vendor-picker"]
+        XCTAssertTrue(
+            vendorPickerButton.exists,
+            "Expected the Add Receipt sheet to expose the vendor picker button."
+        )
+        vendorPickerButton.tap()
+
+        let vendorNavBar = app.navigationBars["Select Vendor"]
+        XCTAssertTrue(
+            vendorNavBar.waitForExistence(timeout: 5),
+            "Expected tapping the vendor row to open the vendor picker sheet."
+        )
+
+        let addNewVendorButton = app.buttons["vendor-picker-add-new"]
+        XCTAssertTrue(
+            addNewVendorButton.exists,
+            "Expected the vendor picker to expose the add-vendor action."
+        )
+        addNewVendorButton.tap()
+
+        let addVendorNavBar = app.navigationBars["Add New Vendor"]
+        XCTAssertTrue(
+            addVendorNavBar.waitForExistence(timeout: 5),
+            "Expected tapping add new vendor to open the nested vendor form."
+        )
+
+        let vendorNameField = app.textFields["Vendor Name"]
+        XCTAssertTrue(
+            vendorNameField.waitForExistence(timeout: 5),
+            "Expected the nested add-vendor form to expose the vendor name field."
+        )
+        vendorNameField.tap()
+        vendorNameField.typeText(vendorName)
+        addVendorNavBar.buttons["Add"].tap()
+
+        XCTAssertTrue(
+            addReceiptNavBar.waitForExistence(timeout: 5),
+            "Expected adding a vendor to return directly to the Add Receipt sheet."
+        )
+
+        let amountField = app.textFields["manual-receipt-amount"]
+        XCTAssertTrue(
+            amountField.waitForExistence(timeout: 5),
+            "Expected the Add Receipt sheet to expose the amount field."
+        )
+        amountField.tap()
+        amountField.typeText(amount)
+
+        let saveButton = app.buttons["manual-receipt-save"]
+        XCTAssertTrue(
+            saveButton.exists,
+            "Expected the Add Receipt sheet to expose the save action."
+        )
+        saveButton.tap()
+
+        XCTAssertFalse(
+            addReceiptNavBar.waitForExistence(timeout: 2),
+            "Expected saving the receipt to dismiss the Add Receipt sheet."
+        )
     }
 
 }
