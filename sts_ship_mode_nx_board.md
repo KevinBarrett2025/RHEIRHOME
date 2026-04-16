@@ -109,17 +109,20 @@
 - `RHEIRUITests` now also covers selected-project receipt `By Vendor` expansion/collapse behavior in deterministic UI mode, proving the grouped vendor header toggles expanded/collapsed and the grouped list container appears/disappears on the real surface.
 - `Receipt.swift`, `Project.swift`, and `ProjectViewModel.swift` now strip inline receipt image blobs from organization-scoped stored project snapshots and CloudKit `fullProjectData` payloads so oversized serialized receipt images do not inflate persistence payloads.
 - `RHEIRTests` now also covers stored-project and persistence-safe project payload stripping behavior for inline receipt images in deterministic parity.
+- `AppSessionSupport.swift` now compacts stale `projects*` `UserDefaults` payloads at `LocalCacheStore` initialization so legacy inline receipt-image blobs are removed before session migration runs.
+- `ProjectViewModel+Import.swift` now strips inline receipt image blobs from the legacy `projects_backup` `UserDefaults` fallback too.
+- `RHEIRTests` now also covers startup legacy project-payload compaction across org-scoped project blobs and the legacy backup path in deterministic parity.
 - Stable simulator evidence is green on the staged checkpoint:
-  - Focused project-payload parity: PASS (`xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_phase2_payload_targeted_commit_dd -resultBundlePath /tmp/rheir_phase2_payload_targeted_commit.xcresult test -only-testing:RHEIRTests/ProjectStoreTests -only-testing:RHEIRTests/ProjectPersistencePayloadTests`, `/tmp/rheir_phase2_payload_targeted_commit.xcresult`, `5 tests in 2 suites`)
-  - Gate A CLI clean build: PASS (`xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_phase2_payload_commit_dd -resultBundlePath /tmp/rheir_gateA_phase2_payload_commit.xcresult clean build`, `/tmp/rheir_gateA_phase2_payload_commit.xcresult`)
+  - Focused startup-compaction parity: PASS (`xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_phase2_payload_compaction_targeted_dd -resultBundlePath /tmp/rheir_phase2_payload_compaction_targeted.xcresult test -only-testing:RHEIRTests/SessionSupportTests -only-testing:RHEIRTests/ProjectStoreTests -only-testing:RHEIRTests/ProjectPersistencePayloadTests`, `/tmp/rheir_phase2_payload_compaction_targeted.xcresult`, `12 tests in 3 suites`)
+  - Gate A CLI clean build: PASS (`xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_phase2_payload_compaction_dd -resultBundlePath /tmp/rheir_gateA_phase2_payload_compaction.xcresult clean build`, `/tmp/rheir_gateA_phase2_payload_compaction.xcresult`)
 
 ## Open Work
 - Production raw `print(...)` cleanup is effectively complete; only development-only seams still emit raw tracing.
 - Continue shrinking the remaining oversized active state owners.
-- Re-run the previously failing real-device project update / scanned-receipt persistence flow now that serialized project payloads strip inline receipt image blobs.
+- Re-run the previously failing real-device project update / scanned-receipt persistence flow now that serialized project payloads and startup legacy `UserDefaults` project blobs strip inline receipt image blobs.
 - The stable simulator path is now warning-clean, and deterministic signed-out, ready-state, organization-selection, project-selection, labor, company-admin, receipts-entry, manual-entry vendor-picker, manual-entry add-vendor, manual-entry payment-method-picker, manual-entry add-payment-method, manual-entry submission, saved receipt detail, receipt-detail action, persisted receipt-edit mutation, saved-receipt search/browse, category/filter drilldown, and `By Vendor` grouped-summary/expansion coverage are in place; the next release-hardening seam after the device rerun is broader receipt workflow runtime QA.
 - Use `SHIP_READINESS_CHECKLIST.md` as the current release-progress reference alongside the STS docs.
 
 ## Blockers
-- Physical-device build/signing is unblocked, but the oversized project-payload fix still needs on-device confirmation against the prior `NSUserDefaults >= 4 MB` and CloudKit `record too large` failures.
+- Physical-device build/signing is unblocked, but the startup legacy-payload compaction still needs on-device confirmation against the prior `NSUserDefaults >= 4 MB` warning and CloudKit `record too large` project-update failure.
 - Raw in-sandbox `xcodebuild` remains less reliable than elevated CLI or the stable `xcodebuildmcp` simulator path in this environment.

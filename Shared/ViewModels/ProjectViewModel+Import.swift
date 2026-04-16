@@ -95,9 +95,17 @@ extension ProjectViewModel {
     /// Save local backup of projects
     private func saveLocalBackup() {
         let projectCount = organizationProjects.count
+        let strippedInlineReceiptImages = organizationProjects.reduce(0) { count, project in
+            count + project.inlineReceiptImageCount
+        }
         do {
-            let data = try JSONEncoder().encode(organizationProjects)
+            let data = try JSONEncoder().encode(organizationProjects.map(\.persistenceSafeCopy))
             UserDefaults.standard.set(data, forKey: "projects_backup")
+            if strippedInlineReceiptImages > 0 {
+                Logger.projectStore.debug(
+                    "Stripped inline receipt images from legacy project backup [images=\(strippedInlineReceiptImages, privacy: .public)]"
+                )
+            }
             Logger.projectStore.notice("Saved local project backup [count=\(projectCount, privacy: .public)]")
         } catch {
             Logger.projectStore.error("Failed to save local project backup: \(error.localizedDescription, privacy: .public)")

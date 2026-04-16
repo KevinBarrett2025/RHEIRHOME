@@ -141,6 +141,58 @@ struct SessionSupportTests {
         #expect(store.lastSelectedProjectID(for: "org-1") == nil)
         #expect(store.appleEmail(for: "user-1") == nil)
     }
+
+    @Test
+    func compactsLegacyProjectPayloadsDuringInitialization() throws {
+        let suiteName = "SessionSupportTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        defaults.set("org-legacy", forKey: "currentOrganizationID")
+
+        var receipt = Receipt(
+            vendor: "North Shore Supply",
+            date: .now,
+            amount: 199.95
+        )
+        receipt.setReceiptImageData(Data(repeating: 0xAA, count: 4096))
+
+        var project = Project(
+            name: "Legacy Payload",
+            client: "Client A",
+            totalBudget: 42000,
+            startDate: .now,
+            endDate: .now.addingTimeInterval(86400),
+            organizationID: "org-legacy"
+        )
+        project.receipts = [receipt]
+
+        let legacyPayload = try JSONEncoder().encode([project])
+        defaults.set(legacyPayload, forKey: "projects_org-legacy")
+        defaults.set(legacyPayload, forKey: "projects_backup")
+
+        let store = LocalCacheStore(userDefaults: defaults)
+
+        #expect(store.selectionState.organizationID == "org-legacy")
+
+        let compactedOrgProjects = try JSONDecoder().decode(
+            [Project].self,
+            from: #require(defaults.data(forKey: "projects_org-legacy"))
+        )
+        let compactedBackupProjects = try JSONDecoder().decode(
+            [Project].self,
+            from: #require(defaults.data(forKey: "projects_backup"))
+        )
+
+        #expect(compactedOrgProjects.first?.receipts.first?.vendor == "North Shore Supply")
+        #expect(compactedOrgProjects.first?.receipts.first?.receiptImageData == nil)
+        #expect(compactedOrgProjects.first?.receipts.first?.receiptImageName == nil)
+        #expect(compactedBackupProjects.first?.receipts.first?.receiptImageData == nil)
+        #expect(compactedBackupProjects.first?.receipts.first?.receiptImageName == nil)
+    }
 }
 
 struct ProjectStoreTests {

@@ -130,21 +130,24 @@
 - Added focused parity for project access normalization and assignment filtering in `RHEIRTests/RHEIRTests.swift`.
 - Hardened oversized organization-scoped project persistence by stripping inline receipt image data from serialized `ProjectStore` snapshots and CloudKit `fullProjectData` payloads via `Receipt.persistenceSafeCopy`, `Project.persistenceSafeCopy`, and the active project save path.
 - Added focused project-payload regression coverage in `RHEIRTests/RHEIRTests.swift` that proves stored projects and persistence-safe serialized payloads retain receipt metadata while removing inline receipt image data and names.
+- Added startup legacy project-payload compaction in `Shared/Views/Auth/AppSessionSupport.swift` so `LocalCacheStore` rewrites stale `projects*` `UserDefaults` blobs through `Project.persistenceSafeCopy` before legacy session migration runs.
+- Hardened `Shared/ViewModels/ProjectViewModel+Import.swift` so the legacy `projects_backup` fallback also strips inline receipt image data before writing to `UserDefaults`.
+- Expanded focused `RHEIRTests/RHEIRTests.swift` parity to prove startup compaction preserves legacy org selection and receipt metadata while clearing inline receipt image data from both org-scoped project payloads and the legacy backup blob.
 
 ## In Progress
-- Re-run the previously failing real-device project update / scanned-receipt persistence flow now that serialized project payloads strip inline receipt image blobs.
+- Re-run the previously failing real-device project update / scanned-receipt persistence flow now that both serialized project payloads and startup legacy `UserDefaults` project blobs strip inline receipt image blobs.
 - Continue release hardening beyond the now-green selected-project saved-receipt search/browse, category/filter drilldown, and `By Vendor` grouped-summary/expansion seams into broader receipt runtime QA on the real receipts surface.
 - Continue shrinking the remaining oversized active state owners around the new sync and access store boundaries.
 - Expand deterministic parity beyond the focused `RHEIRTests` suite.
 
 ## Blockers
 - Raw in-sandbox `xcodebuild` commands are still less reliable than elevated CLI or `xcodebuildmcp` paths in this environment because CoreSimulator and DerivedData access remain sandbox-sensitive.
-- Physical-device build/signing is now unblocked, but the oversized project-payload fix still needs rerun confirmation against the previously observed `NSUserDefaults >= 4 MB` and CloudKit `record too large` failures.
+- Physical-device build/signing is now unblocked, but the startup legacy-payload compaction still needs rerun confirmation against the previously observed `NSUserDefaults >= 4 MB` warning and the earlier CloudKit `record too large` project-update failure.
 
 ## Latest Evidence
-- Focused project-payload parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_phase2_payload_targeted_commit_dd -resultBundlePath /tmp/rheir_phase2_payload_targeted_commit.xcresult test -only-testing:RHEIRTests/ProjectStoreTests -only-testing:RHEIRTests/ProjectPersistencePayloadTests` -> PASS (`/tmp/rheir_phase2_payload_targeted_commit.xcresult`, `5 tests in 2 suites`)
-- Gate A: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_phase2_payload_commit_dd -resultBundlePath /tmp/rheir_gateA_phase2_payload_commit.xcresult clean build` -> PASS (`/tmp/rheir_gateA_phase2_payload_commit.xcresult`)
-- User-run iPhone launch/build is now succeeding, and `/Users/kevinbarrett/Downloads/rheirlogs1.md` captured the oversized `NSUserDefaults` and CloudKit `record too large` failures that this hardening slice targets.
+- Focused startup-compaction parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_phase2_payload_compaction_targeted_dd -resultBundlePath /tmp/rheir_phase2_payload_compaction_targeted.xcresult test -only-testing:RHEIRTests/SessionSupportTests -only-testing:RHEIRTests/ProjectStoreTests -only-testing:RHEIRTests/ProjectPersistencePayloadTests` -> PASS (`/tmp/rheir_phase2_payload_compaction_targeted.xcresult`, `12 tests in 3 suites`)
+- Gate A: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_phase2_payload_compaction_dd -resultBundlePath /tmp/rheir_gateA_phase2_payload_compaction.xcresult clean build` -> PASS (`/tmp/rheir_gateA_phase2_payload_compaction.xcresult`)
+- User-run iPhone launch/build is now succeeding, `/Users/kevinbarrett/Downloads/rheirlogs2.md` confirmed the old startup `NSUserDefaults >= 4 MB` warning still fired before the prior snapshot-strip path, and this startup-compaction slice directly targets that remaining legacy payload path.
 
 ## Next Milestone
-- Re-run the previously failing real-device project update / scanned-receipt persistence flow, then extend deterministic selected-project receipt workflow coverage into broader receipt runtime QA.
+- Re-run the previously failing real-device project update / scanned-receipt persistence flow and confirm both the startup `NSUserDefaults >= 4 MB` warning and the prior CloudKit `record too large` failure stay clear, then extend deterministic selected-project receipt workflow coverage into broader receipt runtime QA.

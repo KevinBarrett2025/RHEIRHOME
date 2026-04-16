@@ -20,6 +20,11 @@ struct SelectionState: Codable, Equatable {
     var projectID: String?
 }
 
+struct LegacyProjectPayloadCompactionResult: Equatable {
+    var compactedKeys = 0
+    var strippedInlineReceiptImages = 0
+}
+
 final class LocalCacheStore {
     static let shared = LocalCacheStore()
 
@@ -34,12 +39,20 @@ final class LocalCacheStore {
         static let pendingInviteRole = "pending_invite_role"
         static let lastProjectPrefix = "selected_project_for_org_"
         static let appleEmailPrefix = "stored_apple_email_"
+        static let legacyProjects = "projects"
+        static let legacyProjectsBackup = "projects_backup"
     }
 
     private let userDefaults: UserDefaults
 
     init(userDefaults: UserDefaults = .standard) {
         self.userDefaults = userDefaults
+        let compactionResult = compactLegacyProjectPayloadsIfNeeded()
+        if compactionResult.compactedKeys > 0 {
+            Logger.session.notice(
+                "Compacted legacy project payloads in local cache [keys=\(compactionResult.compactedKeys, privacy: .public) images=\(compactionResult.strippedInlineReceiptImages, privacy: .public)]"
+            )
+        }
         migrateLegacyStateIfNeeded()
     }
 
@@ -155,6 +168,45 @@ final class LocalCacheStore {
         userDefaults.removeObject(forKey: Key.pendingInviteRole)
     }
 
+    @discardableResult
+    func compactLegacyProjectPayloadsIfNeeded() -> LegacyProjectPayloadCompactionResult {
+        let candidateKeys = userDefaults.dictionaryRepresentation().keys.filter { key in
+            Self.isLegacyProjectPayloadKey(key)
+        }
+        guard !candidateKeys.isEmpty else {
+            return LegacyProjectPayloadCompactionResult()
+        }
+
+        let encoder = JSONEncoder()
+        let decoder = JSONDecoder()
+        var result = LegacyProjectPayloadCompactionResult()
+
+        for key in candidateKeys.sorted() {
+            guard let data = userDefaults.data(forKey: key),
+                  let projects = try? decoder.decode([Project].self, from: data) else {
+                continue
+            }
+
+            let strippedImages = projects.reduce(0) { count, project in
+                count + project.inlineReceiptImageCount
+            }
+            guard strippedImages > 0 else {
+                continue
+            }
+
+            let compactedProjects = projects.map(\.persistenceSafeCopy)
+            guard let compactedData = try? encoder.encode(compactedProjects) else {
+                continue
+            }
+
+            userDefaults.set(compactedData, forKey: key)
+            result.compactedKeys += 1
+            result.strippedInlineReceiptImages += strippedImages
+        }
+
+        return result
+    }
+
     private func migrateLegacyStateIfNeeded() {
         if userDefaults.data(forKey: Key.selectionState) == nil {
             let migratedState = SelectionState(
@@ -181,6 +233,10 @@ final class LocalCacheStore {
             role: role,
             source: .legacyStorage
         )
+    }
+
+    private static func isLegacyProjectPayloadKey(_ key: String) -> Bool {
+        key.hasPrefix("projects_") || key == Key.legacyProjects || key == Key.legacyProjectsBackup
     }
 }
 
