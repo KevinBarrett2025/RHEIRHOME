@@ -1,3 +1,4 @@
+import OSLog
 import SwiftUI
 
 /// Comprehensive Labor Payment Management View
@@ -405,6 +406,7 @@ struct LaborPaymentView: View {
     }
     
     private func processPayment(method: String, notes: String) {
+        let processedCount = selectedHours.count
         for hour in selectedHours {
             projectVM.markHoursAsPaid(hour, method: method, note: notes)
         }
@@ -412,7 +414,9 @@ struct LaborPaymentView: View {
         selectedHours.removeAll()
         showingPaymentModal = false
         
-        print("✅ Processed payment for \(selectedHours.count) hours using \(method)")
+        Logger.labor.notice(
+            "Processed labor payment batch [count=\(processedCount) method=\(method, privacy: .public)]"
+        )
     }
     
     private func calculateTotalHours() -> Double {
