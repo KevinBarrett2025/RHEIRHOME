@@ -81,6 +81,7 @@
 - `WorkHour.swift` no longer carries the redundant local `CLLocation: @unchecked Sendable` conformance.
 - `RheirApp.swift`, `SessionStore`, and `RHEIRUITests` now support deterministic signed-out UI launch smoke coverage without touching live auth state.
 - `RheirApp.swift`, `SessionStore`, and `RHEIRUITests` now also support deterministic ready-state UI launch smoke coverage with a seeded local user and organization.
+- The next deterministic UI harness seam is organization selection, using a seeded logged-in user with multiple organizations and no active current organization.
 - Stable simulator evidence is green on the staged checkpoint:
   - Gate A `build_sim`: PASS (`mcp__xcodebuildmcp__build_sim` with `-derivedDataPath /tmp/rheir_gateA_phase1bz_mcp_dd`)
   - Focused parity `test_sim -only-testing:RHEIRTests -only-testing:RHEIRUITests/RHEIRUITests/testSignedOutModeShowsAppleSignIn -only-testing:RHEIRUITests/RHEIRUITests/testReadyModeShowsMainTabShell -only-testing:RHEIRUITests/RHEIRUITestsLaunchTests/testLaunch`: PASS (`mcp__xcodebuildmcp__test_sim` with `-derivedDataPath /tmp/rheir_parity_phase1bz_mcp_dd`, `30/30`)
@@ -88,7 +89,7 @@
 ## Open Work
 - Production raw `print(...)` cleanup is effectively complete; only development-only seams still emit raw tracing.
 - Continue shrinking the remaining oversized active state owners.
-- The stable simulator path is now warning-clean, and deterministic signed-out plus ready-state shell coverage are in place; the next release-hardening seam is deterministic organization/project workflow coverage in `RHEIRUITests`.
+- The stable simulator path is now warning-clean, and deterministic signed-out plus ready-state shell coverage are in place; the next release-hardening seam is deterministic organization-selection coverage in `RHEIRUITests`, followed by project-selection workflow coverage.
 - Use `SHIP_READINESS_CHECKLIST.md` as the current release-progress reference alongside the STS docs.
 
 ## Blockers

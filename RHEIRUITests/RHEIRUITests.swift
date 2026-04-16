@@ -16,6 +16,7 @@ final class RHEIRUITests: XCTestCase {
     private enum UITestLaunchMode: String {
         case signedOut = "signed_out"
         case ready = "ready"
+        case selectingOrganization = "selecting_organization"
     }
 
     override func setUpWithError() throws {
@@ -59,6 +60,23 @@ final class RHEIRUITests: XCTestCase {
         XCTAssertTrue(tabBar.buttons["Labor"].exists, "Expected Labor tab in ready UI test mode.")
         XCTAssertTrue(tabBar.buttons["Tasks"].exists, "Expected Tasks tab in ready UI test mode.")
         XCTAssertTrue(tabBar.buttons["Company"].exists, "Expected Company tab in ready UI test mode.")
+    }
+
+    @MainActor
+    func testOrganizationSelectionModeShowsOrganizationList() throws {
+        let app = makeApp(mode: .selectingOrganization)
+        app.launch()
+
+        let organizationsTitle = app.navigationBars["Organizations"].firstMatch
+        XCTAssertTrue(
+            organizationsTitle.waitForExistence(timeout: 5),
+            "Expected deterministic organization-selection UI test mode to render the organization picker."
+        )
+
+        XCTAssertTrue(app.buttons["Sign Out"].exists, "Expected Sign Out action in organization-selection mode.")
+        XCTAssertTrue(app.staticTexts["UI Test Builders"].exists, "Expected the seeded builder organization.")
+        XCTAssertTrue(app.staticTexts["Ready Roofing Co"].exists, "Expected the seeded contractor organization.")
+        XCTAssertTrue(app.buttons["Create"].exists, "Expected the organization create action in organization-selection mode.")
     }
 
     @MainActor

@@ -5,6 +5,7 @@ import SwiftUI
 private enum UITestLaunchMode: String {
     case signedOut = "signed_out"
     case ready = "ready"
+    case selectingOrganization = "selecting_organization"
 }
 
 private enum UITestLaunchEnvironment {
@@ -31,33 +32,82 @@ private struct AppLaunchConfiguration {
 
     @MainActor
     func applyBootstrap(authViewModel: AuthViewModel, projectViewModel: ProjectViewModel) {
-        guard uiTestMode == .ready else { return }
+        switch uiTestMode {
+        case .ready:
+            let user = User(id: "ui-test-ready-user", email: "ready-ui-test@rheirhome.com")
+            let organization = Organization(
+                id: "ui-test-ready-org",
+                name: "UI Test Contracting",
+                members: [user.id],
+                adminUserID: user.id
+            )
 
-        let user = User(id: "ui-test-ready-user", email: "ready-ui-test@rheirhome.com")
-        let organization = Organization(
-            id: "ui-test-ready-org",
-            name: "UI Test Contracting",
-            members: [user.id],
-            adminUserID: user.id
-        )
+            applyCommonBootstrap(
+                authViewModel: authViewModel,
+                projectViewModel: projectViewModel,
+                user: user,
+                organizations: [organization],
+                organizationRoles: [organization.id: .admin]
+            )
+            authViewModel.setCurrentOrganization(organization)
+            projectViewModel.setCurrentOrganization(organization, role: .admin)
 
+        case .selectingOrganization:
+            let user = User(id: "ui-test-org-user", email: "org-ui-test@rheirhome.com")
+            let builderOrganization = Organization(
+                id: "ui-test-org-builders",
+                name: "UI Test Builders",
+                members: [user.id, "builder-member-2"],
+                adminUserID: user.id
+            )
+            let roofingOrganization = Organization(
+                id: "ui-test-org-roofing",
+                name: "Ready Roofing Co",
+                members: [user.id],
+                adminUserID: "roofing-admin"
+            )
+
+            applyCommonBootstrap(
+                authViewModel: authViewModel,
+                projectViewModel: projectViewModel,
+                user: user,
+                organizations: [builderOrganization, roofingOrganization],
+                organizationRoles: [
+                    builderOrganization.id: .admin,
+                    roofingOrganization.id: .contractor
+                ]
+            )
+            authViewModel.currentOrg = nil
+
+        case .signedOut, .none:
+            break
+        }
+    }
+
+    @MainActor
+    private func applyCommonBootstrap(
+        authViewModel: AuthViewModel,
+        projectViewModel: ProjectViewModel,
+        user: User,
+        organizations: [Organization],
+        organizationRoles: [String: OrganizationRole]
+    ) {
         authViewModel.user = user
-        authViewModel.organizations = [organization]
-        authViewModel.userOrganizations = [organization]
-        authViewModel.organizationRoles = [organization.id: .admin]
+        authViewModel.organizations = organizations
+        authViewModel.userOrganizations = organizations
+        authViewModel.organizationRoles = organizationRoles
+        authViewModel.currentOrg = nil
         authViewModel.errorMessage = nil
         authViewModel.inviteStatus = ""
         authViewModel.isLoadingOrgs = false
         authViewModel.needsOrganizationSetup = false
         authViewModel.showOrganizationSetup = false
         authViewModel.showAdminInfoUpdate = false
-        authViewModel.setCurrentOrganization(organization)
 
         projectViewModel.projects = []
         projectViewModel.organizationProjects = []
         projectViewModel.accessibleProjects = []
         projectViewModel.deselectProject()
-        projectViewModel.setCurrentOrganization(organization, role: .admin)
     }
 }
 
@@ -115,6 +165,8 @@ struct RheirApp: App {
         case .signedOut:
             authService = SignedOutUITestAuthService()
         case .ready:
+            authService = SignedOutUITestAuthService()
+        case .selectingOrganization:
             authService = SignedOutUITestAuthService()
         case .none:
             authService = CloudKitAuthService()

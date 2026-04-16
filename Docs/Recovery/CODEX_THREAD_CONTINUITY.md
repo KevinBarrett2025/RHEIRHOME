@@ -3,12 +3,12 @@
 ## Repo Truth
 - Repo Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Active Branch: `gm/rheir-hardening-phase1`
-- HEAD SHA: `0a1608e462ca28b7190cd99f5ce5e6253065dcf4`
-- Last Commit: `0a1608e Phase 1: add signed-out UI smoke coverage`
+- HEAD SHA: `5222526b5d693071301786ec2abd00b0abc21ed5`
+- Last Commit: `5222526 Phase 1: add ready-state UI smoke coverage`
 
 ## Current Objective
-- Preserve the repo-tracked ship-readiness checklist and checkpoint the deterministic ready-state smoke coverage slice in `RHEIRUITests`.
-- Queue deterministic organization/project workflow coverage as the next highest-value release-hardening seam after the ready-state UI checkpoint lands.
+- Extend the deterministic `RHEIRUITests` harness with a seeded organization-selection route.
+- Keep the release-hardening spine moving from shell coverage into organization/project workflow coverage without touching live CloudKit state.
 
 ## Current Working Set
 - Session flow now routes through `Shared/Views/Auth/AppSessionSupport.swift`.
@@ -113,6 +113,7 @@
 - `SessionStore` now supports optional project/auth bridge suppression for UI test launch modes so seeded states do not wake live CloudKit sync work.
 - `RHEIRUITests.swift` now contains a deterministic signed-out smoke test that asserts the Apple Sign-In control renders.
 - `RHEIRUITests.swift` now also contains a deterministic ready-state smoke test that asserts the main tab shell renders with the five core tabs.
+- Deterministic organization-selection smoke coverage is the active release-hardening seam now that the signed-out and ready-state launch routes are stable.
 - `RHEIRUITestsLaunchTests.swift` now launches in deterministic signed-out mode before capturing launch evidence.
 - Deterministic organization/project workflow coverage is now the next highest-value release-hardening seam in the active tree.
 - Focused tests for invite parsing, cache migration, project-store persistence, receipt-intelligence retention, cache clearing, labor aggregation/validation, company-state bucketing, team-member store behavior, and receipt project-resolution behavior now live in `RHEIRTests/RHEIRTests.swift`.
@@ -131,6 +132,6 @@
 - This repo follows a repo-local STS equivalent defined in the root governance docs because the original STS spine docs were not present here.
 
 ## Next Required Action
-1. Commit the deterministic ready-state `RHEIRUITests` smoke coverage slice without staging `Shared/Views/Auth/LoginView.swift`, `rheir_knowledge_database.json`, `RHEIRmemories.csv`, or `RheirLogo 1024x1024.png`.
+1. Checkpoint the deterministic organization-selection `RHEIRUITests` smoke coverage slice without staging `Shared/Views/Auth/LoginView.swift`, `rheir_knowledge_database.json`, `RHEIRmemories.csv`, or `RheirLogo 1024x1024.png`.
 2. Preserve the repo-local STS docs and `SHIP_READINESS_CHECKLIST.md` as the current release-planning truth for this repository.
-3. Continue with deterministic organization/project workflow coverage after the ready-state UI checkpoint lands.
+3. Continue with deterministic project-selection coverage after the organization-selection UI checkpoint lands.
