@@ -21,6 +21,7 @@ struct ReceiptsView: View {
     @State private var selectedViewMode: ReceiptViewMode = .all
     @State private var selectedCategory: ReceiptCategory? = nil
     @State private var searchText = ""
+    @State private var expandedVendorGroups: Set<String> = []
     
     private enum ReceiptViewMode: String, CaseIterable {
         case all = "All"
@@ -98,11 +99,11 @@ struct ReceiptsView: View {
                     
                     // Main content
                     mainContent
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 } else {
                     emptyStateView
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
-                
-                Spacer()
                 
                 // Enhanced FAB buttons
                 if projectVM.selectedProject != nil {
@@ -395,11 +396,22 @@ struct ReceiptsView: View {
             let totalSpent = vendorReceipts.reduce(0) { acc, receipt in
                 acc + (receipt.isReturn ? -receipt.amount : receipt.amount)
             }
+            let vendorGroupID = vendorKey
             
             VendorGroupCard(
                 vendorName: vendorName,
                 receipts: vendorReceipts,
                 totalSpent: totalSpent,
+                isExpanded: expandedVendorGroups.contains(vendorGroupID),
+                onToggle: {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        if expandedVendorGroups.contains(vendorGroupID) {
+                            expandedVendorGroups.remove(vendorGroupID)
+                        } else {
+                            expandedVendorGroups.insert(vendorGroupID)
+                        }
+                    }
+                },
                 onReceiptView: { receipt in
                     receiptToView = receipt
                 },
@@ -921,10 +933,11 @@ struct VendorGroupCard: View {
     let vendorName: String
     let receipts: [Receipt]
     let totalSpent: Double
+    let isExpanded: Bool
+    let onToggle: () -> Void
     let onReceiptView: (Receipt) -> Void
     let onReceiptEdit: (Receipt) -> Void
     let onReceiptDelete: (Receipt) -> Void
-    @State private var isExpanded = false
 
     private var accessibilitySlug: String {
         receiptsAccessibilitySlug(vendorName)
@@ -932,13 +945,10 @@ struct VendorGroupCard: View {
     
     var body: some View {
         VStack(spacing: 0) {
-            // Vendor header
-            Button {
-                withAnimation(.easeInOut(duration: 0.3)) {
-                    isExpanded.toggle()
-                }
-            } label: {
-                HStack {
+            // Make the full vendor summary row tappable so expansion remains reachable
+            // even when the trailing corner is visually close to floating action buttons.
+            Button(action: onToggle) {
+                HStack(spacing: 12) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(vendorName)
                             .font(.headline)
@@ -953,23 +963,28 @@ struct VendorGroupCard: View {
                     
                     Spacer()
                     
-                    VStack(alignment: .trailing, spacing: 4) {
-                        Text(totalSpent.formatAsCurrency())
-                            .font(.title3)
-                            .fontWeight(.bold)
-                            .foregroundColor(totalSpent >= 0 ? .primary : .red)
-                            .accessibilityIdentifier("receipts-vendor-group-total-\(accessibilitySlug)")
-                        
-                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
+                    Text(totalSpent.formatAsCurrency())
+                        .font(.title3)
+                        .fontWeight(.bold)
+                        .foregroundColor(totalSpent >= 0 ? .primary : .red)
+                        .accessibilityIdentifier("receipts-vendor-group-total-\(accessibilitySlug)")
+
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .font(.caption.weight(.semibold))
+                        .foregroundColor(.secondary)
+                        .frame(width: 44, height: 44)
+                        .background(
+                            Circle()
+                                .fill(Color(.systemGray6))
+                        )
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
                 .padding()
             }
+            .buttonStyle(.plain)
             .accessibilityIdentifier("receipts-vendor-group-\(accessibilitySlug)")
             .accessibilityValue(isExpanded ? "expanded" : "collapsed")
-            .buttonStyle(PlainButtonStyle())
             
             // Expandable receipts list
             if isExpanded {

@@ -719,6 +719,63 @@ final class RHEIRUITests: XCTestCase {
     }
 
     @MainActor
+    func testReceiptsByVendorModeExpandsAndCollapsesVendorGroup() throws {
+        let app = makeApp(mode: .selectedProject)
+        app.launch()
+        app.tabBars.buttons["Receipts"].tap()
+
+        let alphaVendorName = "UI Test Vendor Toggle Alpha"
+        saveManualReceipt(in: app, vendorName: alphaVendorName, amount: "12.34")
+
+        let alphaReceiptCard = app.buttons["receipt-card-\(alphaVendorName)"]
+        XCTAssertTrue(
+            alphaReceiptCard.waitForExistence(timeout: 5),
+            "Expected the saved receipt card to render in the default receipts list before switching to grouped vendor mode."
+        )
+
+        let byVendorViewModeButton = app.buttons["receipts-view-mode-by-vendor"]
+        XCTAssertTrue(
+            byVendorViewModeButton.waitForExistence(timeout: 5),
+            "Expected the receipts screen to expose the By Vendor view mode before testing expansion."
+        )
+        byVendorViewModeButton.tap()
+
+        XCTAssertTrue(
+            waitForSelectedValue(on: byVendorViewModeButton, timeout: 5),
+            "Expected tapping By Vendor to activate the grouped vendor view before testing expansion."
+        )
+
+        let vendorGroupSlug = "ui-test-vendor-toggle-alpha"
+        let alphaGroupButton = app.buttons["receipts-vendor-group-\(vendorGroupSlug)"]
+        let alphaGroupList = app.otherElements["receipts-vendor-group-list-\(vendorGroupSlug)"]
+        XCTAssertTrue(
+            alphaGroupButton.waitForExistence(timeout: 5),
+            "Expected vendor-grouped receipts mode to render the grouped vendor summary button for the saved vendor."
+        )
+        tapElement(alphaGroupButton, normalizedOffset: CGVector(dx: 0.25, dy: 0.5))
+
+        XCTAssertTrue(
+            waitForAccessibilityValue(on: alphaGroupButton, equals: "expanded", timeout: 5),
+            "Expected expanding the vendor group to update the header accessibility value to expanded."
+        )
+        XCTAssertTrue(
+            alphaGroupList.waitForExistence(timeout: 5),
+            "Expected expanding the vendor group to reveal the grouped receipt list container."
+        )
+
+        tapElement(alphaGroupButton, normalizedOffset: CGVector(dx: 0.25, dy: 0.5))
+
+        XCTAssertTrue(
+            waitForAccessibilityValue(on: alphaGroupButton, equals: "collapsed", timeout: 5),
+            "Expected collapsing the vendor group to update the header accessibility value back to collapsed."
+        )
+        XCTAssertTrue(
+            waitForNonExistence(of: alphaGroupList, timeout: 5),
+            "Expected collapsing the vendor group to hide the grouped receipt list container again."
+        )
+    }
+
+    @MainActor
     func testManualReceiptEntryOpensPaymentMethodPicker() throws {
         let app = makeApp(mode: .selectedProject)
         app.launch()
@@ -1069,6 +1126,23 @@ final class RHEIRUITests: XCTestCase {
 
         element.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: existingValue.count))
         element.typeText(newValue)
+    }
+
+    private func tapElement(_ element: XCUIElement, normalizedOffset: CGVector = CGVector(dx: 0.5, dy: 0.5)) {
+        if element.isHittable {
+            element.tap()
+            return
+        }
+
+        let absoluteOffset = CGVector(
+            dx: element.frame.minX + (element.frame.width * normalizedOffset.dx),
+            dy: element.frame.minY + (element.frame.height * normalizedOffset.dy)
+        )
+
+        XCUIApplication()
+            .coordinate(withNormalizedOffset: .zero)
+            .withOffset(absoluteOffset)
+            .tap()
     }
 
     private func waitForNonExistence(of element: XCUIElement, timeout: TimeInterval) -> Bool {
