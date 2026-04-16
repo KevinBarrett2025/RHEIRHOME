@@ -625,6 +625,7 @@ struct ManualReceiptEntryView: View {
                                 .foregroundColor(.secondary)
                         }
                     }
+                    .accessibilityIdentifier("manual-receipt-vendor-picker")
                     
                     HStack {
                         Text("Amount")

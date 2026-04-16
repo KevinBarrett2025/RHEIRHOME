@@ -3,12 +3,12 @@
 ## Repo Truth
 - Repo Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Active Branch: `gm/rheir-hardening-phase1`
-- HEAD SHA: `938212f4957e345c878fde1426ceff6ebb0338b6`
-- Last Commit: `938212f Phase 1: add company admin UI smoke coverage`
+- HEAD SHA: `2c95ff2bdf3e103494bfa446773ebe33bf457be2`
+- Last Commit: `2c95ff2 Phase 1: add receipts entry UI smoke coverage`
 
 ## Current Objective
-- Checkpoint the deterministic `RHEIRUITests` receipts-entry route that is now green on the stable simulator path.
-- Queue the next selected-project receipt workflow seam after the receipts-entry smoke slice lands.
+- Checkpoint deterministic selected-project manual-entry vendor-picker coverage now that the narrow slice is green.
+- Queue the payment-method picker route as the next selected-project receipt workflow seam.
 
 ## Current Working Set
 - Session flow now routes through `Shared/Views/Auth/AppSessionSupport.swift`.
@@ -118,6 +118,8 @@
 - `RHEIRUITests.swift` now also contains a deterministic labor smoke test that proves the labor gate and project-scoped labor content states.
 - `RHEIRUITests.swift` now also contains a deterministic company-admin smoke test that proves the real admin company-management surface renders.
 - `RHEIRUITests.swift` now also contains a deterministic receipts-entry smoke test that proves the Receipts empty state exposes `Scan Receipt` and `Manual Entry`, and that `Manual Entry` opens the real `Add Receipt` sheet.
+- `ManualReceiptEntryView.swift` now exposes a deterministic accessibility hook for the vendor picker row in the seeded manual-entry sheet.
+- `RHEIRUITests.swift` now also contains a deterministic manual-entry vendor-picker smoke test that proves the selected-project Add Receipt sheet opens the real vendor picker surface and returns to the receipt sheet on cancel.
 - Deterministic selected-project receipts entry coverage is now validated on the stable simulator path, and the next release-hardening seam is a deeper selected-project receipt workflow route.
 - `RHEIRUITestsLaunchTests.swift` now launches in deterministic signed-out mode before capturing launch evidence.
 - Deterministic organization/project workflow coverage is now the next highest-value release-hardening seam in the active tree.
@@ -137,6 +139,6 @@
 - This repo follows a repo-local STS equivalent defined in the root governance docs because the original STS spine docs were not present here.
 
 ## Next Required Action
-1. Checkpoint the deterministic receipts-entry `RHEIRUITests` smoke coverage slice without staging `Shared/Views/Auth/LoginView.swift`, `rheir_knowledge_database.json`, `RHEIRmemories.csv`, or `RheirLogo 1024x1024.png`.
+1. Checkpoint deterministic manual-entry vendor-picker coverage in `RHEIRUITests` without staging `Shared/Views/Auth/LoginView.swift`, `rheir_knowledge_database.json`, `RHEIRmemories.csv`, or `RheirLogo 1024x1024.png`.
 2. Preserve the repo-local STS docs and `SHIP_READINESS_CHECKLIST.md` as the current release-planning truth for this repository.
-3. Continue with deterministic selected-project receipt workflow coverage after the receipts-entry UI checkpoint lands.
+3. Continue with the next deterministic selected-project receipt workflow seam after the vendor-picker checkpoint lands, starting with the payment-method picker route.

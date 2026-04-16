@@ -221,6 +221,48 @@ final class RHEIRUITests: XCTestCase {
     }
 
     @MainActor
+    func testManualReceiptEntryOpensVendorPicker() throws {
+        let app = makeApp(mode: .selectedProject)
+        app.launch()
+        app.tabBars.buttons["Receipts"].tap()
+
+        XCTAssertTrue(
+            app.buttons["Manual Entry"].waitForExistence(timeout: 5),
+            "Expected selected-project mode to expose the manual receipt entry action."
+        )
+
+        app.buttons["Manual Entry"].tap()
+
+        let addReceiptNavBar = app.navigationBars["Add Receipt"]
+        XCTAssertTrue(
+            addReceiptNavBar.waitForExistence(timeout: 5),
+            "Expected the Add Receipt sheet to open before exercising the picker routes."
+        )
+
+        let vendorPickerButton = app.buttons["manual-receipt-vendor-picker"]
+        XCTAssertTrue(
+            vendorPickerButton.exists,
+            "Expected the Add Receipt sheet to expose the vendor picker button."
+        )
+        vendorPickerButton.tap()
+
+        XCTAssertTrue(
+            app.navigationBars["Select Vendor"].waitForExistence(timeout: 5),
+            "Expected tapping the vendor row to open the vendor picker sheet."
+        )
+        XCTAssertTrue(
+            app.buttons["Add New Vendor"].exists,
+            "Expected the vendor picker to expose the add-vendor action."
+        )
+        app.navigationBars["Select Vendor"].buttons["Cancel"].tap()
+
+        XCTAssertTrue(
+            addReceiptNavBar.waitForExistence(timeout: 5),
+            "Expected cancelling the vendor picker to return to the Add Receipt sheet."
+        )
+    }
+
+    @MainActor
     func testLaunchPerformance() throws {
         // This measures how long it takes to launch your application.
         measure(metrics: [XCTApplicationLaunchMetric()]) {
@@ -234,4 +276,5 @@ final class RHEIRUITests: XCTestCase {
         app.launchEnvironment[UITestLaunchEnvironment.skipLaunchDelay] = "1"
         return app
     }
+
 }
