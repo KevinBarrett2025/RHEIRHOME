@@ -3,12 +3,12 @@
 ## Repo Truth
 - Repo Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Active Branch: `gm/rheir-hardening-phase1`
-- HEAD SHA: `3db42661699d397dfc26a0aee5b12971cb0635b7`
-- Last Commit: `3db4266 Phase 1: add manual receipt submission UI smoke coverage`
+- HEAD SHA: `0553e7cf0f7cb40ebbe2c9433dbf023dacb1aef5`
+- Last Commit: `0553e7c Phase 1: add saved receipt detail UI smoke coverage`
 
 ## Current Objective
-- Lock in deterministic selected-project saved receipt detail navigation and metadata rendering coverage after a successful manual save.
-- Queue the next release-hardening seam around receipt-detail edit/delete affordances after saved receipt navigation is deterministic.
+- Lock in deterministic selected-project receipt-detail edit/delete affordance coverage after saved receipt navigation.
+- Queue the next release-hardening seam around persisted saved-receipt edit mutations once detail actions are deterministic.
 
 ## Current Working Set
 - Session flow now routes through `Shared/Views/Auth/AppSessionSupport.swift`.
@@ -129,14 +129,16 @@
 - `Shared/Features/Receipts/ReceiptsView.swift` now routes receipt-card taps to `ReceiptDetailView`, preserves edit as an explicit context action, and exposes deterministic receipt-card identifiers for saved receipt navigation.
 - `Shared/Features/Receipts/ReceiptDetailView.swift` now exposes deterministic accessibility hooks for saved-receipt vendor, amount, and category metadata.
 - `RHEIRUITests.swift` now also contains a deterministic saved-receipt detail smoke test that creates a seeded manual receipt, opens the saved card, and asserts the detail screen metadata.
-- Deterministic selected-project manual receipt submission and saved receipt detail coverage are now validated on the stable simulator path, and the next release-hardening seam is receipt-detail edit/delete affordance coverage in the deeper receipt workflow.
+- `Shared/Features/Receipts/ReceiptDetailView.swift` now also exposes deterministic edit/delete action identifiers for the saved receipt action surface.
+- `RHEIRUITests.swift` now also contains deterministic saved-receipt detail action smoke tests that prove the edit sheet opens/cancels cleanly and that delete removes the saved receipt and returns the receipts list to the empty state.
+- Deterministic selected-project manual receipt submission, saved receipt detail, and receipt-detail action coverage are now validated on the stable simulator path, and the next release-hardening seam is persisted saved-receipt edit mutation coverage in the deeper receipt workflow.
 - `RHEIRUITestsLaunchTests.swift` now launches in deterministic signed-out mode before capturing launch evidence.
 - Deterministic organization/project workflow coverage is now the next highest-value release-hardening seam in the active tree.
 - Focused tests for invite parsing, cache migration, project-store persistence, receipt-intelligence retention, cache clearing, labor aggregation/validation, company-state bucketing, team-member store behavior, and receipt project-resolution behavior now live in `RHEIRTests/RHEIRTests.swift`.
 - Focused tests for project access normalization and assignment filtering now live in `RHEIRTests/RHEIRTests.swift`.
 - The current working slice has exact simulator evidence recorded:
-  - Gate A `build_sim`: PASS (`mcp__xcodebuildmcp__build_sim` with `-derivedDataPath /tmp/rheir_gateA_phase1ck_mcp_dd`)
-  - Focused parity `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_parity_phase1ck_cli_dd test -only-testing:RHEIRTests -only-testing:RHEIRUITests/RHEIRUITests/testSignedOutModeShowsAppleSignIn -only-testing:RHEIRUITests/RHEIRUITests/testReadyModeShowsMainTabShell -only-testing:RHEIRUITests/RHEIRUITests/testOrganizationSelectionModeShowsOrganizationList -only-testing:RHEIRUITests/RHEIRUITests/testProjectSelectionModeRequiresAndAppliesProjectContext -only-testing:RHEIRUITests/RHEIRUITests/testLaborModeRequiresAndUsesSelectedProjectContext -only-testing:RHEIRUITests/RHEIRUITests/testCompanyModeShowsAdminManagementSurface -only-testing:RHEIRUITests/RHEIRUITests/testReceiptsModeShowsEntryActionsAndManualEntrySheet -only-testing:RHEIRUITests/RHEIRUITests/testManualReceiptEntryOpensVendorPicker -only-testing:RHEIRUITests/RHEIRUITests/testManualReceiptEntryOpensAddVendorForm -only-testing:RHEIRUITests/RHEIRUITests/testManualReceiptEntryOpensPaymentMethodPicker -only-testing:RHEIRUITests/RHEIRUITests/testManualReceiptEntryOpensAddPaymentMethodForm -only-testing:RHEIRUITests/RHEIRUITests/testManualReceiptEntrySavesReceiptIntoSelectedProject -only-testing:RHEIRUITests/RHEIRUITests/testManualReceiptEntryNavigatesToSavedReceiptDetails -only-testing:RHEIRUITests/RHEIRUITestsLaunchTests/testLaunch`: PASS (`/tmp/rheir_parity_phase1ck_cli.log`, `/tmp/rheir_parity_phase1ck_cli_dd/Logs/Test/Test-RHEIR-2026.04.16_10-15-12--0400.xcresult`, `27 unit tests + 17 UI/launch tests`)
+  - Gate A `build_sim`: PASS (`mcp__xcodebuildmcp__build_sim` with `-derivedDataPath /tmp/rheir_gateA_phase1cl_mcp_dd`)
+  - Focused parity `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_parity_phase1cl_cli_dd test -only-testing:RHEIRTests -only-testing:RHEIRUITests/RHEIRUITests/testSignedOutModeShowsAppleSignIn -only-testing:RHEIRUITests/RHEIRUITests/testReadyModeShowsMainTabShell -only-testing:RHEIRUITests/RHEIRUITests/testOrganizationSelectionModeShowsOrganizationList -only-testing:RHEIRUITests/RHEIRUITests/testProjectSelectionModeRequiresAndAppliesProjectContext -only-testing:RHEIRUITests/RHEIRUITests/testLaborModeRequiresAndUsesSelectedProjectContext -only-testing:RHEIRUITests/RHEIRUITests/testCompanyModeShowsAdminManagementSurface -only-testing:RHEIRUITests/RHEIRUITests/testReceiptsModeShowsEntryActionsAndManualEntrySheet -only-testing:RHEIRUITests/RHEIRUITests/testManualReceiptEntryOpensVendorPicker -only-testing:RHEIRUITests/RHEIRUITests/testManualReceiptEntryOpensAddVendorForm -only-testing:RHEIRUITests/RHEIRUITests/testManualReceiptEntryOpensPaymentMethodPicker -only-testing:RHEIRUITests/RHEIRUITests/testManualReceiptEntryOpensAddPaymentMethodForm -only-testing:RHEIRUITests/RHEIRUITests/testManualReceiptEntrySavesReceiptIntoSelectedProject -only-testing:RHEIRUITests/RHEIRUITests/testManualReceiptEntryNavigatesToSavedReceiptDetails -only-testing:RHEIRUITests/RHEIRUITests/testSavedReceiptDetailOpensEditSheet -only-testing:RHEIRUITests/RHEIRUITests/testSavedReceiptDetailDeletesReceiptAndReturnsToList -only-testing:RHEIRUITests/RHEIRUITestsLaunchTests/testLaunch`: PASS (`/tmp/rheir_parity_phase1cl_cli.log`, `/tmp/rheir_parity_phase1cl_cli_dd/Logs/Test/Test-RHEIR-2026.04.16_10-53-07--0400.xcresult`, `27 unit tests + 19 UI/launch tests`)
   - Direct `xcodebuild` CLI evidence remains less stable than the MCP simulator path in the current local CoreSimulator environment
 
 ## Known Constraints
@@ -148,4 +150,4 @@
 ## Next Required Action
 1. Preserve the repo-local STS docs and `SHIP_READINESS_CHECKLIST.md` as the current release-planning truth for this repository.
 2. Keep `Shared/Views/Auth/LoginView.swift`, `rheir_knowledge_database.json`, `RHEIRmemories.csv`, and `RheirLogo 1024x1024.png` out of the staged set for this checkpoint.
-3. Continue with the next deterministic selected-project receipt workflow seam by covering receipt-detail edit/delete affordances after successful manual submission.
+3. Continue with the next deterministic selected-project receipt workflow seam by covering persisted saved-receipt edit mutations after successful manual submission.

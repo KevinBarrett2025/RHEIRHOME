@@ -80,6 +80,7 @@ struct ReceiptDetailView: View {
                 Button("Edit Receipt") {
                     showingEditReceipt = true
                 }
+                .accessibilityIdentifier("receipt-detail-edit-action")
                 .font(.subheadline.bold())
                 .foregroundColor(.blue)
                 .frame(maxWidth: .infinity)
@@ -89,6 +90,7 @@ struct ReceiptDetailView: View {
                 Button("Delete Receipt") {
                     showingDeleteAlert = true
                 }
+                .accessibilityIdentifier("receipt-detail-delete-action")
                 .font(.subheadline.bold())
                 .foregroundColor(.red)
                 .frame(maxWidth: .infinity)

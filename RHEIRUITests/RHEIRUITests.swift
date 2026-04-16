@@ -352,20 +352,8 @@ final class RHEIRUITests: XCTestCase {
         app.tabBars.buttons["Receipts"].tap()
 
         let vendorName = "UI Test Saved Vendor"
-        saveManualReceipt(in: app, vendorName: vendorName, amount: "123.45")
+        openSavedReceiptDetails(in: app, vendorName: vendorName, amount: "123.45")
 
-        let receiptCard = app.buttons["receipt-card-\(vendorName)"]
-        XCTAssertTrue(
-            receiptCard.waitForExistence(timeout: 8),
-            "Expected the saved receipt card to render before opening its detail view."
-        )
-        receiptCard.tap()
-
-        let detailNavBar = app.navigationBars["Receipt Details"]
-        XCTAssertTrue(
-            detailNavBar.waitForExistence(timeout: 5),
-            "Expected tapping the saved receipt card to navigate to Receipt Details."
-        )
         XCTAssertTrue(
             app.staticTexts["receipt-detail-vendor"].waitForExistence(timeout: 5),
             "Expected the receipt detail header to expose the saved vendor."
@@ -384,6 +372,81 @@ final class RHEIRUITests: XCTestCase {
             app.staticTexts["receipt-detail-amount"].label,
             "$123.45",
             "Expected the receipt detail header to show the saved amount."
+        )
+    }
+
+    @MainActor
+    func testSavedReceiptDetailOpensEditSheet() throws {
+        let app = makeApp(mode: .selectedProject)
+        app.launch()
+        app.tabBars.buttons["Receipts"].tap()
+
+        openSavedReceiptDetails(in: app, vendorName: "UI Test Editable Vendor", amount: "45.67")
+
+        let editButton = app.buttons["receipt-detail-edit-action"]
+        XCTAssertTrue(
+            editButton.waitForExistence(timeout: 5),
+            "Expected the receipt detail screen to expose the explicit edit action."
+        )
+        editButton.tap()
+
+        let editReceiptNavBar = app.navigationBars["Edit Receipt"]
+        XCTAssertTrue(
+            editReceiptNavBar.waitForExistence(timeout: 5),
+            "Expected the explicit edit action to open the Edit Receipt sheet."
+        )
+        XCTAssertTrue(
+            app.textFields["Vendor"].waitForExistence(timeout: 5),
+            "Expected the Edit Receipt sheet to expose the vendor field."
+        )
+
+        editReceiptNavBar.buttons["Cancel"].tap()
+
+        XCTAssertTrue(
+            app.navigationBars["Receipt Details"].waitForExistence(timeout: 5),
+            "Expected cancelling edit to return to the receipt detail screen."
+        )
+        XCTAssertEqual(
+            app.staticTexts["receipt-detail-vendor"].label,
+            "UI Test Editable Vendor",
+            "Expected the saved receipt detail header to remain unchanged after cancelling edit."
+        )
+    }
+
+    @MainActor
+    func testSavedReceiptDetailDeletesReceiptAndReturnsToList() throws {
+        let app = makeApp(mode: .selectedProject)
+        app.launch()
+        app.tabBars.buttons["Receipts"].tap()
+
+        let vendorName = "UI Test Deleted Vendor"
+        openSavedReceiptDetails(in: app, vendorName: vendorName, amount: "18.90")
+
+        let deleteButton = app.buttons["receipt-detail-delete-action"]
+        XCTAssertTrue(
+            deleteButton.waitForExistence(timeout: 5),
+            "Expected the receipt detail screen to expose the explicit delete action."
+        )
+        deleteButton.tap()
+
+        let deleteAlert = app.alerts["Delete Receipt"]
+        XCTAssertTrue(
+            deleteAlert.waitForExistence(timeout: 5),
+            "Expected tapping delete to show the destructive confirmation alert."
+        )
+        deleteAlert.buttons["Delete"].tap()
+
+        XCTAssertTrue(
+            app.staticTexts["No Receipts Yet"].waitForExistence(timeout: 8),
+            "Expected deleting the only saved receipt to return the receipts list to the empty state."
+        )
+        XCTAssertFalse(
+            app.staticTexts[vendorName].exists,
+            "Expected the deleted receipt row to disappear from the receipts list."
+        )
+        XCTAssertFalse(
+            app.navigationBars["Receipt Details"].exists,
+            "Expected the detail screen to dismiss after deleting the receipt."
         )
     }
 
@@ -612,6 +675,23 @@ final class RHEIRUITests: XCTestCase {
         XCTAssertFalse(
             addReceiptNavBar.waitForExistence(timeout: 2),
             "Expected saving the receipt to dismiss the Add Receipt sheet."
+        )
+    }
+
+    private func openSavedReceiptDetails(in app: XCUIApplication, vendorName: String, amount: String) {
+        saveManualReceipt(in: app, vendorName: vendorName, amount: amount)
+
+        let receiptCard = app.buttons["receipt-card-\(vendorName)"]
+        XCTAssertTrue(
+            receiptCard.waitForExistence(timeout: 8),
+            "Expected the saved receipt card to render before opening its detail view."
+        )
+        receiptCard.tap()
+
+        let detailNavBar = app.navigationBars["Receipt Details"]
+        XCTAssertTrue(
+            detailNavBar.waitForExistence(timeout: 5),
+            "Expected tapping the saved receipt card to navigate to Receipt Details."
         )
     }
 
