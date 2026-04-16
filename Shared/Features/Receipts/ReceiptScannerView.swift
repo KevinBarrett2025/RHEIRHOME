@@ -787,8 +787,6 @@ struct ReceiptScannerView: View {
     }
     
     private func extractPaymentMethodDetails(_ text: String) -> PaymentMethodDetails? {
-        let lowercaseText = text.lowercased()
-        
         // Enhanced last 4 digits patterns with more comprehensive coverage
         let digitPatterns = [
             "\\*\\*\\*\\*\\s*-?\\s*(\\d{4})",           // ****-1234 or **** 1234
