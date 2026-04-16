@@ -58,7 +58,7 @@ struct CommunicationLogsView_Previews: PreviewProvider {
         NavigationStack {
             CommunicationLogsView(
                 communications: sampleCommunications,
-                onSend: { print("Sent:", $0) }
+                onSend: { _ in }
             )
         }
         .previewDevice("iPhone 14")
