@@ -451,6 +451,87 @@ final class RHEIRUITests: XCTestCase {
     }
 
     @MainActor
+    func testSavedReceiptDetailPersistsEdits() throws {
+        let app = makeApp(mode: .selectedProject)
+        app.launch()
+        app.tabBars.buttons["Receipts"].tap()
+
+        let originalVendorName = "UI Test Editable Saved Vendor"
+        let updatedVendorName = "UI Test Edited Saved Vendor"
+        openSavedReceiptDetails(in: app, vendorName: originalVendorName, amount: "45.67")
+
+        let editButton = app.buttons["receipt-detail-edit-action"]
+        XCTAssertTrue(
+            editButton.waitForExistence(timeout: 5),
+            "Expected the receipt detail screen to expose the explicit edit action before testing persistence."
+        )
+        editButton.tap()
+
+        let editReceiptNavBar = app.navigationBars["Edit Receipt"]
+        XCTAssertTrue(
+            editReceiptNavBar.waitForExistence(timeout: 5),
+            "Expected tapping the explicit edit action to open the Edit Receipt sheet."
+        )
+
+        let vendorField = app.textFields["receipt-edit-vendor"]
+        XCTAssertTrue(
+            vendorField.waitForExistence(timeout: 5),
+            "Expected the Edit Receipt sheet to expose the vendor field."
+        )
+        replaceText(in: vendorField, with: updatedVendorName, app: app)
+
+        let amountField = app.textFields["receipt-edit-amount"]
+        XCTAssertTrue(
+            amountField.waitForExistence(timeout: 5),
+            "Expected the Edit Receipt sheet to expose the amount field."
+        )
+        replaceText(in: amountField, with: "98.76", app: app)
+        dismissEditingFocusIfNeeded(in: app, navigationBar: editReceiptNavBar)
+
+        let saveButton = app.buttons["receipt-edit-save"]
+        XCTAssertTrue(
+            saveButton.exists,
+            "Expected the Edit Receipt sheet to expose the save action."
+        )
+        XCTAssertTrue(
+            waitForEnabled(saveButton, timeout: 5),
+            "Expected the Edit Receipt save action to become enabled after entering valid edits."
+        )
+        saveButton.tap()
+
+        XCTAssertTrue(
+            waitForNonExistence(of: editReceiptNavBar, timeout: 5),
+            "Expected saving the receipt edit to dismiss the Edit Receipt sheet."
+        )
+        XCTAssertTrue(
+            app.navigationBars["Receipt Details"].waitForExistence(timeout: 5),
+            "Expected the receipt detail screen to remain visible after saving edits."
+        )
+        XCTAssertEqual(
+            app.staticTexts["receipt-detail-vendor"].label,
+            updatedVendorName,
+            "Expected the receipt detail header to refresh to the edited vendor."
+        )
+        XCTAssertEqual(
+            app.staticTexts["receipt-detail-amount"].label,
+            "$98.76",
+            "Expected the receipt detail header to refresh to the edited amount."
+        )
+
+        app.navigationBars["Receipt Details"].buttons.firstMatch.tap()
+
+        let updatedReceiptCard = app.buttons["receipt-card-\(updatedVendorName)"]
+        XCTAssertTrue(
+            updatedReceiptCard.waitForExistence(timeout: 5),
+            "Expected the receipts list to reconcile to the edited vendor after leaving receipt details."
+        )
+        XCTAssertFalse(
+            app.buttons["receipt-card-\(originalVendorName)"].exists,
+            "Expected the old vendor receipt card identifier to disappear after editing the saved receipt."
+        )
+    }
+
+    @MainActor
     func testManualReceiptEntryOpensPaymentMethodPicker() throws {
         let app = makeApp(mode: .selectedProject)
         app.launch()
@@ -672,8 +753,8 @@ final class RHEIRUITests: XCTestCase {
         )
         saveButton.tap()
 
-        XCTAssertFalse(
-            addReceiptNavBar.waitForExistence(timeout: 2),
+        XCTAssertTrue(
+            waitForNonExistence(of: addReceiptNavBar, timeout: 5),
             "Expected saving the receipt to dismiss the Add Receipt sheet."
         )
     }
@@ -693,6 +774,37 @@ final class RHEIRUITests: XCTestCase {
             detailNavBar.waitForExistence(timeout: 5),
             "Expected tapping the saved receipt card to navigate to Receipt Details."
         )
+    }
+
+    private func replaceText(in element: XCUIElement, with newValue: String, app: XCUIApplication) {
+        let existingValue = (element.value as? String) ?? ""
+        element.tap()
+        element.press(forDuration: 1.1)
+
+        let selectAllMenuItem = app.menuItems["Select All"]
+        if selectAllMenuItem.waitForExistence(timeout: 1) {
+            selectAllMenuItem.tap()
+        }
+
+        element.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: existingValue.count))
+        element.typeText(newValue)
+    }
+
+    private func waitForNonExistence(of element: XCUIElement, timeout: TimeInterval) -> Bool {
+        let predicate = NSPredicate(format: "exists == false")
+        let expectation = XCTNSPredicateExpectation(predicate: predicate, object: element)
+        return XCTWaiter.wait(for: [expectation], timeout: timeout) == .completed
+    }
+
+    private func waitForEnabled(_ element: XCUIElement, timeout: TimeInterval) -> Bool {
+        let predicate = NSPredicate(format: "enabled == true")
+        let expectation = XCTNSPredicateExpectation(predicate: predicate, object: element)
+        return XCTWaiter.wait(for: [expectation], timeout: timeout) == .completed
+    }
+
+    private func dismissEditingFocusIfNeeded(in app: XCUIApplication, navigationBar: XCUIElement) {
+        guard app.keyboards.count > 0 else { return }
+        navigationBar.tap()
     }
 
 }

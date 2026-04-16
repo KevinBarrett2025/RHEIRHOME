@@ -3,6 +3,7 @@ import SwiftUI
 
 struct ReceiptEditView: View {
     @EnvironmentObject var projectVM: ProjectViewModel
+    @Environment(\.dismiss) private var dismiss
     @Binding var isPresented: Bool
     
     let receipt: Receipt
@@ -19,6 +20,7 @@ struct ReceiptEditView: View {
     @State private var discountAmount: String
     @State private var isReturn: Bool
     @State private var showingPaymentMethodPicker = false
+    @State private var isSaving = false
     
     init(receipt: Receipt, isPresented: Binding<Bool>) {
         self.receipt = receipt
@@ -44,6 +46,7 @@ struct ReceiptEditView: View {
             Form {
                 Section("Receipt Details") {
                     TextField("Vendor", text: $vendor)
+                        .accessibilityIdentifier("receipt-edit-vendor")
                     
                     HStack {
                         Text("Amount")
@@ -51,6 +54,7 @@ struct ReceiptEditView: View {
                         TextField("0.00", text: $amount)
                             .keyboardType(.decimalPad)
                             .multilineTextAlignment(.trailing)
+                            .accessibilityIdentifier("receipt-edit-amount")
                     }
                     
                     DatePicker("Date", selection: $date, displayedComponents: .date)
@@ -107,15 +111,17 @@ struct ReceiptEditView: View {
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Cancel") {
-                        isPresented = false
+                        dismissEditor()
                     }
+                    .accessibilityIdentifier("receipt-edit-cancel")
                 }
                 
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Save") {
                         saveReceipt()
                     }
-                    .disabled(!isValidForm)
+                    .disabled(!isValidForm || isSaving)
+                    .accessibilityIdentifier("receipt-edit-save")
                 }
             }
             .sheet(isPresented: $showingPaymentMethodPicker) {
@@ -132,6 +138,9 @@ struct ReceiptEditView: View {
     }
     
     private func saveReceipt() {
+        guard !isSaving else { return }
+        isSaving = true
+
         // Calculate spending changes for vendor and payment method services
         let oldAmount = receipt.isReturn ? -receipt.amount : receipt.amount
         let newAmount = isReturn ? -(Double(amount) ?? receipt.amount) : (Double(amount) ?? receipt.amount)
@@ -168,16 +177,25 @@ struct ReceiptEditView: View {
                     await projectVM.updateProject(updatedProject)
                     await MainActor.run {
                         projectVM.recomputeFilteredReceipts()
+                        dismissEditor()
+                        isSaving = false
+
+                        Logger.receiptWorkflow.notice(
+                            "Receipt updated [vendor=\(vendor, privacy: .public) amount=\(newAmount, format: .fixed(precision: 2))]"
+                        )
                     }
                 }
+
+                return
             }
         }
-        
+
+        isSaving = false
+    }
+
+    private func dismissEditor() {
         isPresented = false
-        
-        Logger.receiptWorkflow.notice(
-            "Receipt updated [vendor=\(vendor, privacy: .public) amount=\(newAmount, format: .fixed(precision: 2))]"
-        )
+        dismiss()
     }
     
     private func updateVendorSpending(oldVendor: String, newVendor: String, oldAmount: Double, newAmount: Double) {

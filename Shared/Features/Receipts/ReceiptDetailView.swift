@@ -5,9 +5,13 @@ struct ReceiptDetailView: View {
     let receipt: Receipt
     @EnvironmentObject var projectVM: ProjectViewModel
     @Environment(\.dismiss) private var dismiss
-    @State private var showingEditReceipt = false
+    @State private var editingReceipt: Receipt?
     @State private var showingDeleteAlert = false
     @State private var showingImageViewer = false
+
+    private var currentReceipt: Receipt {
+        projectVM.selectedProject?.receipts.first(where: { $0.id == receipt.id }) ?? receipt
+    }
     
     var body: some View {
         ScrollView {
@@ -19,12 +23,12 @@ struct ReceiptDetailView: View {
                 receiptDetailsSection
                 
                 // Photos Section
-                if receipt.hasPhotos || receipt.hasReceiptImage {
+                if currentReceipt.hasPhotos || currentReceipt.hasReceiptImage {
                     photosSection
                 }
                 
                 // Items Section
-                if !receipt.items.isEmpty {
+                if !currentReceipt.items.isEmpty {
                     itemsSection
                 }
                 
@@ -41,7 +45,7 @@ struct ReceiptDetailView: View {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Menu {
                     Button("Edit Receipt") {
-                        showingEditReceipt = true
+                        editingReceipt = currentReceipt
                     }
                     
                     Button("Delete Receipt", role: .destructive) {
@@ -52,8 +56,18 @@ struct ReceiptDetailView: View {
                 }
             }
         }
-        .sheet(isPresented: $showingEditReceipt) {
-            ReceiptEditView(receipt: receipt, isPresented: $showingEditReceipt)
+        .sheet(item: $editingReceipt) { editableReceipt in
+            ReceiptEditView(
+                receipt: editableReceipt,
+                isPresented: Binding(
+                    get: { editingReceipt != nil },
+                    set: { isPresented in
+                        if !isPresented {
+                            editingReceipt = nil
+                        }
+                    }
+                )
+            )
                 .environmentObject(projectVM)
         }
         .alert("Delete Receipt", isPresented: $showingDeleteAlert) {
@@ -62,10 +76,10 @@ struct ReceiptDetailView: View {
                 deleteReceipt()
             }
         } message: {
-            Text("Are you sure you want to delete this receipt from \(receipt.vendor) for \(receipt.amount.formatAsCurrency())? This action cannot be undone.")
+            Text("Are you sure you want to delete this receipt from \(currentReceipt.vendor) for \(currentReceipt.amount.formatAsCurrency())? This action cannot be undone.")
         }
         .sheet(isPresented: $showingImageViewer) {
-            if let receiptImage = receipt.receiptImage {
+            if let receiptImage = currentReceipt.receiptImage {
                 ZoomableImageView(image: receiptImage) {
                     showingImageViewer = false
                 }
@@ -78,7 +92,7 @@ struct ReceiptDetailView: View {
         VStack(spacing: 12) {
             HStack(spacing: 16) {
                 Button("Edit Receipt") {
-                    showingEditReceipt = true
+                    editingReceipt = currentReceipt
                 }
                 .accessibilityIdentifier("receipt-detail-edit-action")
                 .font(.subheadline.bold())
@@ -104,14 +118,15 @@ struct ReceiptDetailView: View {
     }
     
     private func deleteReceipt() {
+        let activeReceipt = currentReceipt
         guard let project = projectVM.selectedProject else { return }
         
         var updatedProject = project
-        updatedProject.receipts.removeAll { $0.id == receipt.id }
+        updatedProject.receipts.removeAll { $0.id == activeReceipt.id }
         
         // Update vendor and payment method spending totals
-        updateVendorSpending(for: receipt, isRemoving: true)
-        updatePaymentMethodSpending(for: receipt, isRemoving: true)
+        updateVendorSpending(for: activeReceipt, isRemoving: true)
+        updatePaymentMethodSpending(for: activeReceipt, isRemoving: true)
         
         Task {
             await projectVM.updateProject(updatedProject)
@@ -122,7 +137,7 @@ struct ReceiptDetailView: View {
                 dismiss()
                 
                 Logger.receiptWorkflow.notice(
-                    "Receipt deleted [vendor=\(receipt.vendor, privacy: .public) amount=\(receipt.amount, format: .fixed(precision: 2))]"
+                    "Receipt deleted [vendor=\(activeReceipt.vendor, privacy: .public) amount=\(activeReceipt.amount, format: .fixed(precision: 2))]"
                 )
             }
         }
@@ -166,6 +181,8 @@ struct ReceiptDetailView: View {
     
     @ViewBuilder
     private var receiptHeaderSection: some View {
+        let receipt = currentReceipt
+
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text(receipt.vendor)
@@ -214,6 +231,8 @@ struct ReceiptDetailView: View {
     
     @ViewBuilder
     private var receiptDetailsSection: some View {
+        let receipt = currentReceipt
+
         VStack(alignment: .leading, spacing: 16) {
             Text("Details")
                 .font(.headline)
@@ -253,6 +272,8 @@ struct ReceiptDetailView: View {
     
     @ViewBuilder
     private var photosSection: some View {
+        let receipt = currentReceipt
+
         VStack(alignment: .leading, spacing: 16) {
             Text("Receipt Image")
                 .font(.headline)
@@ -328,6 +349,8 @@ struct ReceiptDetailView: View {
     
     @ViewBuilder
     private var itemsSection: some View {
+        let receipt = currentReceipt
+
         VStack(alignment: .leading, spacing: 16) {
             Text("Items (\(receipt.items.count))")
                 .font(.headline)
