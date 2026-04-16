@@ -675,6 +675,7 @@ struct ManualReceiptEntryView: View {
                                 .foregroundColor(.secondary)
                         }
                     }
+                    .accessibilityIdentifier("manual-receipt-payment-method-picker")
                     
                     TextField("Receipt Number", text: $receiptNumber)
                     

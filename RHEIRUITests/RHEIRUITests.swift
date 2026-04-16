@@ -263,6 +263,55 @@ final class RHEIRUITests: XCTestCase {
     }
 
     @MainActor
+    func testManualReceiptEntryOpensPaymentMethodPicker() throws {
+        let app = makeApp(mode: .selectedProject)
+        app.launch()
+        app.tabBars.buttons["Receipts"].tap()
+
+        XCTAssertTrue(
+            app.buttons["Manual Entry"].waitForExistence(timeout: 5),
+            "Expected selected-project mode to expose the manual receipt entry action."
+        )
+
+        app.buttons["Manual Entry"].tap()
+
+        let addReceiptNavBar = app.navigationBars["Add Receipt"]
+        XCTAssertTrue(
+            addReceiptNavBar.waitForExistence(timeout: 5),
+            "Expected the Add Receipt sheet to open before exercising the payment-method route."
+        )
+
+        let paymentMethodPickerButton = revealButton(
+            identifier: "manual-receipt-payment-method-picker",
+            in: app
+        )
+        XCTAssertTrue(
+            paymentMethodPickerButton.exists,
+            "Expected the Add Receipt sheet to expose the payment-method picker button."
+        )
+        XCTAssertTrue(
+            paymentMethodPickerButton.isHittable,
+            "Expected the payment-method picker button to become hittable after scrolling the Add Receipt form."
+        )
+        paymentMethodPickerButton.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+
+        XCTAssertTrue(
+            app.navigationBars["Select Payment Method"].waitForExistence(timeout: 5),
+            "Expected tapping the payment-method row to open the payment picker sheet."
+        )
+        XCTAssertTrue(
+            app.buttons["Add New Payment Method"].exists,
+            "Expected the payment picker to expose the add-payment-method action."
+        )
+        app.navigationBars["Select Payment Method"].buttons["Cancel"].tap()
+
+        XCTAssertTrue(
+            addReceiptNavBar.waitForExistence(timeout: 5),
+            "Expected cancelling the payment-method picker to return to the Add Receipt sheet."
+        )
+    }
+
+    @MainActor
     func testLaunchPerformance() throws {
         // This measures how long it takes to launch your application.
         measure(metrics: [XCTApplicationLaunchMetric()]) {
@@ -275,6 +324,20 @@ final class RHEIRUITests: XCTestCase {
         app.launchEnvironment[UITestLaunchEnvironment.mode] = mode.rawValue
         app.launchEnvironment[UITestLaunchEnvironment.skipLaunchDelay] = "1"
         return app
+    }
+
+    private func revealButton(identifier: String, in app: XCUIApplication, maxSwipes: Int = 4) -> XCUIElement {
+        let sheetCollection = app.collectionViews.firstMatch
+        var button = app.buttons[identifier]
+
+        for _ in 0..<maxSwipes where !button.exists {
+            let start = sheetCollection.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.78))
+            let end = sheetCollection.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.48))
+            start.press(forDuration: 0.01, thenDragTo: end)
+            button = app.buttons[identifier]
+        }
+
+        return button
     }
 
 }

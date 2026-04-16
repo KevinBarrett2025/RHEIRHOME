@@ -102,6 +102,7 @@
 - `RHEIRUITests` selected-project company-admin smoke coverage
 - `RHEIRUITests` selected-project receipts-entry smoke coverage
 - `RHEIRUITests` selected-project manual-entry vendor-picker smoke coverage
+- `RHEIRUITests` selected-project manual-entry payment-method-picker smoke coverage
 - `VendorKnowledgeService` structured logging
 - `PaymentMethodKnowledgeService` structured logging
 - `OrganizationService` structured logging
@@ -110,14 +111,14 @@
 - `SignInWithAppleCoordinator` structured logging
 
 ## Current Validation Baseline
-- Simulator build path: `mcp__xcodebuildmcp__build_sim` with `extraArgs=["-derivedDataPath","/tmp/rheir_gateA_phase1cf_mcp_dd"]`
-- Focused parity path: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_parity_phase1cf_cli_dd test -only-testing:RHEIRTests -only-testing:RHEIRUITests/RHEIRUITests/testSignedOutModeShowsAppleSignIn -only-testing:RHEIRUITests/RHEIRUITests/testReadyModeShowsMainTabShell -only-testing:RHEIRUITests/RHEIRUITests/testOrganizationSelectionModeShowsOrganizationList -only-testing:RHEIRUITests/RHEIRUITests/testProjectSelectionModeRequiresAndAppliesProjectContext -only-testing:RHEIRUITests/RHEIRUITests/testLaborModeRequiresAndUsesSelectedProjectContext -only-testing:RHEIRUITests/RHEIRUITests/testCompanyModeShowsAdminManagementSurface -only-testing:RHEIRUITests/RHEIRUITests/testReceiptsModeShowsEntryActionsAndManualEntrySheet -only-testing:RHEIRUITests/RHEIRUITests/testManualReceiptEntryOpensVendorPicker -only-testing:RHEIRUITests/RHEIRUITestsLaunchTests/testLaunch`
-- Latest focused parity result: `PASS` (`/tmp/rheir_parity_phase1cf_cli.log`)
+- Simulator build path: `mcp__xcodebuildmcp__build_sim` with `extraArgs=["-derivedDataPath","/tmp/rheir_gateA_phase1cg_mcp_dd"]`
+- Focused parity path: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_parity_phase1cg_cli_dd2 test -only-testing:RHEIRTests -only-testing:RHEIRUITests/RHEIRUITests/testSignedOutModeShowsAppleSignIn -only-testing:RHEIRUITests/RHEIRUITests/testReadyModeShowsMainTabShell -only-testing:RHEIRUITests/RHEIRUITests/testOrganizationSelectionModeShowsOrganizationList -only-testing:RHEIRUITests/RHEIRUITests/testProjectSelectionModeRequiresAndAppliesProjectContext -only-testing:RHEIRUITests/RHEIRUITests/testLaborModeRequiresAndUsesSelectedProjectContext -only-testing:RHEIRUITests/RHEIRUITests/testCompanyModeShowsAdminManagementSurface -only-testing:RHEIRUITests/RHEIRUITests/testReceiptsModeShowsEntryActionsAndManualEntrySheet -only-testing:RHEIRUITests/RHEIRUITests/testManualReceiptEntryOpensVendorPicker -only-testing:RHEIRUITests/RHEIRUITests/testManualReceiptEntryOpensPaymentMethodPicker -only-testing:RHEIRUITests/RHEIRUITestsLaunchTests/testLaunch`
+- Latest focused parity result: `PASS` (`/tmp/rheir_parity_phase1cg_cli2.log`)
 
 ## Known Residual Risks
 - Remaining raw `print(...)` statements are now limited to development-only seams such as `Shared/Services/Development/DevelopmentDataManager.swift`, `Shared/Services/StubServices.swift`, and `Shared/Services/PreviewAuthService.swift`.
 - Stable MCP simulator path is warning-clean for the active target; remaining release hardening now centers on broader deterministic coverage and runtime QA.
-- `RHEIRUITests` is now deterministic for signed-out, ready-state, organization-selection, project-selection, labor, company-admin, receipts-entry, and manual-entry vendor-picker coverage; the next release-hardening slice is the selected-project payment-method picker route before broader runtime QA.
+- `RHEIRUITests` is now deterministic for signed-out, ready-state, organization-selection, project-selection, labor, company-admin, receipts-entry, manual-entry vendor-picker, and manual-entry payment-method-picker coverage; the next release-hardening slice is the add-payment-method route before broader runtime QA.
 - `ProjectViewModel` is still oversized even after the extracted stores, though organization/project synchronization is now isolated behind `OrganizationProjectSyncStore`.
 - `CompanyStore` now lives in the compiled state layer rather than the settings view, but the broader company/project coordination flow still spans multiple UI files.
 - Direct CLI `xcodebuild` evidence remains less stable than the MCP simulator path in the local CoreSimulator environment.
