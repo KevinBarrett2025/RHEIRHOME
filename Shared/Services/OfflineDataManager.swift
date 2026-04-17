@@ -541,7 +541,7 @@ class OfflineDataManager: ObservableObject {
 
 class OfflineStorageManager {
     
-    private let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+    private let documentsURL: URL
     
     // File URLs
     var projectsURL: URL { documentsURL.appendingPathComponent("offline_projects.json") }
@@ -551,7 +551,8 @@ class OfflineStorageManager {
     var photosDirectoryURL: URL { documentsURL.appendingPathComponent("offline_photos") }
     var offlineStateURL: URL { documentsURL.appendingPathComponent("offline_state.json") }
     
-    init() {
+    init(documentsURL: URL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]) {
+        self.documentsURL = documentsURL
         createDirectoriesIfNeeded()
     }
     
@@ -583,10 +584,19 @@ class OfflineStorageManager {
     }
     
     func saveProjects(_ projects: [Project]) -> Bool {
-        guard let data = try? JSONEncoder().encode(projects) else { return false }
+        let strippedInlineReceiptImages = projects.reduce(0) { count, project in
+            count + project.inlineReceiptImageCount
+        }
+        let persistenceSafeProjects = projects.map(\.persistenceSafeCopy)
+        guard let data = try? JSONEncoder().encode(persistenceSafeProjects) else { return false }
         
         do {
             try data.write(to: projectsURL, options: .atomic)
+            if strippedInlineReceiptImages > 0 {
+                Logger.offlineStorage.debug(
+                    "Stripped inline receipt images from offline project payload [images=\(strippedInlineReceiptImages, privacy: .public)]"
+                )
+            }
             return true
         } catch {
             Logger.offlineStorage.error(

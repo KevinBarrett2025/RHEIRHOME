@@ -3,13 +3,13 @@
 ## Repo Truth
 - Repo Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Active Branch: `gm/rheir-hardening-phase1`
-- Thread Start SHA: `05d64b9957bae1faf0528e8a3fa765a1d6440a77`
-- Last Commit At Thread Start: `05d64b9 Phase 2: harden oversized project persistence payloads`
+- Thread Start SHA: `f9cb9db09717db1233cfe872f8183e43d25e4703`
+- Last Commit At Thread Start: `f9cb9db Phase 2: compact legacy project payloads before session restore`
 
 ## Current Objective
-- Compact legacy `UserDefaults` project payloads before session restore so stale inline receipt-image blobs stop triggering launch-time `CFPreferences/NSUserDefaults >= 4 MB` warnings on device.
-- Keep the existing oversized project persistence hardening in place for stored project snapshots and CloudKit payloads while verifying the new startup compaction path through focused parity.
-- Re-run the previously failing real-device project update / scanned-receipt persistence flow after this slice lands to confirm both the launch-time prefs warning and the historical CloudKit payload failure stay clear.
+- Expand startup compaction so legacy project payload cleanup also rewrites undecodable raw JSON and the on-disk `Documents/projects.json` / `Documents/offline_projects.json` files before session restore.
+- Keep the existing oversized project persistence hardening in place for stored project snapshots, CloudKit payloads, and offline storage while verifying the new startup/file compaction path through focused parity and device inspection.
+- Hand off the exact user-driven real-device project update / scanned-receipt mutation rerun as the next manual validation step once this slice lands.
 
 ## Current Working Set
 - Session flow now routes through `Shared/Views/Auth/AppSessionSupport.swift`.
@@ -151,14 +151,18 @@
 - `LocalCacheStore` now compacts stale `projects*` `UserDefaults` payloads at initialization before legacy session migration, stripping inline receipt image blobs from legacy org-scoped project snapshots and backups already on disk.
 - `ProjectViewModel+Import.saveLocalBackup()` now strips inline receipt image blobs from the legacy `projects_backup` fallback before it writes to `UserDefaults`.
 - `RHEIRTests.swift` now also proves startup legacy project-payload compaction preserves selection state and receipt metadata while removing inline receipt image data from both org-scoped `projects_*` blobs and `projects_backup`.
+- `LocalCacheStore` now also compacts undecodable raw legacy JSON payloads plus on-disk `Documents/projects.json` and `Documents/offline_projects.json`, recursively stripping `receiptImageData` and legacy `imageDatas` blobs before session restore continues.
+- `OfflineStorageManager.saveProjects(_:)` now persists `Project.persistenceSafeCopy` payloads so inline receipt-image blobs do not re-enter the offline file path.
+- `RHEIRTests.swift` now also proves raw legacy `imageDatas` stripping for org-scoped prefs payloads, on-disk project files, and offline project file writes.
 - `RHEIRUITestsLaunchTests.swift` now launches in deterministic signed-out mode before capturing launch evidence.
 - Deterministic selected-project receipt runtime coverage remains the next highest-value release-hardening seam in the active tree.
 - Focused tests for invite parsing, cache migration, project-store persistence, receipt-intelligence retention, cache clearing, labor aggregation/validation, company-state bucketing, team-member store behavior, and receipt project-resolution behavior now live in `RHEIRTests/RHEIRTests.swift`.
 - Focused tests for project access normalization and assignment filtering now live in `RHEIRTests/RHEIRTests.swift`.
 - The current working slice has exact simulator evidence recorded:
-  - Focused startup-compaction parity `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_phase2_payload_compaction_targeted_dd -resultBundlePath /tmp/rheir_phase2_payload_compaction_targeted.xcresult test -only-testing:RHEIRTests/SessionSupportTests -only-testing:RHEIRTests/ProjectStoreTests -only-testing:RHEIRTests/ProjectPersistencePayloadTests`: PASS (`/tmp/rheir_phase2_payload_compaction_targeted.xcresult`, `12 tests in 3 suites`)
-  - Gate A CLI clean build `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_phase2_payload_compaction_dd -resultBundlePath /tmp/rheir_gateA_phase2_payload_compaction.xcresult clean build`: PASS (`/tmp/rheir_gateA_phase2_payload_compaction.xcresult`)
-  - User-run iPhone build/launch is now succeeding, `/Users/kevinbarrett/Downloads/rheirlogs1.md` captured the original oversized `NSUserDefaults` and CloudKit `record too large` failures, and `/Users/kevinbarrett/Downloads/rheirlogs2.md` proved the prior snapshot-strip path ran while the launch-time prefs warning still remained, motivating this startup-compaction slice
+  - Focused startup/file-compaction parity `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_phase2_legacy_payload_targeted_dd -resultBundlePath /tmp/rheir_phase2_legacy_payload_targeted.xcresult test -only-testing:RHEIRTests/SessionSupportTests -only-testing:RHEIRTests/ProjectPersistencePayloadTests`: PASS (`/tmp/rheir_phase2_legacy_payload_targeted.xcresult`, `11 tests in 2 suites`)
+  - Gate A CLI clean build `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_phase2_legacy_payload_v2_dd -resultBundlePath /tmp/rheir_gateA_phase2_legacy_payload_v2.xcresult clean build`: PASS (`/tmp/rheir_gateA_phase2_legacy_payload_v2.xcresult`)
+  - Device build/install validation `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'id=00008140-0011492622E8801C' -derivedDataPath /tmp/rheir_phase2_device_verify_v2_dd -resultBundlePath /tmp/rheir_phase2_device_verify_v2_build.xcresult build`: PASS (`/tmp/rheir_phase2_device_verify_v2_build.xcresult`), with copied device payloads showing compact `/tmp/rheir_device_projects_after_fix_v2.json` (`2947` bytes, no `imageDatas`), `/tmp/rheir_device_offline_projects_after_fix_v2.json` (`3437` bytes, no `receiptImageData`), and `/tmp/rheir_device_preferences_v2.plist` (`11701` bytes with compact org-scoped project prefs)
+  - `/Users/kevinbarrett/Downloads/rheirlogs1.md` captured the original oversized `NSUserDefaults` and CloudKit `record too large` failures, and `/Users/kevinbarrett/Downloads/rheirlogs2.md` proved the prior snapshot-strip path ran while the launch-time prefs warning still remained, motivating this raw-JSON/on-disk compaction slice
   - Direct `xcodebuild` CLI evidence remains less stable than the MCP simulator path in the current local CoreSimulator environment
 
 ## Known Constraints
@@ -170,5 +174,5 @@
 ## Next Required Action
 1. Preserve the repo-local STS docs and `SHIP_READINESS_CHECKLIST.md` as the current release-planning truth for this repository.
 2. Keep `Shared/Views/Auth/LoginView.swift`, `rheir_knowledge_database.json`, `RHEIRmemories.csv`, and `RheirLogo 1024x1024.png` out of the staged set for this checkpoint.
-3. Re-run the previously failing real-device project update / scanned-receipt persistence flow and confirm the launch-time `NSUserDefaults >= 4 MB` warning and CloudKit `record too large` failure no longer appear.
-4. If the device rerun is clean, continue broader selected-project receipt runtime QA and reconcile the next checkpoint in the repo-local STS docs.
+3. Manually rerun the previously failing real-device project update / scanned-receipt persistence flow on the updated build and capture fresh logs so the launch-time `NSUserDefaults >= 4 MB` warning and CloudKit `record too large` failure can be checked against the exact mutation path.
+4. If the manual device rerun is clean, continue broader selected-project receipt runtime QA and reconcile the next checkpoint in the repo-local STS docs.

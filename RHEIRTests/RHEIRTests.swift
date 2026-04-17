@@ -24,6 +24,114 @@ private final class RecordingProjectRepository: ProjectRepository {
     }
 }
 
+private func makeProject(
+    organizationID: String,
+    includeReceiptImageData: Bool = false,
+    includeProgressLog: Bool = false
+) -> Project {
+    var project = Project(
+        name: "Legacy Payload",
+        client: "Client A",
+        totalBudget: 42000,
+        startDate: .now,
+        endDate: .now.addingTimeInterval(86400),
+        organizationID: organizationID
+    )
+
+    if includeReceiptImageData {
+        var receipt = Receipt(
+            vendor: "North Shore Supply",
+            date: .now,
+            amount: 199.95
+        )
+        receipt.setReceiptImageData(Data(repeating: 0xAA, count: 4096))
+        project.receipts = [receipt]
+    }
+
+    if includeProgressLog {
+        project.progressLogs = [
+            ProgressLog(
+                workDescription: "Legacy framing update",
+                notes: "Wrapped beam header"
+            )
+        ]
+    }
+
+    return project
+}
+
+private func makeLegacyProjectPayload(
+    organizationID: String,
+    includeReceiptImageData: Bool = false,
+    includeLegacyProgressImageDatas: Bool = false
+) throws -> Data {
+    let project = makeProject(
+        organizationID: organizationID,
+        includeReceiptImageData: includeReceiptImageData,
+        includeProgressLog: includeLegacyProgressImageDatas
+    )
+    let baseData = try JSONEncoder().encode([project])
+
+    guard includeLegacyProgressImageDatas else {
+        return baseData
+    }
+
+    guard var payload = try JSONSerialization.jsonObject(with: baseData) as? [[String: Any]],
+          var encodedProject = payload.first,
+          var progressLogs = encodedProject["progressLogs"] as? [[String: Any]],
+          !progressLogs.isEmpty else {
+        return baseData
+    }
+
+    progressLogs[0]["imageDatas"] = ["legacy-inline-photo"]
+    encodedProject["progressLogs"] = progressLogs
+    payload[0] = encodedProject
+    return try JSONSerialization.data(withJSONObject: payload)
+}
+
+private func makeUndecodableLegacyProjectPayload() throws -> Data {
+    try JSONSerialization.data(
+        withJSONObject: [
+            [
+                "name": "Legacy Project",
+                "phone": "",
+                "communications": [],
+                "contingency": 0,
+                "state": "",
+                "street": "",
+                "progressLogs": [
+                    [
+                        "id": UUID().uuidString,
+                        "date": 777278742.152427,
+                        "notes": "Legacy progress note",
+                        "employeeIDs": [],
+                        "imageDatas": ["legacy-inline-photo"]
+                    ]
+                ],
+                "endDate": 779957128.401665,
+                "changeOrders": [],
+                "id": UUID().uuidString,
+                "laborCost": 0,
+                "taskTemplates": [],
+                "city": "",
+                "generalConditions": 0,
+                "loggedHours": [],
+                "totalBudget": 10000,
+                "materialCost": 0,
+                "notes": "",
+                "client": "",
+                "tasks": [],
+                "status": "completed",
+                "zip": "",
+                "receipts": [],
+                "startDate": 777278728.401662,
+                "profit": 0,
+                "spentContingency": 0
+            ]
+        ]
+    )
+}
+
 struct RHEIRTests {
 
     @Test func example() async throws {
@@ -153,24 +261,10 @@ struct SessionSupportTests {
 
         defaults.set("org-legacy", forKey: "currentOrganizationID")
 
-        var receipt = Receipt(
-            vendor: "North Shore Supply",
-            date: .now,
-            amount: 199.95
+        let legacyPayload = try makeLegacyProjectPayload(
+            organizationID: "org-legacy",
+            includeReceiptImageData: true
         )
-        receipt.setReceiptImageData(Data(repeating: 0xAA, count: 4096))
-
-        var project = Project(
-            name: "Legacy Payload",
-            client: "Client A",
-            totalBudget: 42000,
-            startDate: .now,
-            endDate: .now.addingTimeInterval(86400),
-            organizationID: "org-legacy"
-        )
-        project.receipts = [receipt]
-
-        let legacyPayload = try JSONEncoder().encode([project])
         defaults.set(legacyPayload, forKey: "projects_org-legacy")
         defaults.set(legacyPayload, forKey: "projects_backup")
 
@@ -192,6 +286,65 @@ struct SessionSupportTests {
         #expect(compactedOrgProjects.first?.receipts.first?.receiptImageName == nil)
         #expect(compactedBackupProjects.first?.receipts.first?.receiptImageData == nil)
         #expect(compactedBackupProjects.first?.receipts.first?.receiptImageName == nil)
+    }
+
+    @Test
+    func compactsLegacyProjectPayloadsWithLegacyProgressImagesDuringInitialization() throws {
+        let suiteName = "SessionSupportTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        defaults.set("org-legacy", forKey: "currentOrganizationID")
+        let legacyPayload = try makeUndecodableLegacyProjectPayload()
+        defaults.set(legacyPayload, forKey: "projects_org-legacy")
+
+        _ = LocalCacheStore(userDefaults: defaults)
+
+        let compactedData = try #require(defaults.data(forKey: "projects_org-legacy"))
+        let compactedPayload = try #require(String(data: compactedData, encoding: .utf8))
+        #expect(!compactedPayload.contains("imageDatas"))
+        #expect(compactedPayload.contains("\"Legacy progress note\""))
+    }
+
+    @Test
+    func compactsLegacyProjectFilesDuringInitialization() throws {
+        let suiteName = "SessionSupportTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let documentsURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: documentsURL, withIntermediateDirectories: true)
+        defer {
+            try? FileManager.default.removeItem(at: documentsURL)
+        }
+
+        try makeUndecodableLegacyProjectPayload()
+            .write(to: documentsURL.appendingPathComponent("projects.json"))
+        try makeLegacyProjectPayload(
+            organizationID: "org-legacy",
+            includeReceiptImageData: true
+        ).write(to: documentsURL.appendingPathComponent("offline_projects.json"))
+
+        _ = LocalCacheStore(userDefaults: defaults, documentsURL: documentsURL)
+
+        let compactedProjectsData = try Data(contentsOf: documentsURL.appendingPathComponent("projects.json"))
+        let compactedOfflineData = try Data(contentsOf: documentsURL.appendingPathComponent("offline_projects.json"))
+        let compactedProjectsPayload = try #require(String(data: compactedProjectsData, encoding: .utf8))
+        let compactedOfflinePayload = try #require(String(data: compactedOfflineData, encoding: .utf8))
+
+        #expect(!compactedProjectsPayload.contains("imageDatas"))
+        #expect(!compactedOfflinePayload.contains("receiptImageData"))
+
+        let compactedOfflineProjects = try JSONDecoder().decode([Project].self, from: compactedOfflineData)
+        #expect(compactedProjectsPayload.contains("\"Legacy progress note\""))
+        #expect(compactedOfflineProjects.first?.receipts.first?.vendor == "North Shore Supply")
+        #expect(compactedOfflineProjects.first?.receipts.first?.receiptImageData == nil)
     }
 }
 
@@ -352,6 +505,34 @@ struct ProjectPersistencePayloadTests {
         #expect(decodedProject.receipts.first?.vendor == "Builder Depot")
         #expect(decodedProject.receipts.first?.receiptImageData == nil)
         #expect(decodedProject.receipts.first?.receiptImageName == nil)
+    }
+
+    @Test
+    func stripsInlineReceiptImagesFromOfflineProjectFilePayload() throws {
+        let documentsURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: documentsURL, withIntermediateDirectories: true)
+        defer {
+            try? FileManager.default.removeItem(at: documentsURL)
+        }
+
+        let storage = OfflineStorageManager(documentsURL: documentsURL)
+        let project = makeProject(
+            organizationID: "org-offline-payload",
+            includeReceiptImageData: true
+        )
+
+        #expect(storage.saveProjects([project]))
+
+        let payloadURL = documentsURL.appendingPathComponent("offline_projects.json")
+        let payloadData = try Data(contentsOf: payloadURL)
+        let payloadString = try #require(String(data: payloadData, encoding: .utf8))
+        #expect(!payloadString.contains("receiptImageData"))
+
+        let decodedProjects = try JSONDecoder().decode([Project].self, from: payloadData)
+        #expect(decodedProjects.count == 1)
+        #expect(decodedProjects.first?.receipts.first?.vendor == "North Shore Supply")
+        #expect(decodedProjects.first?.receipts.first?.receiptImageData == nil)
+        #expect(decodedProjects.first?.receipts.first?.receiptImageName == nil)
     }
 }
 

@@ -127,6 +127,9 @@
 - `LocalCacheStore` startup legacy project-payload compaction
 - `ProjectViewModel+Import` legacy `projects_backup` payload hardening
 - `RHEIRTests` session-support legacy project-payload compaction coverage
+- `LocalCacheStore` raw legacy JSON / on-disk project-file compaction fallback
+- `OfflineStorageManager` persistence-safe offline project payload writes
+- `RHEIRTests` raw legacy `imageDatas` and on-disk/offline project-file compaction coverage
 - `VendorKnowledgeService` structured logging
 - `PaymentMethodKnowledgeService` structured logging
 - `OrganizationService` structured logging
@@ -135,15 +138,16 @@
 - `SignInWithAppleCoordinator` structured logging
 
 ## Current Validation Baseline
-- Simulator build path: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_phase2_payload_compaction_dd -resultBundlePath /tmp/rheir_gateA_phase2_payload_compaction.xcresult clean build`
-- Focused startup-compaction parity path: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_phase2_payload_compaction_targeted_dd -resultBundlePath /tmp/rheir_phase2_payload_compaction_targeted.xcresult test -only-testing:RHEIRTests/SessionSupportTests -only-testing:RHEIRTests/ProjectStoreTests -only-testing:RHEIRTests/ProjectPersistencePayloadTests`
-- Latest focused startup-compaction parity result: `PASS` (`/tmp/rheir_phase2_payload_compaction_targeted.xcresult`, `12 tests in 3 suites`)
+- Simulator build path: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_phase2_legacy_payload_v2_dd -resultBundlePath /tmp/rheir_gateA_phase2_legacy_payload_v2.xcresult clean build`
+- Focused startup/file-compaction parity path: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_phase2_legacy_payload_targeted_dd -resultBundlePath /tmp/rheir_phase2_legacy_payload_targeted.xcresult test -only-testing:RHEIRTests/SessionSupportTests -only-testing:RHEIRTests/ProjectPersistencePayloadTests`
+- Latest focused startup/file-compaction parity result: `PASS` (`/tmp/rheir_phase2_legacy_payload_targeted.xcresult`, `11 tests in 2 suites`)
+- Device build/install baseline: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'id=00008140-0011492622E8801C' -derivedDataPath /tmp/rheir_phase2_device_verify_v2_dd -resultBundlePath /tmp/rheir_phase2_device_verify_v2_build.xcresult build` -> `PASS` with copied device payloads `/tmp/rheir_device_projects_after_fix_v2.json`, `/tmp/rheir_device_offline_projects_after_fix_v2.json`, and `/tmp/rheir_device_preferences_v2.plist`
 
 ## Known Residual Risks
 - Remaining raw `print(...)` statements are now limited to development-only seams such as `Shared/Services/Development/DevelopmentDataManager.swift`, `Shared/Services/StubServices.swift`, and `Shared/Services/PreviewAuthService.swift`.
-- Stable simulator and elevated CLI simulator paths are warning-clean for the active target; remaining release hardening now centers on device confirmation of the startup legacy-payload compaction plus broader deterministic coverage and runtime QA.
-- `RHEIRUITests` is now deterministic for signed-out, ready-state, organization-selection, project-selection, labor, company-admin, receipts-entry, manual-entry vendor-picker, manual-entry add-vendor, manual-entry payment-method-picker, manual-entry add-payment-method, manual-entry submission, saved receipt detail, receipt-detail action, persisted receipt-edit mutation, saved-receipt search/browse, category/filter drilldown, and `By Vendor` grouped-summary/expansion coverage; the next release-hardening slice after device confirmation is broader receipt workflow runtime QA.
+- Stable simulator and elevated CLI simulator paths are warning-clean for the active target, and device launch/file-state validation now shows compact `projects.json`, `offline_projects.json`, and prefs payloads; remaining release hardening centers on the exact manual device mutation rerun plus broader deterministic coverage and runtime QA.
+- `RHEIRUITests` is now deterministic for signed-out, ready-state, organization-selection, project-selection, labor, company-admin, receipts-entry, manual-entry vendor-picker, manual-entry add-vendor, manual-entry payment-method-picker, manual-entry add-payment-method, manual-entry submission, saved receipt detail, receipt-detail action, persisted receipt-edit mutation, saved-receipt search/browse, category/filter drilldown, and `By Vendor` grouped-summary/expansion coverage; the next release-hardening slice after the manual device mutation rerun is broader receipt workflow runtime QA.
 - `ProjectViewModel` is still oversized even after the extracted stores, though organization/project synchronization is now isolated behind `OrganizationProjectSyncStore`.
 - `CompanyStore` now lives in the compiled state layer rather than the settings view, but the broader company/project coordination flow still spans multiple UI files.
 - Direct in-sandbox CLI `xcodebuild` evidence remains less stable than elevated CLI or the MCP simulator path in the local CoreSimulator environment.
-- Physical-device build/signing is now working, but the previously failing `NSUserDefaults >= 4 MB` / CloudKit `record too large` project-update path still needs rerun confirmation on device after the startup compaction slice.
+- Physical-device build/signing is now working and launch/file-state compaction is validated, but the exact user-driven `NSUserDefaults >= 4 MB` / CloudKit `record too large` mutation path still needs a manual rerun with fresh logs.

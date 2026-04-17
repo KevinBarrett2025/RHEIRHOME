@@ -22,7 +22,16 @@ struct SelectionState: Codable, Equatable {
 
 struct LegacyProjectPayloadCompactionResult: Equatable {
     var compactedKeys = 0
+    var compactedFiles = 0
     var strippedInlineReceiptImages = 0
+    var reclaimedBytes = 0
+
+    mutating func merge(_ other: LegacyProjectPayloadCompactionResult) {
+        compactedKeys += other.compactedKeys
+        compactedFiles += other.compactedFiles
+        strippedInlineReceiptImages += other.strippedInlineReceiptImages
+        reclaimedBytes += other.reclaimedBytes
+    }
 }
 
 final class LocalCacheStore {
@@ -44,13 +53,24 @@ final class LocalCacheStore {
     }
 
     private let userDefaults: UserDefaults
+    private let fileManager: FileManager
+    private let documentsURL: URL?
 
-    init(userDefaults: UserDefaults = .standard) {
+    init(
+        userDefaults: UserDefaults = .standard,
+        fileManager: FileManager = .default,
+        documentsURL: URL? = nil
+    ) {
         self.userDefaults = userDefaults
-        let compactionResult = compactLegacyProjectPayloadsIfNeeded()
-        if compactionResult.compactedKeys > 0 {
+        self.fileManager = fileManager
+        self.documentsURL = documentsURL ?? fileManager.urls(for: .documentDirectory, in: .userDomainMask).first
+
+        var compactionResult = compactLegacyProjectPayloadsIfNeeded()
+        compactionResult.merge(compactLegacyProjectFilesIfNeeded())
+
+        if compactionResult.compactedKeys > 0 || compactionResult.compactedFiles > 0 {
             Logger.session.notice(
-                "Compacted legacy project payloads in local cache [keys=\(compactionResult.compactedKeys, privacy: .public) images=\(compactionResult.strippedInlineReceiptImages, privacy: .public)]"
+                "Compacted legacy project payloads before session restore [keys=\(compactionResult.compactedKeys, privacy: .public) files=\(compactionResult.compactedFiles, privacy: .public) images=\(compactionResult.strippedInlineReceiptImages, privacy: .public) reclaimedBytes=\(compactionResult.reclaimedBytes, privacy: .public)]"
             )
         }
         migrateLegacyStateIfNeeded()
@@ -183,28 +203,119 @@ final class LocalCacheStore {
 
         for key in candidateKeys.sorted() {
             guard let data = userDefaults.data(forKey: key),
-                  let projects = try? decoder.decode([Project].self, from: data) else {
+                  let compaction = compactedProjectPayloadData(from: data, encoder: encoder, decoder: decoder) else {
                 continue
             }
 
-            let strippedImages = projects.reduce(0) { count, project in
-                count + project.inlineReceiptImageCount
-            }
-            guard strippedImages > 0 else {
-                continue
-            }
-
-            let compactedProjects = projects.map(\.persistenceSafeCopy)
-            guard let compactedData = try? encoder.encode(compactedProjects) else {
-                continue
-            }
-
-            userDefaults.set(compactedData, forKey: key)
+            userDefaults.set(compaction.data, forKey: key)
             result.compactedKeys += 1
-            result.strippedInlineReceiptImages += strippedImages
+            result.strippedInlineReceiptImages += compaction.strippedInlinePayloads
+            result.reclaimedBytes += max(data.count - compaction.data.count, 0)
         }
 
         return result
+    }
+
+    @discardableResult
+    func compactLegacyProjectFilesIfNeeded() -> LegacyProjectPayloadCompactionResult {
+        guard let documentsURL else {
+            return LegacyProjectPayloadCompactionResult()
+        }
+
+        let candidateFiles = [
+            documentsURL.appendingPathComponent("projects.json"),
+            documentsURL.appendingPathComponent("offline_projects.json")
+        ]
+        let encoder = JSONEncoder()
+        let decoder = JSONDecoder()
+        var result = LegacyProjectPayloadCompactionResult()
+
+        for fileURL in candidateFiles where fileManager.fileExists(atPath: fileURL.path) {
+            guard let data = try? Data(contentsOf: fileURL),
+                  let compaction = compactedProjectPayloadData(from: data, encoder: encoder, decoder: decoder) else {
+                continue
+            }
+
+            do {
+                try compaction.data.write(to: fileURL, options: .atomic)
+            } catch {
+                continue
+            }
+
+            result.compactedFiles += 1
+            result.strippedInlineReceiptImages += compaction.strippedInlinePayloads
+            result.reclaimedBytes += max(data.count - compaction.data.count, 0)
+        }
+
+        return result
+    }
+
+    private func compactedProjectPayloadData(
+        from data: Data,
+        encoder: JSONEncoder,
+        decoder: JSONDecoder
+    ) -> (data: Data, strippedInlinePayloads: Int)? {
+        if let projects = try? decoder.decode([Project].self, from: data) {
+            let compactedProjects = projects.map(\.persistenceSafeCopy)
+            let strippedImages = projects.reduce(0) { count, project in
+                count + project.inlineReceiptImageCount
+            }
+
+            if let compactedData = try? encoder.encode(compactedProjects),
+               compactedData != data {
+                return (compactedData, strippedImages)
+            }
+        }
+
+        guard let jsonObject = try? JSONSerialization.jsonObject(with: data) else {
+            return nil
+        }
+
+        let stripped = Self.strippingLegacyInlinePayloads(from: jsonObject)
+        guard stripped.removedPayloads > 0,
+              JSONSerialization.isValidJSONObject(stripped.value),
+              let compactedData = try? JSONSerialization.data(withJSONObject: stripped.value),
+              compactedData != data else {
+            return nil
+        }
+
+        return (compactedData, stripped.removedPayloads)
+    }
+
+    private static func strippingLegacyInlinePayloads(from value: Any) -> (value: Any, removedPayloads: Int) {
+        if let array = value as? [Any] {
+            var removedPayloads = 0
+            let strippedArray = array.map { element -> Any in
+                let strippedElement = strippingLegacyInlinePayloads(from: element)
+                removedPayloads += strippedElement.removedPayloads
+                return strippedElement.value
+            }
+            return (strippedArray, removedPayloads)
+        }
+
+        if let dictionary = value as? [String: Any] {
+            var removedPayloads = 0
+            var strippedDictionary: [String: Any] = [:]
+
+            for (key, childValue) in dictionary {
+                if key == "receiptImageData" || key == "imageDatas" {
+                    if let payloads = childValue as? [Any] {
+                        removedPayloads += max(payloads.count, 1)
+                    } else {
+                        removedPayloads += 1
+                    }
+                    continue
+                }
+
+                let strippedChild = strippingLegacyInlinePayloads(from: childValue)
+                strippedDictionary[key] = strippedChild.value
+                removedPayloads += strippedChild.removedPayloads
+            }
+
+            return (strippedDictionary, removedPayloads)
+        }
+
+        return (value, 0)
     }
 
     private func migrateLegacyStateIfNeeded() {

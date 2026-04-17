@@ -71,7 +71,7 @@ Exit criteria: release candidate is validated on real hardware and ready for sub
 - Freeze scope and submit.
 
 ## Immediate Next Steps
-1. Re-run the previously failing device project update / scanned-receipt persistence flow now that serialized project payloads and startup legacy `UserDefaults` project blobs strip inline receipt image data.
-2. Continue broader selected-project receipt runtime QA once the device rerun is clean.
+1. Manually rerun the previously failing device project update / scanned-receipt persistence flow on the updated build and capture fresh logs; startup file compaction now validates on device, but the exact mutation path still needs confirmation.
+2. Continue broader selected-project receipt runtime QA once the manual device rerun is clean.
 3. Validate end-to-end contractor flows such as receipt OCR and AI analysis, labor logging, and vendor/payment-method updates.
 4. Expand focused parity as simulator and device seams stabilize.
