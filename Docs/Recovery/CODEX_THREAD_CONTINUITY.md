@@ -3,13 +3,13 @@
 ## Repo Truth
 - Repo Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Active Branch: `gm/rheir-hardening-phase1`
-- Thread Start SHA: `4cb0346029fc3950d7ebb9492736461aadd07463`
-- Last Commit At Thread Start: `4cb0346 Phase 2: harden scanned receipt persistence mutation path`
+- Thread Start SHA: `e2fe81823bcfb5a6e94f6645ef6200f62330fe19`
+- Last Commit At Thread Start: `e2fe818 Phase 2: harden receipt scanner first-scan lifecycle`
 
 ## Current Objective
-- Analyze the new real-device scanner failure captured in `/Users/kevinbarrett/Downloads/rheirlogs4.md`, where the first document scan destabilizes before the user can finish the flow.
-- Harden the VisionKit receipt-scanner lifecycle so document-camera results are processed only after the scanner sheet is fully dismissed and duplicate delegate callbacks are ignored.
-- Re-run focused parity and then manually validate that the first scanned-receipt attempt stays stable on device while the saved receipt still persists after leaving and returning.
+- Manually validate the new receipt-scanner queued-dismiss lifecycle on device after `rheirlogs4.md` showed the first document scan destabilizing before the user could finish the flow.
+- Confirm the first scanned-receipt attempt now stays stable on device while the saved scanned receipt still persists after leaving and returning.
+- If the device rerun is clean, continue broader selected-project receipt runtime QA on the real receipts surface.
 
 ## Current Working Set
 - Session flow now routes through `Shared/Views/Auth/AppSessionSupport.swift`.
@@ -182,6 +182,6 @@
 ## Next Required Action
 1. Preserve the repo-local STS docs and `SHIP_READINESS_CHECKLIST.md` as the current release-planning truth for this repository.
 2. Keep `Shared/Views/Auth/LoginView.swift`, `rheir_knowledge_database.json`, `RHEIRmemories.csv`, and `RheirLogo 1024x1024.png` out of the staged set for this checkpoint.
-3. Patch `Shared/Features/Receipts/ReceiptScannerView.swift` so the document scanner queues its result, dismisses through SwiftUI state, and only begins OCR/AI processing after the VisionKit sheet teardown finishes.
-4. Add focused lifecycle coverage for the new document-scanner result queue and duplicate-callback guard, then run the smallest deterministic parity plus Gate A.
-5. Manually rerun the real-device scanned-receipt flow on the updated build, verify the first scan no longer destabilizes, confirm the saved scanned receipt still persists after leaving and returning, and capture fresh logs for the exact mutation path.
+3. Manually rerun the real-device scanned-receipt flow on the updated build, verify the first scan no longer destabilizes, confirm the saved scanned receipt still persists after leaving and returning, and capture fresh logs for the exact mutation path.
+4. In the same device rerun, verify tax, discount, and receipt number are still editable before first save on the scanned-receipt review screen.
+5. If the manual device rerun is clean, continue broader selected-project receipt runtime QA as the next Phase 2 release-hardening seam.
