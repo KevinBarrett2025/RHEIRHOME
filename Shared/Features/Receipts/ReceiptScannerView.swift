@@ -5,6 +5,7 @@ import OSLog
 
 enum ReceiptScannerStep: Equatable {
     case info
+    case launcher
     case camera
     case processing
     case complete
@@ -55,7 +56,24 @@ final class DocumentScannerCompletionGate {
 struct ReceiptScannerPresentationState {
     var currentStep: ReceiptScannerStep = .info
     var showingDocumentScanner = false
+    private var hasCompletedInitialSetup = false
     private var deferredDocumentScanResult = DeferredScannerResult<ReceiptScannerDocumentResult>()
+
+    mutating func performInitialSetup(hideIntro: Bool, hasAIAccess: Bool) -> Bool {
+        guard !hasCompletedInitialSetup else {
+            return false
+        }
+
+        hasCompletedInitialSetup = true
+
+        if hideIntro && hasAIAccess {
+            beginDocumentScan()
+        } else {
+            returnToEntry(hideIntro: hideIntro)
+        }
+
+        return true
+    }
 
     mutating func beginDocumentScan() {
         currentStep = .camera
@@ -68,7 +86,6 @@ struct ReceiptScannerPresentationState {
             return false
         }
 
-        currentStep = .info
         showingDocumentScanner = false
         return true
     }
@@ -77,8 +94,8 @@ struct ReceiptScannerPresentationState {
         deferredDocumentScanResult.consume()
     }
 
-    mutating func returnToInfo() {
-        currentStep = .info
+    mutating func returnToEntry(hideIntro: Bool) {
+        currentStep = hideIntro ? .launcher : .info
         showingDocumentScanner = false
         deferredDocumentScanResult = DeferredScannerResult()
     }
@@ -113,8 +130,8 @@ struct ReceiptScannerView: View {
             if hasAIAccess {
                 // Subscribers get proper flow: Info → Camera → Processing → Manual Entry
                 switch scannerPresentation.currentStep {
-                case .info:
-                    infoPageView
+                case .info, .launcher:
+                    entryPageView
                 case .camera:
                     Color.clear // Camera shows via explicit state, not .onAppear side effects
                 case .processing:
@@ -153,7 +170,7 @@ struct ReceiptScannerView: View {
         }
         .alert("Scanning Error", isPresented: $showingError) {
             Button("OK") { 
-                scannerPresentation.returnToInfo()
+                returnToEntryState()
             }
             Button("Try Again") {
                 beginDocumentScan()
@@ -171,21 +188,23 @@ struct ReceiptScannerView: View {
         .onChange(of: showingAnalysisView) { _, isShowing in
             // If analysis view was dismissed but no receipt was saved, return to info
             if !isShowing && !receiptSaveCompleted && scannerPresentation.currentStep == .complete {
-                scannerPresentation.returnToInfo()
+                returnToEntryState()
             }
         }
         .onAppear {
-            setupInitialView()
-        }
-    }
-    
-    private func setupInitialView() {
-        receiptSaveCompleted = false
-        scannerPresentation.returnToInfo()
+            let performedInitialSetup = scannerPresentation.performInitialSetup(
+                hideIntro: hideIntro,
+                hasAIAccess: hasAIAccess
+            )
 
-        // Check if user has disabled intro - if so, go directly to camera
-        if hideIntro && hasAIAccess {
-            beginDocumentScan()
+            if performedInitialSetup {
+                receiptSaveCompleted = false
+                Logger.receiptWorkflow.info(
+                    "Receipt scanner initial setup completed [hideIntro=\(hideIntro, privacy: .public) aiAccess=\(hasAIAccess, privacy: .public)]."
+                )
+            } else {
+                Logger.receiptWorkflow.info("Receipt scanner reappeared after initial setup; preserving current scanner state.")
+            }
         }
     }
 
@@ -200,75 +219,98 @@ struct ReceiptScannerView: View {
         processingStep = ""
         scannerPresentation.beginDocumentScan()
     }
+
+    private func returnToEntryState() {
+        scannerPresentation.returnToEntry(hideIntro: hideIntro)
+    }
     
     @ViewBuilder
-    private var infoPageView: some View {
+    private var entryPageView: some View {
+        let showsIntro = scannerPresentation.currentStep == .info
+
         NavigationStack {
             ScrollView {
-                VStack(spacing: 32) {
+                VStack(spacing: showsIntro ? 32 : 24) {
                     Spacer()
-                    
-                    // AI Scanner Icon with pulse animation
-                    ZStack {
-                        Circle()
-                            .fill(Color.blue.opacity(0.2))
-                            .frame(width: 120, height: 120)
-                            .scaleEffect(1.2)
-                            .opacity(0.8)
-                            .animation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true), value: scannerPresentation.currentStep == .info)
-                        
-                        Image(systemName: "camera.viewfinder")
-                            .font(.system(size: 48))
-                            .foregroundColor(.blue)
-                    }
-                    
-                    VStack(spacing: 16) {
-                        Text("AI-Powered Receipt Scanner")
-                            .font(.title2)
-                            .fontWeight(.bold)
-                            .multilineTextAlignment(.center)
-                        
-                        Text("Get automatic categorization and data extraction from your receipt photos")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal)
-                    }
-                    
-                    // AI Features with icons
-                    VStack(spacing: 12) {
-                        Text("What This Scanner Does:")
-                            .font(.headline)
-                            .foregroundColor(.blue)
-                        
-                        VStack(spacing: 8) {
-                            aiFeatureRow("Vendor recognition", "building.2.fill")
-                            aiFeatureRow("Smart categorization", "tag.fill")
-                            aiFeatureRow("Payment detection", "creditcard.fill")
-                            aiFeatureRow("Item breakdown", "list.bullet.rectangle.fill")
-                            aiFeatureRow("Tax & discount extraction", "percent")
+
+                    if showsIntro {
+                        ZStack {
+                            Circle()
+                                .fill(Color.blue.opacity(0.2))
+                                .frame(width: 120, height: 120)
+                                .scaleEffect(1.2)
+                                .opacity(0.8)
+                                .animation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true), value: scannerPresentation.currentStep == .info)
+
+                            Image(systemName: "camera.viewfinder")
+                                .font(.system(size: 48))
+                                .foregroundColor(.blue)
                         }
-                    }
-                    .padding()
-                    .background(Color(.systemGray6))
-                    .cornerRadius(12)
-                    
-                    // Instructions
-                    VStack(spacing: 12) {
-                        Text("How to Get Best Results:")
-                            .font(.headline)
-                            .foregroundColor(.orange)
-                        
-                        VStack(alignment: .leading, spacing: 8) {
-                            instructionRow("1.", "Make sure receipt is well-lit")
-                            instructionRow("2.", "Keep receipt flat and in frame")
-                            instructionRow("3.", "Include all text and numbers")
-                            instructionRow("4.", "Avoid shadows and reflections")
+
+                        VStack(spacing: 16) {
+                            Text("AI-Powered Receipt Scanner")
+                                .font(.title2)
+                                .fontWeight(.bold)
+                                .multilineTextAlignment(.center)
+
+                            Text("Get automatic categorization and data extraction from your receipt photos")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal)
                         }
+
+                        VStack(spacing: 12) {
+                            Text("What This Scanner Does:")
+                                .font(.headline)
+                                .foregroundColor(.blue)
+
+                            VStack(spacing: 8) {
+                                aiFeatureRow("Vendor recognition", "building.2.fill")
+                                aiFeatureRow("Smart categorization", "tag.fill")
+                                aiFeatureRow("Payment detection", "creditcard.fill")
+                                aiFeatureRow("Item breakdown", "list.bullet.rectangle.fill")
+                                aiFeatureRow("Tax & discount extraction", "percent")
+                            }
+                        }
+                        .padding()
+                        .background(Color(.systemGray6))
+                        .cornerRadius(12)
+                        
+                        VStack(spacing: 12) {
+                            Text("How to Get Best Results:")
+                                .font(.headline)
+                                .foregroundColor(.orange)
+
+                            VStack(alignment: .leading, spacing: 8) {
+                                instructionRow("1.", "Make sure receipt is well-lit")
+                                instructionRow("2.", "Keep receipt flat and in frame")
+                                instructionRow("3.", "Include all text and numbers")
+                                instructionRow("4.", "Avoid shadows and reflections")
+                            }
+                        }
+                        .padding()
+                        .background(Color.orange.opacity(0.1))
+                        .cornerRadius(12)
+                    } else {
+                        VStack(spacing: 16) {
+                            Image(systemName: "camera.viewfinder")
+                                .font(.system(size: 42))
+                                .foregroundColor(.blue)
+
+                            Text("Receipt Scanner")
+                                .font(.title2)
+                                .fontWeight(.bold)
+                                .multilineTextAlignment(.center)
+
+                            Text("Scan another receipt or import a photo without reopening the full onboarding guide.")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal)
+                        }
+                        .padding(.top, 20)
                     }
-                    .padding()
-                    .background(Color.orange.opacity(0.1))
-                    .cornerRadius(12)
                     
                     Spacer()
                 }
@@ -486,7 +528,7 @@ struct ReceiptScannerView: View {
                 }
                 
                 Button("Cancel") {
-                    scannerPresentation.returnToInfo()
+                    returnToEntryState()
                     isProcessing = false
                 }
                 .font(.subheadline)
@@ -521,7 +563,7 @@ struct ReceiptScannerView: View {
                 Logger.receiptWorkflow.info(
                     "Receipt scanner document sheet dismissed without a queued result; returning to intro."
                 )
-                scannerPresentation.returnToInfo()
+                returnToEntryState()
             }
             return
         }
@@ -537,14 +579,14 @@ struct ReceiptScannerView: View {
             if let firstImage = images.first {
                 handleImageSelection(firstImage)
             } else {
-                scannerPresentation.returnToInfo()
+                returnToEntryState()
                 errorMessage = "No image captured"
                 showingError = true
             }
         case .cancelled:
-            scannerPresentation.returnToInfo()
+            returnToEntryState()
         case .failure(let error):
-            scannerPresentation.returnToInfo()
+            returnToEntryState()
             errorMessage = error.localizedDescription
             showingError = true
         }
@@ -625,7 +667,7 @@ struct ReceiptScannerView: View {
             } catch {
                 await MainActor.run {
                     isProcessing = false
-                    scannerPresentation.returnToInfo()
+                    returnToEntryState()
                     
                     if let receiptError = error as? ReceiptAnalysisError {
                         errorMessage = receiptError.localizedDescription

@@ -1476,7 +1476,7 @@ struct ReceiptScannerLifecycleTests {
         #expect(presentationState.currentStep == .camera)
         #expect(presentationState.showingDocumentScanner == true)
         #expect(presentationState.queueDocumentResult(.cancelled) == true)
-        #expect(presentationState.currentStep == .info)
+        #expect(presentationState.currentStep == .camera)
         #expect(presentationState.showingDocumentScanner == false)
         #expect(presentationState.queueDocumentResult(.cancelled) == false)
 
@@ -1489,15 +1489,15 @@ struct ReceiptScannerLifecycleTests {
     }
 
     @Test
-    func presentationStateReturnToInfoClearsQueuedScannerResult() {
+    func presentationStateReturnToEntryClearsQueuedScannerResult() {
         var presentationState = ReceiptScannerPresentationState()
 
         presentationState.beginDocumentScan()
         #expect(presentationState.queueDocumentResult(.cancelled) == true)
 
-        presentationState.returnToInfo()
+        presentationState.returnToEntry(hideIntro: true)
 
-        #expect(presentationState.currentStep == .info)
+        #expect(presentationState.currentStep == .launcher)
         #expect(presentationState.showingDocumentScanner == false)
 
         switch presentationState.consumeQueuedDocumentResult() {
@@ -1506,5 +1506,20 @@ struct ReceiptScannerLifecycleTests {
         default:
             Issue.record("Expected returning to intro to clear any pending scanner result.")
         }
+    }
+
+    @Test
+    func initialSetupOnlyAutoStartsScannerOnceWhenIntroHidden() {
+        var presentationState = ReceiptScannerPresentationState()
+
+        #expect(presentationState.performInitialSetup(hideIntro: true, hasAIAccess: true) == true)
+        #expect(presentationState.currentStep == .camera)
+        #expect(presentationState.showingDocumentScanner == true)
+
+        presentationState.returnToEntry(hideIntro: true)
+
+        #expect(presentationState.performInitialSetup(hideIntro: true, hasAIAccess: true) == false)
+        #expect(presentationState.currentStep == .launcher)
+        #expect(presentationState.showingDocumentScanner == false)
     }
 }

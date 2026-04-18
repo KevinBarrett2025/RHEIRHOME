@@ -3,13 +3,13 @@
 ## Repo Truth
 - Repo Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Active Branch: `gm/rheir-hardening-phase1`
-- Thread Start SHA: `a6b0b2a699c1993aaea41bf6333de76f3302c00a`
-- Last Commit At Thread Start: `a6b0b2a Phase 2: reconcile receipt scanner continuity docs (docs only)`
+- Thread Start SHA: `17a385d33a00ce0a4df13c5f0aebc7707adc62b7`
+- Last Commit At Thread Start: `17a385d Phase 2: harden receipt scanner cancellation lifecycle`
 
 ## Current Objective
-- Validate the new scanner-cancellation state machine after `rheirlogs5.md` showed the camera re-presenting after capture and scanner cancel callbacks surfacing as user-visible errors.
-- Confirm the updated `ReceiptScannerView` no longer relaunches VisionKit from `.camera` side effects and no longer treats document-scanner cancellation as a user-facing failure.
-- Manually rerun the real-device scanned-receipt flow to confirm first-scan stability, clean teardown, and saved-receipt persistence.
+- Validate the receipt scanner launch-state fix after `rheirlogs7.md` showed a second scanner session still being presented after the first successful capture.
+- Confirm repeated `ReceiptScannerView` appearance callbacks no longer re-run initial scanner setup, and ensure “Don't show again” now returns to a compact non-onboarding launcher instead of the full intro prompt.
+- Re-run the real-device scanned-receipt flow on the updated build to confirm the camera no longer reopens after the first scan and the saved receipt still persists cleanly.
 
 ## Current Working Set
 - Session flow now routes through `Shared/Views/Auth/AppSessionSupport.swift`.
@@ -103,8 +103,8 @@
 - `Shared/Features/TeamMembers/EnhancedTeamMemberDetailView.swift` now uses structured `Logger.teamMember` calls instead of raw `print(...)` tracing for team-member detail save events.
 - `Shared/Features/Tasks/TaskCreateEditView.swift` now uses structured `Logger.project` calls instead of raw `print(...)` tracing for task-save events.
 - `Shared/Features/Receipts/ReceiptScannerCoordinator.swift` now uses structured `Logger.receiptWorkflow` calls instead of raw `print(...)` tracing for legacy document-camera failure events.
-- `Shared/Features/Receipts/ReceiptScannerView.swift` now drives VisionKit presentation through explicit scanner state, queues terminal scanner results until dismissal completes, and treats document-scanner cancellation as a silent return-to-intro path.
-- `RHEIRTests.swift` now includes focused presentation-state coverage that proves queued scanner cancellation does not reopen the sheet and that returning to intro clears pending scanner results.
+- `Shared/Features/Receipts/ReceiptScannerView.swift` now performs one-time scanner initialization, preserves scanner state across repeated view appearances, and routes hidden-intro returns through a compact launcher state instead of reopening the onboarding prompt.
+- `RHEIRTests.swift` now includes focused presentation-state coverage that proves queued scanner cancellation does not reopen the sheet, returning to entry clears pending scanner results, and repeated hidden-intro setup does not auto-start a second scanner session.
 - `Shared/Features/Receipts/ReceiptEditView.swift` now uses structured `Logger.receiptWorkflow` calls instead of raw `print(...)` tracing for receipt-update save events.
 - `Shared/Features/Receipts/ReceiptDetailView.swift` now uses structured `Logger.receiptWorkflow` calls instead of raw `print(...)` tracing for receipt-delete completion events.
 - `Shared/Features/Receipts/QuickVendorCreateView.swift` no longer emits preview-only console tracing in its preview closure.
@@ -184,6 +184,6 @@
 ## Next Required Action
 1. Preserve the repo-local STS docs and `SHIP_READINESS_CHECKLIST.md` as the current release-planning truth for this repository.
 2. Keep `Shared/Views/Auth/LoginView.swift`, `rheir_knowledge_database.json`, `RHEIRmemories.csv`, and `RheirLogo 1024x1024.png` out of the staged set for this checkpoint.
-3. Manually rerun the real-device scanned-receipt flow on the updated build, verify the camera does not reopen after the first capture, verify cancel teardown no longer surfaces scanner errors, confirm the saved scanned receipt still persists after leaving and returning, and capture fresh logs for the exact mutation path.
-4. In the same device rerun, verify tax, discount, and receipt number remain editable before first save on the scanned-receipt review screen.
-5. If the manual device rerun is clean, continue broader selected-project receipt runtime QA as the next Phase 2 release-hardening seam.
+3. Manually rerun the real-device scanned-receipt flow on the updated build and verify the camera does not reopen after the first capture.
+4. In the same device rerun, verify hidden-intro users return to the compact launcher instead of the onboarding prompt after scanner dismissal, and verify cancel teardown no longer surfaces scanner errors.
+5. Confirm the saved scanned receipt still persists after leaving and returning, then capture fresh logs for the exact mutation path before continuing broader receipt runtime QA.
