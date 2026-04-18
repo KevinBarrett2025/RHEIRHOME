@@ -1440,3 +1440,30 @@ struct ReceiptProjectStoreTests {
         #expect(resolution == nil)
     }
 }
+
+struct ReceiptScannerLifecycleTests {
+
+    @Test
+    func deferredScannerResultQueuesOneValueUntilConsumed() {
+        var deferredResult = DeferredScannerResult<Int>()
+
+        #expect(deferredResult.hasPendingValue == false)
+        #expect(deferredResult.queue(7) == true)
+        #expect(deferredResult.hasPendingValue == true)
+        #expect(deferredResult.queue(9) == false)
+        #expect(deferredResult.consume() == 7)
+        #expect(deferredResult.hasPendingValue == false)
+        #expect(deferredResult.queue(11) == true)
+        #expect(deferredResult.consume() == 11)
+    }
+
+    @Test
+    func documentScannerCompletionGateOnlyExecutesFirstCallback() {
+        let gate = DocumentScannerCompletionGate()
+        var callbackCount = 0
+
+        #expect(gate.perform { callbackCount += 1 } == true)
+        #expect(gate.perform { callbackCount += 1 } == false)
+        #expect(callbackCount == 1)
+    }
+}
