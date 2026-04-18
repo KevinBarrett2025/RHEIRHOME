@@ -173,13 +173,49 @@ extension Project {
         }
     }
 
-    var persistenceSafeCopy: Project {
-        guard inlineReceiptImageCount > 0 else {
+    var duplicateReceiptCount: Int {
+        receipts.count - Set(receipts.map(\.id)).count
+    }
+
+    var normalizedReceiptCopy: Project {
+        guard duplicateReceiptCount > 0 else {
             return self
         }
 
+        var seenReceiptIDs: Set<String> = []
+        var normalizedReceipts: [Receipt] = []
+        normalizedReceipts.reserveCapacity(receipts.count)
+
+        // Preserve the most recent receipt mutation when duplicate IDs slip into state.
+        for receipt in receipts.reversed() where seenReceiptIDs.insert(receipt.id).inserted {
+            normalizedReceipts.append(receipt)
+        }
+
         var copy = self
-        copy.receipts = receipts.map(\.persistenceSafeCopy)
+        copy.receipts = Array(normalizedReceipts.reversed())
+        return copy
+    }
+
+    func upsertingReceipt(_ receipt: Receipt) -> Project {
+        var copy = normalizedReceiptCopy
+
+        if let index = copy.receipts.firstIndex(where: { $0.id == receipt.id }) {
+            copy.receipts[index] = receipt
+        } else {
+            copy.receipts.append(receipt)
+        }
+
+        return copy
+    }
+
+    var persistenceSafeCopy: Project {
+        var copy = normalizedReceiptCopy
+
+        guard copy.inlineReceiptImageCount > 0 else {
+            return copy
+        }
+
+        copy.receipts = copy.receipts.map(\.persistenceSafeCopy)
         return copy
     }
 

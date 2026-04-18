@@ -3,13 +3,13 @@
 ## Repo Truth
 - Repo Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Active Branch: `gm/rheir-hardening-phase1`
-- Thread Start SHA: `f9cb9db09717db1233cfe872f8183e43d25e4703`
-- Last Commit At Thread Start: `f9cb9db Phase 2: compact legacy project payloads before session restore`
+- Thread Start SHA: `a496e9edc8bb3260d736897c2a9480547183d2c7`
+- Last Commit At Thread Start: `a496e9e Phase 2: compact legacy project files before session restore`
 
 ## Current Objective
-- Expand startup compaction so legacy project payload cleanup also rewrites undecodable raw JSON and the on-disk `Documents/projects.json` / `Documents/offline_projects.json` files before session restore.
-- Keep the existing oversized project persistence hardening in place for stored project snapshots, CloudKit payloads, and offline storage while verifying the new startup/file compaction path through focused parity and device inspection.
-- Hand off the exact user-driven real-device project update / scanned-receipt mutation rerun as the next manual validation step once this slice lands.
+- Manually validate the newly hardened real-device scanned-receipt persistence path now that repeated project saves perform a CloudKit upsert instead of a create-only save.
+- Confirm the selected-project receipts surface stays stable after leaving and returning, with duplicate receipt IDs normalized before persistence and rendering.
+- Confirm tax, discount, and receipt number are editable in the initial scanned-receipt review flow before the first save.
 
 ## Current Working Set
 - Session flow now routes through `Shared/Views/Auth/AppSessionSupport.swift`.
@@ -38,6 +38,11 @@
 - `Shared/Features/Receipts/ReceiptsView.swift` now exposes selected-state accessibility values on the category filter controls so deterministic drilldown assertions can stay on the real receipts surface.
 - `RHEIRUITests.swift` now covers saved-receipt search/browse behavior on top of the committed persisted-edit mutation path.
 - `RHEIRUITests.swift` now also covers selected-project receipt category/filter drilldown and restoration behavior on top of the committed saved-receipt browse/search path.
+- `Project.swift` now normalizes duplicate receipt IDs and exposes receipt upsert helpers so selected-project receipt state can drop stale duplicate entries before persistence and rendering.
+- `ProjectViewModel.swift`, `ProjectViewModel+Receipts.swift`, `ReceiptEditView.swift`, and `ReceiptsView.swift` now route selected-project receipt saves and list rendering through duplicate-safe receipt normalization.
+- `CloudKitProjectRepository` now fetches existing project and project-assignment records before saving so repeated project mutations update the existing CloudKit records instead of colliding on insert.
+- `ScannedReceiptEntryView.swift` now exposes editable tax, discount, and receipt-number fields before the first save.
+- `RHEIRTests.swift` now also covers duplicate receipt normalization plus CloudKit project/assignment upsert behavior, and the persisted-edit UI smoke remains green on the selected-project receipts surface.
 - Active company/project UI assignment, team-member, organization-edit, payment-method, and team-management views now use structured `Logger` calls instead of raw `print(...)` tracing.
 - Debug/support settings views and data-management helpers now use structured `Logger.settingsSupport` calls instead of raw `print(...)` tracing.
 - `HiddenDebugPanelView.swift` now uses structured `Logger.settingsSupport` calls instead of raw `print(...)` tracing.
@@ -163,6 +168,9 @@
   - Gate A CLI clean build `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_phase2_legacy_payload_v2_dd -resultBundlePath /tmp/rheir_gateA_phase2_legacy_payload_v2.xcresult clean build`: PASS (`/tmp/rheir_gateA_phase2_legacy_payload_v2.xcresult`)
   - Device build/install validation `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'id=00008140-0011492622E8801C' -derivedDataPath /tmp/rheir_phase2_device_verify_v2_dd -resultBundlePath /tmp/rheir_phase2_device_verify_v2_build.xcresult build`: PASS (`/tmp/rheir_phase2_device_verify_v2_build.xcresult`), with copied device payloads showing compact `/tmp/rheir_device_projects_after_fix_v2.json` (`2947` bytes, no `imageDatas`), `/tmp/rheir_device_offline_projects_after_fix_v2.json` (`3437` bytes, no `receiptImageData`), and `/tmp/rheir_device_preferences_v2.plist` (`11701` bytes with compact org-scoped project prefs)
   - `/Users/kevinbarrett/Downloads/rheirlogs1.md` captured the original oversized `NSUserDefaults` and CloudKit `record too large` failures, and `/Users/kevinbarrett/Downloads/rheirlogs2.md` proved the prior snapshot-strip path ran while the launch-time prefs warning still remained, motivating this raw-JSON/on-disk compaction slice
+  - Focused receipt-persistence parity `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_phase2_receipt_persist_targeted_dd -resultBundlePath /tmp/rheir_phase2_receipt_persist_targeted.xcresult test -only-testing:RHEIRTests/ProjectPersistencePayloadTests -only-testing:RHEIRTests/CloudKitProjectRepositoryTests -only-testing:RHEIRTests/OrganizationProjectSyncStoreTests`: PASS (`/tmp/rheir_phase2_receipt_persist_targeted.xcresult`, `8 tests in 3 suites`)
+  - Focused persisted-edit UI smoke `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_phase2_receipt_edit_ui_dd -resultBundlePath /tmp/rheir_phase2_receipt_edit_ui.xcresult test -only-testing:RHEIRUITests/RHEIRUITests/testSavedReceiptDetailPersistsEdits`: PASS (`/tmp/rheir_phase2_receipt_edit_ui.xcresult`, `1 UI test`)
+  - Gate A CLI clean build `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_phase2_receipt_persist_dd -resultBundlePath /tmp/rheir_gateA_phase2_receipt_persist.xcresult clean build`: PASS (`/tmp/rheir_gateA_phase2_receipt_persist.xcresult`)
   - Direct `xcodebuild` CLI evidence remains less stable than the MCP simulator path in the current local CoreSimulator environment
 
 ## Known Constraints
@@ -174,5 +182,5 @@
 ## Next Required Action
 1. Preserve the repo-local STS docs and `SHIP_READINESS_CHECKLIST.md` as the current release-planning truth for this repository.
 2. Keep `Shared/Views/Auth/LoginView.swift`, `rheir_knowledge_database.json`, `RHEIRmemories.csv`, and `RheirLogo 1024x1024.png` out of the staged set for this checkpoint.
-3. Manually rerun the previously failing real-device project update / scanned-receipt persistence flow on the updated build and capture fresh logs so the launch-time `NSUserDefaults >= 4 MB` warning and CloudKit `record too large` failure can be checked against the exact mutation path.
-4. If the manual device rerun is clean, continue broader selected-project receipt runtime QA and reconcile the next checkpoint in the repo-local STS docs.
+3. Manually rerun the real-device scanned-receipt persistence flow on the updated build, leave and return to the receipts surface, and verify the saved scanned receipt still persists without the historical CloudKit collision.
+4. In the same device rerun, verify tax, discount, and receipt number can be corrected before the first save, then capture fresh logs for the exact mutation path.

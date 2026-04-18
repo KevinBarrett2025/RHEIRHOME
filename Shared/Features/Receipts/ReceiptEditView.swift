@@ -169,9 +169,9 @@ struct ReceiptEditView: View {
         
         // Update in project
         if let project = projectVM.selectedProject {
-            var updatedProject = project
-            if let index = updatedProject.receipts.firstIndex(where: { $0.id == receipt.id }) {
-                updatedProject.receipts[index] = updatedReceipt
+            var updatedProject = project.normalizedReceiptCopy
+            if updatedProject.receipts.contains(where: { $0.id == receipt.id }) {
+                updatedProject = updatedProject.upsertingReceipt(updatedReceipt)
                 
                 Task {
                     await projectVM.updateProject(updatedProject)

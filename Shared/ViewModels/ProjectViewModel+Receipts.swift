@@ -144,8 +144,8 @@ extension ProjectViewModel {
             Logger.receiptWorkflow.info("Auto-assigned team member from receipt add.")
         }
         
-        // Add receipt to project
-        organizationProjects[idx].receipts.append(updatedReceipt)
+        // Add or replace the receipt so duplicate IDs do not poison the selected-project list.
+        organizationProjects[idx] = organizationProjects[idx].upsertingReceipt(updatedReceipt)
         selectedProject = organizationProjects[idx]
         invalidateReceiptCache() // Invalidate cache when receipts change
         
@@ -169,12 +169,14 @@ extension ProjectViewModel {
     /// Update an existing receipt in the current project with Enterprise Intelligence integration.
     func updateReceipt(_ receipt: Receipt) {
         guard let sel  = selectedProject,
-              let pIdx = organizationProjects.firstIndex(where: { $0.id == sel.id }),
-              let rIdx = organizationProjects[pIdx].receipts.firstIndex(where: { $0.id == receipt.id })
+              let pIdx = organizationProjects.firstIndex(where: { $0.id == sel.id })
         else { return }
+
+        var currentProject = organizationProjects[pIdx].normalizedReceiptCopy
+        guard let rIdx = currentProject.receipts.firstIndex(where: { $0.id == receipt.id }) else { return }
         
         // Get old receipt for spending adjustment
-        let oldReceipt = organizationProjects[pIdx].receipts[rIdx]
+        let oldReceipt = currentProject.receipts[rIdx]
         
         // Create or find vendor
         let vendor = vendorService.findOrCreateVendor(
@@ -195,8 +197,8 @@ extension ProjectViewModel {
         
         // CRITICAL FIX: Auto-assign team member to project when they update a receipt
         if let teamMemberID = updatedReceipt.teamMemberID,
-           !organizationProjects[pIdx].assignedTeamMemberIDs.contains(teamMemberID.uuidString) {
-            organizationProjects[pIdx].assignTeamMember(teamMemberID.uuidString)
+           !currentProject.assignedTeamMemberIDs.contains(teamMemberID.uuidString) {
+            currentProject.assignTeamMember(teamMemberID.uuidString)
             Logger.receiptWorkflow.info("Auto-assigned team member from receipt update.")
         }
         
@@ -216,8 +218,9 @@ extension ProjectViewModel {
         paymentMethodService.updatePaymentMethodSpending(paymentMethodID: paymentMethod.id, amount: newAmount)
         
         // Update receipt in project
-        organizationProjects[pIdx].receipts[rIdx] = updatedReceipt
-        selectedProject = organizationProjects[pIdx]
+        currentProject = currentProject.upsertingReceipt(updatedReceipt)
+        organizationProjects[pIdx] = currentProject
+        selectedProject = currentProject
         invalidateReceiptCache() // Invalidate cache when receipts change
         
         // 🧠 ENTERPRISE INTELLIGENCE: Process updated receipt for organizational learning

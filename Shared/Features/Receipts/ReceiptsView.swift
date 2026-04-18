@@ -42,7 +42,7 @@ struct ReceiptsView: View {
     private var receipts: [Receipt] {
         guard let project = projectVM.selectedProject else { return [] }
         
-        var filteredReceipts = project.receipts
+        var filteredReceipts = project.normalizedReceiptCopy.receipts
         
         // Apply search filter
         if !searchText.isEmpty {

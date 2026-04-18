@@ -1,4 +1,5 @@
 import Foundation
+import CloudKit
 import Testing
 @testable import RHEIR
 
@@ -21,6 +22,67 @@ private final class RecordingProjectRepository: ProjectRepository {
 
     func loadProjectAssignments(organizationID: String) async -> [String] {
         savedAssignmentsByOrganization[organizationID] ?? []
+    }
+}
+
+private actor RecordingCloudKitProjectDatabase: CloudKitProjectDatabase {
+    enum Failure: Error {
+        case expectedFetchBeforeSave(String)
+    }
+
+    private var recordsByName: [String: CKRecord]
+    private var fetchedRecordNames: [String] = []
+    private var savedRecordNames: [String] = []
+    private let requireFetchBeforeUpdatingExistingRecords: Bool
+
+    init(
+        existingRecords: [CKRecord] = [],
+        requireFetchBeforeUpdatingExistingRecords: Bool = false
+    ) {
+        self.recordsByName = Dictionary(
+            uniqueKeysWithValues: existingRecords.map { ($0.recordID.recordName, $0) }
+        )
+        self.requireFetchBeforeUpdatingExistingRecords = requireFetchBeforeUpdatingExistingRecords
+    }
+
+    func records(matching query: CKQuery) async throws -> [CKRecord] {
+        Array(recordsByName.values)
+    }
+
+    func record(for recordID: CKRecord.ID) async throws -> CKRecord {
+        fetchedRecordNames.append(recordID.recordName)
+
+        guard let record = recordsByName[recordID.recordName] else {
+            throw CKError(.unknownItem)
+        }
+
+        return record
+    }
+
+    func save(_ record: CKRecord) async throws -> CKRecord {
+        let recordName = record.recordID.recordName
+
+        if requireFetchBeforeUpdatingExistingRecords,
+           recordsByName[recordName] != nil,
+           !fetchedRecordNames.contains(recordName) {
+            throw Failure.expectedFetchBeforeSave(recordName)
+        }
+
+        recordsByName[recordName] = record
+        savedRecordNames.append(recordName)
+        return record
+    }
+
+    func fetchedNames() -> [String] {
+        fetchedRecordNames
+    }
+
+    func savedNames() -> [String] {
+        savedRecordNames
+    }
+
+    func record(named recordName: String) -> CKRecord? {
+        recordsByName[recordName]
     }
 }
 
@@ -533,6 +595,100 @@ struct ProjectPersistencePayloadTests {
         #expect(decodedProjects.first?.receipts.first?.vendor == "North Shore Supply")
         #expect(decodedProjects.first?.receipts.first?.receiptImageData == nil)
         #expect(decodedProjects.first?.receipts.first?.receiptImageName == nil)
+    }
+
+    @Test
+    func normalizesDuplicateReceiptsBeforePersistence() throws {
+        let duplicateReceiptID = UUID().uuidString
+        var olderReceipt = Receipt(
+            id: duplicateReceiptID,
+            vendor: "North Shore Supply",
+            date: .now,
+            amount: 120.25
+        )
+        var newerReceipt = olderReceipt
+        newerReceipt.amount = 236.24
+        newerReceipt.notes = "Updated amount"
+        olderReceipt.setReceiptImageData(Data(repeating: 0xAB, count: 512))
+
+        var project = Project(
+            name: "Duplicate Receipt Payload",
+            client: "Client A",
+            totalBudget: 90000,
+            startDate: .now,
+            endDate: .now.addingTimeInterval(86400),
+            organizationID: "org-duplicate-receipts"
+        )
+        project.receipts = [olderReceipt, newerReceipt]
+
+        let payload = try JSONEncoder().encode(project.persistenceSafeCopy)
+        let decodedProject = try JSONDecoder().decode(Project.self, from: payload)
+
+        #expect(decodedProject.receipts.count == 1)
+        #expect(decodedProject.receipts.first?.id == duplicateReceiptID)
+        #expect(decodedProject.receipts.first?.amount == 236.24)
+        #expect(decodedProject.receipts.first?.notes == "Updated amount")
+        #expect(decodedProject.receipts.first?.receiptImageData == nil)
+    }
+}
+
+struct CloudKitProjectRepositoryTests {
+
+    @Test
+    func fetchesExistingProjectRecordBeforeSavingUpdate() async throws {
+        let organizationID = "org-cloudkit-update"
+        let projectID = UUID()
+        let recordID = CKRecord.ID(recordName: "project_\(projectID.uuidString)")
+        let existingRecord = CKRecord(recordType: "Project", recordID: recordID)
+        existingRecord["organizationID"] = organizationID as CKRecordValue
+        existingRecord["name"] = "Old Name" as CKRecordValue
+
+        let database = RecordingCloudKitProjectDatabase(
+            existingRecords: [existingRecord],
+            requireFetchBeforeUpdatingExistingRecords: true
+        )
+        let repository = CloudKitProjectRepository(database: database)
+        let project = Project(
+            id: projectID,
+            name: "Updated Name",
+            client: "Client A",
+            totalBudget: 120000,
+            startDate: .now,
+            endDate: .now.addingTimeInterval(86400),
+            organizationID: organizationID
+        )
+
+        try await repository.saveProject(project, organizationID: organizationID)
+
+        let savedRecord = await database.record(named: recordID.recordName)
+        #expect(await database.fetchedNames() == [recordID.recordName])
+        #expect(await database.savedNames() == [recordID.recordName])
+        #expect(savedRecord?["name"] as? String == "Updated Name")
+    }
+
+    @Test
+    func fetchesExistingAssignmentRecordBeforeSavingUpdate() async throws {
+        let organizationID = "org-cloudkit-assignments"
+        let recordID = CKRecord.ID(recordName: "project_assignments_\(organizationID)")
+        let existingRecord = CKRecord(recordType: "ProjectAssignments", recordID: recordID)
+        existingRecord["organizationID"] = organizationID as CKRecordValue
+        existingRecord["assignedProjectIDs"] = ["existing-project"] as CKRecordValue
+
+        let database = RecordingCloudKitProjectDatabase(
+            existingRecords: [existingRecord],
+            requireFetchBeforeUpdatingExistingRecords: true
+        )
+        let repository = CloudKitProjectRepository(database: database)
+
+        try await repository.saveProjectAssignments(
+            ["existing-project", "new-project"],
+            organizationID: organizationID
+        )
+
+        let savedRecord = await database.record(named: recordID.recordName)
+        #expect(await database.fetchedNames() == [recordID.recordName])
+        #expect(await database.savedNames() == [recordID.recordName])
+        #expect(savedRecord?["assignedProjectIDs"] as? [String] == ["existing-project", "new-project"])
     }
 }
 

@@ -257,24 +257,35 @@ struct ScannedReceiptEntryView: View {
                     .keyboardType(.decimalPad)
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 100)
+                    .accessibilityIdentifier("receipt-scan-amount")
             }
             
-            if taxAmount > 0 {
-                HStack {
-                    Text("Tax:")
-                    Spacer()
-                    Text(taxAmount.formatAsCurrency())
-                        .foregroundColor(.secondary)
-                }
+            HStack {
+                Text("Tax:")
+                Spacer()
+                TextField(
+                    "0.00",
+                    value: $taxAmount,
+                    format: .number.precision(.fractionLength(2))
+                )
+                .keyboardType(.decimalPad)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 100)
+                .accessibilityIdentifier("receipt-scan-tax")
             }
             
-            if discountAmount > 0 {
-                HStack {
-                    Text("Discount:")
-                    Spacer()
-                    Text("-\(discountAmount.formatAsCurrency())")
-                        .foregroundColor(.green)
-                }
+            HStack {
+                Text("Discount:")
+                Spacer()
+                TextField(
+                    "0.00",
+                    value: $discountAmount,
+                    format: .number.precision(.fractionLength(2))
+                )
+                .keyboardType(.decimalPad)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 100)
+                .accessibilityIdentifier("receipt-scan-discount")
             }
             
             DatePicker("Date", selection: $date, displayedComponents: [.date])
@@ -299,13 +310,14 @@ struct ScannedReceiptEntryView: View {
                 .padding(.leading, 4)
             }
             
-            if !receiptNumber.isEmpty {
-                HStack {
-                    Text("Receipt #:")
-                    Spacer()
-                    Text(receiptNumber)
-                        .foregroundColor(.secondary)
-                }
+            HStack {
+                Text("Receipt #:")
+                Spacer()
+                TextField("Optional", text: $receiptNumber)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 160)
+                    .multilineTextAlignment(.trailing)
+                    .accessibilityIdentifier("receipt-scan-receipt-number")
             }
             
             Toggle("Return", isOn: $isReturn)

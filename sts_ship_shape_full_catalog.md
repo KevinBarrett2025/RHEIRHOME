@@ -130,6 +130,12 @@
 - `LocalCacheStore` raw legacy JSON / on-disk project-file compaction fallback
 - `OfflineStorageManager` persistence-safe offline project payload writes
 - `RHEIRTests` raw legacy `imageDatas` and on-disk/offline project-file compaction coverage
+- `Project` duplicate receipt normalization and receipt upsert helpers
+- `CloudKitProjectRepository` fetch-or-save upsert behavior for project and assignment records
+- `ReceiptsView` selected-project receipt-list duplicate-ID hardening
+- `ReceiptEditView` duplicate-safe saved-receipt edit persistence path
+- `ScannedReceiptEntryView` pre-save tax/discount/receipt-number editing
+- `RHEIRTests` duplicate receipt normalization and CloudKit upsert coverage
 - `VendorKnowledgeService` structured logging
 - `PaymentMethodKnowledgeService` structured logging
 - `OrganizationService` structured logging
@@ -138,9 +144,11 @@
 - `SignInWithAppleCoordinator` structured logging
 
 ## Current Validation Baseline
-- Simulator build path: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_phase2_legacy_payload_v2_dd -resultBundlePath /tmp/rheir_gateA_phase2_legacy_payload_v2.xcresult clean build`
-- Focused startup/file-compaction parity path: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_phase2_legacy_payload_targeted_dd -resultBundlePath /tmp/rheir_phase2_legacy_payload_targeted.xcresult test -only-testing:RHEIRTests/SessionSupportTests -only-testing:RHEIRTests/ProjectPersistencePayloadTests`
-- Latest focused startup/file-compaction parity result: `PASS` (`/tmp/rheir_phase2_legacy_payload_targeted.xcresult`, `11 tests in 2 suites`)
+- Simulator build path: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_phase2_receipt_persist_dd -resultBundlePath /tmp/rheir_gateA_phase2_receipt_persist.xcresult clean build`
+- Focused receipt-persistence parity path: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_phase2_receipt_persist_targeted_dd -resultBundlePath /tmp/rheir_phase2_receipt_persist_targeted.xcresult test -only-testing:RHEIRTests/ProjectPersistencePayloadTests -only-testing:RHEIRTests/CloudKitProjectRepositoryTests -only-testing:RHEIRTests/OrganizationProjectSyncStoreTests`
+- Latest focused receipt-persistence parity result: `PASS` (`/tmp/rheir_phase2_receipt_persist_targeted.xcresult`, `8 tests in 3 suites`)
+- Focused persisted-edit UI smoke path: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_phase2_receipt_edit_ui_dd -resultBundlePath /tmp/rheir_phase2_receipt_edit_ui.xcresult test -only-testing:RHEIRUITests/RHEIRUITests/testSavedReceiptDetailPersistsEdits`
+- Latest focused persisted-edit UI smoke result: `PASS` (`/tmp/rheir_phase2_receipt_edit_ui.xcresult`, `1 UI test`)
 - Device build/install baseline: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'id=00008140-0011492622E8801C' -derivedDataPath /tmp/rheir_phase2_device_verify_v2_dd -resultBundlePath /tmp/rheir_phase2_device_verify_v2_build.xcresult build` -> `PASS` with copied device payloads `/tmp/rheir_device_projects_after_fix_v2.json`, `/tmp/rheir_device_offline_projects_after_fix_v2.json`, and `/tmp/rheir_device_preferences_v2.plist`
 
 ## Known Residual Risks
@@ -150,4 +158,4 @@
 - `ProjectViewModel` is still oversized even after the extracted stores, though organization/project synchronization is now isolated behind `OrganizationProjectSyncStore`.
 - `CompanyStore` now lives in the compiled state layer rather than the settings view, but the broader company/project coordination flow still spans multiple UI files.
 - Direct in-sandbox CLI `xcodebuild` evidence remains less stable than elevated CLI or the MCP simulator path in the local CoreSimulator environment.
-- Physical-device build/signing is now working and launch/file-state compaction is validated, but the exact user-driven `NSUserDefaults >= 4 MB` / CloudKit `record too large` mutation path still needs a manual rerun with fresh logs.
+- Physical-device build/signing is now working and launch/file-state compaction is validated; simulator parity is now also green for CloudKit upsert, duplicate receipt normalization, and persisted-edit behavior, but the exact user-driven scanned-receipt / project-update mutation path still needs a manual rerun with fresh logs.

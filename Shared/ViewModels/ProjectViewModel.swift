@@ -512,9 +512,10 @@ class ProjectViewModel: ObservableObject {
         var paymentMethodCacheHits = 0
         
         for project in organizationProjects {
-            totalReceipts += project.receipts.count
+            let normalizedProject = project.normalizedReceiptCopy
+            totalReceipts += normalizedProject.receipts.count
             
-            for receipt in project.receipts {
+            for receipt in normalizedProject.receipts {
                 processedReceipts += 1
                 
                 let vendor = vendorService.findOrCreateVendor(name: receipt.vendor)
@@ -997,9 +998,16 @@ class ProjectViewModel: ObservableObject {
             return
         }
         
-        var secureProject = project
+        let duplicateReceiptCount = project.duplicateReceiptCount
+        var secureProject = project.normalizedReceiptCopy
         secureProject.organizationID = orgID
         secureProject.lastModifiedDate = Date()
+
+        if duplicateReceiptCount > 0 {
+            Logger.project.warning(
+                "Normalized duplicate receipt IDs before project save [project=\(secureProject.id.uuidString, privacy: .private(mask: .hash)) removed=\(duplicateReceiptCount, privacy: .public)]"
+            )
+        }
         
         await MainActor.run {
             if let index = organizationProjects.firstIndex(where: { $0.id == secureProject.id }) {
@@ -1225,9 +1233,15 @@ class ProjectViewModel: ObservableObject {
             )
         }
 
-        var updatedProject = resolution.project
-        updatedProject.receipts.append(receipt)
+        let duplicateReceiptCount = resolution.project.duplicateReceiptCount
+        var updatedProject = resolution.project.upsertingReceipt(receipt)
         updatedProject.lastModifiedDate = Date()
+
+        if duplicateReceiptCount > 0 {
+            Logger.receiptWorkflow.warning(
+                "Normalized duplicate receipt IDs before receipt add [project=\(projectID.uuidString, privacy: .private(mask: .hash)) removed=\(duplicateReceiptCount, privacy: .public)]"
+            )
+        }
 
         await MainActor.run {
             receiptProjectStore.synchronize(
@@ -1264,10 +1278,10 @@ class ProjectViewModel: ObservableObject {
     func updateReceipt(_ receipt: Receipt, in projectID: UUID) async {
         guard let projectIndex = organizationProjects.firstIndex(where: { $0.id == projectID }) else { return }
         
-        var updatedProject = organizationProjects[projectIndex]
-        if let receiptIndex = updatedProject.receipts.firstIndex(where: { $0.id == receipt.id }) {
-            updatedProject.receipts[receiptIndex] = receipt
-            await updateProject(updatedProject)
+        let updatedProject = organizationProjects[projectIndex]
+        if updatedProject.receipts.contains(where: { $0.id == receipt.id }) {
+            let normalizedProject = updatedProject.upsertingReceipt(receipt)
+            await updateProject(normalizedProject)
         }
     }
     
@@ -2194,52 +2208,81 @@ protocol ProjectRepository {
     func loadProjectAssignments(organizationID: String) async -> [String]
 }
 
+protocol CloudKitProjectDatabase {
+    func records(matching query: CKQuery) async throws -> [CKRecord]
+    func record(for recordID: CKRecord.ID) async throws -> CKRecord
+    func save(_ record: CKRecord) async throws -> CKRecord
+}
+
+private struct CKDatabaseProjectAdapter: CloudKitProjectDatabase {
+    let database: CKDatabase
+
+    func records(matching query: CKQuery) async throws -> [CKRecord] {
+        let result = try await database.records(matching: query)
+        return result.matchResults.compactMap { (_, matchResult) in
+            switch matchResult {
+            case .success(let record):
+                return record
+            case .failure(let error):
+                Logger.projectRepository.error(
+                    "Project fetch failed: \(error.localizedDescription, privacy: .public)"
+                )
+                return nil
+            }
+        }
+    }
+
+    func record(for recordID: CKRecord.ID) async throws -> CKRecord {
+        try await database.record(for: recordID)
+    }
+
+    func save(_ record: CKRecord) async throws -> CKRecord {
+        try await database.save(record)
+    }
+}
+
 final class CloudKitProjectRepository: ProjectRepository {
-    private let container: CKContainer
+    private let database: any CloudKitProjectDatabase
 
     init(container: CKContainer = CKContainer(identifier: "iCloud.com.rheirhome.rheirhomeappV3")) {
-        self.container = container
+        self.database = CKDatabaseProjectAdapter(database: container.privateCloudDatabase)
+    }
+
+    init(database: any CloudKitProjectDatabase) {
+        self.database = database
     }
 
     func fetchProjects(for organizationID: String) async throws -> [Project] {
-        let privateDatabase = container.privateCloudDatabase
         let predicate = NSPredicate(format: "organizationID == %@", organizationID)
         let query = CKQuery(recordType: "Project", predicate: predicate)
-        let result = try await privateDatabase.records(matching: query)
+        let records = try await database.records(matching: query)
 
-        let projects = result.matchResults.compactMap { (_, result) -> Project? in
-            switch result {
-            case .success(let record):
-                if let projectData = record["fullProjectData"] as? Data,
-                   let project = try? JSONDecoder().decode(Project.self, from: projectData) {
-                    return project
-                }
+        let projects = records.compactMap { record -> Project? in
+            if let projectData = record["fullProjectData"] as? Data,
+               let project = try? JSONDecoder().decode(Project.self, from: projectData) {
+                return project.normalizedReceiptCopy
+            }
 
-                guard let name = record["name"] as? String,
-                      let client = record["client"] as? String,
-                      let totalBudget = record["totalBudget"] as? Double,
-                      let startDate = record["startDate"] as? Date,
-                      let endDate = record["endDate"] as? Date else {
-                    return nil
-                }
-
-                return Project(
-                    name: name,
-                    client: client,
-                    totalBudget: totalBudget,
-                    materialCost: 0,
-                    laborCost: 0,
-                    generalConditions: 0,
-                    contingency: 0,
-                    startDate: startDate,
-                    endDate: endDate,
-                    organizationID: organizationID
-                )
-
-            case .failure(let error):
-                Logger.projectRepository.error("Project fetch failed: \(error.localizedDescription, privacy: .public)")
+            guard let name = record["name"] as? String,
+                  let client = record["client"] as? String,
+                  let totalBudget = record["totalBudget"] as? Double,
+                  let startDate = record["startDate"] as? Date,
+                  let endDate = record["endDate"] as? Date else {
                 return nil
             }
+
+            return Project(
+                name: name,
+                client: client,
+                totalBudget: totalBudget,
+                materialCost: 0,
+                laborCost: 0,
+                generalConditions: 0,
+                contingency: 0,
+                startDate: startDate,
+                endDate: endDate,
+                organizationID: organizationID
+            )
         }
 
         Logger.projectRepository.debug(
@@ -2250,50 +2293,44 @@ final class CloudKitProjectRepository: ProjectRepository {
     }
 
     func saveProject(_ project: Project, organizationID: String) async throws {
-        let privateDatabase = container.privateCloudDatabase
         let recordID = CKRecord.ID(recordName: "project_\(project.id.uuidString)")
-        let record = CKRecord(recordType: "Project", recordID: recordID)
         let persistenceSafeProject = project.persistenceSafeCopy
 
-        record["name"] = project.name as CKRecordValue
-        record["client"] = project.client as CKRecordValue
-        record["totalBudget"] = project.totalBudget as CKRecordValue
-        record["startDate"] = project.startDate as CKRecordValue
-        record["endDate"] = project.endDate as CKRecordValue
-        record["status"] = project.status.rawValue as CKRecordValue
-        record["organizationID"] = organizationID as CKRecordValue
+        try await upsertRecord(recordType: "Project", recordID: recordID) { record in
+            record["name"] = project.name as CKRecordValue
+            record["client"] = project.client as CKRecordValue
+            record["totalBudget"] = project.totalBudget as CKRecordValue
+            record["startDate"] = project.startDate as CKRecordValue
+            record["endDate"] = project.endDate as CKRecordValue
+            record["status"] = project.status.rawValue as CKRecordValue
+            record["organizationID"] = organizationID as CKRecordValue
 
-        if let projectData = try? JSONEncoder().encode(persistenceSafeProject) {
-            record["fullProjectData"] = projectData as CKRecordValue
+            if let projectData = try? JSONEncoder().encode(persistenceSafeProject) {
+                record["fullProjectData"] = projectData as CKRecordValue
 
-            if project.inlineReceiptImageCount > 0 {
-                Logger.projectRepository.debug(
-                    "Prepared CloudKit project payload without inline receipt images [organization=\(organizationID, privacy: .private(mask: .hash)) images=\(project.inlineReceiptImageCount, privacy: .public) bytes=\(projectData.count, privacy: .public)]"
-                )
+                if project.inlineReceiptImageCount > 0 {
+                    Logger.projectRepository.debug(
+                        "Prepared CloudKit project payload without inline receipt images [organization=\(organizationID, privacy: .private(mask: .hash)) images=\(project.inlineReceiptImageCount, privacy: .public) bytes=\(projectData.count, privacy: .public)]"
+                    )
+                }
             }
         }
-
-        _ = try await privateDatabase.save(record)
     }
 
     func saveProjectAssignments(_ projectIDs: [String], organizationID: String) async throws {
-        let privateDatabase = container.privateCloudDatabase
         let recordID = CKRecord.ID(recordName: "project_assignments_\(organizationID)")
-        let record = CKRecord(recordType: "ProjectAssignments", recordID: recordID)
-
-        record["organizationID"] = organizationID as CKRecordValue
-        record["assignedProjectIDs"] = projectIDs as CKRecordValue
-        record["lastModified"] = Date() as CKRecordValue
-        record["environment"] = "production" as CKRecordValue
-
-        _ = try await privateDatabase.save(record)
+        try await upsertRecord(recordType: "ProjectAssignments", recordID: recordID) { record in
+            record["organizationID"] = organizationID as CKRecordValue
+            record["assignedProjectIDs"] = projectIDs as CKRecordValue
+            record["lastModified"] = Date() as CKRecordValue
+            record["environment"] = "production" as CKRecordValue
+        }
     }
 
     func loadProjectAssignments(organizationID: String) async -> [String] {
         do {
-            let privateDatabase = container.privateCloudDatabase
             let recordID = CKRecord.ID(recordName: "project_assignments_\(organizationID)")
-            let record = try await privateDatabase.record(for: recordID)
+            let record = try await database.record(for: recordID)
             return record["assignedProjectIDs"] as? [String] ?? []
         } catch {
             Logger.projectRepository.error(
@@ -2301,5 +2338,22 @@ final class CloudKitProjectRepository: ProjectRepository {
             )
             return []
         }
+    }
+
+    private func upsertRecord(
+        recordType: String,
+        recordID: CKRecord.ID,
+        configure: (CKRecord) -> Void
+    ) async throws {
+        let record: CKRecord
+
+        do {
+            record = try await database.record(for: recordID)
+        } catch let error as CKError where error.code == .unknownItem {
+            record = CKRecord(recordType: recordType, recordID: recordID)
+        }
+
+        configure(record)
+        _ = try await database.save(record)
     }
 }
