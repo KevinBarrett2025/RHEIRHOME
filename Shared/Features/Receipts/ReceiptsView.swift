@@ -13,7 +13,7 @@ struct ReceiptsView: View {
     @EnvironmentObject var authVM: AuthViewModel
     @Binding var selectedTab: Tab
     @State private var showingNewReceipt = false
-    @State private var showingScanner = false
+    @State private var scannerSession: ReceiptScannerSession?
     @State private var receiptToView: Receipt? = nil
     @State private var receiptToEdit: Receipt? = nil
     @State private var showingDeleteAlert = false
@@ -22,6 +22,7 @@ struct ReceiptsView: View {
     @State private var selectedCategory: ReceiptCategory? = nil
     @State private var searchText = ""
     @State private var expandedVendorGroups: Set<String> = []
+    @AppStorage("hideReceiptScannerIntro") private var hideReceiptScannerIntro = false
     
     private enum ReceiptViewMode: String, CaseIterable {
         case all = "All"
@@ -77,6 +78,10 @@ struct ReceiptsView: View {
         Array(Set(receipts.map { $0.category })).sorted { $0.rawValue < $1.rawValue }
     }
 
+    private var hasScannerAIAccess: Bool {
+        authVM.currentOrg?.subscriptionTier != .free
+    }
+
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
@@ -118,11 +123,19 @@ struct ReceiptsView: View {
                         .environmentObject(projectVM)
                 }
             }
-            .sheet(isPresented: $showingScanner) {
-                if let project = projectVM.selectedProject {
-                    ReceiptScannerView(isPresented: $showingScanner, project: project)
-                        .environmentObject(projectVM)
-                }
+            .sheet(item: $scannerSession) { session in
+                ReceiptScannerView(
+                    isPresented: Binding(
+                        get: { scannerSession?.id == session.id },
+                        set: { isPresented in
+                            if !isPresented && scannerSession?.id == session.id {
+                                scannerSession = nil
+                            }
+                        }
+                    ),
+                    session: session
+                )
+                .environmentObject(projectVM)
             }
             .navigationDestination(item: $receiptToView) { receipt in
                 ReceiptDetailView(receipt: receipt)
@@ -461,7 +474,7 @@ struct ReceiptsView: View {
             
             // Scan receipt FAB
             Button {
-                showingScanner = true
+                presentScanner()
             } label: {
                 VStack(spacing: 4) {
                     Image(systemName: "camera.viewfinder")
@@ -485,7 +498,7 @@ struct ReceiptsView: View {
             }
             .accessibilityIdentifier("receipts-fab-scan")
             .scaleEffect(1.0)
-            .animation(.spring(response: 0.3, dampingFraction: 0.6), value: showingScanner)
+            .animation(.spring(response: 0.3, dampingFraction: 0.6), value: scannerSession != nil)
         }
         .padding(.horizontal, 20)
         .padding(.bottom, 20)
@@ -578,6 +591,18 @@ struct ReceiptsView: View {
             projectVM.paymentMethodService.paymentMethods[index].totalSpent = max(0, projectVM.paymentMethodService.paymentMethods[index].totalSpent)
         }
     }
+
+    private func presentScanner() {
+        guard let project = projectVM.selectedProject else {
+            return
+        }
+
+        scannerSession = ReceiptScannerSession(
+            project: project,
+            hideIntro: hideReceiptScannerIntro,
+            hasAIAccess: hasScannerAIAccess
+        )
+    }
     
     private var emptyStateView: some View {
         ProjectSelectionRequiredView(
@@ -608,7 +633,7 @@ struct ReceiptsView: View {
             VStack(spacing: 12) {
                 HStack(spacing: 16) {
                     Button {
-                        showingScanner = true
+                        presentScanner()
                     } label: {
                         HStack {
                             Image(systemName: "camera.viewfinder")

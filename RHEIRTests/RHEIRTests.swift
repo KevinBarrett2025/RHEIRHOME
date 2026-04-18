@@ -1522,4 +1522,24 @@ struct ReceiptScannerLifecycleTests {
         #expect(presentationState.currentStep == .launcher)
         #expect(presentationState.showingDocumentScanner == false)
     }
+
+    @MainActor
+    @Test
+    func scannerSessionRetainsLaunchStateAcrossHostReuse() {
+        let session = ReceiptScannerSession(
+            project: makeProject(organizationID: "org-123"),
+            hideIntro: true,
+            hasAIAccess: true
+        )
+
+        #expect(session.currentStep == .camera)
+        #expect(session.showingDocumentScanner == true)
+
+        session.returnToEntry(hideIntro: true)
+
+        let reusedHostSession = session
+
+        #expect(reusedHostSession.currentStep == .launcher)
+        #expect(reusedHostSession.showingDocumentScanner == false)
+    }
 }

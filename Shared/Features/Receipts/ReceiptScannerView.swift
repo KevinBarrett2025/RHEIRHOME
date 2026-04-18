@@ -53,6 +53,104 @@ final class DocumentScannerCompletionGate {
     }
 }
 
+@MainActor
+final class ReceiptScannerSession: ObservableObject, Identifiable {
+    let id = UUID()
+    let project: Project
+
+    @Published private(set) var presentationState = ReceiptScannerPresentationState()
+    @Published var showingImagePicker = false
+    @Published var showingAnalysisView = false
+    @Published var scannedImage: UIImage?
+    @Published var analysisResult: ReceiptAnalysisResult?
+    @Published var isProcessing = false
+    @Published var errorMessage: String?
+    @Published var showingError = false
+    @Published var selectedImageFromPicker: UIImage?
+    @Published var processingStep = ""
+    @Published var receiptSaveCompleted = false
+
+    init(project: Project, hideIntro: Bool, hasAIAccess: Bool) {
+        self.project = project
+
+        var initialState = ReceiptScannerPresentationState()
+        _ = initialState.performInitialSetup(
+            hideIntro: hideIntro,
+            hasAIAccess: hasAIAccess
+        )
+        presentationState = initialState
+
+        Logger.receiptWorkflow.info(
+            "Receipt scanner session initialized [hideIntro=\(hideIntro, privacy: .public) aiAccess=\(hasAIAccess, privacy: .public)]."
+        )
+    }
+
+    var currentStep: ReceiptScannerStep {
+        presentationState.currentStep
+    }
+
+    var showingDocumentScanner: Bool {
+        presentationState.showingDocumentScanner
+    }
+
+    func setCurrentStep(_ step: ReceiptScannerStep) {
+        updatePresentation {
+            $0.currentStep = step
+        }
+    }
+
+    func beginDocumentScan() {
+        errorMessage = nil
+        showingError = false
+        scannedImage = nil
+        analysisResult = nil
+        selectedImageFromPicker = nil
+        receiptSaveCompleted = false
+        isProcessing = false
+        processingStep = ""
+
+        updatePresentation {
+            $0.beginDocumentScan()
+        }
+    }
+
+    @discardableResult
+    func queueDocumentResult(_ result: ReceiptScannerDocumentResult) -> Bool {
+        updatePresentation {
+            $0.queueDocumentResult(result)
+        }
+    }
+
+    func consumeQueuedDocumentResult() -> ReceiptScannerDocumentResult? {
+        updatePresentation {
+            $0.consumeQueuedDocumentResult()
+        }
+    }
+
+    func returnToEntry(hideIntro: Bool) {
+        updatePresentation {
+            $0.returnToEntry(hideIntro: hideIntro)
+        }
+    }
+
+    func setDocumentScannerPresented(_ isPresented: Bool) {
+        guard !isPresented else {
+            return
+        }
+
+        updatePresentation {
+            $0.showingDocumentScanner = false
+        }
+    }
+
+    private func updatePresentation<T>(_ mutate: (inout ReceiptScannerPresentationState) -> T) -> T {
+        var updatedState = presentationState
+        let result = mutate(&updatedState)
+        presentationState = updatedState
+        return result
+    }
+}
+
 struct ReceiptScannerPresentationState {
     var currentStep: ReceiptScannerStep = .info
     var showingDocumentScanner = false
@@ -103,23 +201,10 @@ struct ReceiptScannerPresentationState {
 
 struct ReceiptScannerView: View {
     @Binding var isPresented: Bool
-    let project: Project
+    @ObservedObject var session: ReceiptScannerSession
     @EnvironmentObject var projectVM: ProjectViewModel
     @EnvironmentObject var authVM: AuthViewModel
     @AppStorage("hideReceiptScannerIntro") private var hideIntro = false
-    
-    @State private var scannerPresentation = ReceiptScannerPresentationState()
-    @State private var showingImagePicker = false
-    @State private var showingAnalysisView = false
-    @State private var showingUpgradePrompt = false
-    @State private var scannedImage: UIImage?
-    @State private var analysisResult: ReceiptAnalysisResult?
-    @State private var isProcessing = false
-    @State private var errorMessage: String?
-    @State private var showingError = false
-    @State private var selectedImageFromPicker: UIImage?
-    @State private var processingStep = ""
-    @State private var receiptSaveCompleted = false
     
     private var hasAIAccess: Bool {
         authVM.currentOrg?.subscriptionTier != .free
@@ -129,7 +214,7 @@ struct ReceiptScannerView: View {
         ZStack {
             if hasAIAccess {
                 // Subscribers get proper flow: Info → Camera → Processing → Manual Entry
-                switch scannerPresentation.currentStep {
+                switch session.currentStep {
                 case .info, .launcher:
                     entryPageView
                 case .camera:
@@ -144,31 +229,34 @@ struct ReceiptScannerView: View {
                 upgradePromptView
             }
         }
-        .sheet(isPresented: $scannerPresentation.showingDocumentScanner, onDismiss: handleDocumentScannerDismiss) {
+        .sheet(isPresented: Binding(
+            get: { session.showingDocumentScanner },
+            set: { session.setDocumentScannerPresented($0) }
+        ), onDismiss: handleDocumentScannerDismiss) {
             DocumentScannerView { result in
                 queueDocumentScanResult(result)
             }
         }
-        .sheet(isPresented: $showingImagePicker) {
-            ImagePicker(sourceType: .photoLibrary, image: $selectedImageFromPicker)
+        .sheet(isPresented: $session.showingImagePicker) {
+            ImagePicker(sourceType: .photoLibrary, image: $session.selectedImageFromPicker)
         }
-        .sheet(isPresented: $showingAnalysisView) {
-            if let analysisResult = analysisResult, let scannedImage = scannedImage {
+        .sheet(isPresented: $session.showingAnalysisView) {
+            if let analysisResult = session.analysisResult, let scannedImage = session.scannedImage {
                 ScannedReceiptEntryView(
-                    isPresented: $showingAnalysisView,
-                    project: project,
+                    isPresented: $session.showingAnalysisView,
+                    project: session.project,
                     analysisResult: analysisResult,
                     scannedImage: scannedImage,
                     onReceiptSaved: {
                         // When receipt is successfully saved, mark completion and dismiss scanner
-                        receiptSaveCompleted = true
+                        session.receiptSaveCompleted = true
                         isPresented = false
                     }
                 )
                 .environmentObject(projectVM)
             }
         }
-        .alert("Scanning Error", isPresented: $showingError) {
+        .alert("Scanning Error", isPresented: $session.showingError) {
             Button("OK") { 
                 returnToEntryState()
             }
@@ -176,57 +264,34 @@ struct ReceiptScannerView: View {
                 beginDocumentScan()
             }
         } message: {
-            Text(errorMessage ?? "Unknown error occurred")
+            Text(session.errorMessage ?? "Unknown error occurred")
         }
-        .onChange(of: selectedImageFromPicker) { _, newImage in
+        .onChange(of: session.selectedImageFromPicker) { _, newImage in
             if let image = newImage {
-                scannerPresentation.currentStep = .processing
+                session.setCurrentStep(.processing)
                 handleImageSelection(image)
-                selectedImageFromPicker = nil
+                session.selectedImageFromPicker = nil
             }
         }
-        .onChange(of: showingAnalysisView) { _, isShowing in
+        .onChange(of: session.showingAnalysisView) { _, isShowing in
             // If analysis view was dismissed but no receipt was saved, return to info
-            if !isShowing && !receiptSaveCompleted && scannerPresentation.currentStep == .complete {
+            if !isShowing && !session.receiptSaveCompleted && session.currentStep == .complete {
                 returnToEntryState()
-            }
-        }
-        .onAppear {
-            let performedInitialSetup = scannerPresentation.performInitialSetup(
-                hideIntro: hideIntro,
-                hasAIAccess: hasAIAccess
-            )
-
-            if performedInitialSetup {
-                receiptSaveCompleted = false
-                Logger.receiptWorkflow.info(
-                    "Receipt scanner initial setup completed [hideIntro=\(hideIntro, privacy: .public) aiAccess=\(hasAIAccess, privacy: .public)]."
-                )
-            } else {
-                Logger.receiptWorkflow.info("Receipt scanner reappeared after initial setup; preserving current scanner state.")
             }
         }
     }
 
     private func beginDocumentScan() {
-        errorMessage = nil
-        showingError = false
-        scannedImage = nil
-        analysisResult = nil
-        selectedImageFromPicker = nil
-        receiptSaveCompleted = false
-        isProcessing = false
-        processingStep = ""
-        scannerPresentation.beginDocumentScan()
+        session.beginDocumentScan()
     }
 
     private func returnToEntryState() {
-        scannerPresentation.returnToEntry(hideIntro: hideIntro)
+        session.returnToEntry(hideIntro: hideIntro)
     }
     
     @ViewBuilder
     private var entryPageView: some View {
-        let showsIntro = scannerPresentation.currentStep == .info
+        let showsIntro = session.currentStep == .info
 
         NavigationStack {
             ScrollView {
@@ -240,7 +305,7 @@ struct ReceiptScannerView: View {
                                 .frame(width: 120, height: 120)
                                 .scaleEffect(1.2)
                                 .opacity(0.8)
-                                .animation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true), value: scannerPresentation.currentStep == .info)
+                                .animation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true), value: session.currentStep == .info)
 
                             Image(systemName: "camera.viewfinder")
                                 .font(.system(size: 48))
@@ -350,7 +415,7 @@ struct ReceiptScannerView: View {
                         Spacer()
                         
                         Button("Choose from Photos") {
-                            showingImagePicker = true
+                            session.showingImagePicker = true
                         }
                         .font(.subheadline)
                         .foregroundColor(.blue)
@@ -521,7 +586,7 @@ struct ReceiptScannerView: View {
                         .font(.headline)
                         .foregroundColor(.white)
                     
-                    Text(processingStep)
+                    Text(session.processingStep)
                         .font(.subheadline)
                         .foregroundColor(.white.opacity(0.8))
                         .multilineTextAlignment(.center)
@@ -529,7 +594,7 @@ struct ReceiptScannerView: View {
                 
                 Button("Cancel") {
                     returnToEntryState()
-                    isProcessing = false
+                    session.isProcessing = false
                 }
                 .font(.subheadline)
                 .foregroundColor(.white.opacity(0.8))
@@ -547,7 +612,7 @@ struct ReceiptScannerView: View {
     // MARK: - Scanner Result Handling
 
     private func queueDocumentScanResult(_ result: ReceiptScannerDocumentResult) {
-        guard scannerPresentation.queueDocumentResult(result) else {
+        guard session.queueDocumentResult(result) else {
             Logger.receiptWorkflow.warning(
                 "Ignored duplicate receipt scanner result while document scanner dismissal was pending."
             )
@@ -558,8 +623,8 @@ struct ReceiptScannerView: View {
     }
 
     private func handleDocumentScannerDismiss() {
-        guard let result = scannerPresentation.consumeQueuedDocumentResult() else {
-            if scannerPresentation.currentStep == .camera && !isProcessing {
+        guard let result = session.consumeQueuedDocumentResult() else {
+            if session.currentStep == .camera && !session.isProcessing {
                 Logger.receiptWorkflow.info(
                     "Receipt scanner document sheet dismissed without a queued result; returning to intro."
                 )
@@ -575,31 +640,31 @@ struct ReceiptScannerView: View {
     private func handleScanResult(_ result: ReceiptScannerDocumentResult) {
         switch result {
         case .success(let images):
-            scannerPresentation.currentStep = .processing
+            session.setCurrentStep(.processing)
             if let firstImage = images.first {
                 handleImageSelection(firstImage)
             } else {
                 returnToEntryState()
-                errorMessage = "No image captured"
-                showingError = true
+                session.errorMessage = "No image captured"
+                session.showingError = true
             }
         case .cancelled:
             returnToEntryState()
         case .failure(let error):
             returnToEntryState()
-            errorMessage = error.localizedDescription
-            showingError = true
+            session.errorMessage = error.localizedDescription
+            session.showingError = true
         }
     }
     
     private func handleImageSelection(_ image: UIImage) {
-        scannedImage = image
+        session.scannedImage = image
         processReceipt(image)
     }
     
     private func processReceipt(_ image: UIImage) {
-        isProcessing = true
-        processingStep = "Extracting text with OCR..."
+        session.isProcessing = true
+        session.processingStep = "Extracting text with OCR..."
         
         Task {
             do {
@@ -609,7 +674,7 @@ struct ReceiptScannerView: View {
                 
                 // Step 1: Extract text using OCR
                 await MainActor.run {
-                    processingStep = "Extractinging text from image..."
+                    session.processingStep = "Extractinging text from image..."
                 }
                 
                 let ocrText = try await extractTextFromImage(image)
@@ -619,7 +684,7 @@ struct ReceiptScannerView: View {
                 
                 // Step 2: Try AI analysis with subscription checking
                 await MainActor.run {
-                    processingStep = "Analyzing with AI..."
+                    session.processingStep = "Analyzing with AI..."
                 }
                 
                 var analysisResult: ReceiptAnalysisResult
@@ -628,7 +693,7 @@ struct ReceiptScannerView: View {
                 if currentOrg.subscriptionTier != .free {
                     // Try production AI analysis
                     do {
-                        analysisResult = try await performAIAnalysis(ocrText: ocrText, projectName: project.name)
+                        analysisResult = try await performAIAnalysis(ocrText: ocrText, projectName: session.project.name)
                         Logger.receiptWorkflow.notice("Receipt scanner AI analysis completed successfully.")
                     } catch {
                         Logger.receiptWorkflow.warning(
@@ -658,24 +723,24 @@ struct ReceiptScannerView: View {
                 )
                 
                 await MainActor.run {
-                    isProcessing = false
-                    scannerPresentation.currentStep = .complete
-                    self.analysisResult = analysisResult
-                    showingAnalysisView = true
+                    session.isProcessing = false
+                    session.setCurrentStep(.complete)
+                    session.analysisResult = analysisResult
+                    session.showingAnalysisView = true
                 }
                 
             } catch {
                 await MainActor.run {
-                    isProcessing = false
+                    session.isProcessing = false
                     returnToEntryState()
                     
                     if let receiptError = error as? ReceiptAnalysisError {
-                        errorMessage = receiptError.localizedDescription
+                        session.errorMessage = receiptError.localizedDescription
                     } else {
-                        errorMessage = "Failed to process receipt: \(error.localizedDescription)"
+                        session.errorMessage = "Failed to process receipt: \(error.localizedDescription)"
                     }
                     
-                    showingError = true
+                    session.showingError = true
                 }
                 
                 Logger.receiptWorkflow.error(
@@ -1334,7 +1399,14 @@ struct ReceiptScannerView_Previews: PreviewProvider {
             organizationID: "sample-org-id"
         )
         
-        ReceiptScannerView(isPresented: .constant(true), project: sampleProject)
+        ReceiptScannerView(
+            isPresented: .constant(true),
+            session: ReceiptScannerSession(
+                project: sampleProject,
+                hideIntro: false,
+                hasAIAccess: true
+            )
+        )
             .environmentObject(ProjectViewModel(offlineDataManager: OfflineDataManager()))
             .environmentObject(AuthViewModel(service: PreviewAuthService()))
     }
