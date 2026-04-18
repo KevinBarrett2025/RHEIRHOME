@@ -3,13 +3,13 @@
 ## Repo Truth
 - Repo Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Active Branch: `gm/rheir-hardening-phase1`
-- Thread Start SHA: `e2fe81823bcfb5a6e94f6645ef6200f62330fe19`
-- Last Commit At Thread Start: `e2fe818 Phase 2: harden receipt scanner first-scan lifecycle`
+- Thread Start SHA: `a6b0b2a699c1993aaea41bf6333de76f3302c00a`
+- Last Commit At Thread Start: `a6b0b2a Phase 2: reconcile receipt scanner continuity docs (docs only)`
 
 ## Current Objective
-- Manually validate the new receipt-scanner queued-dismiss lifecycle on device after `rheirlogs4.md` showed the first document scan destabilizing before the user could finish the flow.
-- Confirm the first scanned-receipt attempt now stays stable on device while the saved scanned receipt still persists after leaving and returning.
-- If the device rerun is clean, continue broader selected-project receipt runtime QA on the real receipts surface.
+- Validate the new scanner-cancellation state machine after `rheirlogs5.md` showed the camera re-presenting after capture and scanner cancel callbacks surfacing as user-visible errors.
+- Confirm the updated `ReceiptScannerView` no longer relaunches VisionKit from `.camera` side effects and no longer treats document-scanner cancellation as a user-facing failure.
+- Manually rerun the real-device scanned-receipt flow to confirm first-scan stability, clean teardown, and saved-receipt persistence.
 
 ## Current Working Set
 - Session flow now routes through `Shared/Views/Auth/AppSessionSupport.swift`.
@@ -103,6 +103,8 @@
 - `Shared/Features/TeamMembers/EnhancedTeamMemberDetailView.swift` now uses structured `Logger.teamMember` calls instead of raw `print(...)` tracing for team-member detail save events.
 - `Shared/Features/Tasks/TaskCreateEditView.swift` now uses structured `Logger.project` calls instead of raw `print(...)` tracing for task-save events.
 - `Shared/Features/Receipts/ReceiptScannerCoordinator.swift` now uses structured `Logger.receiptWorkflow` calls instead of raw `print(...)` tracing for legacy document-camera failure events.
+- `Shared/Features/Receipts/ReceiptScannerView.swift` now drives VisionKit presentation through explicit scanner state, queues terminal scanner results until dismissal completes, and treats document-scanner cancellation as a silent return-to-intro path.
+- `RHEIRTests.swift` now includes focused presentation-state coverage that proves queued scanner cancellation does not reopen the sheet and that returning to intro clears pending scanner results.
 - `Shared/Features/Receipts/ReceiptEditView.swift` now uses structured `Logger.receiptWorkflow` calls instead of raw `print(...)` tracing for receipt-update save events.
 - `Shared/Features/Receipts/ReceiptDetailView.swift` now uses structured `Logger.receiptWorkflow` calls instead of raw `print(...)` tracing for receipt-delete completion events.
 - `Shared/Features/Receipts/QuickVendorCreateView.swift` no longer emits preview-only console tracing in its preview closure.
@@ -182,6 +184,6 @@
 ## Next Required Action
 1. Preserve the repo-local STS docs and `SHIP_READINESS_CHECKLIST.md` as the current release-planning truth for this repository.
 2. Keep `Shared/Views/Auth/LoginView.swift`, `rheir_knowledge_database.json`, `RHEIRmemories.csv`, and `RheirLogo 1024x1024.png` out of the staged set for this checkpoint.
-3. Manually rerun the real-device scanned-receipt flow on the updated build, verify the first scan no longer destabilizes, confirm the saved scanned receipt still persists after leaving and returning, and capture fresh logs for the exact mutation path.
-4. In the same device rerun, verify tax, discount, and receipt number are still editable before first save on the scanned-receipt review screen.
+3. Manually rerun the real-device scanned-receipt flow on the updated build, verify the camera does not reopen after the first capture, verify cancel teardown no longer surfaces scanner errors, confirm the saved scanned receipt still persists after leaving and returning, and capture fresh logs for the exact mutation path.
+4. In the same device rerun, verify tax, discount, and receipt number remain editable before first save on the scanned-receipt review screen.
 5. If the manual device rerun is clean, continue broader selected-project receipt runtime QA as the next Phase 2 release-hardening seam.

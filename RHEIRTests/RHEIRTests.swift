@@ -1466,4 +1466,45 @@ struct ReceiptScannerLifecycleTests {
         #expect(gate.perform { callbackCount += 1 } == false)
         #expect(callbackCount == 1)
     }
+
+    @Test
+    func presentationStateQueuesCancelledResultWithoutReopeningScanner() {
+        var presentationState = ReceiptScannerPresentationState()
+
+        presentationState.beginDocumentScan()
+
+        #expect(presentationState.currentStep == .camera)
+        #expect(presentationState.showingDocumentScanner == true)
+        #expect(presentationState.queueDocumentResult(.cancelled) == true)
+        #expect(presentationState.currentStep == .info)
+        #expect(presentationState.showingDocumentScanner == false)
+        #expect(presentationState.queueDocumentResult(.cancelled) == false)
+
+        switch presentationState.consumeQueuedDocumentResult() {
+        case .cancelled?:
+            break
+        default:
+            Issue.record("Expected scanner cancellation to remain queued until dismissal completes.")
+        }
+    }
+
+    @Test
+    func presentationStateReturnToInfoClearsQueuedScannerResult() {
+        var presentationState = ReceiptScannerPresentationState()
+
+        presentationState.beginDocumentScan()
+        #expect(presentationState.queueDocumentResult(.cancelled) == true)
+
+        presentationState.returnToInfo()
+
+        #expect(presentationState.currentStep == .info)
+        #expect(presentationState.showingDocumentScanner == false)
+
+        switch presentationState.consumeQueuedDocumentResult() {
+        case nil:
+            break
+        default:
+            Issue.record("Expected returning to intro to clear any pending scanner result.")
+        }
+    }
 }
