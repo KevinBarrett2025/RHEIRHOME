@@ -71,7 +71,7 @@ Exit criteria: release candidate is validated on real hardware and ready for sub
 - Freeze scope and submit.
 
 ## Immediate Next Steps
-1. Manually rerun the previously failing device scanned-receipt flow on the updated build, confirm the camera does not reopen after the first capture now that scanner session ownership is parent-owned, confirm hidden-intro users return to the compact launcher instead of the onboarding prompt after dismissal, confirm cancel teardown no longer surfaces scanner errors, confirm the saved scanned receipt still persists after leaving and returning, verify tax/discount/receipt-number edits before first save, and capture fresh logs for the exact mutation path.
-2. Continue broader selected-project receipt runtime QA once the manual device rerun is clean.
-3. Validate end-to-end contractor flows such as receipt OCR and AI analysis, labor logging, and vendor/payment-method updates.
-4. Expand focused parity as simulator and device seams stabilize.
+1. Add deterministic selected-project AI Project Calculator UI smoke coverage for intake, draft review, and approved-baseline creation on the live budget surface.
+2. Extend estimator parity so receipts, work hours, and tasks map into approved budget lines and drive variance snapshots deterministically.
+3. Stand up the managed estimator backend behind `RHEIR_ESTIMATION_BASE_URL` while preserving the in-app deterministic fallback for local GM work.
+4. Continue broader receipt/runtime QA in parallel so the new estimator baseline can attach to stable contractor workflows.

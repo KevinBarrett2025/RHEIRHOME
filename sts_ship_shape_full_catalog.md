@@ -23,6 +23,13 @@
 - `LaborStore`
 - `CompanyStore`
 - `TeamMemberStore`
+- `EstimateSession` / `EstimateDraft` / `BudgetBaseline` / `EstimateVersion` estimator domain
+- `BudgetLine` / `SourceEvidence` / `ActualCostLink` / `VarianceSnapshot` estimator accounting model
+- `HybridRHEIREstimationService`
+- `SQLiteEstimatorStore`
+- `AIProjectCalculatorViewModel`
+- `BudgetBreakdownView` AI Project Calculator integration
+- `ProjectTask` estimator linkage metadata
 - `OfflineDataManager` structured logging
 - `CloudKitProjectService` structured logging
 - `CloudKitZoneManager` structured logging
@@ -144,14 +151,14 @@
 - `SignInWithAppleCoordinator` structured logging
 
 ## Current Validation Baseline
-- Simulator build path: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_phase2_receipt_persist_dd -resultBundlePath /tmp/rheir_gateA_phase2_receipt_persist.xcresult clean build`
-- Focused receipt-persistence parity path: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_phase2_receipt_persist_targeted_dd -resultBundlePath /tmp/rheir_phase2_receipt_persist_targeted.xcresult test -only-testing:RHEIRTests/ProjectPersistencePayloadTests -only-testing:RHEIRTests/CloudKitProjectRepositoryTests -only-testing:RHEIRTests/OrganizationProjectSyncStoreTests`
-- Latest focused receipt-persistence parity result: `PASS` (`/tmp/rheir_phase2_receipt_persist_targeted.xcresult`, `8 tests in 3 suites`)
-- Focused persisted-edit UI smoke path: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_phase2_receipt_edit_ui_dd -resultBundlePath /tmp/rheir_phase2_receipt_edit_ui.xcresult test -only-testing:RHEIRUITests/RHEIRUITests/testSavedReceiptDetailPersistsEdits`
-- Latest focused persisted-edit UI smoke result: `PASS` (`/tmp/rheir_phase2_receipt_edit_ui.xcresult`, `1 UI test`)
+- Simulator build path: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_estimator_foundation_dd -resultBundlePath /tmp/rheir_gateA_estimator_foundation.xcresult clean build`
+- Focused estimator parity path: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_estimator_targeted_dd7 -resultBundlePath /tmp/rheir_estimator_targeted7.xcresult test -only-testing:RHEIRTests/EstimatorDomainTests -only-testing:RHEIRTests/SQLiteEstimatorStoreTests -only-testing:RHEIRTests/AIProjectCalculatorWorkflowTests`
+- Latest focused estimator parity result: `PASS` (`/tmp/rheir_estimator_targeted7.xcresult`, `6 tests in 3 suites`)
 - Device build/install baseline: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'id=00008140-0011492622E8801C' -derivedDataPath /tmp/rheir_phase2_device_verify_v2_dd -resultBundlePath /tmp/rheir_phase2_device_verify_v2_build.xcresult build` -> `PASS` with copied device payloads `/tmp/rheir_device_projects_after_fix_v2.json`, `/tmp/rheir_device_offline_projects_after_fix_v2.json`, and `/tmp/rheir_device_preferences_v2.plist`
 
 ## Known Residual Risks
+- `RHEIR_ESTIMATION_BASE_URL` is currently unset in this repo-local environment, so the managed estimator backend contract is unexercised and the AI Project Calculator still runs entirely through its deterministic local fallback.
+- Deterministic UI smoke coverage for the AI Project Calculator intake/draft/approval flow and live receipt/hour/task mapping parity is not in place yet.
 - Remaining raw `print(...)` statements are now limited to development-only seams such as `Shared/Services/Development/DevelopmentDataManager.swift`, `Shared/Services/StubServices.swift`, and `Shared/Services/PreviewAuthService.swift`.
 - Stable simulator and elevated CLI simulator paths are warning-clean for the active target, and device launch/file-state validation now shows compact `projects.json`, `offline_projects.json`, and prefs payloads; remaining release hardening centers on the exact manual first-scan device rerun for camera re-entry/error-prompt validation plus broader deterministic coverage and runtime QA.
 - `RHEIRUITests` is now deterministic for signed-out, ready-state, organization-selection, project-selection, labor, company-admin, receipts-entry, manual-entry vendor-picker, manual-entry add-vendor, manual-entry payment-method-picker, manual-entry add-payment-method, manual-entry submission, saved receipt detail, receipt-detail action, persisted receipt-edit mutation, saved-receipt search/browse, category/filter drilldown, and `By Vendor` grouped-summary/expansion coverage; the next release-hardening slice after the manual device mutation rerun is broader receipt workflow runtime QA.

@@ -24,6 +24,7 @@ struct BudgetBreakdownView: View {
     
     private enum BudgetTab: String, CaseIterable {
         case breakdown = "Breakdown"
+        case estimator = "Estimator"
         case teamMembers = "Team"
         case vendors = "Vendors"
         case payments = "Payments"
@@ -31,6 +32,7 @@ struct BudgetBreakdownView: View {
         var icon: String {
             switch self {
             case .breakdown: return "chart.pie.fill"
+            case .estimator: return "sparkles.rectangle.stack.fill"
             case .teamMembers: return "person.2.fill"
             case .vendors: return "building.2.fill"
             case .payments: return "creditcard.fill"
@@ -53,6 +55,16 @@ struct BudgetBreakdownView: View {
                     .environmentObject(projectVM)
                     .environmentObject(authVM)
                     .tag(BudgetTab.breakdown)
+
+                if let project = projectVM.selectedProject {
+                    AIProjectCalculatorView(project: project)
+                        .environmentObject(projectVM)
+                        .environmentObject(authVM)
+                        .tag(BudgetTab.estimator)
+                } else {
+                    ContentUnavailableView("Select a Project", systemImage: "sparkles.rectangle.stack")
+                        .tag(BudgetTab.estimator)
+                }
                 
                 ProjectTeamMembersView()
                     .environmentObject(projectVM)
@@ -2134,5 +2146,599 @@ struct PaymentReceiptRowCard: View {
         .padding()
         .background(Color(.systemGray6))
         .cornerRadius(12)
+    }
+}
+
+struct AIProjectCalculatorView: View {
+    @EnvironmentObject private var projectVM: ProjectViewModel
+    @EnvironmentObject private var authVM: AuthViewModel
+
+    private let projectID: UUID
+
+    @StateObject private var viewModel: AIProjectCalculatorViewModel
+    @State private var selectedProposalMode: ProposalMode = .internalBudget
+    @State private var selectedBudgetLineID: UUID?
+    @State private var selectedMappingSource: MappingSource?
+    @State private var clarificationDrafts: [UUID: String] = [:]
+
+    init(project: Project) {
+        projectID = project.id
+        _viewModel = StateObject(wrappedValue: AIProjectCalculatorViewModel(project: project))
+    }
+
+    private enum ProposalMode: String, CaseIterable, Identifiable {
+        case internalBudget = "Internal"
+        case clientProposal = "Proposal"
+
+        var id: Self { self }
+    }
+
+    private enum MappingSource: Identifiable {
+        case receipt(Receipt)
+        case workHour(WorkHour)
+        case task(ProjectTask)
+
+        var id: String {
+            switch self {
+            case .receipt(let receipt):
+                return "receipt-\(receipt.id)"
+            case .workHour(let workHour):
+                return "hour-\(workHour.id.uuidString)"
+            case .task(let task):
+                return "task-\(task.id.uuidString)"
+            }
+        }
+
+        var title: String {
+            switch self {
+            case .receipt(let receipt):
+                return receipt.vendor
+            case .workHour(let workHour):
+                return "\(workHour.employee) • \(workHour.totalPay.formatAsCurrency())"
+            case .task(let task):
+                return task.title
+            }
+        }
+    }
+
+    private var project: Project? {
+        if let matchingProject = projectVM.organizationProjects.first(where: { $0.id == projectID }) {
+            return matchingProject
+        }
+
+        if let selectedProject = projectVM.selectedProject, selectedProject.id == projectID {
+            return selectedProject
+        }
+
+        return nil
+    }
+
+    var body: some View {
+        Group {
+            if let project {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 20) {
+                        statusCard(project: project)
+                        intakeSection(project: project)
+                        clarificationSection(project: project)
+                        draftSection(project: project)
+                        approvedBaselineSection(project: project)
+                        mappingQueueSection(project: project)
+                    }
+                    .padding()
+                }
+                .task(id: project.id) {
+                    await viewModel.load(project: project)
+                }
+                .sheet(item: $selectedMappingSource) { source in
+                    NavigationStack {
+                        Form {
+                            Section("Map Actual Cost") {
+                                Text(source.title)
+                            }
+
+                            Section("Budget Line") {
+                                Picker("Budget Line", selection: Binding(
+                                    get: { selectedBudgetLineID ?? viewModel.approvedBaseline?.lines.first?.id },
+                                    set: { selectedBudgetLineID = $0 }
+                                )) {
+                                    if let lines = viewModel.approvedBaseline?.lines {
+                                        ForEach(lines) { line in
+                                            Text("\(line.phase) • \(line.title)")
+                                                .tag(Optional(line.id))
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        .navigationTitle("Map Cost")
+                        .toolbar {
+                            ToolbarItem(placement: .navigationBarLeading) {
+                                Button("Cancel") {
+                                    selectedMappingSource = nil
+                                }
+                            }
+                            ToolbarItem(placement: .navigationBarTrailing) {
+                                Button("Save") {
+                                    guard let budgetLineID = selectedBudgetLineID else {
+                                        return
+                                    }
+
+                                    Task {
+                                        switch source {
+                                        case .receipt(let receipt):
+                                            await viewModel.mapReceipt(receipt, to: budgetLineID, project: project)
+                                        case .workHour(let workHour):
+                                            await viewModel.mapWorkHour(workHour, to: budgetLineID, project: project)
+                                        case .task(let task):
+                                            await viewModel.mapTask(task, to: budgetLineID, project: project)
+                                            if let baseline = viewModel.approvedBaseline,
+                                               let line = baseline.lines.first(where: { $0.id == budgetLineID }) {
+                                                var updatedTask = task
+                                                updatedTask.budgetLineID = budgetLineID
+                                                updatedTask.estimateVersionID = baseline.estimateVersionID
+                                                updatedTask.phaseName = line.phase
+                                                await projectVM.updateTask(updatedTask, in: project.id)
+                                            }
+                                        }
+                                        selectedMappingSource = nil
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                ContentUnavailableView("Select a Project", systemImage: "folder.badge.questionmark")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func statusCard(project: Project) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("AI Project Calculator")
+                        .font(.title3)
+                        .fontWeight(.semibold)
+                    Text(viewModel.serviceModeDescription)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                Spacer()
+                if let baseline = viewModel.approvedBaseline {
+                    Text("Baseline \(baseline.createdAt.formatted(date: .abbreviated, time: .omitted))")
+                        .font(.caption)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Color.green.opacity(0.14), in: Capsule())
+                } else {
+                    Text("Draft Mode")
+                        .font(.caption)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Color.orange.opacity(0.14), in: Capsule())
+                }
+            }
+
+            Text("Managed backend orchestration is the long-term path. This build ships the endpoint contract plus a deterministic local fallback so baseline planning is available immediately.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+
+            if let errorMessage = viewModel.errorMessage {
+                Text(errorMessage)
+                    .font(.caption)
+                    .foregroundColor(.red)
+            }
+
+            if let baseline = viewModel.approvedBaseline {
+                let totals = baseline.totals
+                HStack {
+                    summaryMetric(title: "Internal", value: totals.internalTotal)
+                    summaryMetric(title: "Client", value: totals.clientTotal)
+                    summaryMetric(title: "Contingency", value: totals.contingency)
+                }
+            } else {
+                Text("Start with a structured scope prompt, location, and vendor context. Approving a draft locks the live budget baseline and enables variance tracking.")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+            }
+        }
+        .padding()
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
+    }
+
+    @ViewBuilder
+    private func intakeSection(project: Project) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Project Intake")
+                .font(.headline)
+
+            Picker("Project Type", selection: $viewModel.input.projectType) {
+                ForEach(EstimateProjectType.allCases) { type in
+                    Text(type.rawValue).tag(type)
+                }
+            }
+
+            TextField("ZIP / Postal Code", text: $viewModel.input.zipCode)
+                .textInputAutocapitalization(.never)
+                .accessibilityIdentifier("ai-project-calculator-zip")
+
+            TextField("Preferred Vendors (comma separated)", text: Binding(
+                get: { viewModel.input.preferredVendors.joined(separator: ", ") },
+                set: { viewModel.input.preferredVendors = $0.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty } }
+            ))
+
+            TextField("Preferred Stores (comma separated)", text: Binding(
+                get: { viewModel.input.preferredStores.joined(separator: ", ") },
+                set: { viewModel.input.preferredStores = $0.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty } }
+            ))
+
+            Picker("Quality", selection: $viewModel.input.qualityLevel) {
+                ForEach(EstimateQualityLevel.allCases) { level in
+                    Text(level.rawValue).tag(level)
+                }
+            }
+
+            Picker("Schedule", selection: $viewModel.input.scheduleIntent) {
+                ForEach(EstimateScheduleIntent.allCases) { schedule in
+                    Text(schedule.rawValue).tag(schedule)
+                }
+            }
+
+            Picker("Labor Strategy", selection: $viewModel.input.laborStrategy) {
+                ForEach(EstimateLaborStrategy.allCases) { strategy in
+                    Text(strategy.rawValue).tag(strategy)
+                }
+            }
+
+            Picker("Proposal Style", selection: $viewModel.input.proposalStyle) {
+                ForEach(EstimateProposalStyle.allCases) { style in
+                    Text(style.rawValue).tag(style)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Project Prompt")
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+
+                TextEditor(text: $viewModel.input.scopePrompt)
+                    .frame(minHeight: 120)
+                    .padding(8)
+                    .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
+                    .accessibilityIdentifier("ai-project-calculator-prompt")
+            }
+
+            Stepper(
+                "Contingency \(Int(viewModel.input.contingencyPercent))%",
+                value: $viewModel.input.contingencyPercent,
+                in: 0...25,
+                step: 1
+            )
+
+            Toggle("Generate starter tasks on approval", isOn: $viewModel.autoGenerateStarterTasks)
+
+            Button {
+                Task {
+                    await viewModel.createSessionAndDraft(
+                        project: project,
+                        organizationProjects: projectVM.organizationProjects
+                    )
+                }
+            } label: {
+                Label("Build Draft Estimate", systemImage: "sparkles.rectangle.stack")
+            }
+            .buttonStyle(.borderedProminent)
+            .accessibilityIdentifier("ai-project-calculator-build")
+        }
+        .padding()
+        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 16))
+    }
+
+    @ViewBuilder
+    private func clarificationSection(project: Project) -> some View {
+        if let session = viewModel.session, session.clarifications.isEmpty == false, session.isReadyForDraft == false {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Clarifications")
+                    .font(.headline)
+
+                ForEach(session.clarifications) { clarification in
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(clarification.question)
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                        TextField(
+                            "Answer",
+                            text: Binding(
+                                get: { clarificationDrafts[clarification.id] ?? clarification.answer },
+                                set: { clarificationDrafts[clarification.id] = $0 }
+                            )
+                        )
+                        .textFieldStyle(.roundedBorder)
+                        Button("Save Answer") {
+                            Task {
+                                await viewModel.answerClarification(
+                                    clarification.id,
+                                    answer: clarificationDrafts[clarification.id] ?? clarification.answer,
+                                    project: project,
+                                    organizationProjects: projectVM.organizationProjects
+                                )
+                            }
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                }
+            }
+            .padding()
+            .background(Color.blue.opacity(0.08), in: RoundedRectangle(cornerRadius: 16))
+        }
+    }
+
+    @ViewBuilder
+    private func draftSection(project: Project) -> some View {
+        if let draft = viewModel.draft {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack {
+                    Text("Draft Review")
+                        .font(.headline)
+                    Spacer()
+                    Text("\(Int(draft.confidence * 100))% confidence")
+                        .font(.caption)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Color.purple.opacity(0.12), in: Capsule())
+                }
+
+                Picker("View", selection: $selectedProposalMode) {
+                    ForEach(ProposalMode.allCases) { mode in
+                        Text(mode.rawValue).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                if selectedProposalMode == .internalBudget {
+                    VStack(spacing: 12) {
+                        HStack {
+                            summaryMetric(title: "Materials", value: draft.totals.materials)
+                            summaryMetric(title: "Labor", value: draft.totals.labor + draft.totals.subcontract)
+                            summaryMetric(title: "Client Total", value: draft.totals.clientTotal)
+                        }
+
+                        ForEach(Array(Dictionary(grouping: draft.lines, by: \.phase).keys.sorted()), id: \.self) { phase in
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text(phase)
+                                    .font(.subheadline)
+                                    .fontWeight(.semibold)
+                                ForEach(draft.lines.filter { $0.phase == phase }) { line in
+                                    HStack(alignment: .top) {
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            Text(line.title)
+                                                .font(.subheadline)
+                                            Text(line.detail)
+                                                .font(.caption)
+                                                .foregroundColor(.secondary)
+                                        }
+                                        Spacer()
+                                        VStack(alignment: .trailing, spacing: 4) {
+                                            Text(line.totalCost.formatAsCurrency())
+                                                .font(.subheadline)
+                                                .fontWeight(.medium)
+                                            Text(line.lineType.rawValue.capitalized)
+                                                .font(.caption2)
+                                                .foregroundColor(.secondary)
+                                        }
+                                    }
+                                    .padding(.vertical, 6)
+                                }
+                            }
+                            .padding()
+                            .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 14))
+                        }
+                    }
+                } else {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text(draft.proposalView.executiveSummary)
+                            .font(.subheadline)
+                        ForEach(draft.proposalView.sections) { section in
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack {
+                                    Text(section.title)
+                                        .font(.subheadline)
+                                        .fontWeight(.semibold)
+                                    Spacer()
+                                    if let total = section.total {
+                                        Text(total.formatAsCurrency())
+                                            .font(.subheadline)
+                                    }
+                                }
+                                Text(section.body)
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            .padding()
+                            .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 14))
+                        }
+                    }
+                }
+
+                if draft.assumptions.isEmpty == false {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Assumptions")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                        ForEach(draft.assumptions, id: \.self) { assumption in
+                            Text("• \(assumption)")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
+
+                Button {
+                    Task {
+                        await viewModel.approveDraft(
+                            project: project,
+                            organizationProjects: projectVM.organizationProjects,
+                            approvedByUserID: authVM.user?.id,
+                            applyBaseline: { baseline in
+                                await projectVM.applyApprovedBudgetBaseline(baseline, to: project.id)
+                            },
+                            generateTasks: { baseline, versionID in
+                                await projectVM.generateStarterTasks(from: baseline, versionID: versionID, for: project.id)
+                            }
+                        )
+                    }
+                } label: {
+                    Label("Approve Draft Baseline", systemImage: "checkmark.seal.fill")
+                }
+                .buttonStyle(.borderedProminent)
+                .accessibilityIdentifier("ai-project-calculator-approve")
+            }
+            .padding()
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
+        }
+    }
+
+    @ViewBuilder
+    private func approvedBaselineSection(project: Project) -> some View {
+        if let baseline = viewModel.approvedBaseline,
+           let varianceSnapshot = viewModel.varianceSnapshot {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Variance Dashboard")
+                    .font(.headline)
+
+                HStack {
+                    summaryMetric(title: "Budgeted", value: varianceSnapshot.totalBudgeted)
+                    summaryMetric(title: "Committed", value: varianceSnapshot.totalCommitted)
+                    summaryMetric(title: "Actual", value: varianceSnapshot.totalActual)
+                }
+
+                HStack {
+                    summaryMetric(title: "Remaining", value: varianceSnapshot.totalRemaining)
+                    summaryMetric(title: "Forecast", value: varianceSnapshot.totalForecast)
+                    summaryMetric(title: "Lines", value: Double(baseline.lines.count), formatAsCurrency: false)
+                }
+
+                ForEach(varianceSnapshot.lines) { line in
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(line.title)
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                                Text(line.phase)
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            Spacer()
+                            Text(line.budgeted.formatAsCurrency())
+                                .font(.subheadline)
+                        }
+
+                        HStack {
+                            metricChip(title: "Actual", value: line.actual)
+                            metricChip(title: "Committed", value: line.committed)
+                            metricChip(title: "Forecast", value: line.forecast)
+                        }
+                    }
+                    .padding()
+                    .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 14))
+                }
+            }
+            .padding()
+            .background(Color.green.opacity(0.08), in: RoundedRectangle(cornerRadius: 16))
+        }
+    }
+
+    @ViewBuilder
+    private func mappingQueueSection(project: Project) -> some View {
+        if viewModel.approvedBaseline != nil {
+            let receipts = viewModel.unmatchedReceipts(for: project)
+            let workHours = viewModel.unmatchedWorkHours(for: project)
+            let tasks = viewModel.unmatchedTasks(for: project)
+
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Needs Mapping")
+                    .font(.headline)
+
+                if receipts.isEmpty && workHours.isEmpty && tasks.isEmpty {
+                    Text("All current receipts, labor hours, and tasks are linked to the approved budget baseline.")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                } else {
+                    ForEach(receipts, id: \.id) { receipt in
+                        mappingRow(
+                            title: receipt.vendor,
+                            subtitle: "Receipt • \(receipt.amount.formatAsCurrency())",
+                            action: { selectedMappingSource = .receipt(receipt) }
+                        )
+                    }
+                    ForEach(workHours, id: \.id) { workHour in
+                        mappingRow(
+                            title: workHour.employee,
+                            subtitle: "Labor Hour • \(workHour.totalPay.formatAsCurrency())",
+                            action: { selectedMappingSource = .workHour(workHour) }
+                        )
+                    }
+                    ForEach(tasks, id: \.id) { task in
+                        mappingRow(
+                            title: task.title,
+                            subtitle: "Task • \(task.estimatedHours.formatted()) est. hrs",
+                            action: { selectedMappingSource = .task(task) }
+                        )
+                    }
+                }
+            }
+            .padding()
+            .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 16))
+        }
+    }
+
+    @ViewBuilder
+    private func mappingRow(title: String, subtitle: String, action: @escaping () -> Void) -> some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            Spacer()
+            Button("Map", action: action)
+                .buttonStyle(.bordered)
+        }
+    }
+
+    @ViewBuilder
+    private func summaryMetric(title: String, value: Double, formatAsCurrency: Bool = true) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.caption)
+                .foregroundColor(.secondary)
+            Text(formatAsCurrency ? value.formatAsCurrency() : value.formatted())
+                .font(.headline)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding()
+        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    @ViewBuilder
+    private func metricChip(title: String, value: Double) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(.caption2)
+                .foregroundColor(.secondary)
+            Text(value.formatAsCurrency())
+                .font(.caption)
+                .fontWeight(.medium)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(Color.white.opacity(0.7), in: RoundedRectangle(cornerRadius: 10))
     }
 }

@@ -13,6 +13,9 @@ public struct ProjectTask: Identifiable, Codable, Sendable {
     public var estimatedHours: Double
     public var actualHours: Double
     public var projectID: UUID
+    public var budgetLineID: UUID?
+    public var estimateVersionID: UUID?
+    public var phaseName: String?
     
     // Visual documentation - CloudKit photo system
     public var photoIDs: [UUID]
@@ -38,6 +41,9 @@ public struct ProjectTask: Identifiable, Codable, Sendable {
         estimatedHours: Double = 1.0,
         actualHours: Double = 0.0,
         projectID: UUID,
+        budgetLineID: UUID? = nil,
+        estimateVersionID: UUID? = nil,
+        phaseName: String? = nil,
         photoIDs: [UUID] = [],
         assignedEmployeeIDs: [UUID] = [],
         completedByEmployeeIDs: [UUID] = [],
@@ -56,6 +62,9 @@ public struct ProjectTask: Identifiable, Codable, Sendable {
         self.estimatedHours = estimatedHours
         self.actualHours = actualHours
         self.projectID = projectID
+        self.budgetLineID = budgetLineID
+        self.estimateVersionID = estimateVersionID
+        self.phaseName = phaseName
         self.photoIDs = photoIDs
         self.assignedEmployeeIDs = assignedEmployeeIDs
         self.completedByEmployeeIDs = completedByEmployeeIDs

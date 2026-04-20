@@ -10,6 +10,7 @@ import SwiftUI
 import CloudKit
 import Combine
 import OSLog
+import SQLite3
 
 extension Logger {
     static let project = Logger(subsystem: "com.RheirHome.RHEIR", category: "project")
@@ -2355,5 +2356,1267 @@ final class CloudKitProjectRepository: ProjectRepository {
 
         configure(record)
         _ = try await database.save(record)
+    }
+}
+
+private let sqliteTransient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+
+extension Logger {
+    static let estimatorStore = Logger(subsystem: "com.RheirHome.RHEIR", category: "estimatorStore")
+    static let estimatorService = Logger(subsystem: "com.RheirHome.RHEIR", category: "estimatorService")
+}
+
+protocol RHEIREstimationServicing: Sendable {
+    func createSession(
+        project: Project,
+        input: EstimateIntakeInput,
+        organizationProjects: [Project]
+    ) async throws -> EstimateSession
+
+    func clarify(
+        session: EstimateSession,
+        organizationProjects: [Project]
+    ) async throws -> EstimateSession
+
+    func generateDraft(
+        session: EstimateSession,
+        project: Project,
+        organizationProjects: [Project]
+    ) async throws -> EstimateDraft
+
+    func approveDraft(
+        _ draft: EstimateDraft,
+        project: Project,
+        approvedByUserID: String?
+    ) async throws -> EstimateVersion
+
+    func mapActualCost(_ link: ActualCostLink) async throws -> ActualCostLink
+}
+
+enum RHEIREstimationMode: String, Sendable {
+    case remote
+    case localFallback
+}
+
+actor HybridRHEIREstimationService: RHEIREstimationServicing {
+    static let shared = HybridRHEIREstimationService()
+
+    private let remoteBaseURL: URL?
+
+    init(processInfo: ProcessInfo = .processInfo) {
+        if let raw = processInfo.environment["RHEIR_ESTIMATION_BASE_URL"],
+           let parsed = URL(string: raw) {
+            remoteBaseURL = parsed
+        } else {
+            remoteBaseURL = nil
+        }
+    }
+
+    nonisolated var mode: RHEIREstimationMode {
+        remoteBaseURL == nil ? .localFallback : .remote
+    }
+
+    func createSession(
+        project: Project,
+        input: EstimateIntakeInput,
+        organizationProjects: [Project]
+    ) async throws -> EstimateSession {
+        if let remoteBaseURL {
+            do {
+                return try await remoteRequest(
+                    baseURL: remoteBaseURL,
+                    path: "/estimate-sessions",
+                    method: "POST",
+                    body: SessionCreateRequest(
+                        projectID: project.id,
+                        organizationID: project.organizationID,
+                        input: input
+                    ),
+                    as: EstimateSession.self
+                )
+            } catch {
+                Logger.estimatorService.warning("Remote estimate session creation failed; falling back locally.")
+            }
+        }
+
+        var session = EstimateSession(projectID: project.id, input: input)
+        session.clarifications = clarificationQuestions(for: input)
+        session.status = session.clarifications.isEmpty ? .readyForDraft : .clarifying
+        return session
+    }
+
+    func clarify(
+        session: EstimateSession,
+        organizationProjects: [Project]
+    ) async throws -> EstimateSession {
+        if let remoteBaseURL {
+            do {
+                return try await remoteRequest(
+                    baseURL: remoteBaseURL,
+                    path: "/estimate-sessions/\(session.id.uuidString)/clarify",
+                    method: "POST",
+                    body: SessionClarificationRequest(clarifications: session.clarifications),
+                    as: EstimateSession.self
+                )
+            } catch {
+                Logger.estimatorService.warning("Remote clarification failed; falling back locally.")
+            }
+        }
+
+        var updated = session
+        updated.updatedAt = Date()
+        updated.status = updated.isReadyForDraft ? .readyForDraft : .clarifying
+        return updated
+    }
+
+    func generateDraft(
+        session: EstimateSession,
+        project: Project,
+        organizationProjects: [Project]
+    ) async throws -> EstimateDraft {
+        if let remoteBaseURL {
+            do {
+                return try await remoteRequest(
+                    baseURL: remoteBaseURL,
+                    path: "/estimate-sessions/\(session.id.uuidString)/draft",
+                    method: "POST",
+                    body: DraftGenerationRequest(project: project, organizationProjects: organizationProjects),
+                    as: EstimateDraft.self
+                )
+            } catch {
+                Logger.estimatorService.warning("Remote draft generation failed; falling back locally.")
+            }
+        }
+
+        let lines = fallbackLines(session: session, project: project, organizationProjects: organizationProjects)
+        let assumptions = fallbackAssumptions(session: session, project: project)
+        let proposal = fallbackProposal(project: project, lines: lines, assumptions: assumptions)
+
+        return EstimateDraft(
+            sessionID: session.id,
+            projectID: project.id,
+            confidence: fallbackConfidence(session: session, organizationProjects: organizationProjects),
+            assumptions: assumptions,
+            alternates: fallbackAlternates(input: session.input),
+            lines: lines,
+            proposalView: proposal
+        )
+    }
+
+    func approveDraft(
+        _ draft: EstimateDraft,
+        project: Project,
+        approvedByUserID: String?
+    ) async throws -> EstimateVersion {
+        if let remoteBaseURL {
+            do {
+                return try await remoteRequest(
+                    baseURL: remoteBaseURL,
+                    path: "/estimate-drafts/\(draft.id.uuidString)/approve",
+                    method: "POST",
+                    body: DraftApprovalRequest(project: project, approvedByUserID: approvedByUserID),
+                    as: EstimateVersion.self
+                )
+            } catch {
+                Logger.estimatorService.warning("Remote draft approval failed; falling back locally.")
+            }
+        }
+
+        let versionID = UUID()
+        let totals = draft.totals
+        let directTotal = max(totals.directTotal, 1)
+        let baseline = BudgetBaseline(
+            projectID: project.id,
+            estimateVersionID: versionID,
+            projectType: draft.lines.first?.projectType ?? sessionProjectType(for: project),
+            zipCode: project.zip,
+            contingencyPercent: totals.contingency > 0 ? (totals.contingency / directTotal) * 100 : 0,
+            lines: draft.lines
+        )
+
+        return EstimateVersion(
+            id: versionID,
+            projectID: project.id,
+            draftID: draft.id,
+            approvedByUserID: approvedByUserID,
+            assumptions: draft.assumptions,
+            baseline: baseline,
+            proposalView: draft.proposalView
+        )
+    }
+
+    func mapActualCost(_ link: ActualCostLink) async throws -> ActualCostLink {
+        if let remoteBaseURL {
+            do {
+                return try await remoteRequest(
+                    baseURL: remoteBaseURL,
+                    path: "/budget-lines/\(link.budgetLineID.uuidString)/map-actual",
+                    method: "POST",
+                    body: link,
+                    as: ActualCostLink.self
+                )
+            } catch {
+                Logger.estimatorService.warning("Remote actual cost mapping failed; falling back locally.")
+            }
+        }
+
+        return link
+    }
+
+    private func remoteRequest<RequestBody: Encodable, ResponseBody: Decodable>(
+        baseURL: URL,
+        path: String,
+        method: String,
+        body: RequestBody?,
+        as type: ResponseBody.Type
+    ) async throws -> ResponseBody {
+        let normalizedPath = path.hasPrefix("/") ? String(path.dropFirst()) : path
+        var request = URLRequest(url: baseURL.appendingPathComponent(normalizedPath))
+        request.httpMethod = method
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        if let body {
+            request.httpBody = try JSONEncoder().encode(body)
+        }
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, 200..<300 ~= httpResponse.statusCode else {
+            throw NSError(
+                domain: "HybridRHEIREstimationService",
+                code: (response as? HTTPURLResponse)?.statusCode ?? -1,
+                userInfo: [NSLocalizedDescriptionKey: "Estimator backend request failed."]
+            )
+        }
+
+        return try JSONDecoder().decode(ResponseBody.self, from: data)
+    }
+
+    private func clarificationQuestions(for input: EstimateIntakeInput) -> [EstimateClarificationItem] {
+        var clarifications: [EstimateClarificationItem] = []
+
+        if input.scopePrompt.trimmingCharacters(in: .whitespacesAndNewlines).count < 40 {
+            clarifications.append(
+                EstimateClarificationItem(
+                    question: "What is the full scope of work, including rooms, finishes, and any must-have outcomes?"
+                )
+            )
+        }
+
+        if input.zipCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            clarifications.append(
+                EstimateClarificationItem(question: "What ZIP or postal code should the estimate price research target?")
+            )
+        }
+
+        if input.preferredVendors.isEmpty && input.preferredStores.isEmpty {
+            clarifications.append(
+                EstimateClarificationItem(question: "Are there any preferred vendors, stores, or house accounts to prioritize?")
+            )
+        }
+
+        return clarifications
+    }
+
+    private func fallbackConfidence(session: EstimateSession, organizationProjects: [Project]) -> Double {
+        var confidence = 0.58
+        if session.input.scopePrompt.count > 80 { confidence += 0.12 }
+        if session.input.zipCode.isEmpty == false { confidence += 0.08 }
+        if session.input.preferredStores.isEmpty == false || session.input.preferredVendors.isEmpty == false {
+            confidence += 0.07
+        }
+        if organizationProjects.flatMap(\.receipts).isEmpty == false {
+            confidence += 0.1
+        }
+        return min(confidence, 0.92)
+    }
+
+    private func fallbackAssumptions(session: EstimateSession, project: Project) -> [String] {
+        [
+            "Estimate anchored to \(session.input.zipCode.isEmpty ? "regional fallback pricing" : session.input.zipCode) until managed backend live research is configured.",
+            "Human review is required before locking the baseline or sharing a client-facing proposal.",
+            "Existing project budget target of \(project.totalBudget.formatAsCurrency()) was treated as a guide rail, not a hard cap."
+        ]
+    }
+
+    private func fallbackAlternates(input: EstimateIntakeInput) -> [String] {
+        [
+            "Value-engineered option with fewer premium finishes.",
+            "Schedule-compressed option with added labor allocation.",
+            input.preferredStores.isEmpty ? "Vendor-optimized option once preferred stores are confirmed." : "Preferred-store sourcing option."
+        ]
+    }
+
+    private func fallbackProposal(project: Project, lines: [BudgetLine], assumptions: [String]) -> ProposalView {
+        let visibleLines = lines.filter(\.clientVisible)
+        let sections = Dictionary(grouping: visibleLines, by: \.phase)
+            .keys
+            .sorted()
+            .map { phase in
+                let phaseLines = visibleLines.filter { $0.phase == phase }
+                let total = phaseLines.reduce(0) { $0 + $1.totalCost }
+                let body = phaseLines.map { "\($0.title): \($0.detail)" }.joined(separator: "\n")
+                return ProposalSection(title: phase, body: body, total: total)
+            }
+
+        return ProposalView(
+            title: project.name,
+            subtitle: "Draft AI Project Calculator Proposal",
+            executiveSummary: "\(project.name) for \(project.client) is structured as a detailed scope, budget, and proposal draft. Local pricing is currently estimated from organization history and regional fallbacks until the managed estimator backend is configured.",
+            sections: sections,
+            assumptions: assumptions,
+            clientVisibleLines: visibleLines
+        )
+    }
+
+    private func fallbackLines(
+        session: EstimateSession,
+        project: Project,
+        organizationProjects: [Project]
+    ) -> [BudgetLine] {
+        let historicalReceipts = organizationProjects
+            .filter { $0.organizationID == project.organizationID }
+            .flatMap(\.receipts)
+            .filter { $0.isReturn == false }
+        let averageHistoricalSpend = historicalReceipts.isEmpty
+            ? max(project.totalBudget * 0.06, 450)
+            : historicalReceipts.reduce(0) { $0 + $1.amount } / Double(historicalReceipts.count)
+        let qualityMultiplier: Double
+        switch session.input.qualityLevel {
+        case .valueEngineered: qualityMultiplier = 0.88
+        case .builderGrade: qualityMultiplier = 1.0
+        case .premium: qualityMultiplier = 1.18
+        case .luxury: qualityMultiplier = 1.42
+        }
+        let scheduleMultiplier: Double
+        switch session.input.scheduleIntent {
+        case .aggressive: scheduleMultiplier = 1.12
+        case .standard: scheduleMultiplier = 1.0
+        case .phased: scheduleMultiplier = 1.05
+        }
+
+        let preferredVendor = session.input.preferredVendors.first
+        let preferredStore = session.input.preferredStores.first
+        let phases = estimatePhases(for: session.input.scopePrompt, projectType: session.input.projectType)
+        var lines: [BudgetLine] = []
+
+        for (index, phase) in phases.enumerated() {
+            let seed = Double(index + 1)
+            let quantity = max(1, phase.defaultQuantity)
+            let evidence = [
+                SourceEvidence(
+                    type: historicalReceipts.isEmpty ? .regionalFallback : .organizationHistory,
+                    title: historicalReceipts.isEmpty ? "Regional estimator fallback" : "Organization receipt history",
+                    geographicScope: session.input.zipCode.isEmpty ? "regional" : session.input.zipCode,
+                    vendorOrStore: preferredStore ?? preferredVendor,
+                    confidence: historicalReceipts.isEmpty ? 0.58 : 0.82,
+                    note: historicalReceipts.isEmpty
+                        ? "Managed live research is pending backend configuration."
+                        : "Anchored to \(historicalReceipts.count) historical receipts with average spend \(averageHistoricalSpend.formatAsCurrency())."
+                )
+            ]
+
+            let materialUnitCost = averageHistoricalSpend * phase.materialWeight * qualityMultiplier
+            lines.append(
+                BudgetLine(
+                    projectType: session.input.projectType,
+                    scopeGroup: phase.scopeGroup,
+                    costCode: phase.costCode,
+                    phase: phase.name,
+                    title: "\(phase.name) Materials",
+                    detail: phase.materialDetail,
+                    lineType: .materials,
+                    quantity: quantity,
+                    unit: phase.materialUnit,
+                    unitCost: materialUnitCost,
+                    vendorPreference: preferredVendor,
+                    storePreference: preferredStore,
+                    sourceEvidence: evidence
+                )
+            )
+
+            let laborHours = max(6, seed * phase.laborHourMultiplier)
+            let laborRate = fallbackLaborRate(for: session.input)
+            lines.append(
+                BudgetLine(
+                    projectType: session.input.projectType,
+                    scopeGroup: phase.scopeGroup,
+                    costCode: "\(phase.costCode)-LAB",
+                    phase: phase.name,
+                    title: "\(phase.name) Labor",
+                    detail: phase.laborDetail,
+                    lineType: phase.prefersSubcontract ? .subcontract : .labor,
+                    quantity: laborHours,
+                    unit: "hrs",
+                    unitCost: laborRate * scheduleMultiplier,
+                    laborHours: laborHours,
+                    crewRole: phase.crewRole,
+                    vendorPreference: preferredVendor,
+                    storePreference: preferredStore,
+                    sourceEvidence: evidence
+                )
+            )
+        }
+
+        let directTotal = lines.reduce(0) { $0 + $1.totalCost }
+        lines.append(
+            BudgetLine(
+                projectType: session.input.projectType,
+                scopeGroup: "General",
+                costCode: "GC-100",
+                phase: "General Conditions",
+                title: "General Conditions",
+                detail: "Site supervision, logistics, cleanup, and temporary protections.",
+                lineType: .generalConditions,
+                quantity: 1,
+                unit: "allowance",
+                unitCost: directTotal * 0.08,
+                internalOnly: true,
+                clientVisible: false
+            )
+        )
+        lines.append(
+            BudgetLine(
+                projectType: session.input.projectType,
+                scopeGroup: "General",
+                costCode: "PMT-100",
+                phase: "Permits & Fees",
+                title: "Permits & Fees",
+                detail: "Permit allowance and inspection scheduling coverage.",
+                lineType: .permits,
+                quantity: 1,
+                unit: "allowance",
+                unitCost: max(350, directTotal * 0.025)
+            )
+        )
+        lines.append(
+            BudgetLine(
+                projectType: session.input.projectType,
+                scopeGroup: "General",
+                costCode: "CNT-100",
+                phase: "Contingency",
+                title: "Contingency",
+                detail: "Reserve for unknown conditions, minor scope movement, and pricing gaps.",
+                lineType: .contingency,
+                quantity: 1,
+                unit: "allowance",
+                unitCost: directTotal * (session.input.contingencyPercent / 100),
+                internalOnly: true,
+                clientVisible: false
+            )
+        )
+        lines.append(
+            BudgetLine(
+                projectType: session.input.projectType,
+                scopeGroup: "General",
+                costCode: "MKP-100",
+                phase: "Markup",
+                title: "Overhead & Markup",
+                detail: "Business overhead, coordination margin, and proposal packaging.",
+                lineType: .markup,
+                quantity: 1,
+                unit: "allowance",
+                unitCost: directTotal * 0.12,
+                internalOnly: true,
+                clientVisible: false
+            )
+        )
+
+        return lines.sorted {
+            if $0.phase == $1.phase {
+                return $0.lineType.sortPriority < $1.lineType.sortPriority
+            }
+            return $0.phase < $1.phase
+        }
+    }
+
+    private func fallbackLaborRate(for input: EstimateIntakeInput) -> Double {
+        let baseRate: Double
+        switch input.projectType {
+        case .commercialBuildout: baseRate = 110
+        case .newConstruction: baseRate = 105
+        case .houseFlip, .residentialRemodel: baseRate = 92
+        case .exteriorImprovement: baseRate = 88
+        case .maintenanceRepair: baseRate = 82
+        case .specialtyProject: baseRate = 95
+        }
+
+        switch input.laborStrategy {
+        case .selfPerform: return baseRate * 0.92
+        case .blendedCrew: return baseRate
+        case .subcontractHeavy: return baseRate * 1.12
+        }
+    }
+
+    private func estimatePhases(for prompt: String, projectType: EstimateProjectType) -> [EstimatorPhaseTemplate] {
+        let normalizedPrompt = prompt.lowercased()
+        var phases: [EstimatorPhaseTemplate] = []
+
+        func appendIfMissing(_ template: EstimatorPhaseTemplate) {
+            if phases.contains(where: { $0.name == template.name }) == false {
+                phases.append(template)
+            }
+        }
+
+        if normalizedPrompt.contains("kitchen") {
+            appendIfMissing(.init(name: "Demolition", scopeGroup: "Prep", costCode: "KT-DEM", materialDetail: "Protection, disposal, and selective demolition supplies.", laborDetail: "Selective demolition and haul-off labor.", defaultQuantity: 1, materialUnit: "allowance", materialWeight: 0.5, laborHourMultiplier: 12, crewRole: "Demo Crew"))
+            appendIfMissing(.init(name: "Cabinetry", scopeGroup: "Kitchen", costCode: "KT-CAB", materialDetail: "Cabinets, trim, fillers, and hardware.", laborDetail: "Cabinet install, leveling, and punch work.", defaultQuantity: 1, materialUnit: "package", materialWeight: 1.6, laborHourMultiplier: 20, crewRole: "Finish Carpentry"))
+            appendIfMissing(.init(name: "Countertops", scopeGroup: "Kitchen", costCode: "KT-CTP", materialDetail: "Template, stone, fabrication, and sink cutouts.", laborDetail: "Template coordination and install labor.", defaultQuantity: 1, materialUnit: "package", materialWeight: 1.15, laborHourMultiplier: 8, crewRole: "Stone Fabricator", prefersSubcontract: true))
+        }
+
+        if normalizedPrompt.contains("bath") {
+            appendIfMissing(.init(name: "Plumbing", scopeGroup: "Bathroom", costCode: "BA-PLB", materialDetail: "Valve sets, drains, supply lines, and fixture accessories.", laborDetail: "Rough and finish plumbing labor.", defaultQuantity: 1, materialUnit: "package", materialWeight: 0.9, laborHourMultiplier: 14, crewRole: "Licensed Plumber", prefersSubcontract: true))
+            appendIfMissing(.init(name: "Tile & Waterproofing", scopeGroup: "Bathroom", costCode: "BA-TIL", materialDetail: "Backer board, waterproofing membranes, tile, and setting materials.", laborDetail: "Layout, waterproofing, tile install, and grout labor.", defaultQuantity: 1, materialUnit: "package", materialWeight: 1.3, laborHourMultiplier: 18, crewRole: "Tile Installer"))
+        }
+
+        if normalizedPrompt.contains("roof") || normalizedPrompt.contains("siding") || normalizedPrompt.contains("exterior") {
+            appendIfMissing(.init(name: "Exterior Envelope", scopeGroup: "Exterior", costCode: "EX-ENV", materialDetail: "Exterior cladding, flashing, fasteners, and weather barrier.", laborDetail: "Exterior install labor and site protection.", defaultQuantity: 1, materialUnit: "package", materialWeight: 1.4, laborHourMultiplier: 18, crewRole: "Exterior Crew", prefersSubcontract: true))
+        }
+
+        if normalizedPrompt.contains("electrical") || normalizedPrompt.contains("panel") || normalizedPrompt.contains("lighting") {
+            appendIfMissing(.init(name: "Electrical", scopeGroup: "MEP", costCode: "EL-100", materialDetail: "Devices, breakers, wiring, boxes, and fixtures.", laborDetail: "Rough-in, trim-out, and final electrical labor.", defaultQuantity: 1, materialUnit: "package", materialWeight: 0.85, laborHourMultiplier: 12, crewRole: "Licensed Electrician", prefersSubcontract: true))
+        }
+
+        if phases.isEmpty {
+            switch projectType {
+            case .commercialBuildout:
+                phases = [
+                    .init(name: "Framing", scopeGroup: "Core Scope", costCode: "CB-FRM", materialDetail: "Track, studs, blocking, and framing accessories.", laborDetail: "Layout, framing, and wall build labor.", defaultQuantity: 1, materialUnit: "package", materialWeight: 1.1, laborHourMultiplier: 18, crewRole: "Framing Crew"),
+                    .init(name: "MEP Coordination", scopeGroup: "Core Scope", costCode: "CB-MEP", materialDetail: "Core MEP allowance for coordination and finishing materials.", laborDetail: "MEP trade coordination and finishing labor.", defaultQuantity: 1, materialUnit: "allowance", materialWeight: 0.9, laborHourMultiplier: 15, crewRole: "MEP Trades", prefersSubcontract: true),
+                    .init(name: "Finishes", scopeGroup: "Core Scope", costCode: "CB-FIN", materialDetail: "Paint, flooring, accessories, and punch list materials.", laborDetail: "Install, finish, and closeout labor.", defaultQuantity: 1, materialUnit: "package", materialWeight: 1.2, laborHourMultiplier: 14, crewRole: "Finish Crew")
+                ]
+            default:
+                phases = [
+                    .init(name: "Prep & Demo", scopeGroup: "Core Scope", costCode: "RM-DEM", materialDetail: "Protection, consumables, and disposal materials.", laborDetail: "Selective demo, haul-off, and prep labor.", defaultQuantity: 1, materialUnit: "allowance", materialWeight: 0.55, laborHourMultiplier: 10, crewRole: "Demo Crew"),
+                    .init(name: "Core Scope", scopeGroup: "Core Scope", costCode: "RM-CORE", materialDetail: "Primary scope materials based on prompt and project type.", laborDetail: "Primary install labor based on scope and quality level.", defaultQuantity: 1, materialUnit: "package", materialWeight: 1.25, laborHourMultiplier: 16, crewRole: "Lead Installer"),
+                    .init(name: "Finishes & Punch", scopeGroup: "Core Scope", costCode: "RM-FIN", materialDetail: "Finish materials, hardware, paint, and closeout items.", laborDetail: "Punch list, cleanup, and final install labor.", defaultQuantity: 1, materialUnit: "package", materialWeight: 0.8, laborHourMultiplier: 10, crewRole: "Finish Crew")
+                ]
+            }
+        }
+
+        return phases
+    }
+
+    private func sessionProjectType(for project: Project) -> EstimateProjectType {
+        project.totalBudget > 125000 ? .newConstruction : .residentialRemodel
+    }
+}
+
+private struct EstimatorPhaseTemplate {
+    let name: String
+    let scopeGroup: String
+    let costCode: String
+    let materialDetail: String
+    let laborDetail: String
+    let defaultQuantity: Double
+    let materialUnit: String
+    let materialWeight: Double
+    let laborHourMultiplier: Double
+    let crewRole: String
+    var prefersSubcontract: Bool = false
+}
+
+private struct SessionCreateRequest: Encodable {
+    let projectID: UUID
+    let organizationID: String
+    let input: EstimateIntakeInput
+}
+
+private struct SessionClarificationRequest: Encodable {
+    let clarifications: [EstimateClarificationItem]
+}
+
+private struct DraftGenerationRequest: Encodable {
+    let project: Project
+    let organizationProjects: [Project]
+}
+
+private struct DraftApprovalRequest: Encodable {
+    let project: Project
+    let approvedByUserID: String?
+}
+
+actor SQLiteEstimatorStore {
+    static let shared = SQLiteEstimatorStore()
+
+    private let databaseURL: URL
+    private var db: OpaquePointer?
+
+    init(databaseURL: URL? = nil, fileManager: FileManager = .default) {
+        if let databaseURL {
+            self.databaseURL = databaseURL
+        } else {
+            let appSupportDirectory = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+                .appendingPathComponent("RHEIR", isDirectory: true)
+            self.databaseURL = appSupportDirectory.appendingPathComponent("rheir_estimator.sqlite")
+        }
+    }
+
+    deinit {
+        if let db {
+            sqlite3_close(db)
+        }
+    }
+
+    func saveSession(_ session: EstimateSession) throws {
+        try upsertRecord(
+            tableName: "estimate_sessions",
+            recordID: session.id.uuidString,
+            projectID: session.projectID.uuidString,
+            updatedAt: session.updatedAt.timeIntervalSince1970,
+            payload: encode(session)
+        )
+    }
+
+    func loadSession(projectID: UUID) throws -> EstimateSession? {
+        try loadLatestRecord(tableName: "estimate_sessions", projectID: projectID, as: EstimateSession.self)
+    }
+
+    func saveDraft(_ draft: EstimateDraft) throws {
+        try upsertRecord(
+            tableName: "estimate_drafts",
+            recordID: draft.id.uuidString,
+            projectID: draft.projectID.uuidString,
+            updatedAt: draft.updatedAt.timeIntervalSince1970,
+            payload: encode(draft)
+        )
+    }
+
+    func loadDraft(projectID: UUID) throws -> EstimateDraft? {
+        try loadLatestRecord(tableName: "estimate_drafts", projectID: projectID, as: EstimateDraft.self)
+    }
+
+    func saveBaseline(_ baseline: BudgetBaseline) throws {
+        try upsertRecord(
+            tableName: "budget_baselines",
+            recordID: baseline.id.uuidString,
+            projectID: baseline.projectID.uuidString,
+            updatedAt: baseline.updatedAt.timeIntervalSince1970,
+            payload: encode(baseline)
+        )
+    }
+
+    func loadBaseline(projectID: UUID) throws -> BudgetBaseline? {
+        try loadLatestRecord(tableName: "budget_baselines", projectID: projectID, as: BudgetBaseline.self)
+    }
+
+    func saveVersion(_ version: EstimateVersion) throws {
+        try upsertRecord(
+            tableName: "estimate_versions",
+            recordID: version.id.uuidString,
+            projectID: version.projectID.uuidString,
+            updatedAt: version.approvedAt.timeIntervalSince1970,
+            payload: encode(version)
+        )
+    }
+
+    func loadVersions(projectID: UUID) throws -> [EstimateVersion] {
+        try loadRecords(tableName: "estimate_versions", projectID: projectID, as: EstimateVersion.self)
+    }
+
+    func saveActualCostLink(_ link: ActualCostLink) throws {
+        try upsertActualCostLink(link)
+    }
+
+    func replaceActualCostLink(_ link: ActualCostLink) throws {
+        try deleteActualCostLink(
+            projectID: link.projectID,
+            sourceType: link.sourceType,
+            sourceRecordID: link.sourceRecordID
+        )
+        try saveActualCostLink(link)
+    }
+
+    func loadActualCostLinks(projectID: UUID) throws -> [ActualCostLink] {
+        try loadRecords(tableName: "actual_cost_links", projectID: projectID, as: ActualCostLink.self)
+    }
+
+    func deleteActualCostLink(
+        projectID: UUID,
+        sourceType: ActualCostSourceType,
+        sourceRecordID: String
+    ) throws {
+        try openIfNeeded()
+
+        let sql = """
+        DELETE FROM actual_cost_links
+        WHERE project_id = ? AND source_type = ? AND source_record_id = ?
+        """
+
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
+            throw storeError("Failed to prepare delete for actual cost link.")
+        }
+        defer { sqlite3_finalize(statement) }
+
+        try bindText(projectID.uuidString, to: statement, at: 1)
+        try bindText(sourceType.rawValue, to: statement, at: 2)
+        try bindText(sourceRecordID, to: statement, at: 3)
+
+        guard sqlite3_step(statement) == SQLITE_DONE else {
+            throw storeError("Failed to delete actual cost link.")
+        }
+    }
+
+    private func openIfNeeded() throws {
+        if db != nil {
+            return
+        }
+
+        try FileManager.default.createDirectory(
+            at: databaseURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true,
+            attributes: nil
+        )
+
+        let openResult = sqlite3_open_v2(
+            databaseURL.path,
+            &db,
+            SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX,
+            nil
+        )
+
+        guard openResult == SQLITE_OK else {
+            throw storeError("Unable to open estimator database.")
+        }
+
+        try execute(
+            """
+            CREATE TABLE IF NOT EXISTS estimate_sessions (
+                record_id TEXT PRIMARY KEY NOT NULL,
+                project_id TEXT NOT NULL,
+                updated_at REAL NOT NULL,
+                payload TEXT NOT NULL
+            );
+            """
+        )
+        try execute(
+            """
+            CREATE TABLE IF NOT EXISTS estimate_drafts (
+                record_id TEXT PRIMARY KEY NOT NULL,
+                project_id TEXT NOT NULL,
+                updated_at REAL NOT NULL,
+                payload TEXT NOT NULL
+            );
+            """
+        )
+        try execute(
+            """
+            CREATE TABLE IF NOT EXISTS budget_baselines (
+                record_id TEXT PRIMARY KEY NOT NULL,
+                project_id TEXT NOT NULL,
+                updated_at REAL NOT NULL,
+                payload TEXT NOT NULL
+            );
+            """
+        )
+        try execute(
+            """
+            CREATE TABLE IF NOT EXISTS estimate_versions (
+                record_id TEXT PRIMARY KEY NOT NULL,
+                project_id TEXT NOT NULL,
+                updated_at REAL NOT NULL,
+                payload TEXT NOT NULL
+            );
+            """
+        )
+        try execute(
+            """
+            CREATE TABLE IF NOT EXISTS actual_cost_links (
+                record_id TEXT PRIMARY KEY NOT NULL,
+                project_id TEXT NOT NULL,
+                source_type TEXT NOT NULL,
+                source_record_id TEXT NOT NULL,
+                updated_at REAL NOT NULL,
+                payload TEXT NOT NULL
+            );
+            """
+        )
+        try execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_actual_cost_links_source
+            ON actual_cost_links(project_id, source_type, source_record_id);
+            """
+        )
+    }
+
+    private func execute(_ sql: String) throws {
+        var errorMessage: UnsafeMutablePointer<Int8>?
+        guard sqlite3_exec(db, sql, nil, nil, &errorMessage) == SQLITE_OK else {
+            let message = errorMessage.map { String(cString: $0) } ?? "Unknown SQLite error"
+            sqlite3_free(errorMessage)
+            throw storeError(message)
+        }
+    }
+
+    private func upsertRecord(
+        tableName: String,
+        recordID: String,
+        projectID: String,
+        updatedAt: Double,
+        payload: String
+    ) throws {
+        try openIfNeeded()
+
+        let sql = """
+        INSERT INTO \(tableName) (record_id, project_id, updated_at, payload)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(record_id) DO UPDATE SET
+            project_id = excluded.project_id,
+            updated_at = excluded.updated_at,
+            payload = excluded.payload;
+        """
+
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
+            throw storeError("Failed to prepare upsert into \(tableName).")
+        }
+        defer { sqlite3_finalize(statement) }
+
+        try bindText(recordID, to: statement, at: 1)
+        try bindText(projectID, to: statement, at: 2)
+        sqlite3_bind_double(statement, 3, updatedAt)
+        try bindText(payload, to: statement, at: 4)
+
+        guard sqlite3_step(statement) == SQLITE_DONE else {
+            throw storeError("Failed to upsert into \(tableName).")
+        }
+    }
+
+    private func upsertActualCostLink(_ link: ActualCostLink) throws {
+        try openIfNeeded()
+
+        let sql = """
+        INSERT INTO actual_cost_links (record_id, project_id, source_type, source_record_id, updated_at, payload)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(record_id) DO UPDATE SET
+            project_id = excluded.project_id,
+            source_type = excluded.source_type,
+            source_record_id = excluded.source_record_id,
+            updated_at = excluded.updated_at,
+            payload = excluded.payload;
+        """
+
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
+            throw storeError("Failed to prepare upsert into actual_cost_links.")
+        }
+        defer { sqlite3_finalize(statement) }
+
+        try bindText(link.id.uuidString, to: statement, at: 1)
+        try bindText(link.projectID.uuidString, to: statement, at: 2)
+        try bindText(link.sourceType.rawValue, to: statement, at: 3)
+        try bindText(link.sourceRecordID, to: statement, at: 4)
+        sqlite3_bind_double(statement, 5, link.mappedAt.timeIntervalSince1970)
+        try bindText(try encode(link), to: statement, at: 6)
+
+        guard sqlite3_step(statement) == SQLITE_DONE else {
+            throw storeError("Failed to upsert into actual_cost_links.")
+        }
+    }
+
+    private func loadLatestRecord<T: Decodable>(
+        tableName: String,
+        projectID: UUID,
+        as type: T.Type
+    ) throws -> T? {
+        try loadRecords(tableName: tableName, projectID: projectID, as: type).first
+    }
+
+    private func loadRecords<T: Decodable>(
+        tableName: String,
+        projectID: UUID,
+        as type: T.Type
+    ) throws -> [T] {
+        try openIfNeeded()
+
+        let sql = """
+        SELECT payload
+        FROM \(tableName)
+        WHERE project_id = ?
+        ORDER BY updated_at DESC;
+        """
+
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
+            throw storeError("Failed to prepare select from \(tableName).")
+        }
+        defer { sqlite3_finalize(statement) }
+
+        try bindText(projectID.uuidString, to: statement, at: 1)
+
+        var records: [T] = []
+        while sqlite3_step(statement) == SQLITE_ROW {
+            guard let raw = sqlite3_column_text(statement, 0) else {
+                continue
+            }
+            records.append(try JSONDecoder().decode(T.self, from: Data(String(cString: raw).utf8)))
+        }
+
+        return records
+    }
+
+    private func encode<T: Encodable>(_ value: T) throws -> String {
+        let data = try JSONEncoder().encode(value)
+        guard let payload = String(data: data, encoding: .utf8) else {
+            throw storeError("Failed to encode payload into UTF-8.")
+        }
+        return payload
+    }
+
+    private func bindText(_ value: String, to statement: OpaquePointer?, at index: Int32) throws {
+        let result = value.withCString { pointer in
+            sqlite3_bind_text(statement, index, pointer, -1, sqliteTransient)
+        }
+        guard result == SQLITE_OK else {
+            throw storeError("Failed to bind SQLite text parameter.")
+        }
+    }
+
+    private func storeError(_ message: String) -> NSError {
+        NSError(
+            domain: "SQLiteEstimatorStore",
+            code: Int(sqlite3_errcode(db)),
+            userInfo: [NSLocalizedDescriptionKey: message]
+        )
+    }
+}
+
+@MainActor
+final class AIProjectCalculatorViewModel: ObservableObject {
+    @Published var input: EstimateIntakeInput
+    @Published var session: EstimateSession?
+    @Published var draft: EstimateDraft?
+    @Published var approvedBaseline: BudgetBaseline?
+    @Published var versions: [EstimateVersion] = []
+    @Published var actualCostLinks: [ActualCostLink] = []
+    @Published var varianceSnapshot: VarianceSnapshot?
+    @Published var isLoading = false
+    @Published var errorMessage: String?
+    @Published var autoGenerateStarterTasks = true
+
+    private let projectID: UUID
+    private let service: HybridRHEIREstimationService
+    private let store: SQLiteEstimatorStore
+
+    init(
+        project: Project,
+        service: HybridRHEIREstimationService = .shared,
+        store: SQLiteEstimatorStore = .shared
+    ) {
+        projectID = project.id
+        self.service = service
+        self.store = store
+        input = EstimateIntakeInput(
+            projectType: project.totalBudget > 125000 ? .newConstruction : .residentialRemodel,
+            zipCode: project.zip,
+            scopePrompt: project.description,
+            preferredVendors: Array(Set(project.receipts.map(\.vendor))).sorted(),
+            preferredStores: []
+        )
+    }
+
+    var serviceModeDescription: String {
+        switch service.mode {
+        case .remote:
+            return "Managed backend connected"
+        case .localFallback:
+            return "Local estimator fallback"
+        }
+    }
+
+    func load(project: Project) async {
+        isLoading = true
+        defer { isLoading = false }
+
+        do {
+            session = try await store.loadSession(projectID: projectID)
+            draft = try await store.loadDraft(projectID: projectID)
+            approvedBaseline = try await store.loadBaseline(projectID: projectID)
+            versions = try await store.loadVersions(projectID: projectID)
+            actualCostLinks = try await store.loadActualCostLinks(projectID: projectID)
+            if let session {
+                input = session.input
+            }
+            if input.zipCode.isEmpty { input.zipCode = project.zip }
+            if input.scopePrompt.isEmpty { input.scopePrompt = project.description }
+            rebuildVariance(project: project)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func createSessionAndDraft(project: Project, organizationProjects: [Project]) async {
+        isLoading = true
+        errorMessage = nil
+        defer { isLoading = false }
+
+        do {
+            let createdSession = try await service.createSession(
+                project: project,
+                input: input,
+                organizationProjects: organizationProjects
+            )
+            try await store.saveSession(createdSession)
+            session = createdSession
+
+            let clarifiedSession = try await service.clarify(
+                session: createdSession,
+                organizationProjects: organizationProjects
+            )
+            try await store.saveSession(clarifiedSession)
+            session = clarifiedSession
+
+            guard clarifiedSession.isReadyForDraft else {
+                return
+            }
+
+            let generatedDraft = try await service.generateDraft(
+                session: clarifiedSession,
+                project: project,
+                organizationProjects: organizationProjects
+            )
+            try await persistGeneratedDraft(generatedDraft, from: clarifiedSession)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func answerClarification(
+        _ clarificationID: UUID,
+        answer: String,
+        project: Project,
+        organizationProjects: [Project]
+    ) async {
+        guard var session else { return }
+        if let index = session.clarifications.firstIndex(where: { $0.id == clarificationID }) {
+            session.clarifications[index].answer = answer
+        }
+        self.session = session
+
+        do {
+            try await store.saveSession(session)
+            let clarifiedSession = try await service.clarify(session: session, organizationProjects: organizationProjects)
+            try await store.saveSession(clarifiedSession)
+            self.session = clarifiedSession
+
+            if clarifiedSession.isReadyForDraft {
+                let generatedDraft = try await service.generateDraft(
+                    session: clarifiedSession,
+                    project: project,
+                    organizationProjects: organizationProjects
+                )
+                try await persistGeneratedDraft(generatedDraft, from: clarifiedSession)
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func approveDraft(
+        project: Project,
+        organizationProjects: [Project],
+        approvedByUserID: String?,
+        applyBaseline: @escaping (BudgetBaseline) async -> Void,
+        generateTasks: @escaping (BudgetBaseline, UUID) async -> Void
+    ) async {
+        guard let draft else { return }
+
+        isLoading = true
+        errorMessage = nil
+        defer { isLoading = false }
+
+        do {
+            let version = try await service.approveDraft(draft, project: project, approvedByUserID: approvedByUserID)
+            try await store.saveVersion(version)
+            try await store.saveBaseline(version.baseline)
+            var approvedDraft = draft
+            approvedDraft.status = .approved
+            approvedDraft.updatedAt = Date()
+            try await store.saveDraft(approvedDraft)
+            self.draft = approvedDraft
+            if var session {
+                session.status = .approved
+                session.updatedAt = Date()
+                try await store.saveSession(session)
+                self.session = session
+            }
+            versions = try await store.loadVersions(projectID: projectID)
+            approvedBaseline = version.baseline
+            rebuildVariance(project: project)
+
+            await applyBaseline(version.baseline)
+
+            if autoGenerateStarterTasks {
+                await generateTasks(version.baseline, version.id)
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func mapReceipt(_ receipt: Receipt, to budgetLineID: UUID, project: Project) async {
+        guard let baseline = approvedBaseline else { return }
+        let amount = receipt.isReturn ? -receipt.amount : receipt.amount
+        await persistLink(
+            ActualCostLink(
+                projectID: project.id,
+                estimateVersionID: baseline.estimateVersionID,
+                budgetLineID: budgetLineID,
+                sourceType: .receipt,
+                sourceRecordID: receipt.id,
+                mappedAmount: amount,
+                note: "Mapped from saved receipt."
+            ),
+            project: project
+        )
+    }
+
+    func mapWorkHour(_ workHour: WorkHour, to budgetLineID: UUID, project: Project) async {
+        guard let baseline = approvedBaseline else { return }
+        await persistLink(
+            ActualCostLink(
+                projectID: project.id,
+                estimateVersionID: baseline.estimateVersionID,
+                budgetLineID: budgetLineID,
+                sourceType: .workHour,
+                sourceRecordID: workHour.id.uuidString,
+                mappedAmount: workHour.totalPay,
+                note: "Mapped from labor hours."
+            ),
+            project: project
+        )
+    }
+
+    func mapTask(_ task: ProjectTask, to budgetLineID: UUID, project: Project) async {
+        guard let baseline = approvedBaseline else { return }
+        let mappedAmount = task.estimatedHours * (baseline.lines.first(where: { $0.id == budgetLineID })?.unitCost ?? 85)
+        await persistLink(
+            ActualCostLink(
+                projectID: project.id,
+                estimateVersionID: baseline.estimateVersionID,
+                budgetLineID: budgetLineID,
+                sourceType: .task,
+                sourceRecordID: task.id.uuidString,
+                mappedAmount: mappedAmount,
+                note: "Committed cost from task estimate."
+            ),
+            project: project
+        )
+    }
+
+    func unmatchedReceipts(for project: Project) -> [Receipt] {
+        project.receipts.filter { receipt in
+            actualCostLinks.contains(where: {
+                $0.sourceType == .receipt && $0.sourceRecordID == receipt.id
+            }) == false
+        }
+    }
+
+    func unmatchedWorkHours(for project: Project) -> [WorkHour] {
+        project.workHours.filter { hour in
+            actualCostLinks.contains(where: {
+                $0.sourceType == .workHour && $0.sourceRecordID == hour.id.uuidString
+            }) == false
+        }
+    }
+
+    func unmatchedTasks(for project: Project) -> [ProjectTask] {
+        project.tasks.filter { task in
+            let hasExplicitLink = actualCostLinks.contains(where: {
+                $0.sourceType == .task && $0.sourceRecordID == task.id.uuidString
+            })
+            return task.budgetLineID == nil && hasExplicitLink == false
+        }
+    }
+
+    func rebuildVariance(project: Project) {
+        guard let baseline = approvedBaseline else {
+            varianceSnapshot = nil
+            return
+        }
+
+        varianceSnapshot = VarianceSnapshot(
+            project: project,
+            baseline: baseline,
+            actualCostLinks: actualCostLinks
+        )
+    }
+
+    private func persistLink(_ link: ActualCostLink, project: Project) async {
+        do {
+            let persisted = try await service.mapActualCost(link)
+            try await store.replaceActualCostLink(persisted)
+            actualCostLinks = try await store.loadActualCostLinks(projectID: projectID)
+            rebuildVariance(project: project)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func persistGeneratedDraft(
+        _ draft: EstimateDraft,
+        from session: EstimateSession
+    ) async throws {
+        var draftedSession = session
+        draftedSession.status = .drafted
+        draftedSession.updatedAt = Date()
+
+        var reviewDraft = draft
+        reviewDraft.status = .review
+        reviewDraft.updatedAt = Date()
+
+        try await store.saveSession(draftedSession)
+        try await store.saveDraft(reviewDraft)
+
+        self.session = draftedSession
+        self.draft = reviewDraft
+    }
+}
+
+extension ProjectViewModel {
+    func applyApprovedBudgetBaseline(_ baseline: BudgetBaseline, to projectID: UUID) async {
+        guard let project = organizationProjects.first(where: { $0.id == projectID }) else {
+            Logger.project.error("Estimator baseline could not be applied because the project was not found.")
+            return
+        }
+
+        await updateProject(project.applyingBudgetBaseline(baseline))
+    }
+
+    func generateStarterTasks(from baseline: BudgetBaseline, versionID: UUID, for projectID: UUID) async {
+        for line in baseline.lines where line.lineType == .labor || line.lineType == .subcontract || line.lineType == .materials {
+            let task = ProjectTask(
+                title: line.title,
+                description: line.detail,
+                priority: .medium,
+                category: estimatorTaskCategory(for: line),
+                estimatedHours: line.laborHours ?? (line.lineType == .labor ? max(line.quantity, 1) : 1),
+                actualHours: 0,
+                projectID: projectID,
+                budgetLineID: line.id,
+                estimateVersionID: versionID,
+                phaseName: line.phase
+            )
+            await addTask(task, to: projectID)
+        }
+    }
+
+    private func estimatorTaskCategory(for line: BudgetLine) -> TaskCategory {
+        switch line.phase.lowercased() {
+        case let phase where phase.contains("electrical"):
+            return .electrical
+        case let phase where phase.contains("plumb"):
+            return .plumbing
+        case let phase where phase.contains("exterior"):
+            return .landscaping
+        case let phase where phase.contains("finish"):
+            return .painting
+        case let phase where phase.contains("roof"):
+            return .roofing
+        case let phase where phase.contains("cabinet"):
+            return .materials
+        default:
+            return .general
+        }
     }
 }

@@ -3,10 +3,10 @@
 ## Repo
 - Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Branch: `gm/rheir-hardening-phase1`
-- HEAD: `4f0821c59a540f6df39ac3fb663f24466c25d4f2`
+- HEAD: `de088068fc32c14189fafd9d0da16be8757f01a8`
 
 ## Active Initiative
-- RHEIR release hardening, phase 2 receipt workflow pass.
+- RHEIR release hardening, phase 2 estimator foundation and contractor workflow hardening.
 
 ## Completed
 - Recovery tag created before cleanup.
@@ -16,6 +16,12 @@
 - Project-scoped tabs now require explicit project selection.
 - Shared scheme/runtime path is healthy enough for `xcodebuildmcp` simulator build + focused parity.
 - Repo-local STS governance docs created for this repo.
+- Added the first native estimator domain in compiled app code with `EstimateSession`, `EstimateDraft`, `BudgetBaseline`, `EstimateVersion`, `BudgetLine`, `SourceEvidence`, `ActualCostLink`, `VarianceSnapshot`, and proposal-view modeling.
+- Added `HybridRHEIREstimationService` with an environment-driven backend contract (`RHEIR_ESTIMATION_BASE_URL`) plus a deterministic in-app fallback flow for intake clarification, draft generation, approval, and proposal rendering.
+- Added `SQLiteEstimatorStore` so estimator sessions, drafts, approved baselines, versions, and actual-cost links persist in a dedicated SQLite store instead of transient `UserDefaults` blobs.
+- Added `AIProjectCalculatorViewModel` plus a selected-project AI Project Calculator entry point in `BudgetBreakdownView.swift` for intake, clarification, draft review, approval, proposal preview, variance tracking, and mapping queues.
+- Added `ProjectTask` estimator linkage metadata (`budgetLineID`, `estimateVersionID`, `phaseName`) so approved baseline tasks can bridge into the live task flow without replacing existing project summary fields.
+- Added focused estimator parity in `RHEIRTests.swift` for totals rollups, approved-baseline bridge fields, variance math, SQLite round trips, actual-cost link replacement, and the draft-to-approved workflow.
 - Added `ProjectStore` for organization-scoped local project/team-member/assignment persistence.
 - Added `ProjectRepository` for CloudKit project fetch/save and project assignment persistence.
 - Added `OrganizationProjectSyncStore` for organization-scoped project filtering, snapshot persistence, CloudKit merge/fetch/save helpers, zone setup, and assignment gating.
@@ -138,25 +144,24 @@
 - Expanded focused `RHEIRTests/RHEIRTests.swift` parity to prove raw legacy `imageDatas` payloads compact cleanly from `UserDefaults`, on-disk project files, and offline project file writes.
 
 ## In Progress
-- Manually rerun the previously failing real-device scanned-receipt flow on the updated build and capture fresh logs so the new parent-owned scanner session can be checked against the repeated camera re-entry regression from `rheirlogs8.md`.
-- Continue release hardening beyond the now-green selected-project saved-receipt search/browse, category/filter drilldown, and `By Vendor` grouped-summary/expansion seams into broader receipt runtime QA on the real receipts surface.
+- Add deterministic UI smoke coverage for the selected-project AI Project Calculator intake, draft review, and approval flow on the live budget surface.
+- Extend live mapping parity so receipts, work hours, and tasks map into approved budget lines and variance snapshots update deterministically.
+- Keep the managed estimator backend rollout behind `RHEIR_ESTIMATION_BASE_URL` while the deterministic in-app fallback remains the default local execution path.
+- Continue broader selected-project receipt runtime QA in parallel with the new estimator foundation seam.
 - Continue shrinking the remaining oversized active state owners around the new sync and access store boundaries.
 - Expand deterministic parity beyond the focused `RHEIRTests` suite.
 
 ## Blockers
+- A managed `RHEIREstimationService` backend is not configured in this repo-local environment yet, so `RHEIR_ESTIMATION_BASE_URL` is unset and the new estimator flow currently runs through the deterministic local fallback only.
 - Raw in-sandbox `xcodebuild` commands are still less reliable than elevated CLI or `xcodebuildmcp` paths in this environment because CoreSimulator and DerivedData access remain sandbox-sensitive.
-- This environment can install, launch, and inspect the physical-device build, but the exact user-driven scanned-receipt flow still needs a manual rerun to confirm the camera no longer reopens after capture once the scanner host is rebuilt around a parent-owned session, the compact launcher does not regress into the onboarding prompt after dismissal, and cancel teardown no longer surfaces scanner errors on hardware.
 
 ## Latest Evidence
-- `ReceiptsView.swift` now presents the scanner through a parent-owned `ReceiptScannerSession` sheet item that captures a stable project snapshot instead of rebuilding `ReceiptScannerView` from live `selectedProject` and a boolean sheet flag.
-- `ReceiptScannerView.swift` now binds its document-scanner, analysis, error, and processing lifecycle to that shared session object, so nested sheet churn and upstream project refreshes cannot recreate child-local scanner state and auto-relaunch VisionKit.
-- `RHEIRTests.swift` now also covers the new scanner session path directly, proving the reused session retains the hidden-intro launcher state instead of reopening the scanner.
-- Focused scanner lifecycle parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_phase2_scanner_host_targeted_dd -resultBundlePath /tmp/rheir_phase2_scanner_host_targeted.xcresult test -only-testing:RHEIRTests/ReceiptScannerLifecycleTests` -> PASS (`/tmp/rheir_phase2_scanner_host_targeted.xcresult`, `6 tests in 1 suite`)
-- Gate A: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_phase2_scanner_host_dd -resultBundlePath /tmp/rheir_gateA_phase2_scanner_host.xcresult clean build` -> PASS (`/tmp/rheir_gateA_phase2_scanner_host.xcresult`)
-- Focused receipt-persistence parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_phase2_receipt_persist_targeted_dd -resultBundlePath /tmp/rheir_phase2_receipt_persist_targeted.xcresult test -only-testing:RHEIRTests/ProjectPersistencePayloadTests -only-testing:RHEIRTests/CloudKitProjectRepositoryTests -only-testing:RHEIRTests/OrganizationProjectSyncStoreTests` -> PASS (`/tmp/rheir_phase2_receipt_persist_targeted.xcresult`, `8 tests in 3 suites`)
-- Focused persisted-edit UI smoke: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_phase2_receipt_edit_ui_dd -resultBundlePath /tmp/rheir_phase2_receipt_edit_ui.xcresult test -only-testing:RHEIRUITests/RHEIRUITests/testSavedReceiptDetailPersistsEdits` -> PASS (`/tmp/rheir_phase2_receipt_edit_ui.xcresult`, `1 UI test`)
-- Gate A: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_phase2_receipt_persist_dd -resultBundlePath /tmp/rheir_gateA_phase2_receipt_persist.xcresult clean build` -> PASS (`/tmp/rheir_gateA_phase2_receipt_persist.xcresult`)
-- Device build/install validation: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'id=00008140-0011492622E8801C' -derivedDataPath /tmp/rheir_phase2_device_verify_v2_dd -resultBundlePath /tmp/rheir_phase2_device_verify_v2_build.xcresult build` -> PASS (`/tmp/rheir_phase2_device_verify_v2_build.xcresult`), followed by `xcrun devicectl` install/copy verification that `/tmp/rheir_device_projects_after_fix_v2.json` is `2947` bytes with no `imageDatas`, `/tmp/rheir_device_offline_projects_after_fix_v2.json` is `3437` bytes with no `receiptImageData`, and `/tmp/rheir_device_preferences_v2.plist` remains `11701` bytes with compact org-scoped project prefs.
+- `Project.swift` now carries the first compiled estimator domain plus baseline-bridge helpers so approved estimate totals can feed the existing `Project` summary fields without replacing them yet.
+- `ProjectViewModel.swift` now owns `HybridRHEIREstimationService`, `SQLiteEstimatorStore`, and `AIProjectCalculatorViewModel`, keeping secure backend contracts server-oriented while preserving a deterministic local fallback for GM work.
+- `BudgetBreakdownView.swift` now exposes a selected-project AI Project Calculator surface with intake, clarification, draft review, internal/proposal toggles, approval, variance, and unmatched-actual mapping queues.
+- `RHEIRTests.swift` now covers estimator totals, approved-baseline bridge behavior, variance snapshots, SQLite artifact persistence, actual-cost link replacement, and the end-to-end draft approval workflow.
+- Focused estimator parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_estimator_targeted_dd7 -resultBundlePath /tmp/rheir_estimator_targeted7.xcresult test -only-testing:RHEIRTests/EstimatorDomainTests -only-testing:RHEIRTests/SQLiteEstimatorStoreTests -only-testing:RHEIRTests/AIProjectCalculatorWorkflowTests` -> PASS (`/tmp/rheir_estimator_targeted7.xcresult`, `6 tests in 3 suites`)
+- Gate A: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_estimator_foundation_dd -resultBundlePath /tmp/rheir_gateA_estimator_foundation.xcresult clean build` -> PASS (`/tmp/rheir_gateA_estimator_foundation.xcresult`)
 
 ## Next Milestone
-- Manually rerun the previously failing real-device scanned-receipt flow on the updated build, confirm the camera does not reopen after the first capture now that the scanner session is parent-owned, confirm hidden-intro users return to the compact launcher instead of the onboarding prompt after dismissal, confirm cancel teardown no longer surfaces scanner errors, confirm the saved scanned receipt still exists after leaving and returning, verify tax/discount/receipt-number edits are possible before first save, and if the historical warnings stay clear, extend deterministic selected-project receipt workflow coverage into broader receipt runtime QA.
+- Add deterministic selected-project AI Project Calculator UI smoke coverage for intake, draft review, and approval, then extend mapping parity so receipts, labor, and tasks drive budget-line variance on the live budget surface before wiring the managed backend behind `RHEIR_ESTIMATION_BASE_URL`.

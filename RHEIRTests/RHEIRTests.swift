@@ -1543,3 +1543,359 @@ struct ReceiptScannerLifecycleTests {
         #expect(reusedHostSession.showingDocumentScanner == false)
     }
 }
+
+private func makeBudgetLine(
+    id: UUID = UUID(),
+    title: String,
+    phase: String,
+    lineType: BudgetLineType,
+    quantity: Double,
+    unitCost: Double,
+    projectType: EstimateProjectType = .residentialRemodel,
+    clientVisible: Bool = true
+) -> BudgetLine {
+    BudgetLine(
+        id: id,
+        projectType: projectType,
+        scopeGroup: phase,
+        costCode: "CC-\(lineType.sortPriority)-\(title.prefix(3).uppercased())",
+        phase: phase,
+        title: title,
+        detail: "\(title) estimate",
+        lineType: lineType,
+        quantity: quantity,
+        unit: lineType == .labor ? "hrs" : "ea",
+        unitCost: unitCost,
+        laborHours: lineType == .labor ? quantity : nil,
+        crewRole: lineType == .labor ? "Lead Tech" : nil,
+        sourceEvidence: [
+            SourceEvidence(
+                type: .regionalFallback,
+                title: "Regional baseline",
+                geographicScope: "02139",
+                confidence: 0.72,
+                note: "Test fixture"
+            )
+        ],
+        clientVisible: clientVisible
+    )
+}
+
+struct EstimatorDomainTests {
+
+    @Test
+    func rollsUpBudgetLineTotalsByLineType() {
+        let lines = [
+            makeBudgetLine(title: "Lumber", phase: "Framing", lineType: .materials, quantity: 12, unitCost: 24),
+            makeBudgetLine(title: "Crew", phase: "Framing", lineType: .labor, quantity: 20, unitCost: 85),
+            makeBudgetLine(title: "Dumpster", phase: "General", lineType: .generalConditions, quantity: 1, unitCost: 450),
+            makeBudgetLine(title: "Contingency", phase: "General", lineType: .contingency, quantity: 1, unitCost: 600),
+            makeBudgetLine(title: "Markup", phase: "General", lineType: .markup, quantity: 1, unitCost: 275)
+        ]
+
+        let totals = EstimateTotalsSummary(lines: lines)
+
+        #expect(totals.materials == 288)
+        #expect(totals.labor == 1700)
+        #expect(totals.generalConditions == 450)
+        #expect(totals.contingency == 600)
+        #expect(totals.markup == 275)
+        #expect(totals.directTotal == 1988)
+        #expect(totals.internalTotal == 3038)
+        #expect(totals.clientTotal == 3313)
+    }
+
+    @Test
+    func appliesApprovedBaselineIntoProjectBridgeFields() {
+        let baseline = BudgetBaseline(
+            projectID: UUID(),
+            estimateVersionID: UUID(),
+            projectType: .houseFlip,
+            zipCode: "10001",
+            contingencyPercent: 10,
+            lines: [
+                makeBudgetLine(title: "Cabinets", phase: "Kitchen", lineType: .materials, quantity: 1, unitCost: 7200),
+                makeBudgetLine(title: "Install Crew", phase: "Kitchen", lineType: .labor, quantity: 32, unitCost: 95),
+                makeBudgetLine(title: "Permit", phase: "General", lineType: .permits, quantity: 1, unitCost: 450),
+                makeBudgetLine(title: "Site Supervision", phase: "General", lineType: .generalConditions, quantity: 1, unitCost: 1200),
+                makeBudgetLine(title: "Contingency", phase: "General", lineType: .contingency, quantity: 1, unitCost: 900),
+                makeBudgetLine(title: "OH&P", phase: "General", lineType: .markup, quantity: 1, unitCost: 1400)
+            ]
+        )
+        let originalProject = Project(
+            name: "Kitchen Refresh",
+            client: "Jordan",
+            totalBudget: 1000,
+            startDate: .now,
+            endDate: .now.addingTimeInterval(86400),
+            organizationID: "org-estimator"
+        )
+
+        let updatedProject = originalProject.applyingBudgetBaseline(baseline)
+
+        #expect(updatedProject.totalBudget == baseline.totals.clientTotal)
+        #expect(updatedProject.materialCost == baseline.totals.materials + baseline.totals.equipment + baseline.totals.allowance)
+        #expect(updatedProject.laborCost == baseline.totals.labor + baseline.totals.subcontract)
+        #expect(updatedProject.generalConditions == baseline.totals.permits + baseline.totals.generalConditions + baseline.totals.overhead + baseline.totals.markup)
+        #expect(updatedProject.contingency == baseline.totals.contingency)
+        #expect(updatedProject.lastModifiedDate >= originalProject.lastModifiedDate)
+    }
+
+    @Test
+    func buildsVarianceFromMappedActualsAndBudgetLinkedTasks() throws {
+        let framingLineID = UUID()
+        let cleanupLineID = UUID()
+        let baseline = BudgetBaseline(
+            projectID: UUID(),
+            estimateVersionID: UUID(),
+            projectType: .residentialRemodel,
+            zipCode: "02139",
+            contingencyPercent: 8,
+            lines: [
+                makeBudgetLine(id: framingLineID, title: "Framing Crew", phase: "Framing", lineType: .labor, quantity: 10, unitCost: 100),
+                makeBudgetLine(id: cleanupLineID, title: "Final Cleanup", phase: "Closeout", lineType: .generalConditions, quantity: 1, unitCost: 250)
+            ]
+        )
+        var project = Project(
+            id: baseline.projectID,
+            name: "Variance Test",
+            client: "Client B",
+            totalBudget: 10000,
+            startDate: .now,
+            endDate: .now.addingTimeInterval(86400),
+            organizationID: "org-estimator"
+        )
+        project.tasks = [
+            ProjectTask(
+                title: "Frame Powder Room",
+                estimatedHours: 4,
+                projectID: project.id,
+                budgetLineID: framingLineID,
+                estimateVersionID: baseline.estimateVersionID,
+                phaseName: "Framing"
+            )
+        ]
+        let links = [
+            ActualCostLink(
+                projectID: project.id,
+                estimateVersionID: baseline.estimateVersionID,
+                budgetLineID: framingLineID,
+                sourceType: .receipt,
+                sourceRecordID: UUID().uuidString,
+                mappedAmount: 180
+            ),
+            ActualCostLink(
+                projectID: project.id,
+                estimateVersionID: baseline.estimateVersionID,
+                budgetLineID: framingLineID,
+                sourceType: .workHour,
+                sourceRecordID: UUID().uuidString,
+                mappedAmount: 220
+            )
+        ]
+
+        let snapshot = VarianceSnapshot(project: project, baseline: baseline, actualCostLinks: links)
+        let framingLine = try #require(snapshot.lines.first(where: { $0.id == framingLineID }))
+        let cleanupLine = try #require(snapshot.lines.first(where: { $0.id == cleanupLineID }))
+
+        #expect(framingLine.actual == 400)
+        #expect(framingLine.committed == 800)
+        #expect(framingLine.remaining == 600)
+        #expect(framingLine.forecast == 1000)
+        #expect(cleanupLine.actual == 0)
+        #expect(cleanupLine.committed == 0)
+        #expect(snapshot.totalActual == 400)
+    }
+}
+
+struct SQLiteEstimatorStoreTests {
+
+    @Test
+    func persistsEstimatorArtifactsAcrossRoundTrip() async throws {
+        let databaseURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SQLiteEstimatorStoreTests-\(UUID().uuidString)")
+            .appendingPathComponent("estimator.sqlite")
+        let store = SQLiteEstimatorStore(databaseURL: databaseURL)
+        let projectID = UUID()
+        let session = EstimateSession(
+            projectID: projectID,
+            input: EstimateIntakeInput(
+                projectType: .commercialBuildout,
+                zipCode: "60601",
+                scopePrompt: "Tenant buildout for a boutique fitness studio."
+            ),
+            clarifications: [
+                EstimateClarificationItem(question: "Is HVAC replacement required?", answer: "Yes, one rooftop unit.")
+            ],
+            status: .readyForDraft
+        )
+        let draft = EstimateDraft(
+            sessionID: session.id,
+            projectID: projectID,
+            confidence: 0.81,
+            assumptions: ["After-hours work allowed in the lease."],
+            alternates: ["Alternate flooring package."],
+            lines: [
+                makeBudgetLine(title: "Demising Wall", phase: "Framing", lineType: .materials, quantity: 20, unitCost: 40)
+            ],
+            proposalView: ProposalView(
+                title: "Fitness Studio",
+                subtitle: "Initial Estimate",
+                executiveSummary: "Buildout draft",
+                sections: [ProposalSection(title: "Scope", body: "Frame, MEP, finishes")],
+                assumptions: ["After-hours work allowed in the lease."],
+                clientVisibleLines: []
+            )
+        )
+        let baseline = BudgetBaseline(
+            projectID: projectID,
+            estimateVersionID: UUID(),
+            projectType: .commercialBuildout,
+            zipCode: "60601",
+            contingencyPercent: 7,
+            lines: draft.lines
+        )
+        let version = EstimateVersion(
+            projectID: projectID,
+            draftID: draft.id,
+            assumptions: draft.assumptions,
+            baseline: baseline,
+            proposalView: draft.proposalView
+        )
+        let link = ActualCostLink(
+            projectID: projectID,
+            estimateVersionID: baseline.estimateVersionID,
+            budgetLineID: baseline.lines[0].id,
+            sourceType: .receipt,
+            sourceRecordID: UUID().uuidString,
+            mappedAmount: 320
+        )
+
+        try await store.saveSession(session)
+        try await store.saveDraft(draft)
+        try await store.saveBaseline(baseline)
+        try await store.saveVersion(version)
+        try await store.saveActualCostLink(link)
+
+        let loadedSession = try await store.loadSession(projectID: projectID)
+        let loadedDraft = try await store.loadDraft(projectID: projectID)
+        let loadedBaseline = try await store.loadBaseline(projectID: projectID)
+        let loadedVersions = try await store.loadVersions(projectID: projectID)
+        let loadedLinks = try await store.loadActualCostLinks(projectID: projectID)
+
+        #expect(loadedSession == session)
+        #expect(loadedDraft == draft)
+        #expect(loadedBaseline == baseline)
+        #expect(loadedVersions == [version])
+        #expect(loadedLinks == [link])
+    }
+
+    @Test
+    func replacesActualCostLinkBySourceIdentity() async throws {
+        let databaseURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SQLiteEstimatorStoreReplace-\(UUID().uuidString)")
+            .appendingPathComponent("estimator.sqlite")
+        let store = SQLiteEstimatorStore(databaseURL: databaseURL)
+        let projectID = UUID()
+        let sourceRecordID = UUID().uuidString
+        let original = ActualCostLink(
+            projectID: projectID,
+            estimateVersionID: UUID(),
+            budgetLineID: UUID(),
+            sourceType: .receipt,
+            sourceRecordID: sourceRecordID,
+            mappedAmount: 180
+        )
+        let replacement = ActualCostLink(
+            projectID: projectID,
+            estimateVersionID: original.estimateVersionID,
+            budgetLineID: UUID(),
+            sourceType: .receipt,
+            sourceRecordID: sourceRecordID,
+            mappedAmount: 260,
+            note: "Updated allocation"
+        )
+
+        try await store.saveActualCostLink(original)
+        try await store.replaceActualCostLink(replacement)
+
+        let loadedLinks = try await store.loadActualCostLinks(projectID: projectID)
+
+        #expect(loadedLinks == [replacement])
+    }
+}
+
+@MainActor
+struct AIProjectCalculatorWorkflowTests {
+
+    @Test
+    func createsDraftApprovesBaselineAndReloadsPersistedInput() async throws {
+        let databaseURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("AIProjectCalculatorWorkflow-\(UUID().uuidString)")
+            .appendingPathComponent("estimator.sqlite")
+        let store = SQLiteEstimatorStore(databaseURL: databaseURL)
+        let service = HybridRHEIREstimationService()
+        let project = Project(
+            name: "Estimator Workflow",
+            client: "Client C",
+            clientAddress: "123 Main St, Cambridge, MA 02139",
+            description: "Kitchen and bath renovation with electrical updates, new tile, and finish carpentry.",
+            totalBudget: 85000,
+            startDate: .now,
+            endDate: .now.addingTimeInterval(86400),
+            organizationID: "org-estimator"
+        )
+        var historyReceipt = Receipt(
+            vendor: "Builder Depot",
+            date: .now,
+            amount: 425,
+            paymentMethod: "Card"
+        )
+        historyReceipt.projectID = project.id
+        var historicalProject = project
+        historicalProject.receipts = [historyReceipt]
+        let organizationProjects = [historicalProject]
+
+        let viewModel = AIProjectCalculatorViewModel(project: project, service: service, store: store)
+        viewModel.input.projectType = EstimateProjectType.residentialRemodel
+        viewModel.input.zipCode = "02139"
+        viewModel.input.scopePrompt = "Kitchen and bath renovation with electrical updates, tile, carpentry, and finish work."
+        viewModel.input.preferredVendors = ["Builder Depot"]
+        viewModel.input.preferredStores = ["Local Supply"]
+        viewModel.input.contingencyPercent = 12
+
+        await viewModel.createSessionAndDraft(project: project, organizationProjects: organizationProjects)
+
+        let draftedSession = try #require(viewModel.session)
+        let generatedDraft = try #require(viewModel.draft)
+        #expect(draftedSession.status == EstimateSessionStatus.drafted)
+        #expect(generatedDraft.status == EstimateDraftStatus.review)
+        #expect(generatedDraft.lines.isEmpty == false)
+        #expect(generatedDraft.proposalView.sections.isEmpty == false)
+
+        await viewModel.approveDraft(
+            project: project,
+            organizationProjects: organizationProjects,
+            approvedByUserID: "user-123",
+            applyBaseline: { _ in },
+            generateTasks: { _, _ in }
+        )
+
+        let approvedSession = try #require(viewModel.session)
+        let approvedDraft = try #require(viewModel.draft)
+        let approvedBaseline = try #require(viewModel.approvedBaseline)
+
+        #expect(approvedSession.status == EstimateSessionStatus.approved)
+        #expect(approvedDraft.status == EstimateDraftStatus.approved)
+        #expect(viewModel.versions.count == 1)
+        #expect(approvedBaseline.lines == approvedDraft.lines)
+
+        let reloadedViewModel = AIProjectCalculatorViewModel(project: project, service: service, store: store)
+        await reloadedViewModel.load(project: project)
+
+        #expect(reloadedViewModel.input.scopePrompt == viewModel.input.scopePrompt)
+        #expect(reloadedViewModel.input.preferredStores == ["Local Supply"])
+        #expect(reloadedViewModel.session?.status == EstimateSessionStatus.approved)
+        #expect(reloadedViewModel.approvedBaseline == approvedBaseline)
+    }
+}

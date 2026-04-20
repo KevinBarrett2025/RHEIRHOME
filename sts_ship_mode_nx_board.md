@@ -6,6 +6,11 @@
 ## Current Checkpoint
 - Canonical tree cleanup completed in the working branch.
 - Session flow consolidated around `AppSessionSupport.swift`.
+- `Project.swift` now carries the first compiled estimator domain with intake, draft, versioned baseline, variance, source-evidence, and proposal-view models plus bridge helpers back into `Project` budget summary fields.
+- `ProjectViewModel.swift` now contains `HybridRHEIREstimationService`, `SQLiteEstimatorStore`, and `AIProjectCalculatorViewModel` so estimator sessions, drafts, approvals, and actual-cost links persist locally without touching `project.pbxproj`.
+- `BudgetBreakdownView.swift` now exposes an AI Project Calculator entry point from the selected-project budget surface with intake, clarification, draft review, approval, proposal preview, variance, and unmatched-actual mapping queues.
+- `ProjectTask.swift` now carries optional estimator linkage metadata so approved budget lines can bridge into starter tasks and live task variance without replacing the existing task flow.
+- `RHEIRTests.swift` now covers estimator rollups, SQLite persistence, versioning/approval, and draft-to-approved workflow behavior.
 - `ProjectStore`, `ProjectRepository`, `OrganizationProjectSyncStore`, `ProjectAccessStore`, `ReceiptProjectStore`, `ReceiptIntelligenceStore`, `LaborStore`, `CompanyStore`, and `TeamMemberStore` are active seams in compiled code.
 - Active organization directory, vendor intelligence, and payment intelligence services now use structured logging.
 - Active invite routing, organization setup/selection, and Sign in with Apple coordination now use structured logging.
@@ -131,10 +136,12 @@
 ## Open Work
 - Production raw `print(...)` cleanup is effectively complete; only development-only seams still emit raw tracing.
 - Continue shrinking the remaining oversized active state owners.
-- Manually rerun the previously failing real-device scanned-receipt flow on the updated build, verify the camera does not reopen after the first capture now that scanner session ownership is parent-owned, verify hidden-intro users return to the compact launcher instead of the onboarding prompt after dismissal, verify cancel teardown no longer surfaces scanner errors, verify the saved scanned receipt still exists after leaving and returning, and capture fresh logs for the exact mutation path.
-- The stable simulator path is now warning-clean, startup/on-disk payload compaction is validated on device launch, duplicate receipt-ID normalization plus CloudKit upsert hardening are covered in deterministic parity, and deterministic signed-out, ready-state, organization-selection, project-selection, labor, company-admin, receipts-entry, manual-entry vendor-picker, manual-entry add-vendor, manual-entry payment-method-picker, manual-entry add-payment-method, manual-entry submission, saved receipt detail, receipt-detail action, persisted receipt-edit mutation, saved-receipt search/browse, category/filter drilldown, and `By Vendor` grouped-summary/expansion coverage are in place; the next release-hardening seam after the manual device rerun is broader receipt workflow runtime QA.
+- Add deterministic selected-project AI Project Calculator UI smoke coverage for intake, draft review, and approval on the live budget surface.
+- Extend estimator mapping parity so receipts, work hours, and tasks map into approved budget lines and update variance snapshots deterministically.
+- Wire the managed backend rollout behind `RHEIR_ESTIMATION_BASE_URL` without regressing the deterministic local fallback.
+- Continue broader selected-project receipt runtime QA in parallel with the new estimator seam.
 - Use `SHIP_READINESS_CHECKLIST.md` as the current release-progress reference alongside the STS docs.
 
 ## Blockers
-- Physical-device build/signing and startup/on-disk payload compaction are now validated, and simulator parity is green for CloudKit upsert, duplicate-receipt normalization, persisted-edit behavior, and the scanner host lifecycle, but the exact first-scan hardware receipt flow still needs a manual rerun with fresh logs.
+- A managed estimator backend is not configured in this repo-local environment yet, so `RHEIR_ESTIMATION_BASE_URL` is unset and the AI Project Calculator currently executes through its deterministic local fallback only.
 - Raw in-sandbox `xcodebuild` remains less reliable than elevated CLI or the stable `xcodebuildmcp` simulator path in this environment.

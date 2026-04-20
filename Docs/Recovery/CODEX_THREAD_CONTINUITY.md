@@ -3,15 +3,20 @@
 ## Repo Truth
 - Repo Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Active Branch: `gm/rheir-hardening-phase1`
-- Thread Start SHA: `dbce2cd67464fbf2c9e906568721080fea38ffe1`
-- Last Commit At Thread Start: `dbce2cd Phase 2: harden receipt scanner reentry lifecycle`
+- Thread Start SHA: `de088068fc32c14189fafd9d0da16be8757f01a8`
+- Last Commit At Thread Start: `de08806 Phase 2: stabilize receipt scanner parent session lifecycle`
 
 ## Current Objective
-- Validate the receipt scanner host-lifecycle fix after `rheirlogs8.md` showed the scanner session still being recreated after a successful first scan.
-- Confirm the parent-owned receipts scanner session now survives live `selectedProject` refreshes and nested sheet churn so child-local scanner state cannot auto-relaunch VisionKit.
-- Re-run the real-device scanned-receipt flow on the updated build to confirm the camera no longer reopens after the first scan and the saved receipt still persists cleanly.
+- Finalize and commit the first AI project calculator foundation slice for RHEIR on top of the active project and budget seams.
+- Land a native estimator domain with approved-baseline versioning, draft review, proposal preview, and live variance hooks that bridge into the existing receipts, labor, and task flows.
+- Keep the secure backend contract server-oriented while persisting estimator state locally through a dedicated SQLite store and a deterministic in-app fallback path.
 
 ## Current Working Set
+- `Shared/Models/Project.swift` now carries the compiled estimator domain (`EstimateSession`, `EstimateDraft`, `BudgetBaseline`, `EstimateVersion`, `BudgetLine`, `SourceEvidence`, `ActualCostLink`, `VarianceSnapshot`, `ProposalView`) plus `Project.applyingBudgetBaseline(_:)`.
+- `Shared/ViewModels/ProjectViewModel.swift` now contains `HybridRHEIREstimationService`, `SQLiteEstimatorStore`, `AIProjectCalculatorViewModel`, and helper bridges for approved baselines and starter task generation without touching `project.pbxproj`.
+- `Shared/Features/Budget/BudgetBreakdownView.swift` now exposes the selected-project AI Project Calculator surface with intake, clarification, draft review, approval, proposal preview, variance, and unmatched-actual mapping queues.
+- `Shared/Models/ProjectTask.swift` now carries optional estimator linkage metadata (`budgetLineID`, `estimateVersionID`, `phaseName`) so approved budget lines can bridge into the live task flow.
+- `RHEIRTests/RHEIRTests.swift` now covers estimator totals, approved-baseline bridge behavior, variance snapshots, SQLite persistence, actual-cost link replacement, and the draft-to-approved workflow.
 - Session flow now routes through `Shared/Views/Auth/AppSessionSupport.swift`.
 - Active app entry points are under `App/` and `Shared/`.
 - The repo cleanup removed duplicate source trees and backup directories from the active working tree.
@@ -183,8 +188,8 @@
 - This repo follows a repo-local STS equivalent defined in the root governance docs because the original STS spine docs were not present here.
 
 ## Next Required Action
-1. Preserve the repo-local STS docs and `SHIP_READINESS_CHECKLIST.md` as the current release-planning truth for this repository.
-2. Keep `Shared/Views/Auth/LoginView.swift`, `rheir_knowledge_database.json`, `RHEIRmemories.csv`, and `RheirLogo 1024x1024.png` out of the staged set for this checkpoint.
-3. Manually rerun the real-device scanned-receipt flow on the updated build and verify the camera does not reopen after the first capture now that scanner session ownership is parent-owned.
-4. In the same device rerun, verify hidden-intro users return to the compact launcher instead of the onboarding prompt after scanner dismissal, and verify cancel teardown no longer surfaces scanner errors.
-5. Confirm the saved scanned receipt still persists after leaving and returning, then capture fresh logs for the exact mutation path before continuing broader receipt runtime QA.
+1. Preserve the repo-local STS docs and the user-owned files (`Shared/Views/Auth/LoginView.swift`, `rheir_knowledge_database.json`, `RHEIRmemories.csv`, `RheirLogo 1024x1024.png`) outside the staged set for this checkpoint.
+2. Commit the estimator foundation slice from `Project.swift`, `ProjectTask.swift`, `ProjectViewModel.swift`, `BudgetBreakdownView.swift`, `RHEIRTests.swift`, and the repo-local STS docs without touching `project.pbxproj`.
+3. Next seam after this checkpoint: add deterministic selected-project AI Project Calculator UI smoke coverage for intake, draft review, and approval on the live budget surface.
+4. Then extend parity so receipts, work hours, and tasks map into approved budget lines and update variance snapshots deterministically.
+5. Keep the managed backend rollout behind `RHEIR_ESTIMATION_BASE_URL`; local deterministic fallback remains the default until that backend exists.
