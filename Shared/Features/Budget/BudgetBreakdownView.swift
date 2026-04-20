@@ -114,6 +114,8 @@ struct BudgetBreakdownView: View {
                     )
                 }
                 .buttonStyle(PlainButtonStyle())
+                .accessibilityIdentifier("budget-tab-\(tab.rawValue.lowercased())")
+                .accessibilityValue(selectedBudgetTab == tab ? "selected" : "unselected")
             }
         }
         .padding(.horizontal)
@@ -2369,11 +2371,13 @@ struct AIProjectCalculatorView: View {
                 get: { viewModel.input.preferredVendors.joined(separator: ", ") },
                 set: { viewModel.input.preferredVendors = $0.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty } }
             ))
+            .accessibilityIdentifier("ai-project-calculator-vendors")
 
             TextField("Preferred Stores (comma separated)", text: Binding(
                 get: { viewModel.input.preferredStores.joined(separator: ", ") },
                 set: { viewModel.input.preferredStores = $0.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty } }
             ))
+            .accessibilityIdentifier("ai-project-calculator-stores")
 
             Picker("Quality", selection: $viewModel.input.qualityLevel) {
                 ForEach(EstimateQualityLevel.allCases) { level in
@@ -2483,6 +2487,7 @@ struct AIProjectCalculatorView: View {
                 HStack {
                     Text("Draft Review")
                         .font(.headline)
+                        .accessibilityIdentifier("ai-project-calculator-draft-review")
                     Spacer()
                     Text("\(Int(draft.confidence * 100))% confidence")
                         .font(.caption)
@@ -2608,6 +2613,7 @@ struct AIProjectCalculatorView: View {
             VStack(alignment: .leading, spacing: 16) {
                 Text("Variance Dashboard")
                     .font(.headline)
+                    .accessibilityIdentifier("ai-project-calculator-variance-dashboard")
 
                 HStack {
                     summaryMetric(title: "Budgeted", value: varianceSnapshot.totalBudgeted)

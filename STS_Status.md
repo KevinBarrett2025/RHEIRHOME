@@ -3,7 +3,7 @@
 ## Repo
 - Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Branch: `gm/rheir-hardening-phase1`
-- HEAD: `de088068fc32c14189fafd9d0da16be8757f01a8`
+- HEAD: `00dd53013907e86485015fad7bfb479625474da8`
 
 ## Active Initiative
 - RHEIR release hardening, phase 2 estimator foundation and contractor workflow hardening.
@@ -22,6 +22,7 @@
 - Added `AIProjectCalculatorViewModel` plus a selected-project AI Project Calculator entry point in `BudgetBreakdownView.swift` for intake, clarification, draft review, approval, proposal preview, variance tracking, and mapping queues.
 - Added `ProjectTask` estimator linkage metadata (`budgetLineID`, `estimateVersionID`, `phaseName`) so approved baseline tasks can bridge into the live task flow without replacing existing project summary fields.
 - Added focused estimator parity in `RHEIRTests.swift` for totals rollups, approved-baseline bridge fields, variance math, SQLite round trips, actual-cost link replacement, and the draft-to-approved workflow.
+- Added deterministic selected-project AI Project Calculator UI smoke coverage by clearing estimator SQLite artifacts for UI test launches in `RheirApp.swift`, exposing stable estimator-tab/draft/variance accessibility hooks in `BudgetBreakdownView.swift`, and asserting in `RHEIRUITests.swift` that the live budget surface can build and approve a draft estimate deterministically.
 - Added `ProjectStore` for organization-scoped local project/team-member/assignment persistence.
 - Added `ProjectRepository` for CloudKit project fetch/save and project assignment persistence.
 - Added `OrganizationProjectSyncStore` for organization-scoped project filtering, snapshot persistence, CloudKit merge/fetch/save helpers, zone setup, and assignment gating.
@@ -144,7 +145,6 @@
 - Expanded focused `RHEIRTests/RHEIRTests.swift` parity to prove raw legacy `imageDatas` payloads compact cleanly from `UserDefaults`, on-disk project files, and offline project file writes.
 
 ## In Progress
-- Add deterministic UI smoke coverage for the selected-project AI Project Calculator intake, draft review, and approval flow on the live budget surface.
 - Extend live mapping parity so receipts, work hours, and tasks map into approved budget lines and variance snapshots update deterministically.
 - Keep the managed estimator backend rollout behind `RHEIR_ESTIMATION_BASE_URL` while the deterministic in-app fallback remains the default local execution path.
 - Continue broader selected-project receipt runtime QA in parallel with the new estimator foundation seam.
@@ -158,10 +158,12 @@
 ## Latest Evidence
 - `Project.swift` now carries the first compiled estimator domain plus baseline-bridge helpers so approved estimate totals can feed the existing `Project` summary fields without replacing them yet.
 - `ProjectViewModel.swift` now owns `HybridRHEIREstimationService`, `SQLiteEstimatorStore`, and `AIProjectCalculatorViewModel`, keeping secure backend contracts server-oriented while preserving a deterministic local fallback for GM work.
-- `BudgetBreakdownView.swift` now exposes a selected-project AI Project Calculator surface with intake, clarification, draft review, internal/proposal toggles, approval, variance, and unmatched-actual mapping queues.
+- `RheirApp.swift` now clears estimator SQLite artifacts in UI test launch modes, and `BudgetBreakdownView.swift` now exposes deterministic estimator-tab/intake/draft/variance accessibility hooks so the live budget surface stays stable under seeded UI smoke coverage.
+- `RHEIRUITests.swift` now contains deterministic selected-project AI Project Calculator coverage that opens the real project card, switches to the estimator tab, builds a draft estimate, and approves the baseline into the variance dashboard.
 - `RHEIRTests.swift` now covers estimator totals, approved-baseline bridge behavior, variance snapshots, SQLite artifact persistence, actual-cost link replacement, and the end-to-end draft approval workflow.
 - Focused estimator parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_estimator_targeted_dd7 -resultBundlePath /tmp/rheir_estimator_targeted7.xcresult test -only-testing:RHEIRTests/EstimatorDomainTests -only-testing:RHEIRTests/SQLiteEstimatorStoreTests -only-testing:RHEIRTests/AIProjectCalculatorWorkflowTests` -> PASS (`/tmp/rheir_estimator_targeted7.xcresult`, `6 tests in 3 suites`)
-- Gate A: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_estimator_foundation_dd -resultBundlePath /tmp/rheir_gateA_estimator_foundation.xcresult clean build` -> PASS (`/tmp/rheir_gateA_estimator_foundation.xcresult`)
+- Focused estimator UI smoke: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_estimator_ui_smoke_dd -resultBundlePath /tmp/rheir_estimator_ui_smoke.xcresult test -only-testing:RHEIRUITests/RHEIRUITests/testAIProjectCalculatorBuildsAndApprovesDraftEstimate` -> PASS (`/tmp/rheir_estimator_ui_smoke.xcresult`, `1 UI test`)
+- Gate A: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_estimator_ui_smoke_dd -resultBundlePath /tmp/rheir_gateA_estimator_ui_smoke.xcresult clean build` -> PASS (`/tmp/rheir_gateA_estimator_ui_smoke.xcresult`)
 
 ## Next Milestone
-- Add deterministic selected-project AI Project Calculator UI smoke coverage for intake, draft review, and approval, then extend mapping parity so receipts, labor, and tasks drive budget-line variance on the live budget surface before wiring the managed backend behind `RHEIR_ESTIMATION_BASE_URL`.
+- Extend mapping parity so receipts, labor, and tasks drive budget-line variance on the live budget surface, then wire the managed backend behind `RHEIR_ESTIMATION_BASE_URL` without regressing the deterministic local fallback.

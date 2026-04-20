@@ -9,8 +9,10 @@
 - `Project.swift` now carries the first compiled estimator domain with intake, draft, versioned baseline, variance, source-evidence, and proposal-view models plus bridge helpers back into `Project` budget summary fields.
 - `ProjectViewModel.swift` now contains `HybridRHEIREstimationService`, `SQLiteEstimatorStore`, and `AIProjectCalculatorViewModel` so estimator sessions, drafts, approvals, and actual-cost links persist locally without touching `project.pbxproj`.
 - `BudgetBreakdownView.swift` now exposes an AI Project Calculator entry point from the selected-project budget surface with intake, clarification, draft review, approval, proposal preview, variance, and unmatched-actual mapping queues.
+- `RheirApp.swift` now clears estimator SQLite artifacts for seeded UI-test launches, and `BudgetBreakdownView.swift` now exposes deterministic estimator-tab/intake/draft/variance accessibility hooks for the live budget surface.
 - `ProjectTask.swift` now carries optional estimator linkage metadata so approved budget lines can bridge into starter tasks and live task variance without replacing the existing task flow.
 - `RHEIRTests.swift` now covers estimator rollups, SQLite persistence, versioning/approval, and draft-to-approved workflow behavior.
+- `RHEIRUITests.swift` now covers selected-project AI Project Calculator build/approve behavior on the real budget surface in deterministic UI mode.
 - `ProjectStore`, `ProjectRepository`, `OrganizationProjectSyncStore`, `ProjectAccessStore`, `ReceiptProjectStore`, `ReceiptIntelligenceStore`, `LaborStore`, `CompanyStore`, and `TeamMemberStore` are active seams in compiled code.
 - Active organization directory, vendor intelligence, and payment intelligence services now use structured logging.
 - Active invite routing, organization setup/selection, and Sign in with Apple coordination now use structured logging.
@@ -136,7 +138,6 @@
 ## Open Work
 - Production raw `print(...)` cleanup is effectively complete; only development-only seams still emit raw tracing.
 - Continue shrinking the remaining oversized active state owners.
-- Add deterministic selected-project AI Project Calculator UI smoke coverage for intake, draft review, and approval on the live budget surface.
 - Extend estimator mapping parity so receipts, work hours, and tasks map into approved budget lines and update variance snapshots deterministically.
 - Wire the managed backend rollout behind `RHEIR_ESTIMATION_BASE_URL` without regressing the deterministic local fallback.
 - Continue broader selected-project receipt runtime QA in parallel with the new estimator seam.

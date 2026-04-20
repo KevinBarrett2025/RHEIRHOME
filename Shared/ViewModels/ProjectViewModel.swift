@@ -2938,6 +2938,21 @@ private struct DraftApprovalRequest: Encodable {
 actor SQLiteEstimatorStore {
     static let shared = SQLiteEstimatorStore()
 
+    static func clearUITestArtifacts(fileManager: FileManager = .default) {
+        let appSupportDirectory = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("RHEIR", isDirectory: true)
+        let databaseURL = appSupportDirectory.appendingPathComponent("rheir_estimator.sqlite")
+        let candidateURLs = [
+            databaseURL,
+            databaseURL.appendingPathExtension("wal"),
+            databaseURL.appendingPathExtension("shm")
+        ]
+
+        for candidateURL in candidateURLs where fileManager.fileExists(atPath: candidateURL.path) {
+            try? fileManager.removeItem(at: candidateURL)
+        }
+    }
+
     private let databaseURL: URL
     private var db: OpaquePointer?
 

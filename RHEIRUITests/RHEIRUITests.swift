@@ -21,6 +21,8 @@ final class RHEIRUITests: XCTestCase {
         case selectedProject = "selected_project"
     }
 
+    private static let selectedProjectCardIdentifier = "project-card-A7A92AF6-2E2B-4F51-BEA4-4B53CF2A7D11"
+
     override func setUpWithError() throws {
         // Put setup code here. This method is called before the invocation of each test method in the class.
 
@@ -776,6 +778,66 @@ final class RHEIRUITests: XCTestCase {
     }
 
     @MainActor
+    func testAIProjectCalculatorBuildsAndApprovesDraftEstimate() throws {
+        let app = makeApp(mode: .selectedProject)
+        app.launch()
+
+        openAIProjectCalculator(in: app)
+
+        let zipField = app.textFields["ai-project-calculator-zip"]
+        XCTAssertTrue(
+            zipField.waitForExistence(timeout: 5),
+            "Expected the AI Project Calculator intake to expose the ZIP field."
+        )
+        replaceText(in: zipField, with: "90210", app: app)
+
+        let vendorsField = app.textFields["ai-project-calculator-vendors"]
+        XCTAssertTrue(
+            vendorsField.waitForExistence(timeout: 5),
+            "Expected the AI Project Calculator intake to expose the preferred vendors field."
+        )
+        replaceText(in: vendorsField, with: "Home Depot", app: app)
+
+        let promptField = app.textViews["ai-project-calculator-prompt"]
+        XCTAssertTrue(
+            promptField.waitForExistence(timeout: 5),
+            "Expected the AI Project Calculator intake to expose the project prompt editor."
+        )
+        replaceText(
+            in: promptField,
+            with: "Remodel a dated kitchen with new cabinets, quartz counters, appliance swaps, lighting, flooring transitions, and finish carpentry with a contractor-grade scope.",
+            app: app
+        )
+        dismissKeyboardIfPresent(in: app)
+
+        let buildButton = revealButton(identifier: "ai-project-calculator-build", in: app, maxSwipes: 6)
+        XCTAssertTrue(
+            buildButton.exists,
+            "Expected the estimator intake to expose the build-draft action after entering required context."
+        )
+        buildButton.tap()
+
+        let draftReview = app.staticTexts["ai-project-calculator-draft-review"]
+        XCTAssertTrue(
+            draftReview.waitForExistence(timeout: 8),
+            "Expected building the estimator draft to render the draft review section without clarifications."
+        )
+
+        let approveButton = revealButton(identifier: "ai-project-calculator-approve", in: app, maxSwipes: 8)
+        XCTAssertTrue(
+            approveButton.exists,
+            "Expected the draft review surface to expose the approve-baseline action."
+        )
+        approveButton.tap()
+
+        let varianceDashboard = app.staticTexts["ai-project-calculator-variance-dashboard"]
+        XCTAssertTrue(
+            varianceDashboard.waitForExistence(timeout: 8),
+            "Expected approving the estimator draft to render the live variance dashboard."
+        )
+    }
+
+    @MainActor
     func testManualReceiptEntryOpensPaymentMethodPicker() throws {
         let app = makeApp(mode: .selectedProject)
         app.launch()
@@ -1111,6 +1173,29 @@ final class RHEIRUITests: XCTestCase {
         XCTAssertTrue(
             detailNavBar.waitForExistence(timeout: 5),
             "Expected tapping the saved receipt card to navigate to Receipt Details."
+        )
+    }
+
+    private func openAIProjectCalculator(in app: XCUIApplication) {
+        app.tabBars.buttons["Projects"].tap()
+
+        let projectCard = app.buttons[Self.selectedProjectCardIdentifier]
+        XCTAssertTrue(
+            projectCard.waitForExistence(timeout: 5),
+            "Expected deterministic selected-project mode to expose the seeded Kitchen Remodel project card."
+        )
+        projectCard.tap()
+
+        let estimatorTab = app.buttons["budget-tab-estimator"]
+        XCTAssertTrue(
+            estimatorTab.waitForExistence(timeout: 5),
+            "Expected the budget breakdown surface to expose the Estimator tab."
+        )
+        estimatorTab.tap()
+
+        XCTAssertTrue(
+            waitForSelectedValue(on: estimatorTab, timeout: 5),
+            "Expected tapping the Estimator tab to switch the budget surface into estimator mode."
         )
     }
 
