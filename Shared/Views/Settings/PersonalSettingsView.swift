@@ -6,6 +6,7 @@ struct PersonalSettingsView: View {
     @EnvironmentObject private var authVM: AuthViewModel
     @EnvironmentObject private var projectVM: ProjectViewModel
     @Environment(\.dismiss) private var dismiss
+    private let releaseProfile = AppReleaseProfile.current
     
     // App Preferences
     @AppStorage("preferredMapProvider") private var preferredMapProvider: MapProvider = .apple
@@ -23,38 +24,40 @@ struct PersonalSettingsView: View {
         NavigationStack {
             Form {
                 // Subscription Management Section
-                Section {
-                    Button {
-                        showingTierManagement = true
-                    } label: {
-                        HStack {
-                            Image(systemName: "crown.fill")
-                                .font(.title2)
-                                .foregroundColor(.purple)
-                            
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Subscription Management")
-                                    .font(.headline)
-                                    .fontWeight(.semibold)
-                                    .foregroundColor(.primary)
-                                
-                                if let org = authVM.currentOrg {
-                                    Text("Current: \(org.subscriptionTier.displayName)")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
+                if !releaseProfile.shouldHideSubscriptionManagement {
+                    Section {
+                        Button {
+                            showingTierManagement = true
+                        } label: {
+                            HStack {
+                                Image(systemName: "crown.fill")
+                                    .font(.title2)
+                                    .foregroundColor(.purple)
+
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Subscription Management")
+                                        .font(.headline)
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(.primary)
+
+                                    if let org = authVM.currentOrg {
+                                        Text("Current: \(org.subscriptionTier.displayName)")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
                                 }
+
+                                Spacer()
+
+                                Image(systemName: "chevron.right")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
                             }
-                            
-                            Spacer()
-                            
-                            Image(systemName: "chevron.right")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
                         }
+                        .buttonStyle(.plain)
+                    } footer: {
+                        Text("Manage your subscription tier and billing preferences.")
                     }
-                    .buttonStyle(.plain)
-                } footer: {
-                    Text("Manage your subscription tier and billing preferences.")
                 }
                 
                 // App Preferences Section
@@ -129,39 +132,42 @@ struct PersonalSettingsView: View {
                         ))
                     }
                 } footer: {
-                    Text("These settings apply to your personal use of the app across all organizations.")
+                    Text(releaseProfile.shouldHideCollaborationSurface
+                         ? "These settings apply to your personal use of the app on this iCloud account."
+                         : "These settings apply to your personal use of the app across all organizations.")
                 }
                 
                 // Account Section
                 Section {
-                    // Organizations
-                    Button {
-                        showingAccountDetails = true
-                    } label: {
-                        HStack {
-                            Image(systemName: "building.2.fill")
-                                .foregroundColor(.orange)
-                                .frame(width: 24)
-                            
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Organizations")
-                                    .font(.subheadline)
-                                    .fontWeight(.medium)
-                                    .foregroundColor(.primary)
-                                
-                                Text("Member of \(authVM.userOrganizations.count) organization\(authVM.userOrganizations.count == 1 ? "" : "s")")
+                    if !releaseProfile.shouldHideCollaborationSurface {
+                        Button {
+                            showingAccountDetails = true
+                        } label: {
+                            HStack {
+                                Image(systemName: "building.2.fill")
+                                    .foregroundColor(.orange)
+                                    .frame(width: 24)
+
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Organizations")
+                                        .font(.subheadline)
+                                        .fontWeight(.medium)
+                                        .foregroundColor(.primary)
+
+                                    Text("Member of \(authVM.userOrganizations.count) organization\(authVM.userOrganizations.count == 1 ? "" : "s")")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+
+                                Spacer()
+
+                                Image(systemName: "chevron.right")
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                             }
-                            
-                            Spacer()
-                            
-                            Image(systemName: "chevron.right")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
                         }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                     
                     // Sign Out
                     Button {
@@ -182,7 +188,9 @@ struct PersonalSettingsView: View {
                     }
                     .buttonStyle(.plain)
                 } footer: {
-                    Text("Manage your personal account across all organizations.")
+                    Text(releaseProfile.shouldHideCollaborationSurface
+                         ? "Manage your personal account and device preferences."
+                         : "Manage your personal account across all organizations.")
                 }
                 
                 // App Information Section

@@ -139,11 +139,11 @@
 ## Open Work
 - Production raw `print(...)` cleanup is effectively complete; only development-only seams still emit raw tracing.
 - Continue shrinking the remaining oversized active state owners.
-- Wire the managed backend rollout behind `RHEIR_ESTIMATION_BASE_URL` without regressing the deterministic local fallback.
-- Continue broader selected-project estimator variance/runtime QA on top of the approved-baseline mapping seam.
-- Continue broader selected-project receipt runtime QA in parallel with the estimator seam.
+- Keep the shipping app locked to the fast-ship v1 release profile so the visible shell stays single-user and avoids team/admin detours.
+- Continue broader selected-project estimator variance/runtime QA on top of the approved-baseline mapping seam inside the simplified v1 shell.
+- Continue broader selected-project receipt runtime QA in parallel with the estimator seam so the fast-ship contractor workflow stays stable on device and simulator.
 - Use `SHIP_READINESS_CHECKLIST.md` as the current release-progress reference alongside the STS docs.
 
 ## Blockers
-- A managed estimator backend is not configured in this repo-local environment yet, so `RHEIR_ESTIMATION_BASE_URL` is unset and the AI Project Calculator currently executes through its deterministic local fallback only.
+- Same-user iCloud restore/sync is not yet treated as ship-proven; if it fails release-candidate validation, local-device persistence must remain the authoritative launch promise.
 - Raw in-sandbox `xcodebuild` remains less reliable than elevated CLI or the stable `xcodebuildmcp` simulator path in this environment.

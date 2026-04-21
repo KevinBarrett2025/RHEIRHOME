@@ -6,6 +6,7 @@ struct LandingPageView: View {
     @EnvironmentObject var authVM: AuthViewModel
     @EnvironmentObject private var sessionStore: SessionStore
     @Binding var selectedTab: Tab
+    private let releaseProfile = AppReleaseProfile.current
 
     @State private var showNewProject = false
     @State private var isRefreshing = false
@@ -30,7 +31,7 @@ struct LandingPageView: View {
                     )
                     
                     // Additional context info below header
-                    if authVM.currentOrg != nil {
+                    if authVM.currentOrg != nil && !releaseProfile.shouldHideCollaborationSurface {
                         HStack {
                             // Multi-org indicator and quick stats  
                             if authVM.userOrganizations.count > 1 {
@@ -141,10 +142,14 @@ struct LandingPageView: View {
         VStack(spacing: 12) {
             HStack(alignment: .top, spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(authVM.currentOrg?.name ?? "No Organization Selected")
+                    Text(authVM.currentOrg?.name ?? "Workspace Unavailable")
                         .font(.headline)
 
-                    if let role = authVM.currentOrganizationRole {
+                    if releaseProfile.shouldHideCollaborationSurface {
+                        Text("Personal workspace")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    } else if let role = authVM.currentOrganizationRole {
                         Text(role.displayName)
                             .font(.caption)
                             .foregroundColor(.secondary)
@@ -157,7 +162,7 @@ struct LandingPageView: View {
 
                 Spacer()
 
-                if authVM.userOrganizations.count > 1 {
+                if !releaseProfile.shouldHideCollaborationSurface && authVM.userOrganizations.count > 1 {
                     Button("Switch") {
                         sessionStore.showOrganizationSelector()
                     }
@@ -223,7 +228,24 @@ struct LandingPageView: View {
                     .font(.headline)
                     .foregroundColor(.secondary)
                 
-                if let org = authVM.currentOrg {
+                if releaseProfile.shouldHideCollaborationSurface {
+                    VStack(spacing: 8) {
+                        Text("Create your first project to start tracking receipts, labor, tasks, and budget.")
+                            .multilineTextAlignment(.center)
+                            .foregroundColor(.secondary)
+
+                        Button {
+                            showNewProject = true
+                        } label: {
+                            HStack {
+                                Image(systemName: "plus.circle.fill")
+                                Text("Create Project")
+                            }
+                            .font(.caption)
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                } else if let org = authVM.currentOrg {
                     VStack(spacing: 8) {
                         if let role = authVM.currentOrganizationRole {
                             switch role {
@@ -288,7 +310,7 @@ struct LandingPageView: View {
                 // Projects count header with role context
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
-                        if let role = authVM.currentOrganizationRole {
+                        if !releaseProfile.shouldHideCollaborationSurface, let role = authVM.currentOrganizationRole {
                             HStack {
                                 Text("\(activeProjects.count) Active Projects")
                                     .font(.headline)
@@ -312,7 +334,8 @@ struct LandingPageView: View {
                         }
                         
                         // Show organization context for multi-org users
-                        if authVM.userOrganizations.count > 1,
+                        if !releaseProfile.shouldHideCollaborationSurface,
+                           authVM.userOrganizations.count > 1,
                            let currentOrg = authVM.currentOrg {
                             Text("Current: \(currentOrg.name)")
                                 .font(.caption2)
@@ -335,7 +358,7 @@ struct LandingPageView: View {
                     
                     Menu {
                         // Multi-org actions
-                        if authVM.userOrganizations.count > 1 {
+                        if !releaseProfile.shouldHideCollaborationSurface && authVM.userOrganizations.count > 1 {
                             Button("Switch Organization") {
                                 // This would trigger the organization selector
                             }
@@ -410,7 +433,7 @@ struct LandingPageView: View {
                         .font(.caption)
                     Spacer()
                     if isSharedProject {
-                        Text("Shared")
+                        Text(releaseProfile.shouldHideCollaborationSurface ? "Synced" : "Shared")
                             .font(.caption2)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)

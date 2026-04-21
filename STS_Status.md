@@ -146,25 +146,30 @@
 - Expanded focused `RHEIRTests/RHEIRTests.swift` parity to prove raw legacy `imageDatas` payloads compact cleanly from `UserDefaults`, on-disk project files, and offline project file writes.
 
 ## In Progress
-- Keep the managed estimator backend rollout behind `RHEIR_ESTIMATION_BASE_URL` while the deterministic in-app fallback remains the default local execution path.
-- Continue broader selected-project estimator variance/runtime QA on top of the approved-baseline mapping seam.
-- Continue broader selected-project receipt runtime QA in parallel with the estimator hardening lane.
+- Lock the shipping app into the fast-ship v1 release profile so the visible shell stays single-user focused: `Projects`, `Receipts`, `Labor`, `Tasks`, plus budget `Breakdown` / `Estimator`.
+- Continue broader selected-project estimator variance/runtime QA on top of the approved-baseline mapping seam inside the simplified v1 shell.
+- Continue broader selected-project receipt runtime QA in parallel so the streamlined single-user contractor workflow remains stable on real device and simulator.
 - Continue shrinking the remaining oversized active state owners around the new sync and access store boundaries.
 - Expand deterministic parity beyond the focused `RHEIRTests` suite.
 
 ## Blockers
-- A managed `RHEIREstimationService` backend is not configured in this repo-local environment yet, so `RHEIR_ESTIMATION_BASE_URL` is unset and the new estimator flow currently runs through the deterministic local fallback only.
+- Same-user iCloud sync still needs release-candidate validation before it can be treated as a launch promise; if it is not green by cutoff, local-device persistence remains the ship path and cross-device expectations must stay muted.
 - Raw in-sandbox `xcodebuild` commands are still less reliable than elevated CLI or `xcodebuildmcp` paths in this environment because CoreSimulator and DerivedData access remain sandbox-sensitive.
 
 ## Latest Evidence
+- `AppReleaseProfile` now defaults the app into a fast-ship v1 mode that hides collaboration-heavy surfaces without deleting their code, while preserving a legacy override path for post-launch work.
+- `AppSessionSupport.swift` now normalizes invite/admin/org-selection state for the fast-ship profile so the visible launch path collapses toward `launch -> sign in -> ready` instead of detouring through collaboration setup when an existing workspace is already available.
+- `MainTabView.swift`, `LandingPageView.swift`, `UniversalHeaderView.swift`, and `PersonalSettingsView.swift` now hide Company/admin/collaboration affordances in the shipping profile and keep account/settings access lightweight under the core project shell.
+- `BudgetBreakdownView.swift` and `ProjectBudgetTabView.swift` now constrain the visible v1 budget surface to `Breakdown` and `Estimator`, leaving team/vendor/payment tabs deferred behind the release-profile gate.
+- `RHEIRUITests.swift` now contains deterministic fast-ship UI smoke coverage that proves the ready shell has no Company tab, organization-selection launch state auto-resolves into the ready shell, and the selected-project budget surface only exposes the v1 tab set.
 - `Project.swift` now carries the first compiled estimator domain plus baseline-bridge helpers so approved estimate totals can feed the existing `Project` summary fields without replacing them yet.
 - `ProjectViewModel.swift` now owns `HybridRHEIREstimationService`, `SQLiteEstimatorStore`, and `AIProjectCalculatorViewModel`, keeping secure backend contracts server-oriented while preserving a deterministic local fallback for GM work.
 - `RheirApp.swift` now exposes a dedicated `estimator_mapping` UI-test launch mode, while `BudgetBreakdownView.swift` defaults live mapping saves to the visible budget-line selection, refreshes task-linked variance after task persistence, and exposes deterministic mapping-queue plus summary-value accessibility hooks.
 - `RHEIRUITests.swift` now contains deterministic selected-project AI Project Calculator coverage that builds and approves a draft estimate, maps seeded receipt/work-hour/task actuals into approved budget lines, and proves the live variance dashboard updates away from zero.
 - `RHEIRTests.swift` now covers the mapping workflow end-to-end by proving receipt, work-hour, and task links clear unmatched queues and rebuild committed/actual variance against an approved baseline.
-- Focused estimator mapping parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_estimator_mapping_tests_retry_dd -resultBundlePath /tmp/rheir_estimator_mapping_tests_retry.xcresult test -only-testing:RHEIRTests/AIProjectCalculatorWorkflowTests` -> PASS (`/tmp/rheir_estimator_mapping_tests_retry.xcresult`, `2 tests in 1 suite`)
-- Focused estimator mapping UI smoke: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_estimator_mapping_ui_retry2_dd -resultBundlePath /tmp/rheir_estimator_mapping_ui_retry2.xcresult test -only-testing:RHEIRUITests/RHEIRUITests/testAIProjectCalculatorMapsActualsAndUpdatesVariance` -> PASS (`/tmp/rheir_estimator_mapping_ui_retry2.xcresult`, `1 UI test`)
-- Gate A: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_estimator_mapping_dd -resultBundlePath /tmp/rheir_gateA_estimator_mapping.xcresult clean build` -> PASS (`/tmp/rheir_gateA_estimator_mapping.xcresult`)
+- Focused fast-ship unit parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_fastship_v1_unit_dd -resultBundlePath /tmp/rheir_fastship_v1_unit.xcresult test -only-testing:RHEIRTests/SessionSupportTests -only-testing:RHEIRTests/AIProjectCalculatorWorkflowTests` -> PASS (`/tmp/rheir_fastship_v1_unit.xcresult`, `13 tests in 2 suites`)
+- Focused fast-ship UI smoke: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_fastship_v1_ui_dd -resultBundlePath /tmp/rheir_fastship_v1_ui.xcresult test -only-testing:RHEIRUITests/RHEIRUITests/testReadyModeShowsMainTabShell -only-testing:RHEIRUITests/RHEIRUITests/testOrganizationSelectionModeAutoResolvesIntoReadyShell -only-testing:RHEIRUITests/RHEIRUITests/testBudgetSurfaceShowsOnlyFastShipV1Tabs -only-testing:RHEIRUITests/RHEIRUITests/testAIProjectCalculatorBuildsAndApprovesDraftEstimate -only-testing:RHEIRUITests/RHEIRUITests/testAIProjectCalculatorMapsActualsAndUpdatesVariance` -> PASS (`/tmp/rheir_fastship_v1_ui.xcresult`, `5 UI tests`)
+- Gate A: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_fastship_v1_dd -resultBundlePath /tmp/rheir_gateA_fastship_v1.xcresult clean build` -> PASS (`/tmp/rheir_gateA_fastship_v1.xcresult`)
 
 ## Next Milestone
-- Wire the managed backend behind `RHEIR_ESTIMATION_BASE_URL`, then broaden approved-baseline variance/runtime QA on the live budget surface without regressing the deterministic local fallback.
+- Finish the fast-ship v1 polish pack: unify core shell/UI treatment, prove relaunch persistence and same-device contractor workflows end-to-end, and keep same-user iCloud sync as an optional release candidate only if it validates cleanly.

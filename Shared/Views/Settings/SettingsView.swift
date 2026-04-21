@@ -3,6 +3,7 @@ import SwiftUI
 struct SettingsView: View {
     @EnvironmentObject var authVM: AuthViewModel
     @EnvironmentObject var projectVM: ProjectViewModel
+    private let releaseProfile = AppReleaseProfile.current
     @AppStorage("preferredMapProvider") private var preferredMapProvider: MapProvider = .apple
     
     @StateObject private var resetService = CompleteDataResetService()
@@ -249,30 +250,32 @@ struct SettingsView: View {
             }
             .padding(.vertical, 4)
             
-            NavigationLink(destination: ChatGPTSettingsView()) {
-                HStack {
-                    Circle()
-                        .fill(Color.purple.opacity(0.2))
-                        .frame(width: 32, height: 32)
-                        .overlay(
-                            Image(systemName: "brain.head.profile")
-                                .font(.system(size: 16, weight: .semibold))
-                                .foregroundColor(.purple)
-                        )
-                    
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("ChatGPT Integration")
-                            .font(.headline)
-                        Text("AI-powered receipt processing")
+            if !releaseProfile.shouldHideLegacyAIKeySettings {
+                NavigationLink(destination: ChatGPTSettingsView()) {
+                    HStack {
+                        Circle()
+                            .fill(Color.purple.opacity(0.2))
+                            .frame(width: 32, height: 32)
+                            .overlay(
+                                Image(systemName: "brain.head.profile")
+                                    .font(.system(size: 16, weight: .semibold))
+                                    .foregroundColor(.purple)
+                            )
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("ChatGPT Integration")
+                                .font(.headline)
+                            Text("AI-powered receipt processing")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+
+                        Spacer()
+
+                        Image(systemName: "chevron.right")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
-                    
-                    Spacer()
-                    
-                    Image(systemName: "chevron.right")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
                 }
             }
         }

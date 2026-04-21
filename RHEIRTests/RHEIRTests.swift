@@ -205,6 +205,28 @@ struct RHEIRTests {
 struct SessionSupportTests {
 
     @Test
+    func fastShipReleaseProfileIsDefault() {
+        let profile = AppReleaseProfile(environment: [:])
+
+        #expect(profile.mode == .fastShipV1)
+        #expect(profile.mainTabs == [.projects, .receipts, .labor, .tasks])
+        #expect(profile.shouldHideCompanySurface)
+        #expect(profile.shouldHideAdvancedBudgetSurfaces)
+        #expect(profile.shouldHideLegacyAIKeySettings)
+    }
+
+    @Test
+    func legacyReleaseProfileRestoresDeferredSurfaces() {
+        let profile = AppReleaseProfile(environment: [AppReleaseProfile.environmentKey: "legacy"])
+
+        #expect(profile.mode == .legacy)
+        #expect(profile.mainTabs == Tab.allCases)
+        #expect(!profile.shouldHideCompanySurface)
+        #expect(!profile.shouldHideAdvancedBudgetSurfaces)
+        #expect(!profile.shouldHideLegacyAIKeySettings)
+    }
+
+    @Test
     func parsesCustomSchemeInvite() {
         let url = URL(string: "rheirhome://invite?orgID=org-123&name=RHEIR%20Builders&role=contractor&token=invite-token")!
 

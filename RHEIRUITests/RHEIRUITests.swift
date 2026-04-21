@@ -67,24 +67,25 @@ final class RHEIRUITests: XCTestCase {
         XCTAssertTrue(tabBar.buttons["Receipts"].exists, "Expected Receipts tab in ready UI test mode.")
         XCTAssertTrue(tabBar.buttons["Labor"].exists, "Expected Labor tab in ready UI test mode.")
         XCTAssertTrue(tabBar.buttons["Tasks"].exists, "Expected Tasks tab in ready UI test mode.")
-        XCTAssertTrue(tabBar.buttons["Company"].exists, "Expected Company tab in ready UI test mode.")
+        XCTAssertFalse(tabBar.buttons["Company"].exists, "Expected the fast-ship v1 shell to hide the Company tab.")
     }
 
     @MainActor
-    func testOrganizationSelectionModeShowsOrganizationList() throws {
+    func testOrganizationSelectionModeAutoResolvesIntoReadyShell() throws {
         let app = makeApp(mode: .selectingOrganization)
         app.launch()
 
-        let organizationsTitle = app.navigationBars["Organizations"].firstMatch
+        let tabBar = app.tabBars.firstMatch
         XCTAssertTrue(
-            organizationsTitle.waitForExistence(timeout: 5),
-            "Expected deterministic organization-selection UI test mode to render the organization picker."
+            tabBar.waitForExistence(timeout: 5),
+            "Expected fast-ship v1 mode to bypass the organization picker and resolve directly into the main tab shell."
         )
 
-        XCTAssertTrue(app.buttons["Sign Out"].exists, "Expected Sign Out action in organization-selection mode.")
-        XCTAssertTrue(app.staticTexts["UI Test Builders"].exists, "Expected the seeded builder organization.")
-        XCTAssertTrue(app.staticTexts["Ready Roofing Co"].exists, "Expected the seeded contractor organization.")
-        XCTAssertTrue(app.buttons["Create"].exists, "Expected the organization create action in organization-selection mode.")
+        XCTAssertFalse(
+            app.navigationBars["Organizations"].exists,
+            "Expected the organization-selection surface to stay hidden in fast-ship v1 mode."
+        )
+        XCTAssertTrue(tabBar.buttons["Projects"].exists, "Expected Projects tab after streamlined organization resolution.")
     }
 
     @MainActor
@@ -164,31 +165,30 @@ final class RHEIRUITests: XCTestCase {
     }
 
     @MainActor
-    func testCompanyModeShowsAdminManagementSurface() throws {
+    func testBudgetSurfaceShowsOnlyFastShipV1Tabs() throws {
         let app = makeApp(mode: .selectedProject)
         app.launch()
-        app.tabBars.buttons["Company"].tap()
+
+        app.tabBars.buttons["Projects"].tap()
+
+        let projectCard = app.buttons[Self.selectedProjectCardIdentifier]
+        XCTAssertTrue(
+            projectCard.waitForExistence(timeout: 5),
+            "Expected deterministic selected-project mode to expose the seeded Kitchen Remodel project card."
+        )
+        projectCard.tap()
 
         XCTAssertTrue(
-            app.navigationBars["Company Settings"].waitForExistence(timeout: 5),
-            "Expected selected-project admin mode to open the Company settings surface."
+            app.buttons["budget-tab-breakdown"].waitForExistence(timeout: 5),
+            "Expected the budget surface to expose the Breakdown tab."
         )
         XCTAssertTrue(
-            app.staticTexts["Team Status Overview"].waitForExistence(timeout: 5),
-            "Expected the admin company team overview to render."
+            app.buttons["budget-tab-estimator"].exists,
+            "Expected the budget surface to keep the Estimator tab in fast-ship v1 mode."
         )
-        XCTAssertTrue(
-            app.staticTexts["Manage Team"].exists,
-            "Expected the admin-only team management section."
-        )
-        XCTAssertTrue(
-            app.buttons["Add Internal Team Member"].exists,
-            "Expected the admin-only add team member action."
-        )
-        XCTAssertFalse(
-            app.staticTexts["Administrator Access Required"].exists,
-            "Expected admin mode to avoid the restricted company access state."
-        )
+        XCTAssertFalse(app.buttons["budget-tab-team"].exists, "Expected Team tab to stay hidden in fast-ship v1 mode.")
+        XCTAssertFalse(app.buttons["budget-tab-vendors"].exists, "Expected Vendors tab to stay hidden in fast-ship v1 mode.")
+        XCTAssertFalse(app.buttons["budget-tab-payments"].exists, "Expected Payments tab to stay hidden in fast-ship v1 mode.")
     }
 
     @MainActor

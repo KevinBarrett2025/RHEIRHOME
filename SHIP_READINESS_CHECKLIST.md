@@ -3,7 +3,7 @@
 ## Current Status
 - Branch: `gm/rheir-hardening-phase1`
 - Status: in `Release Hardening`
-- Release posture: not ship-ready yet
+- Release posture: narrowed to a fast-ship v1 single-user contractor release
 
 ## Phase 1: Foundation Completion
 Exit criteria: architecture is stable, noisy legacy behavior is reduced, and warning debt is controlled.
@@ -23,32 +23,33 @@ Exit criteria: architecture is stable, noisy legacy behavior is reduced, and war
 - Keep simulator Gate A and focused parity green on every checkpoint.
 
 ## Phase 2: Release Hardening
-Exit criteria: main contractor workflows are predictable, test-covered, and role-correct.
+Exit criteria: a single user can move through the core contractor workflows predictably, with the simplified v1 shell, stable persistence, and clean App Store posture.
 
 - Add UI smoke coverage for:
   - sign in
-  - choose organization
+  - simplified ready shell with no collaboration/admin detour
   - choose project
   - add receipt
   - log labor
-  - company admin access
+  - task management
+  - estimator draft/approve plus live actual-cost mapping
 - Validate end-to-end workflows for:
-  - admin onboarding
-  - invite acceptance
   - project switching
   - receipt OCR and AI analysis
   - labor logging
-  - vendor and payment method updates
-- Validate role-based behavior for admin and non-admin users.
-- Validate relaunch restore, cache fallback, and cross-organization isolation.
-- Remove or isolate debug-only behavior from release flows.
+  - task create/complete
+  - estimator baseline review
+  - relaunch restore and cache fallback
+- Keep invite, org-selection, team/admin, company-management, proposal-service, live-price research, and legacy AI-key entry hidden behind the fast-ship release profile unless they are explicitly re-enabled post-launch.
+- Validate same-user iCloud restore only as an optional launch enhancement; if it is not green by cutoff, ship with local-device persistence as the authoritative expectation.
+- Remove or isolate debug-only behavior from release flows and user-facing copy.
 
 ## Phase 3: Promo Candidate
 Exit criteria: the build is realistic QA and release-candidate material.
 
 - Run clean simulator gate with no new active-target warnings.
 - Run focused parity plus smoke suite.
-- Run authenticated manual QA on core contractor flows.
+- Run authenticated manual QA on the fast-ship contractor flows.
 - Re-verify privacy and logging posture:
   - no token dumps
   - no raw OCR dumps
@@ -62,7 +63,7 @@ Exit criteria: release candidate is validated on real hardware and ready for sub
 - Use the now-working physical-device path for real-hardware validation of the release candidate.
 - Run device validation for:
   - Sign in with Apple
-  - CloudKit org/project flows
+  - same-user project restore and persistence
   - receipt capture
   - permissions
   - offline/online transitions
@@ -71,6 +72,6 @@ Exit criteria: release candidate is validated on real hardware and ready for sub
 - Freeze scope and submit.
 
 ## Immediate Next Steps
-1. Stand up the managed estimator backend behind `RHEIR_ESTIMATION_BASE_URL` while preserving the in-app deterministic fallback for local GM work.
-2. Broaden approved-baseline variance/runtime QA so receipts, work hours, tasks, and proposal review stay coherent on the live budget surface.
-3. Continue broader receipt/runtime QA in parallel so the estimator baseline can attach to stable contractor workflows.
+1. Standardize the fast-ship v1 shell so the visible projects, receipts, labor, tasks, and budget surfaces share the same header, empty-state, and primary-action patterns.
+2. Run the focused fast-ship release pack end-to-end, including relaunch persistence plus scanned-receipt return/reopen validation on the real selected-project flow.
+3. Validate same-user iCloud restore on real hardware; if it is not clean by release cutoff, keep the shell but de-scope cross-device expectations from launch.

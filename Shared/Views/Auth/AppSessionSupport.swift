@@ -422,6 +422,7 @@ final class SessionStore: ObservableObject {
     private var hasFinishedLaunch = false
     private var isProcessingInvite = false
     private var isChoosingOrganization = false
+    private let releaseProfile = AppReleaseProfile.current
 
     init(
         authViewModel: AuthViewModel,
@@ -455,6 +456,7 @@ final class SessionStore: ObservableObject {
                 try? await Task.sleep(nanoseconds: launchDelayNanoseconds)
             }
             hasFinishedLaunch = true
+            normalizeStateForReleaseProfile()
             refreshState(reason: "launch complete")
             processPendingInviteIfPossible()
             restoreProjectSelectionIfPossible()
@@ -462,6 +464,11 @@ final class SessionStore: ObservableObject {
     }
 
     func handleIncomingURL(_ url: URL) {
+        if releaseProfile.shouldHideCollaborationSurface {
+            Logger.session.notice("Ignored incoming invite URL in fast-ship v1 release profile.")
+            return
+        }
+
         guard let invite = PendingInvite.parse(from: url) else {
             Logger.session.error("Ignored unsupported URL.")
             return
@@ -489,6 +496,7 @@ final class SessionStore: ObservableObject {
     }
 
     func showOrganizationSelector() {
+        guard !releaseProfile.shouldHideCollaborationSurface else { return }
         isChoosingOrganization = true
         refreshState(reason: "organization selector requested")
     }
@@ -520,6 +528,7 @@ final class SessionStore: ObservableObject {
     private func bind() {
         authViewModel.$user
             .sink { [weak self] _ in
+                self?.normalizeStateForReleaseProfile()
                 self?.refreshState(reason: "user changed")
                 self?.processPendingInviteIfPossible()
             }
@@ -532,6 +541,7 @@ final class SessionStore: ObservableObject {
                     self.selectionState.organizationID = organization.id
                     self.localCache.selectionState = self.selectionState
                 }
+                self.normalizeStateForReleaseProfile()
                 self.refreshState(reason: "organization changed")
                 self.restoreProjectSelectionIfPossible()
             }
@@ -539,18 +549,21 @@ final class SessionStore: ObservableObject {
 
         authViewModel.$showAdminInfoUpdate
             .sink { [weak self] _ in
+                self?.normalizeStateForReleaseProfile()
                 self?.refreshState(reason: "admin onboarding changed")
             }
             .store(in: &cancellables)
 
         authViewModel.$organizations
             .sink { [weak self] _ in
+                self?.normalizeStateForReleaseProfile()
                 self?.refreshState(reason: "organization list changed")
             }
             .store(in: &cancellables)
 
         authViewModel.$isLoadingOrgs
             .sink { [weak self] _ in
+                self?.normalizeStateForReleaseProfile()
                 self?.refreshState(reason: "organization loading changed")
             }
             .store(in: &cancellables)
@@ -574,17 +587,20 @@ final class SessionStore: ObservableObject {
     }
 
     private func refreshState(reason: String) {
+        normalizeStateForReleaseProfile()
         let nextState: AppSessionState
 
         if !hasFinishedLaunch {
             nextState = .launching
         } else if authViewModel.user == nil {
             nextState = .signedOut
-        } else if pendingInvite != nil || isProcessingInvite {
+        } else if !releaseProfile.shouldUseStreamlinedSessionRouting && (pendingInvite != nil || isProcessingInvite) {
             nextState = .processingInvite
-        } else if authViewModel.showAdminInfoUpdate && authViewModel.currentOrg != nil {
+        } else if !releaseProfile.shouldUseStreamlinedSessionRouting &&
+                    authViewModel.showAdminInfoUpdate &&
+                    authViewModel.currentOrg != nil {
             nextState = .adminOnboarding
-        } else if authViewModel.currentOrg == nil || isChoosingOrganization {
+        } else if authViewModel.currentOrg == nil || (!releaseProfile.shouldUseStreamlinedSessionRouting && isChoosingOrganization) {
             nextState = .selectingOrganization
         } else {
             nextState = .ready
@@ -597,6 +613,11 @@ final class SessionStore: ObservableObject {
     }
 
     private func processPendingInviteIfPossible() {
+        guard !releaseProfile.shouldHideCollaborationSurface else {
+            clearPendingInviteIfNeededForReleaseProfile()
+            return
+        }
+
         guard !isProcessingInvite,
               authViewModel.user != nil,
               let invite = pendingInvite else {
@@ -660,5 +681,46 @@ final class SessionStore: ObservableObject {
         projectViewModel.deselectProject()
         selectionState.projectID = nil
         localCache.selectionState = selectionState
+    }
+
+    private func normalizeStateForReleaseProfile() {
+        guard releaseProfile.shouldUseStreamlinedSessionRouting else { return }
+
+        isChoosingOrganization = false
+        clearPendingInviteIfNeededForReleaseProfile()
+
+        if authViewModel.showAdminInfoUpdate {
+            authViewModel.dismissAdminInfoUpdate()
+        }
+
+        autoSelectCurrentOrganizationIfPossible()
+    }
+
+    private func clearPendingInviteIfNeededForReleaseProfile() {
+        guard pendingInvite != nil || isProcessingInvite else { return }
+
+        pendingInvite = nil
+        localCache.clearPendingInvite()
+        authViewModel.clearPendingInvite()
+        isProcessingInvite = false
+    }
+
+    private func autoSelectCurrentOrganizationIfPossible() {
+        guard authViewModel.user != nil,
+              authViewModel.currentOrg == nil else {
+            return
+        }
+
+        let availableOrganizations = authViewModel.userOrganizations.isEmpty
+            ? authViewModel.organizations
+            : authViewModel.userOrganizations
+
+        guard !availableOrganizations.isEmpty else { return }
+
+        let preferredOrganizationID = selectionState.organizationID ?? localCache.previousOrganizationID
+        let resolvedOrganization = availableOrganizations.first(where: { $0.id == preferredOrganizationID }) ?? availableOrganizations.first
+
+        guard let resolvedOrganization else { return }
+        authViewModel.setCurrentOrganization(resolvedOrganization)
     }
 }

@@ -20,6 +20,7 @@ struct BudgetBreakdownView: View {
     @EnvironmentObject private var projectVM: ProjectViewModel
     @EnvironmentObject private var authVM: AuthViewModel
     @Binding var selectedTab: Tab
+    private let releaseProfile = AppReleaseProfile.current
     @State private var selectedBudgetTab: BudgetTab = .breakdown
     
     private enum BudgetTab: String, CaseIterable {
@@ -65,31 +66,38 @@ struct BudgetBreakdownView: View {
                     ContentUnavailableView("Select a Project", systemImage: "sparkles.rectangle.stack")
                         .tag(BudgetTab.estimator)
                 }
-                
-                ProjectTeamMembersView()
-                    .environmentObject(projectVM)
-                    .environmentObject(authVM)
-                    .tag(BudgetTab.teamMembers)
-                
-                SpendingByVendorView()
-                    .environmentObject(projectVM)
-                    .environmentObject(authVM)
-                    .tag(BudgetTab.vendors)
-                
-                SpendingByPaymentMethodView()
-                    .environmentObject(projectVM)
-                    .environmentObject(authVM)
-                    .tag(BudgetTab.payments)
+
+                if !releaseProfile.shouldHideAdvancedBudgetSurfaces {
+                    ProjectTeamMembersView()
+                        .environmentObject(projectVM)
+                        .environmentObject(authVM)
+                        .tag(BudgetTab.teamMembers)
+
+                    SpendingByVendorView()
+                        .environmentObject(projectVM)
+                        .environmentObject(authVM)
+                        .tag(BudgetTab.vendors)
+
+                    SpendingByPaymentMethodView()
+                        .environmentObject(projectVM)
+                        .environmentObject(authVM)
+                        .tag(BudgetTab.payments)
+                }
             }
             .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
         }
         .navigationBarHidden(true)
+        .onAppear {
+            if !availableTabs.contains(selectedBudgetTab) {
+                selectedBudgetTab = .breakdown
+            }
+        }
     }
     
     @ViewBuilder
     private var customTabBar: some View {
         HStack(spacing: 0) {
-            ForEach(BudgetTab.allCases, id: \.self) { tab in
+            ForEach(availableTabs, id: \.self) { tab in
                 Button {
                     withAnimation(.easeInOut(duration: 0.3)) {
                         selectedBudgetTab = tab
@@ -127,6 +135,12 @@ struct BudgetBreakdownView: View {
                 .foregroundColor(Color(.systemGray4)),
             alignment: .bottom
         )
+    }
+
+    private var availableTabs: [BudgetTab] {
+        releaseProfile.shouldHideAdvancedBudgetSurfaces
+            ? [.breakdown, .estimator]
+            : BudgetTab.allCases
     }
 }
 

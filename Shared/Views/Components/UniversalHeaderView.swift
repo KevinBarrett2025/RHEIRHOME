@@ -5,6 +5,7 @@ import OSLog
 struct UniversalHeaderView: View {
     @EnvironmentObject private var authVM: AuthViewModel
     @EnvironmentObject private var projectVM: ProjectViewModel
+    private let releaseProfile = AppReleaseProfile.current
     
     let showSettingsGear: Bool
     let showProjectContext: Bool
@@ -100,7 +101,8 @@ struct UniversalHeaderView: View {
             }
             
             // Role indicator for multi-org users
-            if authVM.userOrganizations.count > 1,
+            if !releaseProfile.shouldHideCollaborationSurface,
+               authVM.userOrganizations.count > 1,
                let role = authVM.currentOrganizationRole {
                 Text(role.displayName)
                     .font(.caption)
@@ -135,12 +137,12 @@ struct UniversalHeaderView: View {
     private var headerControls: some View {
         HStack(spacing: 16) {
             // Subscription tier dropdown (optimized with caching)
-            if let tier = currentTier {
+            if !releaseProfile.shouldHideSubscriptionManagement, let tier = currentTier {
                 tierDropdown(tier)
             }
             
             // Multi-org indicator
-            if authVM.userOrganizations.count > 1 {
+            if !releaseProfile.shouldHideCollaborationSurface && authVM.userOrganizations.count > 1 {
                 VStack(alignment: .trailing, spacing: 2) {
                     HStack(spacing: 4) {
                         Image(systemName: "building.2.crop.circle")

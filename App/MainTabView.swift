@@ -5,7 +5,7 @@ struct MainTabView: View {
     @EnvironmentObject private var authVM: AuthViewModel
     @EnvironmentObject private var sessionStore: SessionStore
 
-    // ← Use the **global** Tab enum, not MainTabView.Tab
+    private let releaseProfile = AppReleaseProfile.current
     @State private var selection: Tab = .projects
 
     var body: some View {
@@ -36,14 +36,21 @@ struct MainTabView: View {
             .tabItem { Label("Tasks", systemImage: "checklist") }
             .tag(Tab.tasks)
 
-            NavigationStack {
-                MasterCompanySettingsView()
-                    .environmentObject(projectVM)
-                    .environmentObject(authVM)
-                    .environmentObject(sessionStore)
+            if !releaseProfile.shouldHideCompanySurface {
+                NavigationStack {
+                    MasterCompanySettingsView()
+                        .environmentObject(projectVM)
+                        .environmentObject(authVM)
+                        .environmentObject(sessionStore)
+                }
+                .tabItem { Label("Company", systemImage: "building.2") }
+                .tag(Tab.company)
             }
-            .tabItem { Label("Company", systemImage: "building.2") }
-            .tag(Tab.company)
+        }
+        .onAppear {
+            if !releaseProfile.mainTabs.contains(selection) {
+                selection = .projects
+            }
         }
     }
 }
