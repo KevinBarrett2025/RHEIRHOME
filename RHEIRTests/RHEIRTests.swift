@@ -1898,4 +1898,115 @@ struct AIProjectCalculatorWorkflowTests {
         #expect(reloadedViewModel.session?.status == EstimateSessionStatus.approved)
         #expect(reloadedViewModel.approvedBaseline == approvedBaseline)
     }
+
+    @Test
+    func mapsReceiptWorkHourAndTaskIntoVarianceAndClearsUnmatchedQueues() async throws {
+        let databaseURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("AIProjectCalculatorMappingWorkflow-\(UUID().uuidString)")
+            .appendingPathComponent("estimator.sqlite")
+        let store = SQLiteEstimatorStore(databaseURL: databaseURL)
+        let service = HybridRHEIREstimationService()
+        let projectID = UUID()
+        var project = Project(
+            id: projectID,
+            name: "Estimator Mapping Workflow",
+            client: "Client D",
+            clientAddress: "45 Market St, Boston, MA 02110",
+            description: "Kitchen remodel with framing touchups, electrical trim, fixture resets, and finish carpentry.",
+            totalBudget: 64000,
+            startDate: .now,
+            endDate: .now.addingTimeInterval(86400),
+            organizationID: "org-estimator"
+        )
+
+        var receipt = Receipt(
+            id: "workflow-receipt-1",
+            vendor: "Builder Supply",
+            date: .now,
+            amount: 286.42,
+            notes: "Framing hardware",
+            category: .material,
+            paymentMethod: "Card"
+        )
+        receipt.projectID = project.id
+
+        let workHour = WorkHour(
+            id: UUID(uuidString: "22B3A73B-D8A9-4AA3-B1A9-0E52036E7718")!,
+            date: .now,
+            startTime: .now,
+            endTime: .now.addingTimeInterval(3 * 3600),
+            lunchStart: nil,
+            lunchEnd: nil,
+            employee: "Sam Carter",
+            employeeID: nil,
+            rate: 48,
+            category: "Framing",
+            isPaid: false,
+            paymentMethod: nil,
+            paymentNote: nil,
+            paymentTimestamp: nil
+        )
+
+        let task = ProjectTask(
+            id: UUID(uuidString: "BF5BB517-9FB0-44E0-A30F-3EEC7E36B744")!,
+            title: "Install backing for cabinets",
+            description: "Prep framing for cabinet layout.",
+            priority: .high,
+            category: .materials,
+            estimatedHours: 3.5,
+            actualHours: 0,
+            projectID: project.id
+        )
+
+        project.receipts = [receipt]
+        project.workHours = [workHour]
+        project.tasks = [task]
+
+        let viewModel = AIProjectCalculatorViewModel(project: project, service: service, store: store)
+        viewModel.input.projectType = .residentialRemodel
+        viewModel.input.zipCode = "02110"
+        viewModel.input.scopePrompt = project.description
+        viewModel.input.preferredVendors = ["Builder Supply"]
+        viewModel.input.preferredStores = ["Local Supply"]
+        viewModel.autoGenerateStarterTasks = false
+
+        await viewModel.createSessionAndDraft(project: project, organizationProjects: [project])
+        await viewModel.approveDraft(
+            project: project,
+            organizationProjects: [project],
+            approvedByUserID: "user-456",
+            applyBaseline: { _ in },
+            generateTasks: { _, _ in }
+        )
+
+        let baseline = try #require(viewModel.approvedBaseline)
+        let mappedLine = try #require(baseline.lines.first)
+
+        await viewModel.mapReceipt(receipt, to: mappedLine.id, project: project)
+        await viewModel.mapWorkHour(workHour, to: mappedLine.id, project: project)
+        await viewModel.mapTask(task, to: mappedLine.id, project: project)
+
+        var mappedTask = task
+        mappedTask.budgetLineID = mappedLine.id
+        mappedTask.estimateVersionID = baseline.estimateVersionID
+        mappedTask.phaseName = mappedLine.phase
+
+        var mappedProject = project
+        mappedProject.tasks = [mappedTask]
+        viewModel.rebuildVariance(project: mappedProject)
+
+        #expect(viewModel.actualCostLinks.count == 3)
+        #expect(Set(viewModel.actualCostLinks.map(\.sourceType)) == Set([.receipt, .workHour, .task]))
+        #expect(viewModel.unmatchedReceipts(for: mappedProject).isEmpty)
+        #expect(viewModel.unmatchedWorkHours(for: mappedProject).isEmpty)
+        #expect(viewModel.unmatchedTasks(for: mappedProject).isEmpty)
+
+        let varianceSnapshot = try #require(viewModel.varianceSnapshot)
+        let mappedVariance = try #require(varianceSnapshot.lines.first(where: { $0.id == mappedLine.id }))
+
+        #expect(mappedVariance.actual == receipt.amount + workHour.totalPay)
+        #expect(mappedVariance.committed == mappedVariance.actual + (mappedTask.estimatedHours * max(mappedLine.unitCost, 1)))
+        #expect(varianceSnapshot.totalActual == mappedVariance.actual)
+        #expect(varianceSnapshot.totalCommitted == mappedVariance.committed)
+    }
 }

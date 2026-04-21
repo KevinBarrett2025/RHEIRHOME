@@ -8,6 +8,7 @@ private enum UITestLaunchMode: String {
     case selectingOrganization = "selecting_organization"
     case projectSelection = "project_selection"
     case selectedProject = "selected_project"
+    case estimatorMapping = "estimator_mapping"
 }
 
 private enum UITestLaunchEnvironment {
@@ -81,7 +82,7 @@ private struct AppLaunchConfiguration {
             )
             authViewModel.currentOrg = nil
 
-        case .projectSelection, .selectedProject:
+        case .projectSelection, .selectedProject, .estimatorMapping:
             let user = User(id: "ui-test-project-user", email: "project-ui-test@rheirhome.com")
             let organization = Organization(
                 id: "ui-test-project-org",
@@ -89,12 +90,15 @@ private struct AppLaunchConfiguration {
                 members: [user.id, "project-member-2"],
                 adminUserID: user.id
             )
-            let kitchenProject = makeUITestProject(
+            let kitchenProjectSeed = makeUITestProject(
                 id: UUID(uuidString: "A7A92AF6-2E2B-4F51-BEA4-4B53CF2A7D11")!,
                 name: "Kitchen Remodel",
                 client: "Avery Homes",
                 organizationID: organization.id
             )
+            let kitchenProject = uiTestMode == .estimatorMapping
+                ? makeUITestEstimatorMappingProject(from: kitchenProjectSeed)
+                : kitchenProjectSeed
             let bathProject = makeUITestProject(
                 id: UUID(uuidString: "4F874307-DB41-446C-9A9E-DB94283E4E28")!,
                 name: "Primary Bath Upgrade",
@@ -117,7 +121,7 @@ private struct AppLaunchConfiguration {
             projectViewModel.projects = [kitchenProject, bathProject]
             projectViewModel.organizationProjects = [kitchenProject, bathProject]
             projectViewModel.accessibleProjects = [kitchenProject, bathProject]
-            if uiTestMode == .selectedProject {
+            if uiTestMode == .selectedProject || uiTestMode == .estimatorMapping {
                 projectViewModel.selectProject(kitchenProject)
             } else {
                 projectViewModel.deselectProject()
@@ -175,6 +179,54 @@ private struct AppLaunchConfiguration {
             assignedUserIDs: [],
             organizationID: organizationID
         )
+    }
+
+    private func makeUITestEstimatorMappingProject(from project: Project) -> Project {
+        var seededProject = project
+
+        var receipt = Receipt(
+            id: "ui-test-estimator-receipt-001",
+            vendor: "Builder Supply",
+            date: Date(timeIntervalSince1970: 1_736_207_200),
+            amount: 286.42,
+            notes: "Blocking and framing hardware",
+            category: .material,
+            paymentMethod: "Card"
+        )
+        receipt.projectID = project.id
+
+        let workHour = WorkHour(
+            id: UUID(uuidString: "5D8CB53E-67D7-468C-8171-1A0A0C830511")!,
+            date: Date(timeIntervalSince1970: 1_736_208_000),
+            startTime: Date(timeIntervalSince1970: 1_736_208_000),
+            endTime: Date(timeIntervalSince1970: 1_736_222_400),
+            lunchStart: nil,
+            lunchEnd: nil,
+            employee: "Sam Carter",
+            employeeID: nil,
+            rate: 48,
+            category: "Framing",
+            isPaid: false,
+            paymentMethod: nil,
+            paymentNote: nil,
+            paymentTimestamp: nil
+        )
+
+        let task = ProjectTask(
+            id: UUID(uuidString: "8A6A2F75-0B87-4E33-9264-BF6C3E3BC84D")!,
+            title: "Install backing for kitchen cabinets",
+            description: "Prep the wall framing for cabinet layout and blocking.",
+            priority: .high,
+            category: .materials,
+            estimatedHours: 3.5,
+            actualHours: 0,
+            projectID: project.id
+        )
+
+        seededProject.receipts = [receipt]
+        seededProject.workHours = [workHour]
+        seededProject.tasks = [task]
+        return seededProject
     }
 }
 
@@ -242,6 +294,8 @@ struct RheirApp: App {
         case .projectSelection:
             authService = SignedOutUITestAuthService()
         case .selectedProject:
+            authService = SignedOutUITestAuthService()
+        case .estimatorMapping:
             authService = SignedOutUITestAuthService()
         case .none:
             authService = CloudKitAuthService()

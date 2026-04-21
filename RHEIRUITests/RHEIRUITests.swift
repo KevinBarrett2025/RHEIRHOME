@@ -19,9 +19,13 @@ final class RHEIRUITests: XCTestCase {
         case selectingOrganization = "selecting_organization"
         case projectSelection = "project_selection"
         case selectedProject = "selected_project"
+        case estimatorMapping = "estimator_mapping"
     }
 
     private static let selectedProjectCardIdentifier = "project-card-A7A92AF6-2E2B-4F51-BEA4-4B53CF2A7D11"
+    private static let estimatorMappingReceiptButtonIdentifier = "ai-project-calculator-map-receipt-ui-test-estimator-receipt-001"
+    private static let estimatorMappingWorkHourButtonIdentifier = "ai-project-calculator-map-hour-5D8CB53E-67D7-468C-8171-1A0A0C830511"
+    private static let estimatorMappingTaskButtonIdentifier = "ai-project-calculator-map-task-8A6A2F75-0B87-4E33-9264-BF6C3E3BC84D"
 
     override func setUpWithError() throws {
         // Put setup code here. This method is called before the invocation of each test method in the class.
@@ -783,57 +787,54 @@ final class RHEIRUITests: XCTestCase {
         app.launch()
 
         openAIProjectCalculator(in: app)
-
-        let zipField = app.textFields["ai-project-calculator-zip"]
-        XCTAssertTrue(
-            zipField.waitForExistence(timeout: 5),
-            "Expected the AI Project Calculator intake to expose the ZIP field."
-        )
-        replaceText(in: zipField, with: "90210", app: app)
-
-        let vendorsField = app.textFields["ai-project-calculator-vendors"]
-        XCTAssertTrue(
-            vendorsField.waitForExistence(timeout: 5),
-            "Expected the AI Project Calculator intake to expose the preferred vendors field."
-        )
-        replaceText(in: vendorsField, with: "Home Depot", app: app)
-
-        let promptField = app.textViews["ai-project-calculator-prompt"]
-        XCTAssertTrue(
-            promptField.waitForExistence(timeout: 5),
-            "Expected the AI Project Calculator intake to expose the project prompt editor."
-        )
-        replaceText(
-            in: promptField,
-            with: "Remodel a dated kitchen with new cabinets, quartz counters, appliance swaps, lighting, flooring transitions, and finish carpentry with a contractor-grade scope.",
-            app: app
-        )
-        dismissKeyboardIfPresent(in: app)
-
-        let buildButton = revealButton(identifier: "ai-project-calculator-build", in: app, maxSwipes: 6)
-        XCTAssertTrue(
-            buildButton.exists,
-            "Expected the estimator intake to expose the build-draft action after entering required context."
-        )
-        buildButton.tap()
-
-        let draftReview = app.staticTexts["ai-project-calculator-draft-review"]
-        XCTAssertTrue(
-            draftReview.waitForExistence(timeout: 8),
-            "Expected building the estimator draft to render the draft review section without clarifications."
-        )
-
-        let approveButton = revealButton(identifier: "ai-project-calculator-approve", in: app, maxSwipes: 8)
-        XCTAssertTrue(
-            approveButton.exists,
-            "Expected the draft review surface to expose the approve-baseline action."
-        )
-        approveButton.tap()
+        buildAndApproveEstimatorDraft(in: app)
 
         let varianceDashboard = app.staticTexts["ai-project-calculator-variance-dashboard"]
         XCTAssertTrue(
             varianceDashboard.waitForExistence(timeout: 8),
             "Expected approving the estimator draft to render the live variance dashboard."
+        )
+    }
+
+    @MainActor
+    func testAIProjectCalculatorMapsActualsAndUpdatesVariance() throws {
+        let app = makeApp(mode: .estimatorMapping)
+        app.launch()
+
+        openAIProjectCalculator(in: app)
+        buildAndApproveEstimatorDraft(in: app, disableAutoGenerateStarterTasks: true)
+
+        let mappingHeader = revealElement(identifier: "ai-project-calculator-needs-mapping", in: app, maxSwipes: 8)
+        XCTAssertTrue(
+            mappingHeader.exists,
+            "Expected the approved estimator baseline to expose the live mapping queue for seeded actuals."
+        )
+
+        mapEstimatorActual(identifier: Self.estimatorMappingReceiptButtonIdentifier, in: app)
+        mapEstimatorActual(identifier: Self.estimatorMappingWorkHourButtonIdentifier, in: app)
+        mapEstimatorActual(identifier: Self.estimatorMappingTaskButtonIdentifier, in: app)
+
+        let mappingEmptyState = revealElement(
+            identifier: "ai-project-calculator-needs-mapping-empty",
+            in: app,
+            maxSwipes: 8,
+            query: { $0.staticTexts["ai-project-calculator-needs-mapping-empty"] }
+        )
+        XCTAssertTrue(
+            mappingEmptyState.waitForExistence(timeout: 8),
+            "Expected mapping the seeded receipt, work hour, and task to clear the live mapping queue."
+        )
+
+        let actualSummary = revealElement(identifier: "ai-project-calculator-summary-actual", in: app, maxSwipes: 8)
+        XCTAssertTrue(
+            waitForAccessibilityValue(on: actualSummary, notEquals: "$0.00", timeout: 5),
+            "Expected mapping the seeded receipt and labor hour to move the Actual metric away from zero."
+        )
+
+        let committedSummary = revealElement(identifier: "ai-project-calculator-summary-committed", in: app, maxSwipes: 8)
+        XCTAssertTrue(
+            waitForAccessibilityValue(on: committedSummary, notEquals: "$0.00", timeout: 5),
+            "Expected mapping the seeded task to move the Committed metric away from zero."
         )
     }
 
@@ -972,6 +973,104 @@ final class RHEIRUITests: XCTestCase {
         return app
     }
 
+    private func buildAndApproveEstimatorDraft(
+        in app: XCUIApplication,
+        disableAutoGenerateStarterTasks: Bool = false
+    ) {
+        if disableAutoGenerateStarterTasks {
+            let autoGenerateToggle = revealElement(
+                identifier: "ai-project-calculator-auto-generate-tasks",
+                in: app,
+                maxSwipes: 6,
+                query: { $0.switches["ai-project-calculator-auto-generate-tasks"] }
+            )
+            XCTAssertTrue(
+                autoGenerateToggle.exists,
+                "Expected the estimator intake to expose the starter-task toggle."
+            )
+            if (autoGenerateToggle.value as? String) == "1" {
+                autoGenerateToggle.tap()
+            }
+            XCTAssertTrue(
+                waitForAccessibilityValue(on: autoGenerateToggle, equals: "0", timeout: 3),
+                "Expected the starter-task toggle to turn off for deterministic mapping coverage."
+            )
+        }
+
+        let zipField = app.textFields["ai-project-calculator-zip"]
+        XCTAssertTrue(
+            zipField.waitForExistence(timeout: 5),
+            "Expected the AI Project Calculator intake to expose the ZIP field."
+        )
+        replaceText(in: zipField, with: "90210", app: app)
+
+        let vendorsField = app.textFields["ai-project-calculator-vendors"]
+        XCTAssertTrue(
+            vendorsField.waitForExistence(timeout: 5),
+            "Expected the AI Project Calculator intake to expose the preferred vendors field."
+        )
+        replaceText(in: vendorsField, with: "Home Depot", app: app)
+
+        let promptField = app.textViews["ai-project-calculator-prompt"]
+        XCTAssertTrue(
+            promptField.waitForExistence(timeout: 5),
+            "Expected the AI Project Calculator intake to expose the project prompt editor."
+        )
+        replaceText(
+            in: promptField,
+            with: "Remodel a dated kitchen with new cabinets, quartz counters, appliance swaps, lighting, flooring transitions, and finish carpentry with a contractor-grade scope.",
+            app: app
+        )
+        dismissKeyboardIfPresent(in: app)
+
+        let buildButton = revealButton(identifier: "ai-project-calculator-build", in: app, maxSwipes: 6)
+        XCTAssertTrue(
+            buildButton.exists,
+            "Expected the estimator intake to expose the build-draft action after entering required context."
+        )
+        buildButton.tap()
+
+        let draftReview = app.staticTexts["ai-project-calculator-draft-review"]
+        XCTAssertTrue(
+            draftReview.waitForExistence(timeout: 8),
+            "Expected building the estimator draft to render the draft review section without clarifications."
+        )
+
+        let approveButton = revealButton(identifier: "ai-project-calculator-approve", in: app, maxSwipes: 8)
+        XCTAssertTrue(
+            approveButton.exists,
+            "Expected the draft review surface to expose the approve-baseline action."
+        )
+        approveButton.tap()
+    }
+
+    private func mapEstimatorActual(identifier: String, in app: XCUIApplication) {
+        let mappingButton = revealButton(identifier: identifier, in: app, maxSwipes: 8)
+        XCTAssertTrue(
+            mappingButton.exists,
+            "Expected the live estimator mapping queue to expose \(identifier)."
+        )
+        mappingButton.tap()
+
+        let mappingNavigationBar = app.navigationBars["Map Cost"]
+        XCTAssertTrue(
+            mappingNavigationBar.waitForExistence(timeout: 5),
+            "Expected tapping \(identifier) to open the mapping sheet."
+        )
+
+        let saveButton = app.buttons["ai-project-calculator-mapping-save"]
+        XCTAssertTrue(
+            saveButton.waitForExistence(timeout: 5),
+            "Expected the mapping sheet to expose the save action."
+        )
+        saveButton.tap()
+
+        XCTAssertTrue(
+            waitForNonExistence(of: mappingNavigationBar, timeout: 5),
+            "Expected saving the mapping sheet to dismiss it cleanly."
+        )
+    }
+
     private func revealButton(identifier: String, in app: XCUIApplication, maxSwipes: Int = 4) -> XCUIElement {
         revealElement(identifier: identifier, in: app, maxSwipes: maxSwipes, query: { $0.buttons[identifier] })
     }
@@ -986,6 +1085,9 @@ final class RHEIRUITests: XCTestCase {
         let resolveElement = query ?? { application in
             let button = application.buttons[identifier]
             if button.exists { return button }
+
+            let toggle = application.switches[identifier]
+            if toggle.exists { return toggle }
 
             let otherElement = application.otherElements[identifier]
             if otherElement.exists { return otherElement }
@@ -1252,6 +1354,16 @@ final class RHEIRUITests: XCTestCase {
         timeout: TimeInterval
     ) -> Bool {
         let predicate = NSPredicate(format: "value == %@", expectedValue)
+        let expectation = XCTNSPredicateExpectation(predicate: predicate, object: element)
+        return XCTWaiter.wait(for: [expectation], timeout: timeout) == .completed
+    }
+
+    private func waitForAccessibilityValue(
+        on element: XCUIElement,
+        notEquals unexpectedValue: String,
+        timeout: TimeInterval
+    ) -> Bool {
+        let predicate = NSPredicate(format: "value != %@", unexpectedValue)
         let expectation = XCTNSPredicateExpectation(predicate: predicate, object: element)
         return XCTWaiter.wait(for: [expectation], timeout: timeout) == .completed
     }

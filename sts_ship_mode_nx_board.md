@@ -13,6 +13,7 @@
 - `ProjectTask.swift` now carries optional estimator linkage metadata so approved budget lines can bridge into starter tasks and live task variance without replacing the existing task flow.
 - `RHEIRTests.swift` now covers estimator rollups, SQLite persistence, versioning/approval, and draft-to-approved workflow behavior.
 - `RHEIRUITests.swift` now covers selected-project AI Project Calculator build/approve behavior on the real budget surface in deterministic UI mode.
+- `RheirApp.swift`, `BudgetBreakdownView.swift`, `RHEIRTests.swift`, and `RHEIRUITests.swift` now also cover seeded receipt/work-hour/task mapping parity so approved budget lines drive live committed/actual variance and clear unmatched queues deterministically.
 - `ProjectStore`, `ProjectRepository`, `OrganizationProjectSyncStore`, `ProjectAccessStore`, `ReceiptProjectStore`, `ReceiptIntelligenceStore`, `LaborStore`, `CompanyStore`, and `TeamMemberStore` are active seams in compiled code.
 - Active organization directory, vendor intelligence, and payment intelligence services now use structured logging.
 - Active invite routing, organization setup/selection, and Sign in with Apple coordination now use structured logging.
@@ -138,9 +139,9 @@
 ## Open Work
 - Production raw `print(...)` cleanup is effectively complete; only development-only seams still emit raw tracing.
 - Continue shrinking the remaining oversized active state owners.
-- Extend estimator mapping parity so receipts, work hours, and tasks map into approved budget lines and update variance snapshots deterministically.
 - Wire the managed backend rollout behind `RHEIR_ESTIMATION_BASE_URL` without regressing the deterministic local fallback.
-- Continue broader selected-project receipt runtime QA in parallel with the new estimator seam.
+- Continue broader selected-project estimator variance/runtime QA on top of the approved-baseline mapping seam.
+- Continue broader selected-project receipt runtime QA in parallel with the estimator seam.
 - Use `SHIP_READINESS_CHECKLIST.md` as the current release-progress reference alongside the STS docs.
 
 ## Blockers

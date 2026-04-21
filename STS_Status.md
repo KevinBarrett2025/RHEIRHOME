@@ -3,7 +3,7 @@
 ## Repo
 - Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Branch: `gm/rheir-hardening-phase1`
-- HEAD: `00dd53013907e86485015fad7bfb479625474da8`
+- HEAD: `96ffc4deea4f3e5993808741dd2c583cf63ce395`
 
 ## Active Initiative
 - RHEIR release hardening, phase 2 estimator foundation and contractor workflow hardening.
@@ -23,6 +23,7 @@
 - Added `ProjectTask` estimator linkage metadata (`budgetLineID`, `estimateVersionID`, `phaseName`) so approved baseline tasks can bridge into the live task flow without replacing existing project summary fields.
 - Added focused estimator parity in `RHEIRTests.swift` for totals rollups, approved-baseline bridge fields, variance math, SQLite round trips, actual-cost link replacement, and the draft-to-approved workflow.
 - Added deterministic selected-project AI Project Calculator UI smoke coverage by clearing estimator SQLite artifacts for UI test launches in `RheirApp.swift`, exposing stable estimator-tab/draft/variance accessibility hooks in `BudgetBreakdownView.swift`, and asserting in `RHEIRUITests.swift` that the live budget surface can build and approve a draft estimate deterministically.
+- Added deterministic estimator actual-cost mapping parity by seeding receipts, work hours, and tasks in a dedicated UI launch mode, exposing stable mapping-queue and variance-summary hooks in `BudgetBreakdownView.swift`, and asserting that mapped actuals clear the unmatched queue and move committed/actual variance off zero on the real budget surface.
 - Added `ProjectStore` for organization-scoped local project/team-member/assignment persistence.
 - Added `ProjectRepository` for CloudKit project fetch/save and project assignment persistence.
 - Added `OrganizationProjectSyncStore` for organization-scoped project filtering, snapshot persistence, CloudKit merge/fetch/save helpers, zone setup, and assignment gating.
@@ -145,9 +146,9 @@
 - Expanded focused `RHEIRTests/RHEIRTests.swift` parity to prove raw legacy `imageDatas` payloads compact cleanly from `UserDefaults`, on-disk project files, and offline project file writes.
 
 ## In Progress
-- Extend live mapping parity so receipts, work hours, and tasks map into approved budget lines and variance snapshots update deterministically.
 - Keep the managed estimator backend rollout behind `RHEIR_ESTIMATION_BASE_URL` while the deterministic in-app fallback remains the default local execution path.
-- Continue broader selected-project receipt runtime QA in parallel with the new estimator foundation seam.
+- Continue broader selected-project estimator variance/runtime QA on top of the approved-baseline mapping seam.
+- Continue broader selected-project receipt runtime QA in parallel with the estimator hardening lane.
 - Continue shrinking the remaining oversized active state owners around the new sync and access store boundaries.
 - Expand deterministic parity beyond the focused `RHEIRTests` suite.
 
@@ -158,12 +159,12 @@
 ## Latest Evidence
 - `Project.swift` now carries the first compiled estimator domain plus baseline-bridge helpers so approved estimate totals can feed the existing `Project` summary fields without replacing them yet.
 - `ProjectViewModel.swift` now owns `HybridRHEIREstimationService`, `SQLiteEstimatorStore`, and `AIProjectCalculatorViewModel`, keeping secure backend contracts server-oriented while preserving a deterministic local fallback for GM work.
-- `RheirApp.swift` now clears estimator SQLite artifacts in UI test launch modes, and `BudgetBreakdownView.swift` now exposes deterministic estimator-tab/intake/draft/variance accessibility hooks so the live budget surface stays stable under seeded UI smoke coverage.
-- `RHEIRUITests.swift` now contains deterministic selected-project AI Project Calculator coverage that opens the real project card, switches to the estimator tab, builds a draft estimate, and approves the baseline into the variance dashboard.
-- `RHEIRTests.swift` now covers estimator totals, approved-baseline bridge behavior, variance snapshots, SQLite artifact persistence, actual-cost link replacement, and the end-to-end draft approval workflow.
-- Focused estimator parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_estimator_targeted_dd7 -resultBundlePath /tmp/rheir_estimator_targeted7.xcresult test -only-testing:RHEIRTests/EstimatorDomainTests -only-testing:RHEIRTests/SQLiteEstimatorStoreTests -only-testing:RHEIRTests/AIProjectCalculatorWorkflowTests` -> PASS (`/tmp/rheir_estimator_targeted7.xcresult`, `6 tests in 3 suites`)
-- Focused estimator UI smoke: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_estimator_ui_smoke_dd -resultBundlePath /tmp/rheir_estimator_ui_smoke.xcresult test -only-testing:RHEIRUITests/RHEIRUITests/testAIProjectCalculatorBuildsAndApprovesDraftEstimate` -> PASS (`/tmp/rheir_estimator_ui_smoke.xcresult`, `1 UI test`)
-- Gate A: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_estimator_ui_smoke_dd -resultBundlePath /tmp/rheir_gateA_estimator_ui_smoke.xcresult clean build` -> PASS (`/tmp/rheir_gateA_estimator_ui_smoke.xcresult`)
+- `RheirApp.swift` now exposes a dedicated `estimator_mapping` UI-test launch mode, while `BudgetBreakdownView.swift` defaults live mapping saves to the visible budget-line selection, refreshes task-linked variance after task persistence, and exposes deterministic mapping-queue plus summary-value accessibility hooks.
+- `RHEIRUITests.swift` now contains deterministic selected-project AI Project Calculator coverage that builds and approves a draft estimate, maps seeded receipt/work-hour/task actuals into approved budget lines, and proves the live variance dashboard updates away from zero.
+- `RHEIRTests.swift` now covers the mapping workflow end-to-end by proving receipt, work-hour, and task links clear unmatched queues and rebuild committed/actual variance against an approved baseline.
+- Focused estimator mapping parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_estimator_mapping_tests_retry_dd -resultBundlePath /tmp/rheir_estimator_mapping_tests_retry.xcresult test -only-testing:RHEIRTests/AIProjectCalculatorWorkflowTests` -> PASS (`/tmp/rheir_estimator_mapping_tests_retry.xcresult`, `2 tests in 1 suite`)
+- Focused estimator mapping UI smoke: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_estimator_mapping_ui_retry2_dd -resultBundlePath /tmp/rheir_estimator_mapping_ui_retry2.xcresult test -only-testing:RHEIRUITests/RHEIRUITests/testAIProjectCalculatorMapsActualsAndUpdatesVariance` -> PASS (`/tmp/rheir_estimator_mapping_ui_retry2.xcresult`, `1 UI test`)
+- Gate A: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_estimator_mapping_dd -resultBundlePath /tmp/rheir_gateA_estimator_mapping.xcresult clean build` -> PASS (`/tmp/rheir_gateA_estimator_mapping.xcresult`)
 
 ## Next Milestone
-- Extend mapping parity so receipts, labor, and tasks drive budget-line variance on the live budget surface, then wire the managed backend behind `RHEIR_ESTIMATION_BASE_URL` without regressing the deterministic local fallback.
+- Wire the managed backend behind `RHEIR_ESTIMATION_BASE_URL`, then broaden approved-baseline variance/runtime QA on the live budget surface without regressing the deterministic local fallback.

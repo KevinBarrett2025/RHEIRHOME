@@ -2201,6 +2201,10 @@ struct AIProjectCalculatorView: View {
                 return task.title
             }
         }
+
+        var buttonAccessibilityID: String {
+            "ai-project-calculator-map-\(id)"
+        }
     }
 
     private var project: Project? {
@@ -2237,6 +2241,7 @@ struct AIProjectCalculatorView: View {
                         Form {
                             Section("Map Actual Cost") {
                                 Text(source.title)
+                                    .accessibilityIdentifier("ai-project-calculator-mapping-source")
                             }
 
                             Section("Budget Line") {
@@ -2251,18 +2256,21 @@ struct AIProjectCalculatorView: View {
                                         }
                                     }
                                 }
+                                .accessibilityIdentifier("ai-project-calculator-mapping-line")
                             }
                         }
                         .navigationTitle("Map Cost")
                         .toolbar {
                             ToolbarItem(placement: .navigationBarLeading) {
                                 Button("Cancel") {
+                                    selectedBudgetLineID = nil
                                     selectedMappingSource = nil
                                 }
+                                .accessibilityIdentifier("ai-project-calculator-mapping-cancel")
                             }
                             ToolbarItem(placement: .navigationBarTrailing) {
                                 Button("Save") {
-                                    guard let budgetLineID = selectedBudgetLineID else {
+                                    guard let budgetLineID = selectedBudgetLineID ?? viewModel.approvedBaseline?.lines.first?.id else {
                                         return
                                     }
 
@@ -2281,11 +2289,17 @@ struct AIProjectCalculatorView: View {
                                                 updatedTask.estimateVersionID = baseline.estimateVersionID
                                                 updatedTask.phaseName = line.phase
                                                 await projectVM.updateTask(updatedTask, in: project.id)
+                                                if let refreshedProject = projectVM.selectedProject,
+                                                   refreshedProject.id == project.id {
+                                                    viewModel.rebuildVariance(project: refreshedProject)
+                                                }
                                             }
                                         }
+                                        selectedBudgetLineID = nil
                                         selectedMappingSource = nil
                                     }
                                 }
+                                .accessibilityIdentifier("ai-project-calculator-mapping-save")
                             }
                         }
                     }
@@ -2423,6 +2437,7 @@ struct AIProjectCalculatorView: View {
             )
 
             Toggle("Generate starter tasks on approval", isOn: $viewModel.autoGenerateStarterTasks)
+                .accessibilityIdentifier("ai-project-calculator-auto-generate-tasks")
 
             Button {
                 Task {
@@ -2616,15 +2631,15 @@ struct AIProjectCalculatorView: View {
                     .accessibilityIdentifier("ai-project-calculator-variance-dashboard")
 
                 HStack {
-                    summaryMetric(title: "Budgeted", value: varianceSnapshot.totalBudgeted)
-                    summaryMetric(title: "Committed", value: varianceSnapshot.totalCommitted)
-                    summaryMetric(title: "Actual", value: varianceSnapshot.totalActual)
+                    summaryMetric(title: "Budgeted", value: varianceSnapshot.totalBudgeted, accessibilityIdentifier: "ai-project-calculator-summary-budgeted")
+                    summaryMetric(title: "Committed", value: varianceSnapshot.totalCommitted, accessibilityIdentifier: "ai-project-calculator-summary-committed")
+                    summaryMetric(title: "Actual", value: varianceSnapshot.totalActual, accessibilityIdentifier: "ai-project-calculator-summary-actual")
                 }
 
                 HStack {
-                    summaryMetric(title: "Remaining", value: varianceSnapshot.totalRemaining)
-                    summaryMetric(title: "Forecast", value: varianceSnapshot.totalForecast)
-                    summaryMetric(title: "Lines", value: Double(baseline.lines.count), formatAsCurrency: false)
+                    summaryMetric(title: "Remaining", value: varianceSnapshot.totalRemaining, accessibilityIdentifier: "ai-project-calculator-summary-remaining")
+                    summaryMetric(title: "Forecast", value: varianceSnapshot.totalForecast, accessibilityIdentifier: "ai-project-calculator-summary-forecast")
+                    summaryMetric(title: "Lines", value: Double(baseline.lines.count), formatAsCurrency: false, accessibilityIdentifier: "ai-project-calculator-summary-lines")
                 }
 
                 ForEach(varianceSnapshot.lines) { line in
@@ -2668,31 +2683,45 @@ struct AIProjectCalculatorView: View {
             VStack(alignment: .leading, spacing: 12) {
                 Text("Needs Mapping")
                     .font(.headline)
+                    .accessibilityIdentifier("ai-project-calculator-needs-mapping")
 
                 if receipts.isEmpty && workHours.isEmpty && tasks.isEmpty {
                     Text("All current receipts, labor hours, and tasks are linked to the approved budget baseline.")
                         .font(.subheadline)
                         .foregroundColor(.secondary)
+                        .accessibilityIdentifier("ai-project-calculator-needs-mapping-empty")
                 } else {
                     ForEach(receipts, id: \.id) { receipt in
                         mappingRow(
                             title: receipt.vendor,
                             subtitle: "Receipt • \(receipt.amount.formatAsCurrency())",
-                            action: { selectedMappingSource = .receipt(receipt) }
+                            identifier: MappingSource.receipt(receipt).buttonAccessibilityID,
+                            action: {
+                                selectedBudgetLineID = nil
+                                selectedMappingSource = .receipt(receipt)
+                            }
                         )
                     }
                     ForEach(workHours, id: \.id) { workHour in
                         mappingRow(
                             title: workHour.employee,
                             subtitle: "Labor Hour • \(workHour.totalPay.formatAsCurrency())",
-                            action: { selectedMappingSource = .workHour(workHour) }
+                            identifier: MappingSource.workHour(workHour).buttonAccessibilityID,
+                            action: {
+                                selectedBudgetLineID = nil
+                                selectedMappingSource = .workHour(workHour)
+                            }
                         )
                     }
                     ForEach(tasks, id: \.id) { task in
                         mappingRow(
                             title: task.title,
                             subtitle: "Task • \(task.estimatedHours.formatted()) est. hrs",
-                            action: { selectedMappingSource = .task(task) }
+                            identifier: MappingSource.task(task).buttonAccessibilityID,
+                            action: {
+                                selectedBudgetLineID = nil
+                                selectedMappingSource = .task(task)
+                            }
                         )
                     }
                 }
@@ -2703,7 +2732,12 @@ struct AIProjectCalculatorView: View {
     }
 
     @ViewBuilder
-    private func mappingRow(title: String, subtitle: String, action: @escaping () -> Void) -> some View {
+    private func mappingRow(
+        title: String,
+        subtitle: String,
+        identifier: String?,
+        action: @escaping () -> Void
+    ) -> some View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
@@ -2716,21 +2750,34 @@ struct AIProjectCalculatorView: View {
             Spacer()
             Button("Map", action: action)
                 .buttonStyle(.bordered)
+                .accessibilityIdentifier(identifier ?? "ai-project-calculator-map-action")
         }
     }
 
     @ViewBuilder
-    private func summaryMetric(title: String, value: Double, formatAsCurrency: Bool = true) -> some View {
+    private func summaryMetric(
+        title: String,
+        value: Double,
+        formatAsCurrency: Bool = true,
+        accessibilityIdentifier: String? = nil
+    ) -> some View {
+        let formattedValue = formatAsCurrency ? value.formatAsCurrency() : value.formatted()
         VStack(alignment: .leading, spacing: 4) {
             Text(title)
                 .font(.caption)
                 .foregroundColor(.secondary)
-            Text(formatAsCurrency ? value.formatAsCurrency() : value.formatted())
+            Text(formattedValue)
                 .font(.headline)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
         .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier(
+            accessibilityIdentifier
+                ?? "ai-project-calculator-summary-\(title.lowercased().replacingOccurrences(of: " ", with: "-"))"
+        )
+        .accessibilityValue(formattedValue)
     }
 
     @ViewBuilder

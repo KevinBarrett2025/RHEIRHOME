@@ -71,6 +71,6 @@ Exit criteria: release candidate is validated on real hardware and ready for sub
 - Freeze scope and submit.
 
 ## Immediate Next Steps
-1. Extend estimator parity so receipts, work hours, and tasks map into approved budget lines and drive variance snapshots deterministically.
-2. Stand up the managed estimator backend behind `RHEIR_ESTIMATION_BASE_URL` while preserving the in-app deterministic fallback for local GM work.
-3. Continue broader receipt/runtime QA in parallel so the new estimator baseline can attach to stable contractor workflows.
+1. Stand up the managed estimator backend behind `RHEIR_ESTIMATION_BASE_URL` while preserving the in-app deterministic fallback for local GM work.
+2. Broaden approved-baseline variance/runtime QA so receipts, work hours, tasks, and proposal review stay coherent on the live budget surface.
+3. Continue broader receipt/runtime QA in parallel so the estimator baseline can attach to stable contractor workflows.
