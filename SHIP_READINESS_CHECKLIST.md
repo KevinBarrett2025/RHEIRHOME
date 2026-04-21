@@ -72,6 +72,6 @@ Exit criteria: release candidate is validated on real hardware and ready for sub
 - Freeze scope and submit.
 
 ## Immediate Next Steps
-1. Standardize the fast-ship v1 shell so the visible projects, receipts, labor, tasks, and budget surfaces share the same header, empty-state, and primary-action patterns.
-2. Run the focused fast-ship release pack end-to-end, including relaunch persistence plus scanned-receipt return/reopen validation on the real selected-project flow.
-3. Validate same-user iCloud restore on real hardware; if it is not clean by release cutoff, keep the shell but de-scope cross-device expectations from launch.
+1. Run the focused fast-ship release pack end-to-end with relaunch persistence and scanned-receipt return/reopen validation on the real selected-project flow.
+2. Validate same-user iCloud restore on real hardware; if it is not clean by release cutoff, keep the shell but de-scope cross-device expectations from launch.
+3. Only after the device acceptance pack is green, decide whether any remaining shell polish is still launch-critical.

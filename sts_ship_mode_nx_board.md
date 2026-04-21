@@ -142,6 +142,7 @@
 - Keep the shipping app locked to the fast-ship v1 release profile so the visible shell stays single-user and avoids team/admin detours.
 - Continue broader selected-project estimator variance/runtime QA on top of the approved-baseline mapping seam inside the simplified v1 shell.
 - Continue broader selected-project receipt runtime QA in parallel with the estimator seam so the fast-ship contractor workflow stays stable on device and simulator.
+- Prove relaunch persistence and same-device contractor flows across the simplified shell before cutting a promo candidate.
 - Use `SHIP_READINESS_CHECKLIST.md` as the current release-progress reference alongside the STS docs.
 
 ## Blockers

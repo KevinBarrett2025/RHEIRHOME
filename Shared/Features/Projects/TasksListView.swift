@@ -3,6 +3,7 @@ import SwiftUI
 struct TasksListView: View {
     @EnvironmentObject var projectVM: ProjectViewModel
     @EnvironmentObject var authVM: AuthViewModel
+    @Binding var selectedTab: Tab
     @State private var showingNewTask = false
     @State private var showingCompletedTasks = false
     @State private var searchText = ""
@@ -218,10 +219,16 @@ struct TasksListView: View {
             
             if filteredTasks.isEmpty && !searchText.isEmpty {
                 Section {
-                    Text("No tasks match your search")
-                        .foregroundColor(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .center)
-                        .padding()
+                    WorkflowEmptyStateCard(
+                        icon: "magnifyingglass.circle",
+                        title: "No Matching Tasks",
+                        message: "Try a different search term or clear the filter to see all project tasks.",
+                        primaryActionTitle: "Clear Search",
+                        primaryAction: {
+                            searchText = ""
+                        }
+                    )
+                    .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
                 }
             } else if tasks.isEmpty {
                 emptyTasksView
@@ -258,32 +265,26 @@ struct TasksListView: View {
     private var emptyStateView: some View {
         ProjectSelectionRequiredView(
             title: "Select a Project",
-            message: "Choose a project before viewing or managing tasks."
+            message: "Choose a project before viewing or managing tasks.",
+            actionTitle: "Go to Projects",
+            action: {
+                selectedTab = .projects
+            }
         )
     }
     
     private var emptyTasksView: some View {
         Section {
-            VStack(spacing: 16) {
-                Image(systemName: "checklist")
-                    .font(.system(size: 40))
-                    .foregroundColor(.secondary)
-                
-                Text("No Tasks Yet")
-                    .font(.headline)
-                    .foregroundColor(.secondary)
-                
-                Text("Add tasks to organize and track work progress")
-                    .multilineTextAlignment(.center)
-                    .foregroundColor(.secondary)
-                    .font(.caption)
-                
-                Button("Create First Task") {
+            WorkflowEmptyStateCard(
+                icon: "checklist",
+                title: "No Tasks Yet",
+                message: "Create your first task to organize scope, due dates, and work progress for this project.",
+                primaryActionTitle: "Create First Task",
+                primaryAction: {
                     showingNewTask = true
                 }
-                .buttonStyle(.borderedProminent)
-            }
-            .padding(.vertical)
+            )
+            .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
         }
     }
     
@@ -743,8 +744,9 @@ struct DetailRow: View {
 struct TasksListView_Previews: PreviewProvider {
     static var previews: some View {
         NavigationStack {
-            TasksListView()
+            TasksListView(selectedTab: .constant(.tasks))
                 .environmentObject(ProjectViewModel(offlineDataManager: OfflineDataManager()))
+                .environmentObject(AuthViewModel(service: PreviewAuthService()))
         }
     }
 }

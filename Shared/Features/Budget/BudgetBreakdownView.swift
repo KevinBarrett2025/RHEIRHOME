@@ -63,7 +63,15 @@ struct BudgetBreakdownView: View {
                         .environmentObject(authVM)
                         .tag(BudgetTab.estimator)
                 } else {
-                    ContentUnavailableView("Select a Project", systemImage: "sparkles.rectangle.stack")
+                    ProjectSelectionRequiredView(
+                        title: "Select a Project",
+                        message: "Choose a project before reviewing the estimator or budget plan.",
+                        icon: "sparkles.rectangle.stack",
+                        actionTitle: "Go to Projects",
+                        action: {
+                            selectedTab = .projects
+                        }
+                    )
                         .tag(BudgetTab.estimator)
                 }
 
@@ -459,21 +467,15 @@ struct BudgetBreakdownContentView: View {
     
     @ViewBuilder
     private var emptyState: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "folder")
-                .font(.system(size: 48))
-                .foregroundColor(.secondary)
-            
-            Text("No Project Selected")
-                .font(.title2)
-                .fontWeight(.semibold)
-            
-            Text("Select a project to view budget breakdown and analytics.")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-        }
-        .padding()
+        ProjectSelectionRequiredView(
+            title: "Select a Project",
+            message: "Choose a project before reviewing budget breakdown and analytics.",
+            icon: "chart.pie",
+            actionTitle: "Go to Projects",
+            action: {
+                selectedTab = .projects
+            }
+        )
     }
     
     // MARK: - Helper Methods
@@ -510,7 +512,7 @@ struct BudgetBreakdownContentView: View {
         Task {
             await projectVM.updateProject(copy)
         }
-        selectedTab = .company
+        selectedTab = AppReleaseProfile.current.shouldHideCompanySurface ? .projects : .company
     }
 }
 

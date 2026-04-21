@@ -283,39 +283,16 @@ struct ReceiptsView: View {
     private var mainContent: some View {
         if receipts.isEmpty {
             if selectedCategory != nil || !searchText.isEmpty {
-                // Filtered empty state
-                VStack(spacing: 16) {
-                    Image(systemName: "magnifyingglass.circle")
-                        .font(.system(size: 48))
-                        .foregroundColor(.secondary)
-                    
-                    Text("No Matching Receipts")
-                        .font(.headline)
-                        .foregroundColor(.secondary)
-                    
-                    if selectedCategory != nil {
-                        Text("No receipts found in the \(selectedCategory!.rawValue) category")
-                            .multilineTextAlignment(.center)
-                            .foregroundColor(.secondary)
-                            .padding(.horizontal)
-                        
-                        Button("View All Receipts") {
-                            selectedCategory = nil
-                            searchText = ""
-                        }
-                        .buttonStyle(.bordered)
-                    } else {
-                        Text("Try adjusting your search terms")
-                            .multilineTextAlignment(.center)
-                            .foregroundColor(.secondary)
-                            .padding(.horizontal)
-                        
-                        Button("Clear Search") {
-                            searchText = ""
-                        }
-                        .buttonStyle(.bordered)
+                WorkflowEmptyStateCard(
+                    icon: "magnifyingglass.circle",
+                    title: "No Matching Receipts",
+                    message: filteredEmptyStateMessage,
+                    primaryActionTitle: selectedCategory != nil ? "View All Receipts" : "Clear Search",
+                    primaryAction: {
+                        selectedCategory = nil
+                        searchText = ""
                     }
-                }
+                )
                 .padding()
             } else {
                 emptyReceiptsView
@@ -616,49 +593,30 @@ struct ReceiptsView: View {
     }
     
     private var emptyReceiptsView: some View {
-        VStack(spacing: 20) {
-            Image(systemName: "receipt")
-                .font(.system(size: 60))
-                .foregroundColor(.secondary)
-            
-            Text("No Receipts Yet")
-                .font(.headline)
-                .foregroundColor(.secondary)
-            
-            Text("Start tracking expenses by adding receipts")
-                .multilineTextAlignment(.center)
-                .foregroundColor(.secondary)
-                .padding(.horizontal)
-            
-            VStack(spacing: 12) {
-                HStack(spacing: 16) {
-                    Button {
-                        presentScanner()
-                    } label: {
-                        HStack {
-                            Image(systemName: "camera.viewfinder")
-                            Text("Scan Receipt")
-                        }
-                        .frame(maxWidth: .infinity)
-                    }
-                    .accessibilityIdentifier("receipts-empty-scan")
-                    .buttonStyle(.borderedProminent)
-                    
-                    Button {
-                        showingNewReceipt = true
-                    } label: {
-                        HStack {
-                            Image(systemName: "square.and.pencil")
-                            Text("Manual Entry")
-                        }
-                        .frame(maxWidth: .infinity)
-                    }
-                    .accessibilityIdentifier("receipts-empty-manual-entry")
-                    .buttonStyle(.bordered)
-                }
-            }
-        }
+        WorkflowEmptyStateCard(
+            icon: "receipt",
+            title: "No Receipts Yet",
+            message: "Scan a receipt or add one manually to start tracking project costs.",
+            primaryActionTitle: "Scan Receipt",
+            primaryAction: {
+                presentScanner()
+            },
+            primaryActionIdentifier: "receipts-empty-scan",
+            secondaryActionTitle: "Manual Entry",
+            secondaryAction: {
+                showingNewReceipt = true
+            },
+            secondaryActionIdentifier: "receipts-empty-manual-entry"
+        )
         .padding()
+    }
+
+    private var filteredEmptyStateMessage: String {
+        if let selectedCategory {
+            return "No receipts found in the \(selectedCategory.rawValue) category. Clear the filters to see every saved receipt."
+        }
+
+        return "Try a different vendor, note, or item search."
     }
 }
 

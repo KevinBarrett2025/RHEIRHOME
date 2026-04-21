@@ -111,6 +111,16 @@ final class RHEIRUITests: XCTestCase {
             receiptsGateMessage.waitForExistence(timeout: 5),
             "Expected Receipts to require a selected project before showing receipt content."
         )
+        let goToProjectsButton = app.buttons["project-selection-required-action"]
+        XCTAssertTrue(
+            goToProjectsButton.exists,
+            "Expected the fast-ship receipt gate to expose the shared Go to Projects action."
+        )
+        goToProjectsButton.tap()
+        XCTAssertTrue(
+            chooseProjectButton.waitForExistence(timeout: 5),
+            "Expected the shared project gate action to return the user to the Projects shell."
+        )
 
         app.terminate()
 
@@ -139,6 +149,10 @@ final class RHEIRUITests: XCTestCase {
             laborGateMessage.waitForExistence(timeout: 5),
             "Expected Labor to require a selected project before showing project-scoped labor content."
         )
+        XCTAssertTrue(
+            app.buttons["project-selection-required-action"].exists,
+            "Expected the fast-ship labor gate to expose the shared Go to Projects action."
+        )
 
         app.terminate()
 
@@ -151,16 +165,52 @@ final class RHEIRUITests: XCTestCase {
             "Expected selected-project mode to show the labor summary."
         )
         XCTAssertTrue(
-            selectedProjectApp.staticTexts["No team members found"].exists,
-            "Expected selected-project mode to show the empty labor team-member state."
+            selectedProjectApp.staticTexts["No Labor Logged Yet"].exists,
+            "Expected selected-project mode to show the simplified fast-ship labor empty state."
         )
         XCTAssertTrue(
-            selectedProjectApp.buttons["Log Hours for Team Member"].exists,
+            selectedProjectApp.buttons["Log Hours"].exists,
             "Expected selected-project mode to keep the log-hours action available."
         )
         XCTAssertFalse(
             selectedProjectApp.staticTexts["Choose a project before viewing or logging labor hours."].exists,
             "Expected the labor project-selection gate to disappear when project context is already seeded."
+        )
+    }
+
+    @MainActor
+    func testTasksModeRequiresAndUsesSelectedProjectContext() throws {
+        let app = makeApp(mode: .projectSelection)
+        app.launch()
+        app.tabBars.buttons["Tasks"].tap()
+
+        let tasksGateMessage = app.staticTexts["Choose a project before viewing or managing tasks."]
+        XCTAssertTrue(
+            tasksGateMessage.waitForExistence(timeout: 5),
+            "Expected Tasks to require a selected project before showing project-scoped task content."
+        )
+        XCTAssertTrue(
+            app.buttons["project-selection-required-action"].exists,
+            "Expected the fast-ship tasks gate to expose the shared Go to Projects action."
+        )
+
+        app.terminate()
+
+        let selectedProjectApp = makeApp(mode: .selectedProject)
+        selectedProjectApp.launch()
+        selectedProjectApp.tabBars.buttons["Tasks"].tap()
+
+        XCTAssertTrue(
+            selectedProjectApp.staticTexts["No Tasks Yet"].waitForExistence(timeout: 5),
+            "Expected selected-project mode to show the task empty state."
+        )
+        XCTAssertTrue(
+            selectedProjectApp.buttons["Create First Task"].exists,
+            "Expected selected-project mode to keep the primary task creation action available."
+        )
+        XCTAssertFalse(
+            selectedProjectApp.staticTexts["Choose a project before viewing or managing tasks."].exists,
+            "Expected the tasks project-selection gate to disappear when project context is already seeded."
         )
     }
 

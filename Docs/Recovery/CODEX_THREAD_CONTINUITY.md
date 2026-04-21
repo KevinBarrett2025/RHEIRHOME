@@ -3,22 +3,25 @@
 ## Repo Truth
 - Repo Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Active Branch: `gm/rheir-hardening-phase1`
-- Thread Start SHA: `d916f5a835f9bddf79837726afee9f92985ed560`
-- Last Commit At Thread Start: `d916f5a Phase 2: add estimator actual-cost mapping parity`
+- Thread Start SHA: `b75cf15409fa369d8d512fa122238f4645022bad`
+- Last Commit At Thread Start: `b75cf15 Phase 2: streamline fast-ship v1 shell and session routing`
 
 ## Current Objective
 - Lock RHEIR into the fast-ship v1 release profile so the visible app ships as a single-user contractor tool with the core shell only: `Projects`, `Receipts`, `Labor`, `Tasks`, plus budget `Breakdown` / `Estimator`.
 - Collapse the visible session flow toward `launch -> sign in -> ready`, hiding invite, org-selection, company/admin, and legacy AI-key surfaces unless the app is explicitly forced back into the legacy/full profile.
-- Keep the next seam on real contractor workflows: relaunch persistence, same-device/device QA, and UI/UX standardization across the simplified shell while the current local estimator and actual-cost mapping foundation remains intact.
+- Keep the next seam on real contractor workflows: relaunch persistence and same-device/device QA on the simplified shell now that the shared project-gate and empty-state treatment is in place.
 
 ## Current Working Set
 - `Shared/Utilities/Shared/tab.swift` now carries `AppReleaseProfile`, defaulting the shipping app into `fastShipV1` while preserving an environment override path for legacy/full-profile work.
 - `Shared/Views/Auth/AppSessionSupport.swift` now normalizes invite/admin/org-selection state for the fast-ship profile, auto-selects an existing workspace when possible, and suppresses collaboration-driven detours in the visible launch path.
 - `App/MainTabView.swift`, `App/LandingPageView.swift`, `Shared/Views/Components/UniversalHeaderView.swift`, and `Shared/Views/Settings/PersonalSettingsView.swift` now hide Company/admin/collaboration affordances in the fast-ship profile while keeping lightweight account/settings entry points available.
 - `Shared/Features/Budget/BudgetBreakdownView.swift` and `Shared/Features/Budget/ProjectBudgetTabView.swift` now constrain the visible v1 budget surface to `Breakdown` and `Estimator`.
+- `Shared/Views/Components/ProjectSelectionRequiredView.swift` now owns the shared fast-ship project gate CTA plus `WorkflowEmptyStateCard`, which Receipts, Labor, Tasks, and Budget now use to keep empty states and primary actions visually aligned.
+- `Shared/Features/Receipts/ReceiptsView.swift`, `Shared/Features/TimeEntry/LaborModuleView.swift`, `Shared/Features/Projects/TasksListView.swift`, and `Shared/Features/Budget/BudgetBreakdownView.swift` now route project-required and empty-state shells through the shared fast-ship card treatment instead of each tab carrying its own divergent layout.
 - `Shared/Views/Settings/SettingsView.swift` now hides the legacy `ChatGPTSettingsView` entry when the fast-ship profile is active.
 - `RHEIRTests/RHEIRTests.swift` now covers the fast-ship release-profile default and the legacy-profile override behavior in addition to the existing estimator workflow tests.
 - `RHEIRUITests/RHEIRUITests.swift` now contains deterministic fast-ship shell smoke coverage proving the Company tab is hidden, organization-selection launch state auto-resolves into the ready shell, and only the v1 budget tabs are visible on the selected-project budget surface.
+- `RHEIRUITests/RHEIRUITests.swift` now also proves Receipts, Labor, and Tasks expose the shared `Go to Projects` gate action when no project is selected, and that selected-project Tasks keeps the fast-ship primary create action visible.
 - `Shared/Models/Project.swift` now carries the compiled estimator domain (`EstimateSession`, `EstimateDraft`, `BudgetBaseline`, `EstimateVersion`, `BudgetLine`, `SourceEvidence`, `ActualCostLink`, `VarianceSnapshot`, `ProposalView`) plus `Project.applyingBudgetBaseline(_:)`.
 - `Shared/ViewModels/ProjectViewModel.swift` now contains `HybridRHEIREstimationService`, `SQLiteEstimatorStore`, `AIProjectCalculatorViewModel`, and helper bridges for approved baselines and starter task generation without touching `project.pbxproj`.
 - `Shared/Features/Budget/BudgetBreakdownView.swift` now exposes the selected-project AI Project Calculator surface with intake, clarification, draft review, approval, proposal preview, variance, and unmatched-actual mapping queues.

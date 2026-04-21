@@ -4,6 +4,7 @@ import OSLog
 struct LaborModuleView: View {
     @EnvironmentObject var projectVM: ProjectViewModel
     @EnvironmentObject var authVM: AuthViewModel
+    @Binding var selectedTab: Tab
     @State private var showingLogHours = false
     @State private var selectedTeamMember: TeamMember?
     @State private var showingPaymentView = false
@@ -204,48 +205,26 @@ struct LaborModuleView: View {
     
     @ViewBuilder
     private var emptyTeamMembersView: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "person.2.circle")
-                .font(.system(size: 40))
-                .foregroundColor(.secondary)
-            
-            Text("No team members found")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-            
-            VStack(spacing: 8) {
-                Text("This can happen if:")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                
-                Text("• No hours have been logged for this project")
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
-                Text("• Organization team members need to be added")
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
-                Text("• Team member data needs to be migrated")
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
-            }
-            .multilineTextAlignment(.center)
-            
-            Button("Log Hours for Team Member") {
+        WorkflowEmptyStateCard(
+            icon: "person.2.circle",
+            title: "No Labor Logged Yet",
+            message: "Log the first hours for this project to start tracking labor cost and crew activity.",
+            primaryActionTitle: "Log Hours",
+            primaryAction: {
                 showingLogHours = true
             }
-            .buttonStyle(.borderedProminent)
-        }
-        .padding()
-        .frame(maxWidth: .infinity)
-        .background(Color(.systemGray6))
-        .cornerRadius(10)
+        )
     }
     
     @ViewBuilder 
     private var noProjectSelectedView: some View {
         ProjectSelectionRequiredView(
             title: "Select a Project",
-            message: "Choose a project before viewing or logging labor hours."
+            message: "Choose a project before viewing or logging labor hours.",
+            actionTitle: "Go to Projects",
+            action: {
+                selectedTab = .projects
+            }
         )
     }
 }
@@ -517,7 +496,8 @@ struct SimpleWorkHourRowView: View {
 
 #Preview {
     NavigationStack {
-        LaborModuleView()
+        LaborModuleView(selectedTab: .constant(.labor))
             .environmentObject(ProjectViewModel(offlineDataManager: OfflineDataManager()))
+            .environmentObject(AuthViewModel(service: PreviewAuthService()))
     }
 }

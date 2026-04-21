@@ -22,14 +22,14 @@ struct MainTabView: View {
                 .tabItem { Label("Receipts", systemImage: "tray.full") }
                 .tag(Tab.receipts)
 
-            LaborModuleView()
+            LaborModuleView(selectedTab: $selection)
                 .environmentObject(projectVM)
                 .environmentObject(sessionStore)
                 .tabItem { Label("Labor", systemImage: "clock") }
                 .tag(Tab.labor)
 
             NavigationStack {
-                TasksListView()
+                TasksListView(selectedTab: $selection)
                     .environmentObject(projectVM)
                     .environmentObject(sessionStore)
             }
