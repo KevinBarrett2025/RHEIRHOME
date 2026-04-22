@@ -72,6 +72,6 @@ Exit criteria: release candidate is validated on real hardware and ready for sub
 - Freeze scope and submit.
 
 ## Immediate Next Steps
-1. Run the focused fast-ship release pack end-to-end with scanned-receipt return/reopen validation on the real selected-project flow, now that manual-receipt relaunch persistence is green in simulator.
+1. Run the fast-ship real-device acceptance pack end-to-end on the selected-project flow: Sign in with Apple, first scan, scanned-receipt return/reopen, and relaunch restore, now that both manual-receipt relaunch and scanned-receipt reopen are green in simulator.
 2. Validate same-user iCloud restore on real hardware; if it is not clean by release cutoff, keep the shell but de-scope cross-device expectations from launch.
 3. Only after the device acceptance pack is green, decide whether any remaining shell polish is still launch-critical.

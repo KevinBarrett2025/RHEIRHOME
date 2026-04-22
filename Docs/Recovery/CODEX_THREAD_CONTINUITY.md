@@ -3,13 +3,13 @@
 ## Repo Truth
 - Repo Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Active Branch: `gm/rheir-hardening-phase1`
-- Thread Start SHA: `de163377f1379650d9ab5486e32724473b3ae88c`
-- Last Commit At Thread Start: `de16337 Phase 2: unify fast-ship shell empty states and project gates`
+- Thread Start SHA: `43cf40e6a04a344c25dbc5e4be29f2f7430df494`
+- Last Commit At Thread Start: `43cf40e Phase 2: add fast-ship relaunch persistence smoke coverage`
 
 ## Current Objective
 - Lock RHEIR into the fast-ship v1 release profile so the visible app ships as a single-user contractor tool with the core shell only: `Projects`, `Receipts`, `Labor`, `Tasks`, plus budget `Breakdown` / `Estimator`.
 - Collapse the visible session flow toward `launch -> sign in -> ready`, hiding invite, org-selection, company/admin, and legacy AI-key surfaces unless the app is explicitly forced back into the legacy/full profile.
-- Keep the next seam on real contractor workflows: scanned-receipt return/reopen and same-device/device QA on the simplified shell now that deterministic manual-receipt relaunch persistence is in place.
+- Keep the next seam on real contractor workflows: same-device and real-device QA on the simplified shell now that deterministic manual-receipt relaunch persistence and scanned-receipt return/reopen are both green in simulator.
 
 ## Current Working Set
 - `Shared/Utilities/Shared/tab.swift` now carries `AppReleaseProfile`, defaulting the shipping app into `fastShipV1` while preserving an environment override path for legacy/full-profile work.
@@ -31,6 +31,10 @@
 - `RHEIRTests/RHEIRTests.swift` now covers estimator totals, approved-baseline bridge behavior, variance snapshots, SQLite persistence, actual-cost link replacement, the draft-to-approved workflow, and receipt/work-hour/task mapping parity against an approved baseline.
 - `RHEIRUITests/RHEIRUITests.swift` now contains deterministic selected-project AI Project Calculator UI smoke coverage that opens the real project card, switches to the estimator tab, builds a draft estimate, approves the baseline into the live variance dashboard, maps seeded actuals, and proves the unmatched queue clears while actual/committed variance moves off zero.
 - `RHEIRUITests/RHEIRUITests.swift` now also proves a fast-ship manual receipt survives terminate/relaunch by restoring the selected-project context from persisted state and reopening the saved receipt detail after app relaunch.
+- `App/RheirApp.swift` now includes a deterministic `scanned_receipt_review` launch mode for UI smoke coverage of the real scanned-receipt review/save path without requiring live VisionKit capture in simulator.
+- `Shared/Features/Receipts/ReceiptsView.swift` now seeds a completed scanner session for that launch mode, explicitly clearing the document-scanner sheet so the analysis/review sheet wins the presentation race.
+- `Shared/Features/Receipts/ReceiptScannerView.swift` now promotes pre-completed scanner sessions into the real `ScannedReceiptEntryView` sheet on appearance, and `ScannedReceiptEntryView.swift` exposes stable review-form accessibility IDs needed for deterministic save/reopen assertions.
+- `RHEIRUITests/RHEIRUITests.swift` now contains `testScannedReceiptPersistsAfterLeavingAndReturningToReceipts()`, proving the seeded scanned receipt saves, survives leaving the Receipts surface, and reopens from saved detail.
 - Session flow now routes through `Shared/Views/Auth/AppSessionSupport.swift`.
 - Active app entry points are under `App/` and `Shared/`.
 - The repo cleanup removed duplicate source trees and backup directories from the active working tree.

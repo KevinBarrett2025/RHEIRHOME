@@ -21,6 +21,7 @@ final class RHEIRUITests: XCTestCase {
         case projectSelection = "project_selection"
         case selectedProject = "selected_project"
         case estimatorMapping = "estimator_mapping"
+        case scannedReceiptReview = "scanned_receipt_review"
         case restoredSession = "restored_session"
     }
 
@@ -487,6 +488,96 @@ final class RHEIRUITests: XCTestCase {
             restoredApp.staticTexts["receipt-detail-amount"].label,
             "$123.45",
             "Expected the relaunch-restored receipt detail header to keep the saved amount."
+        )
+    }
+
+    @MainActor
+    func testScannedReceiptPersistsAfterLeavingAndReturningToReceipts() throws {
+        let vendorName = "UI Test Scanned Vendor"
+
+        let app = makeApp(mode: .scannedReceiptReview)
+        app.launch()
+        app.tabBars.buttons["Receipts"].tap()
+
+        let scannedReceiptNavBar = app.navigationBars["AI-Scanned Receipt"]
+        XCTAssertTrue(
+            scannedReceiptNavBar.waitForExistence(timeout: 5),
+            "Expected the seeded scanned-receipt review flow to present the real AI-scanned receipt sheet."
+        )
+        XCTAssertTrue(
+            app.textFields["receipt-scan-vendor"].waitForExistence(timeout: 5),
+            "Expected the scanned-receipt review sheet to expose the editable vendor field."
+        )
+        XCTAssertTrue(
+            app.textFields["receipt-scan-payment-method"].exists,
+            "Expected the scanned-receipt review sheet to expose the editable payment method field."
+        )
+        XCTAssertTrue(
+            app.textFields["receipt-scan-tax"].exists,
+            "Expected the scanned-receipt review sheet to expose the editable tax field."
+        )
+        let receiptNumberField = revealElement(
+            identifier: "receipt-scan-receipt-number",
+            in: app,
+            query: { $0.textFields["receipt-scan-receipt-number"] }
+        )
+        XCTAssertTrue(
+            receiptNumberField.exists,
+            "Expected the scanned-receipt review sheet to expose the editable receipt number field."
+        )
+
+        let saveButton = app.buttons["receipt-scan-save"]
+        XCTAssertTrue(
+            waitForEnabled(saveButton, timeout: 5),
+            "Expected the seeded scanned-receipt review flow to allow saving without extra manual repair."
+        )
+        saveButton.tap()
+
+        let successAlert = app.alerts["Receipt Added Successfully"]
+        XCTAssertTrue(
+            successAlert.waitForExistence(timeout: 8),
+            "Expected saving the scanned receipt review to surface the success alert."
+        )
+        successAlert.buttons["OK"].tap()
+
+        XCTAssertTrue(
+            waitForNonExistence(of: scannedReceiptNavBar, timeout: 5),
+            "Expected confirming the scanned-receipt success alert to dismiss the review sheet."
+        )
+
+        let receiptCard = app.buttons["receipt-card-\(vendorName)"]
+        XCTAssertTrue(
+            receiptCard.waitForExistence(timeout: 8),
+            "Expected the scanned receipt to render in the selected-project receipts list after saving."
+        )
+
+        app.tabBars.buttons["Projects"].tap()
+        app.tabBars.buttons["Receipts"].tap()
+
+        XCTAssertTrue(
+            app.buttons["receipt-card-\(vendorName)"].waitForExistence(timeout: 5),
+            "Expected the saved scanned receipt to remain visible after leaving and returning to the receipts surface."
+        )
+        app.buttons["receipt-card-\(vendorName)"].tap()
+
+        XCTAssertTrue(
+            app.navigationBars["Receipt Details"].waitForExistence(timeout: 5),
+            "Expected the saved scanned receipt to reopen from the receipts list after returning."
+        )
+        XCTAssertEqual(
+            app.staticTexts["receipt-detail-vendor"].label,
+            vendorName,
+            "Expected the reopened scanned receipt detail to keep the saved vendor."
+        )
+        XCTAssertEqual(
+            app.staticTexts["receipt-detail-amount"].label,
+            "$89.76",
+            "Expected the reopened scanned receipt detail to keep the saved amount."
+        )
+        XCTAssertEqual(
+            app.staticTexts["receipt-detail-category"].label,
+            "Materials",
+            "Expected the reopened scanned receipt detail to keep the seeded category."
         )
     }
 

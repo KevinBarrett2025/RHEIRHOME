@@ -279,6 +279,9 @@ struct ReceiptScannerView: View {
                 returnToEntryState()
             }
         }
+        .onAppear {
+            presentCompletedAnalysisIfNeeded()
+        }
     }
 
     private func beginDocumentScan() {
@@ -287,6 +290,20 @@ struct ReceiptScannerView: View {
 
     private func returnToEntryState() {
         session.returnToEntry(hideIntro: hideIntro)
+    }
+
+    private func presentCompletedAnalysisIfNeeded() {
+        guard session.currentStep == .complete else {
+            return
+        }
+        guard session.analysisResult != nil, session.scannedImage != nil else {
+            return
+        }
+        guard !session.showingAnalysisView else {
+            return
+        }
+
+        session.showingAnalysisView = true
     }
     
     @ViewBuilder

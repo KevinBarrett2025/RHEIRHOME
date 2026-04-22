@@ -68,12 +68,14 @@ struct ScannedReceiptEntryView: View {
                     Button("Cancel") { 
                         isPresented = false
                     }
+                    .accessibilityIdentifier("receipt-scan-cancel")
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
                         saveReceipt()
                     }
                     .disabled(!canSave)
+                    .accessibilityIdentifier("receipt-scan-save")
                 }
             }
             .onAppear {
@@ -163,6 +165,7 @@ struct ScannedReceiptEntryView: View {
             HStack {
                 TextField("Vendor Name", text: $vendor)
                     .textFieldStyle(.roundedBorder)
+                    .accessibilityIdentifier("receipt-scan-vendor")
                 
                 Button("📋") {
                     showingVendorPicker = true
@@ -185,6 +188,7 @@ struct ScannedReceiptEntryView: View {
             HStack {
                 TextField("Payment Method", text: $paymentMethod)
                     .textFieldStyle(.roundedBorder)
+                    .accessibilityIdentifier("receipt-scan-payment-method")
                 
                 Button("💳") {
                     showingPaymentMethodPicker = true

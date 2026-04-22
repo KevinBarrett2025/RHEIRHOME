@@ -9,6 +9,7 @@ private enum UITestLaunchMode: String {
     case projectSelection = "project_selection"
     case selectedProject = "selected_project"
     case estimatorMapping = "estimator_mapping"
+    case scannedReceiptReview = "scanned_receipt_review"
     case restoredSession = "restored_session"
 }
 
@@ -86,7 +87,7 @@ private struct AppLaunchConfiguration {
             )
             authViewModel.currentOrg = nil
 
-        case .projectSelection, .selectedProject, .estimatorMapping:
+        case .projectSelection, .selectedProject, .estimatorMapping, .scannedReceiptReview:
             let user = User(id: "ui-test-project-user", email: "project-ui-test@rheirhome.com")
             let organization = Organization(
                 id: "ui-test-project-org",
@@ -125,7 +126,7 @@ private struct AppLaunchConfiguration {
             projectViewModel.projects = [kitchenProject, bathProject]
             projectViewModel.organizationProjects = [kitchenProject, bathProject]
             projectViewModel.accessibleProjects = [kitchenProject, bathProject]
-            if uiTestMode == .selectedProject || uiTestMode == .estimatorMapping {
+            if uiTestMode == .selectedProject || uiTestMode == .estimatorMapping || uiTestMode == .scannedReceiptReview {
                 projectViewModel.selectProject(kitchenProject)
             } else {
                 projectViewModel.deselectProject()
@@ -335,6 +336,8 @@ struct RheirApp: App {
         case .selectedProject:
             authService = SignedOutUITestAuthService()
         case .estimatorMapping:
+            authService = SignedOutUITestAuthService()
+        case .scannedReceiptReview:
             authService = SignedOutUITestAuthService()
         case .restoredSession:
             authService = SignedOutUITestAuthService()

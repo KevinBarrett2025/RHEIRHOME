@@ -1,5 +1,11 @@
 import SwiftUI
 import OSLog
+import UIKit
+
+private enum ReceiptUITestLaunch {
+    static let modeKey = "RHEIR_UI_TEST_MODE"
+    static let scannedReceiptReviewMode = "scanned_receipt_review"
+}
 
 private func receiptsAccessibilitySlug(_ value: String) -> String {
     value
@@ -22,6 +28,7 @@ struct ReceiptsView: View {
     @State private var selectedCategory: ReceiptCategory? = nil
     @State private var searchText = ""
     @State private var expandedVendorGroups: Set<String> = []
+    @State private var didSeedUITestScannerReview = false
     @AppStorage("hideReceiptScannerIntro") private var hideReceiptScannerIntro = false
     
     private enum ReceiptViewMode: String, CaseIterable {
@@ -161,6 +168,12 @@ struct ReceiptsView: View {
                 if let receipt = receiptToDelete {
                     Text("Are you sure you want to delete the receipt from \(receipt.vendor) for \(receipt.amount.formatAsCurrency())? This action cannot be undone.")
                 }
+            }
+            .onAppear {
+                applyUITestScannerReviewSeedIfNeeded()
+            }
+            .onChange(of: selectedTab) { _, _ in
+                applyUITestScannerReviewSeedIfNeeded()
             }
         }
     }
@@ -579,6 +592,99 @@ struct ReceiptsView: View {
             hideIntro: hideReceiptScannerIntro,
             hasAIAccess: hasScannerAIAccess
         )
+    }
+
+    private func applyUITestScannerReviewSeedIfNeeded() {
+        guard !didSeedUITestScannerReview else {
+            return
+        }
+        guard ProcessInfo.processInfo.environment[ReceiptUITestLaunch.modeKey] == ReceiptUITestLaunch.scannedReceiptReviewMode else {
+            return
+        }
+        guard selectedTab == .receipts else {
+            return
+        }
+        guard let project = projectVM.selectedProject else {
+            return
+        }
+        guard project.normalizedReceiptCopy.receipts.isEmpty else {
+            didSeedUITestScannerReview = true
+            return
+        }
+
+        let seededSession = ReceiptScannerSession(
+            project: project,
+            hideIntro: true,
+            hasAIAccess: true
+        )
+        seededSession.setDocumentScannerPresented(false)
+        seededSession.scannedImage = makeUITestScannedReceiptImage()
+        seededSession.analysisResult = makeUITestScannedReceiptAnalysis()
+        seededSession.setCurrentStep(.complete)
+        seededSession.showingAnalysisView = true
+        seededSession.receiptSaveCompleted = false
+
+        scannerSession = seededSession
+        didSeedUITestScannerReview = true
+    }
+
+    private func makeUITestScannedReceiptAnalysis() -> ReceiptAnalysisResult {
+        ReceiptAnalysisResult(
+            vendor: "UI Test Scanned Vendor",
+            category: ReceiptCategory.material.rawValue,
+            amount: 89.76,
+            taxAmount: 7.26,
+            discountAmount: 0,
+            paymentMethod: "Visa",
+            paymentMethodDetails: PaymentMethodDetails(cardBrand: "Visa", lastFourDigits: "4242", accountInfo: nil),
+            receiptNumber: "SCAN-4242",
+            receiptDate: Date(timeIntervalSince1970: 1_735_171_200),
+            items: [
+                ReceiptItemResult(
+                    name: "Primer",
+                    quantity: 2,
+                    unitPrice: 19.99,
+                    totalPrice: 39.98,
+                    category: ReceiptCategory.material.rawValue
+                ),
+                ReceiptItemResult(
+                    name: "Brush Set",
+                    quantity: 1,
+                    unitPrice: 42.52,
+                    totalPrice: 42.52,
+                    category: ReceiptCategory.material.rawValue
+                )
+            ],
+            isReturn: false,
+            confidence: 0.91
+        )
+    }
+
+    private func makeUITestScannedReceiptImage() -> UIImage {
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: 320, height: 640))
+        return renderer.image { context in
+            UIColor.white.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 320, height: 640))
+
+            UIColor(white: 0.92, alpha: 1).setFill()
+            context.fill(CGRect(x: 24, y: 24, width: 272, height: 592))
+
+            let textAttributes: [NSAttributedString.Key: Any] = [
+                .font: UIFont.boldSystemFont(ofSize: 20),
+                .foregroundColor: UIColor.black
+            ]
+            NSString(string: "UI Test Supply").draw(at: CGPoint(x: 40, y: 52), withAttributes: textAttributes)
+
+            let bodyAttributes: [NSAttributedString.Key: Any] = [
+                .font: UIFont.systemFont(ofSize: 16),
+                .foregroundColor: UIColor.darkGray
+            ]
+            NSString(string: "Primer x2        $39.98").draw(at: CGPoint(x: 40, y: 120), withAttributes: bodyAttributes)
+            NSString(string: "Brush Set x1     $42.52").draw(at: CGPoint(x: 40, y: 156), withAttributes: bodyAttributes)
+            NSString(string: "Tax              $7.26").draw(at: CGPoint(x: 40, y: 224), withAttributes: bodyAttributes)
+            NSString(string: "Total            $89.76").draw(at: CGPoint(x: 40, y: 276), withAttributes: bodyAttributes)
+            NSString(string: "Receipt # SCAN-4242").draw(at: CGPoint(x: 40, y: 328), withAttributes: bodyAttributes)
+        }
     }
     
     private var emptyStateView: some View {
