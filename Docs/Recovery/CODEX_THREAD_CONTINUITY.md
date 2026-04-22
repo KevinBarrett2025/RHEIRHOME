@@ -3,13 +3,13 @@
 ## Repo Truth
 - Repo Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Active Branch: `gm/rheir-hardening-phase1`
-- Thread Start SHA: `b75cf15409fa369d8d512fa122238f4645022bad`
-- Last Commit At Thread Start: `b75cf15 Phase 2: streamline fast-ship v1 shell and session routing`
+- Thread Start SHA: `de163377f1379650d9ab5486e32724473b3ae88c`
+- Last Commit At Thread Start: `de16337 Phase 2: unify fast-ship shell empty states and project gates`
 
 ## Current Objective
 - Lock RHEIR into the fast-ship v1 release profile so the visible app ships as a single-user contractor tool with the core shell only: `Projects`, `Receipts`, `Labor`, `Tasks`, plus budget `Breakdown` / `Estimator`.
 - Collapse the visible session flow toward `launch -> sign in -> ready`, hiding invite, org-selection, company/admin, and legacy AI-key surfaces unless the app is explicitly forced back into the legacy/full profile.
-- Keep the next seam on real contractor workflows: relaunch persistence and same-device/device QA on the simplified shell now that the shared project-gate and empty-state treatment is in place.
+- Keep the next seam on real contractor workflows: scanned-receipt return/reopen and same-device/device QA on the simplified shell now that deterministic manual-receipt relaunch persistence is in place.
 
 ## Current Working Set
 - `Shared/Utilities/Shared/tab.swift` now carries `AppReleaseProfile`, defaulting the shipping app into `fastShipV1` while preserving an environment override path for legacy/full-profile work.
@@ -25,11 +25,12 @@
 - `Shared/Models/Project.swift` now carries the compiled estimator domain (`EstimateSession`, `EstimateDraft`, `BudgetBaseline`, `EstimateVersion`, `BudgetLine`, `SourceEvidence`, `ActualCostLink`, `VarianceSnapshot`, `ProposalView`) plus `Project.applyingBudgetBaseline(_:)`.
 - `Shared/ViewModels/ProjectViewModel.swift` now contains `HybridRHEIREstimationService`, `SQLiteEstimatorStore`, `AIProjectCalculatorViewModel`, and helper bridges for approved baselines and starter task generation without touching `project.pbxproj`.
 - `Shared/Features/Budget/BudgetBreakdownView.swift` now exposes the selected-project AI Project Calculator surface with intake, clarification, draft review, approval, proposal preview, variance, and unmatched-actual mapping queues.
-- `App/RheirApp.swift` now clears estimator SQLite artifacts in UI test launch modes and includes a dedicated `estimator_mapping` launch mode that seeds receipt/work-hour/task actuals onto the selected project for deterministic mapping parity.
+- `App/RheirApp.swift` now clears estimator SQLite artifacts in destructive UI test launch modes, supports `RHEIR_UI_TEST_PRESERVE_STATE`, and includes a `restored_session` launch mode that reloads persisted fast-ship organization/project state synchronously for relaunch parity.
 - `Shared/Features/Budget/BudgetBreakdownView.swift` now also exposes deterministic accessibility hooks for the estimator tab, preferred-vendor/store fields, draft-review header, variance-dashboard summary values, and live mapping actions, while defaulting mapping saves to the visible selected budget line and rebuilding task-linked variance after project task persistence.
 - `Shared/Models/ProjectTask.swift` now carries optional estimator linkage metadata (`budgetLineID`, `estimateVersionID`, `phaseName`) so approved budget lines can bridge into the live task flow.
 - `RHEIRTests/RHEIRTests.swift` now covers estimator totals, approved-baseline bridge behavior, variance snapshots, SQLite persistence, actual-cost link replacement, the draft-to-approved workflow, and receipt/work-hour/task mapping parity against an approved baseline.
 - `RHEIRUITests/RHEIRUITests.swift` now contains deterministic selected-project AI Project Calculator UI smoke coverage that opens the real project card, switches to the estimator tab, builds a draft estimate, approves the baseline into the live variance dashboard, maps seeded actuals, and proves the unmatched queue clears while actual/committed variance moves off zero.
+- `RHEIRUITests/RHEIRUITests.swift` now also proves a fast-ship manual receipt survives terminate/relaunch by restoring the selected-project context from persisted state and reopening the saved receipt detail after app relaunch.
 - Session flow now routes through `Shared/Views/Auth/AppSessionSupport.swift`.
 - Active app entry points are under `App/` and `Shared/`.
 - The repo cleanup removed duplicate source trees and backup directories from the active working tree.

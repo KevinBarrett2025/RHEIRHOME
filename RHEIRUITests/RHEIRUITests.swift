@@ -11,6 +11,7 @@ final class RHEIRUITests: XCTestCase {
     private enum UITestLaunchEnvironment {
         static let mode = "RHEIR_UI_TEST_MODE"
         static let skipLaunchDelay = "RHEIR_UI_TEST_SKIP_LAUNCH_DELAY"
+        static let preserveState = "RHEIR_UI_TEST_PRESERVE_STATE"
     }
 
     private enum UITestLaunchMode: String {
@@ -20,6 +21,7 @@ final class RHEIRUITests: XCTestCase {
         case projectSelection = "project_selection"
         case selectedProject = "selected_project"
         case estimatorMapping = "estimator_mapping"
+        case restoredSession = "restored_session"
     }
 
     private static let selectedProjectCardIdentifier = "project-card-A7A92AF6-2E2B-4F51-BEA4-4B53CF2A7D11"
@@ -428,6 +430,63 @@ final class RHEIRUITests: XCTestCase {
             app.staticTexts["receipt-detail-amount"].label,
             "$123.45",
             "Expected the receipt detail header to show the saved amount."
+        )
+    }
+
+    @MainActor
+    func testManualReceiptPersistsAcrossFastShipRelaunch() throws {
+        let vendorName = "UI Test Relaunch Vendor"
+        let amount = "123.45"
+
+        let app = makeApp(mode: .selectedProject)
+        app.launch()
+        app.tabBars.buttons["Receipts"].tap()
+
+        saveManualReceipt(in: app, vendorName: vendorName, amount: amount)
+
+        let receiptCard = app.buttons["receipt-card-\(vendorName)"]
+        XCTAssertTrue(
+            receiptCard.waitForExistence(timeout: 8),
+            "Expected the saved receipt to appear before terminating the app for relaunch coverage."
+        )
+
+        app.terminate()
+
+        let restoredApp = makeApp(mode: .restoredSession, preserveState: true)
+        restoredApp.launch()
+
+        let tabBar = restoredApp.tabBars.firstMatch
+        XCTAssertTrue(
+            tabBar.waitForExistence(timeout: 5),
+            "Expected the relaunch-preserving UI test mode to resolve back into the main tab shell."
+        )
+
+        restoredApp.tabBars.buttons["Receipts"].tap()
+
+        XCTAssertFalse(
+            restoredApp.staticTexts["Choose a project from the Projects tab before viewing receipts."].exists,
+            "Expected the selected project context to restore after relaunch."
+        )
+        XCTAssertTrue(
+            restoredApp.buttons["receipt-card-\(vendorName)"].waitForExistence(timeout: 8),
+            "Expected the saved receipt card to persist after terminating and relaunching the fast-ship app shell."
+        )
+
+        restoredApp.buttons["receipt-card-\(vendorName)"].tap()
+
+        XCTAssertTrue(
+            restoredApp.navigationBars["Receipt Details"].waitForExistence(timeout: 5),
+            "Expected the persisted receipt to remain navigable after relaunch."
+        )
+        XCTAssertEqual(
+            restoredApp.staticTexts["receipt-detail-vendor"].label,
+            vendorName,
+            "Expected the relaunch-restored receipt detail header to keep the saved vendor."
+        )
+        XCTAssertEqual(
+            restoredApp.staticTexts["receipt-detail-amount"].label,
+            "$123.45",
+            "Expected the relaunch-restored receipt detail header to keep the saved amount."
         )
     }
 
@@ -1016,10 +1075,13 @@ final class RHEIRUITests: XCTestCase {
         }
     }
 
-    private func makeApp(mode: UITestLaunchMode) -> XCUIApplication {
+    private func makeApp(mode: UITestLaunchMode, preserveState: Bool = false) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchEnvironment[UITestLaunchEnvironment.mode] = mode.rawValue
         app.launchEnvironment[UITestLaunchEnvironment.skipLaunchDelay] = "1"
+        if preserveState {
+            app.launchEnvironment[UITestLaunchEnvironment.preserveState] = "1"
+        }
         return app
     }
 

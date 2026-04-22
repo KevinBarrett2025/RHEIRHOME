@@ -9,21 +9,25 @@ private enum UITestLaunchMode: String {
     case projectSelection = "project_selection"
     case selectedProject = "selected_project"
     case estimatorMapping = "estimator_mapping"
+    case restoredSession = "restored_session"
 }
 
 private enum UITestLaunchEnvironment {
     static let modeKey = "RHEIR_UI_TEST_MODE"
     static let skipLaunchDelayKey = "RHEIR_UI_TEST_SKIP_LAUNCH_DELAY"
+    static let preserveStateKey = "RHEIR_UI_TEST_PRESERVE_STATE"
 }
 
 private struct AppLaunchConfiguration {
     let uiTestMode: UITestLaunchMode?
     let launchDelayNanoseconds: UInt64
     let shouldConnectProjectViewModel: Bool
+    let shouldPreserveState: Bool
 
     init(processInfo: ProcessInfo = .processInfo) {
         let environment = processInfo.environment
         self.uiTestMode = UITestLaunchMode(rawValue: environment[UITestLaunchEnvironment.modeKey] ?? "")
+        self.shouldPreserveState = environment[UITestLaunchEnvironment.preserveStateKey] == "1"
         self.shouldConnectProjectViewModel = uiTestMode == nil
 
         if environment[UITestLaunchEnvironment.skipLaunchDelayKey] == "1" || uiTestMode != nil {
@@ -125,6 +129,41 @@ private struct AppLaunchConfiguration {
                 projectViewModel.selectProject(kitchenProject)
             } else {
                 projectViewModel.deselectProject()
+            }
+
+        case .restoredSession:
+            let user = User(id: "ui-test-project-user", email: "project-ui-test@rheirhome.com")
+            let organization = Organization(
+                id: "ui-test-project-org",
+                name: "Project Picker Builders",
+                members: [user.id, "project-member-2"],
+                adminUserID: user.id
+            )
+
+            applyCommonBootstrap(
+                authViewModel: authViewModel,
+                projectViewModel: projectViewModel,
+                user: user,
+                organizations: [organization],
+                organizationRoles: [organization.id: .admin]
+            )
+            let localCache = LocalCacheStore.shared
+            let restoredProjects = ProjectStore().loadProjects(for: organization.id)
+
+            authViewModel.currentOrg = organization
+            projectViewModel.currentOrganization = organization
+            projectViewModel.currentOrganizationRole = .admin
+            projectViewModel.currentOrganizationID = organization.id
+            projectViewModel.isUsingCloudKitForOrganizationData = false
+            projectViewModel.projects = restoredProjects
+            projectViewModel.organizationProjects = restoredProjects
+            projectViewModel.accessibleProjects = restoredProjects
+
+            let restoredProjectID = localCache.lastSelectedProjectID(for: organization.id)
+                ?? localCache.selectionState.projectID
+            if let restoredProjectID,
+               let restoredProject = restoredProjects.first(where: { $0.id.uuidString == restoredProjectID }) {
+                projectViewModel.selectProject(restoredProject)
             }
 
         case .signedOut, .none:
@@ -278,7 +317,7 @@ struct RheirApp: App {
 
     init() {
         let launchConfiguration = AppLaunchConfiguration()
-        if launchConfiguration.uiTestMode != nil {
+        if launchConfiguration.uiTestMode != nil && !launchConfiguration.shouldPreserveState {
             LocalCacheStore.shared.clearAllKnownSessionKeys()
             SQLiteEstimatorStore.clearUITestArtifacts()
         }
@@ -296,6 +335,8 @@ struct RheirApp: App {
         case .selectedProject:
             authService = SignedOutUITestAuthService()
         case .estimatorMapping:
+            authService = SignedOutUITestAuthService()
+        case .restoredSession:
             authService = SignedOutUITestAuthService()
         case .none:
             authService = CloudKitAuthService()
