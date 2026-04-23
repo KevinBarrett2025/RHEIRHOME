@@ -1,5 +1,6 @@
 import Foundation
 import CloudKit
+import Combine
 import Testing
 @testable import RHEIR
 
@@ -22,6 +23,70 @@ private final class RecordingProjectRepository: ProjectRepository {
 
     func loadProjectAssignments(organizationID: String) async -> [String] {
         savedAssignmentsByOrganization[organizationID] ?? []
+    }
+}
+
+private final class StubAuthService: AuthService {
+    var currentUser: User?
+
+    init(currentUser: User? = nil) {
+        self.currentUser = currentUser
+    }
+
+    func signUp(email: String, password: String) -> AnyPublisher<User, Error> {
+        Fail(error: NSError(domain: "StubAuthService", code: -1)).eraseToAnyPublisher()
+    }
+
+    func login(email: String, password: String) -> AnyPublisher<User, Error> {
+        Fail(error: NSError(domain: "StubAuthService", code: -1)).eraseToAnyPublisher()
+    }
+
+    func signInWithApple() -> AnyPublisher<User, Error> {
+        Fail(error: NSError(domain: "StubAuthService", code: -1)).eraseToAnyPublisher()
+    }
+
+    func invite(email: String, orgID: String) -> AnyPublisher<Void, Error> {
+        Just(())
+            .setFailureType(to: Error.self)
+            .eraseToAnyPublisher()
+    }
+
+    func signOut() {
+        currentUser = nil
+    }
+}
+
+@MainActor
+private final class RecordingSessionProjectViewModel: ProjectViewModel {
+    var setCurrentOrganizationCalls: [String?] = []
+    var zoneSetupCalls: [String] = []
+    var organizationDidChangeCalls: [String?] = []
+    var setCurrentUserRoleCalls: [(OrganizationRole, String)] = []
+
+    init(repository: ProjectRepository = RecordingProjectRepository()) {
+        super.init(
+            offlineDataManager: OfflineDataManager(),
+            projectRepository: repository
+        )
+    }
+
+    override func setCurrentOrganization(_ organization: Organization?, role: TeamMemberRole? = nil) {
+        setCurrentOrganizationCalls.append(organization?.id)
+        currentOrganization = organization
+        currentOrganizationRole = role
+        currentOrganizationID = organization?.id
+    }
+
+    override func setupCloudKitZoneForOrganization(_ organizationID: String) async {
+        zoneSetupCalls.append(organizationID)
+    }
+
+    override func organizationDidChange(_ orgID: String?) async {
+        organizationDidChangeCalls.append(orgID)
+    }
+
+    override func setCurrentUserRole(_ role: OrganizationRole, forOrganization organizationID: String) {
+        setCurrentUserRoleCalls.append((role, organizationID))
     }
 }
 
@@ -332,6 +397,35 @@ struct SessionSupportTests {
         #expect(store.pendingInvite == nil)
         #expect(store.lastSelectedProjectID(for: "org-1") == nil)
         #expect(store.appleEmail(for: "user-1") == nil)
+    }
+
+    @Test
+    @MainActor
+    func duplicateOrganizationActivationIsIgnored() async {
+        let authViewModel = AuthViewModel(service: StubAuthService())
+        let projectViewModel = RecordingSessionProjectViewModel()
+        let organization = Organization(
+            id: "org-duplicate",
+            name: "North Shore Builders",
+            members: ["member-1"],
+            adminUserID: "admin-1"
+        )
+
+        authViewModel.organizationRoles[organization.id] = .admin
+        authViewModel.setProjectViewModel(projectViewModel)
+
+        authViewModel.setCurrentOrganization(organization)
+        await Task.yield()
+        authViewModel.setCurrentOrganization(organization)
+        try? await Task.sleep(nanoseconds: 100_000_000)
+
+        #expect(projectViewModel.setCurrentOrganizationCalls == [organization.id])
+        #expect(projectViewModel.zoneSetupCalls == [organization.id])
+        #expect(projectViewModel.organizationDidChangeCalls == [organization.id])
+        #expect(projectViewModel.setCurrentUserRoleCalls.contains { role, organizationID in
+            role == .admin && organizationID == organization.id
+        })
+        #expect(authViewModel.currentOrg?.id == organization.id)
     }
 
     @Test

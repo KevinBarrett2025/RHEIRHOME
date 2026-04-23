@@ -89,6 +89,10 @@ final class LocalCacheStore {
             return state
         }
         set {
+            guard selectionState != newValue else {
+                return
+            }
+
             guard let data = try? JSONEncoder().encode(newValue) else {
                 return
             }

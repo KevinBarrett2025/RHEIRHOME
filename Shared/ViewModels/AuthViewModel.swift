@@ -66,6 +66,7 @@ class AuthViewModel: ObservableObject {
     private let service: AuthService
     private var cancellables = Set<AnyCancellable>()
     private let localCache = LocalCacheStore.shared
+    private let releaseProfile = AppReleaseProfile.current
     
     // MARK: - ProjectViewModel Integration (placeholder to avoid import cycle)
     private var projectVM: ProjectViewModel?
@@ -158,6 +159,16 @@ class AuthViewModel: ObservableObject {
     
     @MainActor
     func setCurrentOrganization(_ organization: Organization) {
+        if currentOrg?.id == organization.id {
+            currentOrg = organization
+            needsOrganizationSetup = false
+            showOrganizationSetup = false
+            upsertOrganization(organization, into: &organizations)
+            upsertOrganization(organization, into: &userOrganizations)
+            logOrganizationEvent("Skipped duplicate organization activation.", organizationID: organization.id)
+            return
+        }
+
         // Store previous organization for quick switching
         if let currentOrgID = currentOrg?.id {
             localCache.previousOrganizationID = currentOrgID
@@ -172,13 +183,12 @@ class AuthViewModel: ObservableObject {
         needsOrganizationSetup = false;
         showOrganizationSetup = false;
         
-        if !organizations.contains(where: { $0.id == organization.id }) {
-            organizations.append(organization);
+        let hadOrganization = organizations.contains(where: { $0.id == organization.id })
+        upsertOrganization(organization, into: &organizations)
+        upsertOrganization(organization, into: &userOrganizations)
+
+        if !hadOrganization {
             logOrganizationEvent("Added organization to local list.", organizationID: organization.id)
-        }
-        
-        if !userOrganizations.contains(where: { $0.id == organization.id }) {
-            userOrganizations.append(organization);
         }
         
         // CRITICAL FIX: Call ProjectViewModel's setCurrentOrganization to properly set currentOrganizationID
@@ -222,6 +232,14 @@ class AuthViewModel: ObservableObject {
         }
         
         logOrganizationEvent("Current organization updated.", organizationID: organization.id)
+    }
+
+    private func upsertOrganization(_ organization: Organization, into collection: inout [Organization]) {
+        if let existingIndex = collection.firstIndex(where: { $0.id == organization.id }) {
+            collection[existingIndex] = organization
+        } else {
+            collection.append(organization)
+        }
     }
 
     // MARK: - Apple Sign-In
@@ -332,16 +350,23 @@ class AuthViewModel: ObservableObject {
                 let storedOrgID = self.localCache.selectionState.organizationID
                 let selectedOrg = orgs.first { $0.id == storedOrgID } ?? firstOrg;
 
-                self.logOrganizationEvent("Selecting organization for restored session.", organizationID: selectedOrg.id)
-                // FIX: Use Task for MainActor call
-                Task { @MainActor in
-                    self.setCurrentOrganization(selectedOrg);
-                }
                 self.needsOrganizationSetup = false;
-                
-                // ENTERPRISE: Automatic background data validation
-                Task { @MainActor in
-                    await self.validateOrganizationDataIntegrity(selectedOrg);
+
+                if self.releaseProfile.shouldUseStreamlinedSessionRouting {
+                    self.logOrganizationEvent(
+                        "Deferring restored organization selection to streamlined session store.",
+                        organizationID: selectedOrg.id
+                    )
+                } else {
+                    self.logOrganizationEvent("Selecting organization for restored session.", organizationID: selectedOrg.id)
+                    Task { @MainActor in
+                        self.setCurrentOrganization(selectedOrg);
+                    }
+
+                    // ENTERPRISE: Automatic background data validation
+                    Task { @MainActor in
+                        await self.validateOrganizationDataIntegrity(selectedOrg);
+                    }
                 }
             }
         }
