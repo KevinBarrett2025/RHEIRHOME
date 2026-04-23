@@ -141,12 +141,13 @@
 - Continue shrinking the remaining oversized active state owners.
 - Keep the shipping app locked to the fast-ship v1 release profile so the visible shell stays single-user and avoids team/admin detours.
 - `AppSessionSupport.swift` and `AuthViewModel.swift` now dedupe restored fast-ship organization activation so `LocalCacheStore.selectionState` is not rewritten in a loop during post-Sign in with Apple session recovery.
+- `SessionStore` now resolves the fast-ship organization on the next main-actor turn after org loading completes, instead of activating the workspace inside synchronous auth publisher callbacks.
 - Continue broader selected-project estimator variance/runtime QA on top of the approved-baseline mapping seam inside the simplified v1 shell.
 - Continue broader selected-project receipt runtime QA in parallel with the estimator seam so the fast-ship contractor workflow stays stable on device and simulator, with same-device and real-device acceptance now the next receipt release seam after scanned-receipt return/reopen parity closed in simulator.
-- Relaunch persistence and scanned-receipt return/reopen are simulator-proven on the simplified shell, and restored-session parity is now green in focused tests; finish same-device and real-device acceptance before cutting a promo candidate.
+- Relaunch persistence and scanned-receipt return/reopen are simulator-proven on the simplified shell, and restored-session/session-resolution parity is now green in focused tests; finish same-device and real-device acceptance before cutting a promo candidate.
 - Use `SHIP_READINESS_CHECKLIST.md` as the current release-progress reference alongside the STS docs.
 
 ## Blockers
-- The restored-session freeze after Sign in with Apple still needs real-device confirmation on the new deduped session path; until that rerun passes, device acceptance remains open.
+- The restored-session freeze after Sign in with Apple still needs real-device confirmation on the new deduped and deferred session path; until that rerun passes, device acceptance remains open.
 - Same-user iCloud restore/sync is not yet treated as ship-proven; if it fails release-candidate validation, local-device persistence must remain the authoritative launch promise.
 - Raw in-sandbox `xcodebuild` remains less reliable than elevated CLI or the stable `xcodebuildmcp` simulator path in this environment.

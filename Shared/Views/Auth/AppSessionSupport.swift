@@ -426,6 +426,8 @@ final class SessionStore: ObservableObject {
     private var hasFinishedLaunch = false
     private var isProcessingInvite = false
     private var isChoosingOrganization = false
+    private var isResolvingStreamlinedOrganization = false
+    private var streamlinedOrganizationResolutionTask: Task<Void, Never>?
     private let releaseProfile = AppReleaseProfile.current
 
     init(
@@ -464,6 +466,7 @@ final class SessionStore: ObservableObject {
             refreshState(reason: "launch complete")
             processPendingInviteIfPossible()
             restoreProjectSelectionIfPossible()
+            scheduleStreamlinedOrganizationResolution(reason: "launch complete")
         }
     }
 
@@ -535,6 +538,7 @@ final class SessionStore: ObservableObject {
                 self?.normalizeStateForReleaseProfile()
                 self?.refreshState(reason: "user changed")
                 self?.processPendingInviteIfPossible()
+                self?.scheduleStreamlinedOrganizationResolution(reason: "user changed")
             }
             .store(in: &cancellables)
 
@@ -548,6 +552,9 @@ final class SessionStore: ObservableObject {
                 self.normalizeStateForReleaseProfile()
                 self.refreshState(reason: "organization changed")
                 self.restoreProjectSelectionIfPossible()
+                if organization == nil {
+                    self.scheduleStreamlinedOrganizationResolution(reason: "organization cleared")
+                }
             }
             .store(in: &cancellables)
 
@@ -562,6 +569,7 @@ final class SessionStore: ObservableObject {
             .sink { [weak self] _ in
                 self?.normalizeStateForReleaseProfile()
                 self?.refreshState(reason: "organization list changed")
+                self?.scheduleStreamlinedOrganizationResolution(reason: "organization list changed")
             }
             .store(in: &cancellables)
 
@@ -569,6 +577,7 @@ final class SessionStore: ObservableObject {
             .sink { [weak self] _ in
                 self?.normalizeStateForReleaseProfile()
                 self?.refreshState(reason: "organization loading changed")
+                self?.scheduleStreamlinedOrganizationResolution(reason: "organization loading changed")
             }
             .store(in: &cancellables)
 
@@ -696,8 +705,6 @@ final class SessionStore: ObservableObject {
         if authViewModel.showAdminInfoUpdate {
             authViewModel.dismissAdminInfoUpdate()
         }
-
-        autoSelectCurrentOrganizationIfPossible()
     }
 
     private func clearPendingInviteIfNeededForReleaseProfile() {
@@ -709,9 +716,23 @@ final class SessionStore: ObservableObject {
         isProcessingInvite = false
     }
 
-    private func autoSelectCurrentOrganizationIfPossible() {
-        guard authViewModel.user != nil,
-              authViewModel.currentOrg == nil else {
+    private func scheduleStreamlinedOrganizationResolution(reason: String) {
+        guard releaseProfile.shouldUseStreamlinedSessionRouting else { return }
+
+        streamlinedOrganizationResolutionTask?.cancel()
+        streamlinedOrganizationResolutionTask = Task { @MainActor [weak self] in
+            await Task.yield()
+            self?.resolveStreamlinedOrganizationIfPossible(reason: reason)
+        }
+    }
+
+    private func resolveStreamlinedOrganizationIfPossible(reason: String) {
+        guard hasFinishedLaunch,
+              authViewModel.user != nil,
+              authViewModel.currentOrg == nil,
+              !authViewModel.isLoadingOrgs,
+              !isProcessingInvite,
+              !isResolvingStreamlinedOrganization else {
             return
         }
 
@@ -725,6 +746,11 @@ final class SessionStore: ObservableObject {
         let resolvedOrganization = availableOrganizations.first(where: { $0.id == preferredOrganizationID }) ?? availableOrganizations.first
 
         guard let resolvedOrganization else { return }
+        isResolvingStreamlinedOrganization = true
+        Logger.session.info(
+            "Resolving streamlined organization selection [reason=\(reason, privacy: .public)]"
+        )
+        defer { isResolvingStreamlinedOrganization = false }
         authViewModel.setCurrentOrganization(resolvedOrganization)
     }
 }

@@ -16,6 +16,8 @@
 - `Shared/ViewModels/AuthViewModel.swift` now defers restored fast-ship organization activation to the streamlined session store and ignores duplicate same-organization activation work so post-Sign in with Apple restore does not re-run organization/project synchronization twice.
 - `Shared/Views/Auth/AppSessionSupport.swift` now ignores no-op `LocalCacheStore.selectionState` writes, preventing repeated `UserDefaults` persistence churn during restored-session routing.
 - `RHEIRTests/RHEIRTests.swift` now includes restored-session regression coverage proving duplicate organization activation only performs one project-view-model synchronization pass.
+- `Shared/Views/Auth/AppSessionSupport.swift` now defers fast-ship workspace selection until org loading completes and resolves it on the next main-actor turn instead of selecting inside synchronous auth publisher callbacks.
+- `RHEIRTests/RHEIRTests.swift` now includes session-store coverage proving streamlined organization resolution waits for loading to complete before activating the workspace.
 - `Shared/Utilities/Shared/tab.swift` now carries `AppReleaseProfile`, defaulting the shipping app into `fastShipV1` while preserving an environment override path for legacy/full-profile work.
 - `Shared/Views/Auth/AppSessionSupport.swift` now normalizes invite/admin/org-selection state for the fast-ship profile, auto-selects an existing workspace when possible, and suppresses collaboration-driven detours in the visible launch path.
 - `App/MainTabView.swift`, `App/LandingPageView.swift`, `Shared/Views/Components/UniversalHeaderView.swift`, and `Shared/Views/Settings/PersonalSettingsView.swift` now hide Company/admin/collaboration affordances in the fast-ship profile while keeping lightweight account/settings entry points available.
@@ -211,6 +213,6 @@
 
 ## Next Required Action
 1. Preserve the repo-local STS docs and the user-owned files (`Shared/Views/Auth/LoginView.swift`, `rheir_knowledge_database.json`, `RHEIRmemories.csv`, `RheirLogo 1024x1024.png`) outside the staged set for the next checkpoint.
-2. Re-run the same-device and real-device acceptance pack on the simplified shell, starting with the post-Sign in with Apple restored-session path that previously froze in `LocalCacheStore.selectionState.setter`.
+2. Re-run the same-device and real-device acceptance pack on the simplified shell, starting with the post-Sign in with Apple restored-session path that previously froze and now resolves the workspace only after organization loading completes.
 3. If the restored-session rerun is clean, continue first scan, scanned-receipt return/reopen, relaunch restore, and the same-user iCloud restore decision on real hardware.
 4. Only resume backend estimator rollout and broader runtime QA after the fast-ship device launch path is stable again.

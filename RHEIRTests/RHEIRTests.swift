@@ -429,6 +429,61 @@ struct SessionSupportTests {
     }
 
     @Test
+    @MainActor
+    func streamlinedSessionStoreResolvesOrganizationAfterLoadingCompletes() async {
+        let suiteName = "SessionSupportTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let localCache = LocalCacheStore(userDefaults: defaults)
+        let user = User(id: "fast-ship-user", email: "owner@rheirhome.com")
+        let organization = Organization(
+            id: "org-fast-ship",
+            name: "Fast Ship Builders",
+            members: [user.id],
+            adminUserID: user.id
+        )
+
+        localCache.selectionState = SelectionState(organizationID: organization.id, projectID: nil)
+
+        let authViewModel = AuthViewModel(service: StubAuthService())
+        let projectViewModel = RecordingSessionProjectViewModel()
+        let sessionStore = SessionStore(
+            authViewModel: authViewModel,
+            projectViewModel: projectViewModel,
+            localCache: localCache,
+            launchDelayNanoseconds: 0
+        )
+
+        sessionStore.connectIfNeeded()
+        await Task.yield()
+
+        authViewModel.isLoadingOrgs = true
+        authViewModel.user = user
+        authViewModel.organizations = [organization]
+        authViewModel.userOrganizations = [organization]
+        authViewModel.organizationRoles = [organization.id: .admin]
+
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        #expect(authViewModel.currentOrg == nil)
+        #expect(projectViewModel.setCurrentOrganizationCalls.isEmpty)
+        #expect(sessionStore.state == .selectingOrganization)
+
+        authViewModel.isLoadingOrgs = false
+
+        try? await Task.sleep(nanoseconds: 150_000_000)
+
+        #expect(authViewModel.currentOrg?.id == organization.id)
+        #expect(projectViewModel.setCurrentOrganizationCalls == [organization.id])
+        #expect(projectViewModel.zoneSetupCalls == [organization.id])
+        #expect(projectViewModel.organizationDidChangeCalls == [organization.id])
+        #expect(sessionStore.state == .ready)
+    }
+
+    @Test
     func compactsLegacyProjectPayloadsDuringInitialization() throws {
         let suiteName = "SessionSupportTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
