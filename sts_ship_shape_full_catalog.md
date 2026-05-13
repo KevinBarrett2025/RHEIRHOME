@@ -149,6 +149,8 @@
 - `Receipt` top-level subcategory persistence
 - `ScannedReceiptEntryView` scanned-item persistence and non-segmented category review control
 - `ReceiptDetailView` menu-only receipt actions plus persisted item/subcategory rendering
+- `ReceiptEditView` saved scanned-item breakdown rendering and line-item editor
+- `RHEIRUITests` saved scanned-receipt edit-sheet item visibility coverage
 - `RHEIRTests` duplicate receipt normalization and CloudKit upsert coverage
 - `VendorKnowledgeService` structured logging
 - `PaymentMethodKnowledgeService` structured logging
@@ -185,6 +187,8 @@
 - Latest focused launch-polish Gate A result: `PASS` (`/tmp/rheir_gateA_launch_polish.xcresult`)
 - Latest focused scanned-item/detail-action UI parity result: initial runner bootstrap failure at `/tmp/rheir_receipt_item_menu_ui2.xcresult`; retry `PASS` (`/tmp/rheir_receipt_item_menu_ui_retry.xcresult`, `4 UI tests`)
 - Latest focused scanned-item/detail-action Gate A result: `PASS` (`/tmp/rheir_gateA_receipt_item_menu2.xcresult`)
+- Latest focused saved scanned-item edit-sheet UI parity result: `PASS` (`/tmp/rheir_receipt_edit_items_ui.xcresult`, `3 UI tests`)
+- Latest focused saved scanned-item edit-sheet Gate A result: `PASS` (`/tmp/rheir_gateA_receipt_edit_items.xcresult`)
 
 ## Known Residual Risks
 - The fast-ship v1 release profile is now the active launch target, but same-user iCloud restore still needs explicit release-candidate validation before it can be treated as a ship promise.
@@ -193,7 +197,7 @@
 - Stable simulator and elevated CLI simulator paths are warning-clean for the active target, and device launch/file-state validation now shows compact `projects.json`, `offline_projects.json`, and prefs payloads; remaining release hardening centers on the simplified single-user contractor flow plus same-device and real-device QA.
 - The latest device freeze root cause was duplicate restored-organization activation in the fast-ship session path, not scanner or receipt persistence; the latest device sign-in logs now reach `ready` and complete org/project load on real hardware.
 - The latest device logs now show the sign-out boundary holding cleanly with `Cleared active organization...` and `No organization selected; clearing organization-scoped state.` instead of replaying stale org-sync work. The remaining active device risk is the receipt flow on hardware rather than session routing.
-- The next device acceptance pass must still confirm the new scanned-item persistence patch on hardware: saved scanned receipts should reopen with itemized lines intact, the scan-review category control should remain legible, and the ellipsis menu should fully cover edit/delete after the duplicate bottom buttons were removed.
+- The next device acceptance pass must still confirm the new scanned-item persistence/edit patch on hardware: saved scanned receipts should reopen with itemized lines intact, those lines should appear inside the saved edit sheet, the scan-review category control should remain legible, and the ellipsis menu should fully cover edit/delete after the duplicate bottom buttons were removed.
 - The latest launch-polish slice removed the last two recurring active-path warnings by aligning receipt-level legacy bridge totals with detailed receipt categories and replacing string asset-name status colors with semantic SwiftUI tint colors.
 - `RHEIRUITests` is now deterministic for signed-out, ready-state, fast-ship organization auto-resolution, project-selection, receipts gate/entry, labor gate/empty state, tasks gate/empty state, manual-entry vendor-picker, manual-entry add-vendor, manual-entry payment-method-picker, manual-entry add-payment-method, manual-entry submission, manual-receipt relaunch persistence, scanned-receipt return/reopen, saved receipt detail, receipt-detail action, persisted receipt-edit mutation, saved-receipt search/browse, category/filter drilldown, `By Vendor` grouped-summary/expansion coverage, and selected-project AI Project Calculator build/approve plus actual-cost mapping coverage; the next hardening slice is same-device and device QA on this simplified shell rather than more surface reshaping or managed-backend expansion.
 - `ProjectViewModel` is still oversized even after the extracted stores, though organization/project synchronization is now isolated behind `OrganizationProjectSyncStore`.

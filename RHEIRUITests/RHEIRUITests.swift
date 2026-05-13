@@ -595,6 +595,118 @@ final class RHEIRUITests: XCTestCase {
     }
 
     @MainActor
+    func testSavedScannedReceiptEditSheetShowsPersistedItems() throws {
+        let app = makeApp(mode: .scannedReceiptReview)
+        app.launch()
+        app.tabBars.buttons["Receipts"].tap()
+
+        let vendorName = "UI Test Scanned Vendor"
+        let scannedReceiptNavBar = app.navigationBars["AI-Scanned Receipt"]
+        XCTAssertTrue(
+            scannedReceiptNavBar.waitForExistence(timeout: 5),
+            "Expected the seeded scanned-receipt review flow to present the review sheet before testing edit persistence."
+        )
+
+        let saveButton = app.buttons["receipt-scan-save"]
+        XCTAssertTrue(
+            waitForEnabled(saveButton, timeout: 5),
+            "Expected the seeded scanned receipt review to be savable before testing the saved edit sheet."
+        )
+        saveButton.tap()
+
+        let successAlert = app.alerts["Receipt Added Successfully"]
+        XCTAssertTrue(
+            successAlert.waitForExistence(timeout: 8),
+            "Expected saving the scanned receipt review to surface the success alert."
+        )
+        successAlert.buttons["OK"].tap()
+
+        XCTAssertTrue(
+            waitForNonExistence(of: scannedReceiptNavBar, timeout: 5),
+            "Expected confirming the scanned receipt success alert to dismiss the review sheet."
+        )
+
+        let receiptCard = app.buttons["receipt-card-\(vendorName)"]
+        XCTAssertTrue(
+            receiptCard.waitForExistence(timeout: 8),
+            "Expected the saved scanned receipt to render in the receipts list before opening detail."
+        )
+        receiptCard.tap()
+
+        XCTAssertTrue(
+            app.navigationBars["Receipt Details"].waitForExistence(timeout: 5),
+            "Expected the saved scanned receipt to reopen from the receipts list before testing its edit sheet."
+        )
+
+        openReceiptActionsMenu(in: app)
+
+        let editButton = receiptDetailMenuAction(
+            identifier: "receipt-detail-menu-edit",
+            fallbackTitle: "Edit Receipt",
+            in: app
+        )
+        XCTAssertTrue(
+            editButton.waitForExistence(timeout: 5),
+            "Expected the receipt detail actions menu to expose the edit action for the saved scanned receipt."
+        )
+        editButton.tap()
+
+        let editReceiptNavBar = app.navigationBars["Edit Receipt"]
+        XCTAssertTrue(
+            editReceiptNavBar.waitForExistence(timeout: 5),
+            "Expected tapping the receipt detail edit action to open the Edit Receipt sheet."
+        )
+
+        let itemizedHeader = revealElement(
+            identifier: "receipt-edit-items-header",
+            in: app,
+            query: { $0.staticTexts["receipt-edit-items-header"] }
+        )
+        XCTAssertTrue(
+            itemizedHeader.exists,
+            "Expected the saved scanned receipt edit sheet to expose the persisted itemized breakdown section."
+        )
+
+        let primerRow = revealElement(
+            identifier: "receipt-edit-item-primer",
+            in: app,
+            query: { $0.buttons["receipt-edit-item-primer"] }
+        )
+        XCTAssertTrue(
+            primerRow.exists,
+            "Expected the saved scanned receipt edit sheet to expose the persisted Primer line item."
+        )
+
+        let brushSetRow = revealElement(
+            identifier: "receipt-edit-item-brush-set",
+            in: app,
+            query: { $0.buttons["receipt-edit-item-brush-set"] }
+        )
+        XCTAssertTrue(
+            brushSetRow.exists,
+            "Expected the saved scanned receipt edit sheet to expose the persisted Brush Set line item."
+        )
+
+        primerRow.tap()
+
+        let lineItemNavBar = app.navigationBars["Edit Line Item"]
+        XCTAssertTrue(
+            lineItemNavBar.waitForExistence(timeout: 5),
+            "Expected tapping a saved scanned receipt item to open its line-item editor."
+        )
+        XCTAssertTrue(
+            app.textFields["receipt-edit-line-item-name"].waitForExistence(timeout: 5),
+            "Expected the line-item editor to expose the editable item name field."
+        )
+
+        lineItemNavBar.buttons["Cancel"].tap()
+        XCTAssertTrue(
+            editReceiptNavBar.waitForExistence(timeout: 5),
+            "Expected cancelling the line-item editor to return to the parent receipt edit sheet."
+        )
+    }
+
+    @MainActor
     func testSavedReceiptDetailOpensEditSheet() throws {
         let app = makeApp(mode: .selectedProject)
         app.launch()

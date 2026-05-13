@@ -1,6 +1,13 @@
 import OSLog
 import SwiftUI
 
+private func receiptEditAccessibilitySlug(_ value: String) -> String {
+    value
+        .lowercased()
+        .replacingOccurrences(of: "[^a-z0-9]+", with: "-", options: .regularExpression)
+        .trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+}
+
 struct ReceiptEditView: View {
     @EnvironmentObject var projectVM: ProjectViewModel
     @Environment(\.dismiss) private var dismiss
@@ -20,6 +27,8 @@ struct ReceiptEditView: View {
     @State private var taxAmount: String
     @State private var discountAmount: String
     @State private var isReturn: Bool
+    @State private var items: [ReceiptItem]
+    @State private var editingItem: ReceiptItem?
     @State private var showingPaymentMethodPicker = false
     @State private var isSaving = false
     
@@ -37,6 +46,7 @@ struct ReceiptEditView: View {
         self._taxAmount = State(initialValue: String(format: "%.2f", receipt.taxAmount))
         self._discountAmount = State(initialValue: String(format: "%.2f", receipt.discountAmount))
         self._isReturn = State(initialValue: receipt.isReturn)
+        self._items = State(initialValue: receipt.items)
     }
     
     private var isValidForm: Bool {
@@ -109,6 +119,48 @@ struct ReceiptEditView: View {
                     TextField("Additional notes...", text: $notes, axis: .vertical)
                         .lineLimit(3...6)
                 }
+
+                if !items.isEmpty {
+                    Section {
+                        ForEach(items) { item in
+                            Button {
+                                editingItem = item
+                            } label: {
+                                HStack(spacing: 12) {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(item.name)
+                                            .font(.headline)
+                                            .foregroundStyle(.primary)
+
+                                        Text("Qty: \(item.quantity, specifier: "%.1f")  Total: \(item.totalPrice.formatAsCurrency())")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+
+                                        if !item.subcategory.isEmpty {
+                                            Text(item.subcategory)
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                        }
+                                    }
+
+                                    Spacer()
+
+                                    Image(systemName: "chevron.right")
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(.tertiary)
+                                }
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityIdentifier("receipt-edit-item-\(receiptEditAccessibilitySlug(item.name))")
+                        }
+                    } header: {
+                        Text("Itemized Breakdown")
+                            .accessibilityIdentifier("receipt-edit-items-header")
+                    } footer: {
+                        Text("Tap an item to review or edit the saved scan details.")
+                    }
+                }
             }
             .navigationTitle("Edit Receipt")
             .navigationBarTitleDisplayMode(.inline)
@@ -135,6 +187,16 @@ struct ReceiptEditView: View {
                     onSelection: { method in
                         paymentMethod = method.displayName
                         selectedPaymentMethodObj = method
+                    }
+                )
+            }
+            .sheet(item: $editingItem) { item in
+                ReceiptLineItemEditView(
+                    item: item,
+                    onSave: { updatedItem in
+                        if let index = items.firstIndex(where: { $0.id == updatedItem.id }) {
+                            items[index] = updatedItem
+                        }
                     }
                 )
             }
@@ -173,6 +235,7 @@ struct ReceiptEditView: View {
         updatedReceipt.taxAmount = Double(taxAmount) ?? 0
         updatedReceipt.discountAmount = Double(discountAmount) ?? 0
         updatedReceipt.isReturn = isReturn
+        updatedReceipt.items = items
         
         // Update in project
         if let project = projectVM.selectedProject {
@@ -255,6 +318,146 @@ struct ReceiptEditView: View {
                 projectVM.paymentMethodService.paymentMethods[index].totalSpent = max(0, projectVM.paymentMethodService.paymentMethods[index].totalSpent)
             }
         }
+    }
+}
+
+private struct ReceiptLineItemEditView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let item: ReceiptItem
+    let onSave: (ReceiptItem) -> Void
+
+    @State private var name: String
+    @State private var quantity: String
+    @State private var unitPrice: String
+    @State private var totalPrice: String
+    @State private var category: ReceiptCategory
+    @State private var subcategory: String
+    @State private var sku: String
+    @State private var notes: String
+
+    init(item: ReceiptItem, onSave: @escaping (ReceiptItem) -> Void) {
+        self.item = item
+        self.onSave = onSave
+        self._name = State(initialValue: item.name)
+        self._quantity = State(initialValue: String(format: "%.2f", item.quantity))
+        self._unitPrice = State(initialValue: String(format: "%.2f", item.unitPrice))
+        self._totalPrice = State(initialValue: String(format: "%.2f", item.totalPrice))
+        self._category = State(initialValue: item.category)
+        self._subcategory = State(initialValue: item.subcategory)
+        self._sku = State(initialValue: item.sku)
+        self._notes = State(initialValue: item.notes)
+    }
+
+    private var isValidForm: Bool {
+        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && (Double(quantity) ?? 0) > 0
+            && ((Double(totalPrice) ?? 0) > 0 || (Double(unitPrice) ?? 0) > 0)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Line Item") {
+                    TextField("Item Name", text: $name)
+                        .accessibilityIdentifier("receipt-edit-line-item-name")
+
+                    HStack {
+                        Text("Quantity")
+                        Spacer()
+                        TextField("0.00", text: $quantity)
+                            .keyboardType(.decimalPad)
+                            .multilineTextAlignment(.trailing)
+                            .accessibilityIdentifier("receipt-edit-line-item-quantity")
+                    }
+
+                    HStack {
+                        Text("Unit Price")
+                        Spacer()
+                        TextField("0.00", text: $unitPrice)
+                            .keyboardType(.decimalPad)
+                            .multilineTextAlignment(.trailing)
+                            .accessibilityIdentifier("receipt-edit-line-item-unit-price")
+                    }
+
+                    HStack {
+                        Text("Total Price")
+                        Spacer()
+                        TextField("0.00", text: $totalPrice)
+                            .keyboardType(.decimalPad)
+                            .multilineTextAlignment(.trailing)
+                            .accessibilityIdentifier("receipt-edit-line-item-total-price")
+                    }
+                }
+
+                Section("Classification") {
+                    Picker("Category", selection: $category) {
+                        ForEach(ReceiptCategory.allCases) { receiptCategory in
+                            Text(receiptCategory.rawValue).tag(receiptCategory)
+                        }
+                    }
+                    .accessibilityIdentifier("receipt-edit-line-item-category")
+
+                    TextField("Subcategory", text: $subcategory)
+                        .accessibilityIdentifier("receipt-edit-line-item-subcategory")
+
+                    TextField("SKU", text: $sku)
+                        .accessibilityIdentifier("receipt-edit-line-item-sku")
+                }
+
+                Section("Notes") {
+                    TextField("Notes", text: $notes, axis: .vertical)
+                        .lineLimit(2...5)
+                        .accessibilityIdentifier("receipt-edit-line-item-notes")
+                }
+            }
+            .navigationTitle("Edit Line Item")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                    .accessibilityIdentifier("receipt-edit-line-item-cancel")
+                }
+
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Save") {
+                        save()
+                    }
+                    .disabled(!isValidForm)
+                    .accessibilityIdentifier("receipt-edit-line-item-save")
+                }
+            }
+        }
+    }
+
+    private func save() {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedSubcategory = subcategory.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedSKU = sku.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedNotes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let parsedQuantity = max(Double(quantity) ?? item.quantity, 0.01)
+        let parsedUnitPrice = max(Double(unitPrice) ?? item.unitPrice, 0)
+        let fallbackTotal = parsedQuantity * parsedUnitPrice
+        let parsedTotalPrice = max(Double(totalPrice) ?? fallbackTotal, 0.01)
+
+        onSave(
+            ReceiptItem(
+                id: item.id,
+                name: trimmedName,
+                quantity: parsedQuantity,
+                unitPrice: parsedUnitPrice,
+                totalPrice: parsedTotalPrice,
+                category: category,
+                subcategory: trimmedSubcategory,
+                sku: trimmedSKU,
+                notes: trimmedNotes
+            )
+        )
+
+        dismiss()
     }
 }
 
