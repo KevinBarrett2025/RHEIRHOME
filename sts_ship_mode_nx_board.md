@@ -4,6 +4,9 @@
 - `Phase 2 Release Hardening`
 
 ## Current Checkpoint
+- `Receipt.swift` now persists a trimmed optional top-level `subcategory`, while `ScannedReceiptEntryView.swift` now copies AI-detected line items into `Receipt.items` before save and no longer compresses the full receipt-category taxonomy into an unreadable segmented control during scan review.
+- `ReceiptDetailView.swift` now keeps the ellipsis menu as the single receipt-detail edit/delete action surface, exposes deterministic item/subcategory hooks, and removes the duplicate bottom edit/delete buttons; `ReceiptEditView.swift` now edits the same top-level receipt subcategory.
+- `RHEIRUITests.swift` now proves scanned receipt item lines survive save, leave/return, and reopen, and that the receipt-detail ellipsis menu still drives edit/delete flows after the duplicate bottom buttons were removed.
 - Canonical tree cleanup completed in the working branch.
 - Session flow consolidated around `AppSessionSupport.swift`.
 - `Project.swift` now carries the first compiled estimator domain with intake, draft, versioned baseline, variance, source-evidence, and proposal-view models plus bridge helpers back into `Project` budget summary fields.
@@ -139,6 +142,7 @@
   - Device build/install verification: PASS (`xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'id=00008140-0011492622E8801C' -derivedDataPath /tmp/rheir_phase2_device_verify_v2_dd -resultBundlePath /tmp/rheir_phase2_device_verify_v2_build.xcresult build`, `/tmp/rheir_phase2_device_verify_v2_build.xcresult`) with copied device payloads showing `projects.json` shrunk to `2947` bytes and `offline_projects.json` to `3437` bytes without inline image blobs
 
 ## Open Work
+- Re-run the real-device selected-project receipt flow with the new scan-review/detail patch and explicitly confirm that scanned line items persist after save/reopen/relaunch, the category control is legible, and the ellipsis menu fully replaces the removed duplicate action buttons.
 - Production raw `print(...)` cleanup is effectively complete; only development-only seams still emit raw tracing.
 - Continue shrinking the remaining oversized active state owners.
 - Keep the shipping app locked to the fast-ship v1 release profile so the visible shell stays single-user and avoids team/admin detours.
@@ -154,6 +158,6 @@
 - `ProjectViewModel+Filters.swift` now aligns the receipt-level legacy bridge with detailed receipt-category mapping, and `ProjectStatus` / `ChangeOrderStatus` now expose semantic SwiftUI tint colors so the active fast-ship path is clear of the lingering materials-divergence log spam and missing `green` asset warning.
 
 ## Blockers
-- The restored-session freeze and nil-org sign-out replay seam are now both clean in device logs; the remaining launch-critical device risk is the selected-project receipt flow itself on real hardware.
+- The restored-session freeze and nil-org sign-out replay seam are now both clean in device logs; the remaining launch-critical device risk is the selected-project receipt flow itself on real hardware, specifically confirming the new scanned-item persistence and menu-only detail actions on device.
 - Same-user iCloud restore/sync is not yet treated as ship-proven; if it fails release-candidate validation, local-device persistence must remain the authoritative launch promise.
 - Raw in-sandbox `xcodebuild` remains less reliable than elevated CLI or the stable `xcodebuildmcp` simulator path in this environment.

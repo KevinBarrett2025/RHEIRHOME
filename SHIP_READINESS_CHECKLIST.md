@@ -72,7 +72,7 @@ Exit criteria: release candidate is validated on real hardware and ready for sub
 - Freeze scope and submit.
 
 ## Immediate Next Steps
-1. Continue the fast-ship real-device acceptance pack on the selected-project receipts surface now that the sign-in/sign-out seam is clean: first scan, save, leave `Receipts`, return, and reopen the saved receipt.
-2. Terminate and relaunch the app on device, then confirm the saved receipt and selected-project context persist cleanly through restore.
-3. Validate same-user iCloud restore on real hardware; if it is not clean by release cutoff, keep the shell but de-scope cross-device expectations from launch.
-4. Only after the device acceptance pack is green, decide whether any remaining shell polish is still launch-critical.
+1. Continue the fast-ship real-device acceptance pack on the selected-project receipts surface with the latest scan-review/detail patch: first scan, save, leave `Receipts`, return, and reopen the saved receipt.
+2. On that device rerun, explicitly confirm that scanned itemized lines persist, the scan-review category control is usable, and the top-right ellipsis menu fully replaces the removed duplicate edit/delete buttons.
+3. Terminate and relaunch the app on device, then confirm the saved receipt and selected-project context persist cleanly through restore.
+4. Validate same-user iCloud restore on real hardware; if it is not clean by release cutoff, keep the shell but de-scope cross-device expectations from launch.

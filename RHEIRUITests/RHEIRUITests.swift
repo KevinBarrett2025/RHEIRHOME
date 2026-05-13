@@ -579,6 +579,19 @@ final class RHEIRUITests: XCTestCase {
             "Materials",
             "Expected the reopened scanned receipt detail to keep the seeded category."
         )
+        XCTAssertEqual(
+            app.staticTexts["receipt-detail-items-header"].label,
+            "Items (2)",
+            "Expected the reopened scanned receipt detail to keep the persisted item count."
+        )
+        XCTAssertTrue(
+            app.staticTexts["receipt-detail-item-primer"].exists,
+            "Expected the first scanned receipt item to persist into the saved receipt detail."
+        )
+        XCTAssertTrue(
+            app.staticTexts["receipt-detail-item-brush-set"].exists,
+            "Expected the second scanned receipt item to persist into the saved receipt detail."
+        )
     }
 
     @MainActor
@@ -589,17 +602,23 @@ final class RHEIRUITests: XCTestCase {
 
         openSavedReceiptDetails(in: app, vendorName: "UI Test Editable Vendor", amount: "45.67")
 
-        let editButton = app.buttons["receipt-detail-edit-action"]
+        openReceiptActionsMenu(in: app)
+
+        let editButton = receiptDetailMenuAction(
+            identifier: "receipt-detail-menu-edit",
+            fallbackTitle: "Edit Receipt",
+            in: app
+        )
         XCTAssertTrue(
             editButton.waitForExistence(timeout: 5),
-            "Expected the receipt detail screen to expose the explicit edit action."
+            "Expected the receipt detail actions menu to expose the edit action."
         )
         editButton.tap()
 
         let editReceiptNavBar = app.navigationBars["Edit Receipt"]
         XCTAssertTrue(
             editReceiptNavBar.waitForExistence(timeout: 5),
-            "Expected the explicit edit action to open the Edit Receipt sheet."
+            "Expected the receipt detail actions menu to open the Edit Receipt sheet."
         )
         XCTAssertTrue(
             app.textFields["Vendor"].waitForExistence(timeout: 5),
@@ -628,10 +647,16 @@ final class RHEIRUITests: XCTestCase {
         let vendorName = "UI Test Deleted Vendor"
         openSavedReceiptDetails(in: app, vendorName: vendorName, amount: "18.90")
 
-        let deleteButton = app.buttons["receipt-detail-delete-action"]
+        openReceiptActionsMenu(in: app)
+
+        let deleteButton = receiptDetailMenuAction(
+            identifier: "receipt-detail-menu-delete",
+            fallbackTitle: "Delete Receipt",
+            in: app
+        )
         XCTAssertTrue(
             deleteButton.waitForExistence(timeout: 5),
-            "Expected the receipt detail screen to expose the explicit delete action."
+            "Expected the receipt detail actions menu to expose the delete action."
         )
         deleteButton.tap()
 
@@ -666,17 +691,23 @@ final class RHEIRUITests: XCTestCase {
         let updatedVendorName = "UI Test Edited Saved Vendor"
         openSavedReceiptDetails(in: app, vendorName: originalVendorName, amount: "45.67")
 
-        let editButton = app.buttons["receipt-detail-edit-action"]
+        openReceiptActionsMenu(in: app)
+
+        let editButton = receiptDetailMenuAction(
+            identifier: "receipt-detail-menu-edit",
+            fallbackTitle: "Edit Receipt",
+            in: app
+        )
         XCTAssertTrue(
             editButton.waitForExistence(timeout: 5),
-            "Expected the receipt detail screen to expose the explicit edit action before testing persistence."
+            "Expected the receipt detail actions menu to expose the edit action before testing persistence."
         )
         editButton.tap()
 
         let editReceiptNavBar = app.navigationBars["Edit Receipt"]
         XCTAssertTrue(
             editReceiptNavBar.waitForExistence(timeout: 5),
-            "Expected tapping the explicit edit action to open the Edit Receipt sheet."
+            "Expected tapping the receipt detail actions menu to open the Edit Receipt sheet."
         )
 
         let vendorField = app.textFields["receipt-edit-vendor"]
@@ -1479,6 +1510,25 @@ final class RHEIRUITests: XCTestCase {
             detailNavBar.waitForExistence(timeout: 5),
             "Expected tapping the saved receipt card to navigate to Receipt Details."
         )
+    }
+
+    private func openReceiptActionsMenu(in app: XCUIApplication) {
+        let identifiedMenu = app.buttons["receipt-detail-actions-menu"]
+        let actionsMenu = identifiedMenu.exists ? identifiedMenu : app.buttons["Receipt Actions"]
+        XCTAssertTrue(
+            actionsMenu.waitForExistence(timeout: 5),
+            "Expected the receipt detail screen to expose the top-right actions menu."
+        )
+        actionsMenu.tap()
+    }
+
+    private func receiptDetailMenuAction(
+        identifier: String,
+        fallbackTitle: String,
+        in app: XCUIApplication
+    ) -> XCUIElement {
+        let identifiedAction = app.buttons[identifier]
+        return identifiedAction.exists ? identifiedAction : app.buttons[fallbackTitle]
     }
 
     private func openAIProjectCalculator(in app: XCUIApplication) {

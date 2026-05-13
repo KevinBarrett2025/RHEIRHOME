@@ -3,16 +3,20 @@
 ## Repo Truth
 - Repo Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Active Branch: `gm/rheir-hardening-phase1`
-- Thread Start SHA: `b4388fc23899b0596b5d2f0bf3ec16112fc890ff`
-- Last Commit At Thread Start: `b4388fc Phase 2: honor nil-org clears during fast-ship sign-out`
+- Thread Start SHA: `1b74bbee65a05eca6ca90f858003e3c06694c838`
+- Last Commit At Thread Start: `1b74bbee Phase 2: clean fast-ship launch polish warnings`
 
 ## Current Objective
-- Lock RHEIR into the fast-ship v1 release profile so the visible app ships as a single-user contractor tool with the core shell only: `Projects`, `Receipts`, `Labor`, `Tasks`, plus budget `Breakdown` / `Estimator`.
-- Collapse the visible session flow toward `launch -> sign in -> ready`, hiding invite, org-selection, company/admin, and legacy AI-key surfaces unless the app is explicitly forced back into the legacy/full profile.
-- Keep the next seam on real contractor workflows: same-device and real-device QA on the simplified shell now that deterministic manual-receipt relaunch persistence and scanned-receipt return/reopen are both green in simulator and the sign-out seam is confirmed clean on device.
-- Clean the last active launch-polish warnings on the fast-ship path so device logs stop surfacing expected enhanced-vs-legacy materials divergence noise and status-color asset misses before the remaining receipt acceptance pass continues.
+- Keep RHEIR locked into the fast-ship v1 release profile so the visible app ships as a single-user contractor tool with the core shell only: `Projects`, `Receipts`, `Labor`, `Tasks`, plus budget `Breakdown` / `Estimator`.
+- Preserve the simplified visible session flow `launch -> sign in -> ready`, with invite, org-selection, company/admin, and legacy AI-key surfaces still hidden unless the app is explicitly forced back into the legacy/full profile.
+- Close the new selected-project receipt seam found in device QA: scanned receipt itemized lines must persist after save/reopen, the scan-review category control must remain usable with the full taxonomy, and receipt details must expose one edit/delete action surface instead of duplicate affordances.
+- Keep the next seam on real contractor workflows: rerun same-device and real-device receipt acceptance on the simplified shell now that deterministic manual-receipt relaunch persistence, scanned-receipt return/reopen, and sign-out/session-clear routing are green in simulator and device logs.
 
 ## Current Working Set
+- `Shared/Models/Receipt.swift` now persists a trimmed optional top-level `subcategory`, closing the gap where scan-review subcategory input was accepted by the initializer but silently discarded before persistence.
+- `Shared/Features/Receipts/ScannedReceiptEntryView.swift` now persists `analysisResult.items` into the saved `Receipt.items` payload, stores the top-level subcategory, and drops the unusable segmented category picker treatment so the scan-review taxonomy stays legible with the full case set.
+- `Shared/Features/Receipts/ReceiptDetailView.swift` now keeps the ellipsis menu as the single receipt-detail edit/delete action surface, exposes item/subcategory accessibility hooks, and shows saved scanned items once they persist into the live receipt model.
+- `Shared/Features/Receipts/ReceiptEditView.swift` now edits the new top-level receipt subcategory, and `RHEIRUITests/RHEIRUITests.swift` now proves the top-right actions menu still edits/deletes receipts while scanned receipt item lines survive save, leave/return, and reopen.
 - `Shared/ViewModels/AuthViewModel.swift` now tracks a single in-flight fast-ship organization-switch task, cancelling it when the session signs out or clears the active organization so stale post-ready work cannot keep running into a cleared workspace.
 - `Shared/ViewModels/ProjectViewModel.swift` now invalidates organization synchronization with an `organizationSyncToken` and staleness guards after each async phase, preventing old org-switch work from repopulating projects or team members after `setCurrentOrganization(nil)`.
 - `RHEIRTests/RHEIRTests.swift` now includes a focused regression proving an interrupted organization sync that clears the current organization cannot restore projects, access, or selection when the async flow resumes.
@@ -225,7 +229,7 @@
 
 ## Next Required Action
 1. Preserve the repo-local STS docs and the user-owned files (`Shared/Views/Auth/LoginView.swift`, `rheir_knowledge_database.json`, `RHEIRmemories.csv`, `RheirLogo 1024x1024.png`) outside the staged set for the next checkpoint.
-2. Re-run the real-device restored-session seam on the simplified shell and explicitly confirm that sign-out or session clear no longer allows `organizationDidChange(nil)` to replay zone setup, snapshot load, and project refresh after the workspace is cleared.
-3. Continue the fast-ship real-device acceptance pack through first scan, scanned-receipt save, leave/return/reopen, and relaunch restore on the selected-project receipts surface.
+2. Re-run the real-device selected-project receipt flow on the simplified shell and explicitly confirm that scanned receipt itemized lines now persist after save, leave/return, reopen, and relaunch restore.
+3. Confirm on device that the scan-review category control is usable with the full taxonomy and that receipt details rely on the top-right actions menu without needing duplicate bottom edit/delete buttons.
 4. Make the same-user iCloud restore launch decision only after the device receipt flow is green end-to-end; if it is not clean by cutoff, keep local-device persistence as the ship promise.
-5. Only resume broader runtime QA and any post-launch surface expansion after the fast-ship device launch path is stable again.
+5. Only resume broader runtime QA and any post-launch surface expansion after the fast-ship device receipt path is stable again.

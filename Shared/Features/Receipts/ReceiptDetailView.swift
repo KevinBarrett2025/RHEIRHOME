@@ -1,6 +1,13 @@
 import OSLog
 import SwiftUI
 
+private func receiptDetailAccessibilitySlug(_ value: String) -> String {
+    value
+        .lowercased()
+        .replacingOccurrences(of: "[^a-z0-9]+", with: "-", options: .regularExpression)
+        .trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+}
+
 struct ReceiptDetailView: View {
     let receipt: Receipt
     @EnvironmentObject var projectVM: ProjectViewModel
@@ -31,10 +38,7 @@ struct ReceiptDetailView: View {
                 if !currentReceipt.items.isEmpty {
                     itemsSection
                 }
-                
-                // Action Buttons
-                actionButtonsSection
-                
+
                 Spacer()
             }
             .padding()
@@ -47,13 +51,17 @@ struct ReceiptDetailView: View {
                     Button("Edit Receipt") {
                         editingReceipt = currentReceipt
                     }
+                    .accessibilityIdentifier("receipt-detail-menu-edit")
                     
                     Button("Delete Receipt", role: .destructive) {
                         showingDeleteAlert = true
                     }
+                    .accessibilityIdentifier("receipt-detail-menu-delete")
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }
+                .accessibilityIdentifier("receipt-detail-actions-menu")
+                .accessibilityLabel("Receipt Actions")
             }
         }
         .sheet(item: $editingReceipt) { editableReceipt in
@@ -85,36 +93,6 @@ struct ReceiptDetailView: View {
                 }
             }
         }
-    }
-    
-    @ViewBuilder
-    private var actionButtonsSection: some View {
-        VStack(spacing: 12) {
-            HStack(spacing: 16) {
-                Button("Edit Receipt") {
-                    editingReceipt = currentReceipt
-                }
-                .accessibilityIdentifier("receipt-detail-edit-action")
-                .font(.subheadline.bold())
-                .foregroundColor(.blue)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 12)
-                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.blue, lineWidth: 1))
-                
-                Button("Delete Receipt") {
-                    showingDeleteAlert = true
-                }
-                .accessibilityIdentifier("receipt-detail-delete-action")
-                .font(.subheadline.bold())
-                .foregroundColor(.red)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 12)
-                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.red, lineWidth: 1))
-            }
-        }
-        .padding()
-        .background(Color(.systemGray6))
-        .cornerRadius(12)
     }
     
     private func deleteReceipt() {
@@ -241,6 +219,11 @@ struct ReceiptDetailView: View {
             if !receipt.paymentMethod.isEmpty {
                 detailRow("Payment Method", value: receipt.paymentMethod)
             }
+
+            if let subcategory = receipt.subcategory, !subcategory.isEmpty {
+                detailRow("Subcategory", value: subcategory)
+                    .accessibilityIdentifier("receipt-detail-subcategory")
+            }
             
             if !receipt.receiptNumber.isEmpty {
                 detailRow("Receipt Number", value: receipt.receiptNumber)
@@ -355,6 +338,7 @@ struct ReceiptDetailView: View {
             Text("Items (\(receipt.items.count))")
                 .font(.headline)
                 .fontWeight(.semibold)
+                .accessibilityIdentifier("receipt-detail-items-header")
             
             ForEach(receipt.items) { item in
                 HStack {
@@ -362,6 +346,7 @@ struct ReceiptDetailView: View {
                         Text(item.name)
                             .font(.subheadline)
                             .fontWeight(.medium)
+                            .accessibilityIdentifier("receipt-detail-item-\(receiptDetailAccessibilitySlug(item.name))")
                         
                         if !item.sku.isEmpty {
                             Text("SKU: \(item.sku)")

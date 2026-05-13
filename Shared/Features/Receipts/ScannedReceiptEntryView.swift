@@ -336,7 +336,7 @@ struct ScannedReceiptEntryView: View {
                     Text(cat.rawValue).tag(cat)
                 }
             }
-            .pickerStyle(.segmented)
+            .accessibilityIdentifier("receipt-scan-category")
             
             if !analysisResult.category.isEmpty {
                 Text("AI suggested: \(analysisResult.category)")
@@ -347,6 +347,9 @@ struct ScannedReceiptEntryView: View {
             
             TextField("Subcategory (optional)", text: $subcategory)
                 .textContentType(.none)
+                .textInputAutocapitalization(.words)
+                .autocorrectionDisabled()
+                .accessibilityIdentifier("receipt-scan-subcategory")
         }
     }
     
@@ -511,14 +514,25 @@ struct ScannedReceiptEntryView: View {
     
     private func saveReceipt() {
         guard let amountValue = Double(amountText) else { return }
-        
-        let receipt = Receipt(
+
+        let persistedItems = analysisResult.items.map { item in
+            ReceiptItem(
+                name: item.name,
+                quantity: item.quantity,
+                unitPrice: item.unitPrice,
+                totalPrice: item.totalPrice,
+                category: ReceiptCategory(rawValue: item.category) ?? category
+            )
+        }
+
+        var receipt = Receipt(
             vendor: vendor,
             vendorID: selectedVendor?.id.uuidString,
             date: date,
             amount: amountValue,
             notes: notes,
             category: category,
+            subcategory: subcategory,
             isReturn: isReturn,
             paymentMethod: paymentMethod,
             paymentMethodID: selectedPaymentMethod?.id.uuidString,
@@ -536,6 +550,8 @@ struct ScannedReceiptEntryView: View {
             ),
             receiptImageData: scannedImage.jpegData(compressionQuality: 0.8)
         )
+
+        receipt.items = persistedItems
         
         // CRITICAL FIX: Use the correct async method with project ID
         Task {

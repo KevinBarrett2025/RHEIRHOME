@@ -399,6 +399,7 @@ public struct Receipt: Identifiable, Codable, Hashable, Sendable {
     public var amount: Double
     public var notes: String
     public var category: ReceiptCategory
+    public var subcategory: String?
     public var photoIDs: [UUID]          // CloudKit photo references
     public var tags: [String]
     public var isReturn: Bool
@@ -453,6 +454,9 @@ public struct Receipt: Identifiable, Codable, Hashable, Sendable {
         self.amount = amount
         self.notes = notes
         self.category = category
+        self.subcategory = subcategory.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? nil
+            : subcategory.trimmingCharacters(in: .whitespacesAndNewlines)
         self.photoIDs = []
         self.tags = []
         self.isReturn = isReturn

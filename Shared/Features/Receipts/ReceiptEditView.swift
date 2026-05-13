@@ -13,6 +13,7 @@ struct ReceiptEditView: View {
     @State private var notes: String
     @State private var date: Date
     @State private var category: ReceiptCategory
+    @State private var subcategory: String
     @State private var paymentMethod: String
     @State private var selectedPaymentMethodObj: PaymentMethod?
     @State private var receiptNumber: String
@@ -30,6 +31,7 @@ struct ReceiptEditView: View {
         self._notes = State(initialValue: receipt.notes)
         self._date = State(initialValue: receipt.date)
         self._category = State(initialValue: receipt.category)
+        self._subcategory = State(initialValue: receipt.subcategory ?? "")
         self._paymentMethod = State(initialValue: receipt.paymentMethod)
         self._receiptNumber = State(initialValue: receipt.receiptNumber)
         self._taxAmount = State(initialValue: String(format: "%.2f", receipt.taxAmount))
@@ -64,6 +66,8 @@ struct ReceiptEditView: View {
                             Text(category.rawValue).tag(category)
                         }
                     }
+
+                    TextField("Subcategory (optional)", text: $subcategory)
                     
                     Toggle("Return/Refund", isOn: $isReturn)
                 }
@@ -161,6 +165,9 @@ struct ReceiptEditView: View {
         updatedReceipt.notes = notes
         updatedReceipt.date = date
         updatedReceipt.category = category
+        updatedReceipt.subcategory = subcategory.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? nil
+            : subcategory.trimmingCharacters(in: .whitespacesAndNewlines)
         updatedReceipt.paymentMethod = paymentMethod
         updatedReceipt.receiptNumber = receiptNumber
         updatedReceipt.taxAmount = Double(taxAmount) ?? 0
