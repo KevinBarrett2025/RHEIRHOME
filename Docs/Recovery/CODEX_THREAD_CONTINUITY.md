@@ -3,14 +3,14 @@
 ## Repo Truth
 - Repo Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Active Branch: `gm/rheir-hardening-phase1`
-- Thread Start SHA: `862a29619305b5045445bd699deb309f43eeb88b`
-- Last Commit At Thread Start: `862a296 Phase 2: cancel stale fast-ship organization sync after sign-out`
+- Thread Start SHA: `b4388fc23899b0596b5d2f0bf3ec16112fc890ff`
+- Last Commit At Thread Start: `b4388fc Phase 2: honor nil-org clears during fast-ship sign-out`
 
 ## Current Objective
 - Lock RHEIR into the fast-ship v1 release profile so the visible app ships as a single-user contractor tool with the core shell only: `Projects`, `Receipts`, `Labor`, `Tasks`, plus budget `Breakdown` / `Estimator`.
 - Collapse the visible session flow toward `launch -> sign in -> ready`, hiding invite, org-selection, company/admin, and legacy AI-key surfaces unless the app is explicitly forced back into the legacy/full profile.
-- Keep the next seam on real contractor workflows: same-device and real-device QA on the simplified shell now that deterministic manual-receipt relaunch persistence and scanned-receipt return/reopen are both green in simulator.
-- Keep the post-Sign in with Apple path lean on device now that the restored-session freeze is cleared, by making nil-organization clears authoritative in the project sync path so sign-out cannot replay stale organization-switch work before the acceptance pack continues.
+- Keep the next seam on real contractor workflows: same-device and real-device QA on the simplified shell now that deterministic manual-receipt relaunch persistence and scanned-receipt return/reopen are both green in simulator and the sign-out seam is confirmed clean on device.
+- Clean the last active launch-polish warnings on the fast-ship path so device logs stop surfacing expected enhanced-vs-legacy materials divergence noise and status-color asset misses before the remaining receipt acceptance pass continues.
 
 ## Current Working Set
 - `Shared/ViewModels/AuthViewModel.swift` now tracks a single in-flight fast-ship organization-switch task, cancelling it when the session signs out or clears the active organization so stale post-ready work cannot keep running into a cleared workspace.
@@ -19,6 +19,10 @@
 - `Shared/ViewModels/AuthViewModel.swift` now clears the attached `ProjectViewModel` organization immediately when the fast-ship session signs out or routes a nil organization through `notifyProjectViewModelOrganizationChange(_:)`, instead of letting the async refresh wrapper observe the stale previous org.
 - `Shared/ViewModels/ProjectViewModel.swift` now treats `organizationDidChange(nil)` as an authoritative clear by calling `setCurrentOrganization(nil)` before the legacy async refresh path, closing the device bug where sign-out still reloaded the last organization after the workspace cleared.
 - `RHEIRTests/RHEIRTests.swift` now includes `signOutClearsProjectViewModelOrganizationBeforeAsyncRefresh()`, proving the sign-out path delivers the active org first and the nil clear second to the project-view-model seam before any async refresh runs.
+- The latest real-device sign-out/re-sign-in logs now confirm the cleared workspace stays cleared: after sign-out, the app logs `Cleared active organization from project view model.`, `Cleared active organization.`, `Clearing organization-scoped projects because no organization is active.`, and `No organization selected; clearing organization-scoped state.` without replaying stale zone setup or project reload before the next sign-in begins.
+- `Shared/ViewModels/ProjectViewModel+Filters.swift` now aligns receipt-level legacy materials/general-conditions/contingency bridge totals with the detailed receipt-category mapping used by enhanced budget spending, removing the expected `Materials enhanced spending diverged from legacy...` noise from active fast-ship logs.
+- `Shared/Models/ProjectStatus.swift` and `Shared/Models/ChangeOrder.swift` now expose semantic SwiftUI `tintColor` values, and `Shared/Features/Clients/ClientCardView.swift` plus `Shared/Features/Projects/ChangeOrderView.swift` now use those colors instead of string asset lookups, removing the active `No color named 'green' found in asset catalog...` warning.
+- `RHEIRTests/RHEIRTests.swift` now includes `BudgetBridgeTests.detailedMaterialReceiptValidatesAgainstReceiptLevelLegacyBridge()`, proving a detailed-category material receipt validates cleanly through the receipt-level bridge and reports `Status: ✅ VALIDATED`.
 - `Shared/ViewModels/AuthViewModel.swift` and `Shared/ViewModels/ProjectViewModel.swift` now centralize heavy fast-ship organization synchronization under `ProjectViewModel.organizationDidChange(_:)`, removing auth-side duplicate CloudKit zone setup and connect-time eager organization project loads during restored-session handoff.
 - `RHEIRTests/RHEIRTests.swift` now treats `organizationDidChange(_:)` as the authoritative synchronization seam in the session-support recording harness, keeping restored-session coverage aligned with the leaner production path.
 - `Shared/ViewModels/AuthViewModel.swift` now defers restored fast-ship organization activation to the streamlined session store and ignores duplicate same-organization activation work so post-Sign in with Apple restore does not re-run organization/project synchronization twice.
@@ -222,5 +226,6 @@
 ## Next Required Action
 1. Preserve the repo-local STS docs and the user-owned files (`Shared/Views/Auth/LoginView.swift`, `rheir_knowledge_database.json`, `RHEIRmemories.csv`, `RheirLogo 1024x1024.png`) outside the staged set for the next checkpoint.
 2. Re-run the real-device restored-session seam on the simplified shell and explicitly confirm that sign-out or session clear no longer allows `organizationDidChange(nil)` to replay zone setup, snapshot load, and project refresh after the workspace is cleared.
-3. If that rerun is clean, continue first scan, scanned-receipt return/reopen, relaunch restore, and the same-user iCloud restore decision on real hardware.
-4. Only resume broader runtime QA and any post-launch surface expansion after the fast-ship device launch path is stable again.
+3. Continue the fast-ship real-device acceptance pack through first scan, scanned-receipt save, leave/return/reopen, and relaunch restore on the selected-project receipts surface.
+4. Make the same-user iCloud restore launch decision only after the device receipt flow is green end-to-end; if it is not clean by cutoff, keep local-device persistence as the ship promise.
+5. Only resume broader runtime QA and any post-launch surface expansion after the fast-ship device launch path is stable again.

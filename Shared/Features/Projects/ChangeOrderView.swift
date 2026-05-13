@@ -173,7 +173,7 @@ private struct ChangeOrderHistoryView: View {
                         }
                         HStack {
                             Text("Status: \(order.status.rawValue)")
-                                .foregroundColor(Color(order.status.color))
+                                .foregroundColor(order.status.tintColor)
                             Spacer()
                             Button {
                                 // approval toggle...

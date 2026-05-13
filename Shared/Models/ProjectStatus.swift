@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(SwiftUI)
+import SwiftUI
+#endif
 
 public enum ProjectStatus: String, CaseIterable, Codable, Sendable {
     case active = "Active"
@@ -30,4 +33,16 @@ public enum ProjectStatus: String, CaseIterable, Codable, Sendable {
         case .planning: return "gray"
         }
     }
+
+    #if canImport(SwiftUI)
+    public var tintColor: Color {
+        switch self {
+        case .active: return .green
+        case .completed: return .blue
+        case .onHold: return .orange
+        case .cancelled: return .red
+        case .planning: return .gray
+        }
+    }
+    #endif
 }

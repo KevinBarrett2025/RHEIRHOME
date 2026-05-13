@@ -43,7 +43,7 @@ struct ClientCardView: View {
                     Text(project.status.rawValue)
                         .font(.caption)
                         .fontWeight(.medium)
-                        .foregroundColor(Color(project.status.color))
+                        .foregroundColor(project.status.tintColor)
                     
                     Text("Due: \(project.endDate, style: .date)")
                         .font(.caption)

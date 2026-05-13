@@ -33,21 +33,33 @@ extension ProjectViewModel {
         )
     }
 
-    private func logEnhancedBudgetMismatch(_ category: String, enhanced: Double, legacy: Double) {
-        let enhancedFormatted = enhanced.formatAsCurrency()
-        let legacyFormatted = legacy.formatAsCurrency()
-
-        Logger.project.debug(
-            "\(category, privacy: .public) enhanced spending diverged from legacy. Enhanced=\(enhancedFormatted, privacy: .public) Legacy=\(legacyFormatted, privacy: .public)"
-        )
-    }
-
     private func logLegacyBudgetFallback(_ calculation: String) {
         Logger.project.notice("\(calculation, privacy: .public) used legacy fallback.")
     }
 
     private var currentReceipts: [Receipt] {
         selectedProject?.receipts ?? []
+    }
+
+    /// Receipt-level bridge for high-level budget buckets.
+    /// This intentionally ignores item-level classification, but it should still
+    /// classify detailed receipt categories into the correct parent bucket.
+    private func receiptLevelSpending(for budgetCategory: EnhancedBudgetCategory) -> Double {
+        let relevantCategories = Set(getReceiptCategories(for: budgetCategory))
+
+        let result = currentReceipts
+            .filter { relevantCategories.contains($0.category) }
+            .reduce(0.0) { acc, receipt in
+                let amount = receipt.isReturn ? -receipt.amount : receipt.amount
+                guard amount.isFinite else { return acc }
+                return acc + amount
+            }
+
+        guard result.isFinite else {
+            logInvalidBudgetValue("receiptLevelSpending[\(budgetCategory.rawValue)]", value: result)
+            return 0
+        }
+        return result
     }
 
     // MARK: - Enhanced Budget Category Mapping
@@ -83,59 +95,17 @@ extension ProjectViewModel {
 
     /// Net spent (sales minus returns) on General Conditions receipts
     private var receiptGeneralConditions: Double {
-        let result = currentReceipts
-            .filter { $0.category == .general }
-            .reduce(0) { acc, r in
-                let amount = r.isReturn ? -r.amount : r.amount
-                // Ensure each amount is valid
-                guard amount.isFinite else { return acc }
-                return acc + amount
-            }
-        
-        // Ensure final result is valid
-        guard result.isFinite else {
-            logInvalidBudgetValue("receiptGeneralConditions", value: result)
-            return 0
-        }
-        return result
+        receiptLevelSpending(for: .generalConditions)
     }
 
     /// Net spent (sales minus returns) on Materials receipts
     private var receiptMaterials: Double {
-        let result = currentReceipts
-            .filter { $0.category == .material }
-            .reduce(0) { acc, r in
-                let amount = r.isReturn ? -r.amount : r.amount
-                // Ensure each amount is valid
-                guard amount.isFinite else { return acc }
-                return acc + amount
-            }
-        
-        // Ensure final result is valid
-        guard result.isFinite else {
-            logInvalidBudgetValue("receiptMaterials", value: result)
-            return 0
-        }
-        return result
+        receiptLevelSpending(for: .materials)
     }
 
     /// Net spent (sales minus returns) on Contingency receipts
     private var receiptContingency: Double {
-        let result = currentReceipts
-            .filter { $0.category == .contingency }
-            .reduce(0) { acc, r in
-                let amount = r.isReturn ? -r.amount : r.amount
-                // Ensure each amount is valid
-                guard amount.isFinite else { return acc }
-                return acc + amount
-            }
-        
-        // Ensure final result is valid
-        guard result.isFinite else {
-            logInvalidBudgetValue("receiptContingency", value: result)
-            return 0
-        }
-        return result
+        receiptLevelSpending(for: .contingency)
     }
 
     /// Total net receipts spending across all categories
@@ -417,16 +387,9 @@ extension ProjectViewModel {
 
     /// Net spent on General Conditions (enhanced calculation with fallback to legacy)
     var spentGeneralConditions: Double {
-        // Use enhanced calculation, but validate against legacy for consistency
         let enhanced = enhancedSpentGeneralConditions
         let legacy = receiptGeneralConditions + hoursGeneralConditions
-        
-        // For debugging: log differences if significant
-        if abs(enhanced - legacy) > 0.01 {
-            logEnhancedBudgetMismatch("General Conditions", enhanced: enhanced, legacy: legacy)
-        }
-        
-        // Prefer enhanced calculation
+
         guard enhanced.isFinite else {
             logLegacyBudgetFallback("spentGeneralConditions")
             return legacy
@@ -436,16 +399,9 @@ extension ProjectViewModel {
 
     /// Net spent on Materials (enhanced calculation with fallback to legacy)
     var spentMaterials: Double {
-        // Use enhanced calculation, but validate against legacy for consistency
         let enhanced = enhancedSpentMaterials
         let legacy = receiptMaterials
-        
-        // For debugging: log differences if significant
-        if abs(enhanced - legacy) > 0.01 {
-            logEnhancedBudgetMismatch("Materials", enhanced: enhanced, legacy: legacy)
-        }
-        
-        // Prefer enhanced calculation
+
         guard enhanced.isFinite else {
             logLegacyBudgetFallback("spentMaterials")
             return legacy
@@ -467,16 +423,9 @@ extension ProjectViewModel {
 
     /// Net spent on Contingency (enhanced calculation with fallback to legacy)
     var spentContingency: Double {
-        // Use enhanced calculation, but validate against legacy for consistency
         let enhanced = enhancedSpentContingency
         let legacy = receiptContingency + hoursContingency
-        
-        // For debugging: log differences if significant
-        if abs(enhanced - legacy) > 0.01 {
-            logEnhancedBudgetMismatch("Contingency", enhanced: enhanced, legacy: legacy)
-        }
-        
-        // Prefer enhanced calculation
+
         guard enhanced.isFinite else {
             logLegacyBudgetFallback("spentContingency")
             return legacy

@@ -3,7 +3,7 @@
 ## Repo
 - Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Branch: `gm/rheir-hardening-phase1`
-- HEAD: `862a29619305b5045445bd699deb309f43eeb88b`
+- HEAD: `b4388fc23899b0596b5d2f0bf3ec16112fc890ff`
 
 ## Active Initiative
 - RHEIR release hardening, phase 2 estimator foundation and contractor workflow hardening.
@@ -28,6 +28,10 @@
 - Added focused session-support regression coverage proving an interrupted organization sync cannot restore projects, access, or selection after `setCurrentOrganization(nil)` fires during the sync.
 - Added nil-organization sign-out hardening so `notifyProjectViewModelOrganizationChange(nil)` clears `ProjectViewModel` state before async refresh, and `organizationDidChange(nil)` now treats the nil org as an authoritative clear instead of reusing the last organization id.
 - Added focused session-support regression coverage proving the sign-out path delivers the active org first and the nil clear second to the project-view-model seam before any async refresh runs.
+- Confirmed on real device that fast-ship sign-out now clears organization-scoped workspace state without replaying stale zone setup, snapshot load, or project refresh before the next sign-in begins.
+- Aligned receipt-level legacy materials/general-conditions/contingency bridge totals with detailed receipt-category mapping in `ProjectViewModel+Filters.swift`, removing expected `Materials enhanced spending diverged from legacy...` noise from active fast-ship logs.
+- Replaced string asset-name status color lookups in client-card and change-order UI with semantic SwiftUI tint colors on `ProjectStatus` and `ChangeOrderStatus`, removing the active `No color named 'green' found in asset catalog...` warning.
+- Added focused budget-bridge regression coverage proving a detailed-category material receipt validates cleanly through the receipt-level legacy bridge.
 - Added `ProjectStore` for organization-scoped local project/team-member/assignment persistence.
 - Added `ProjectRepository` for CloudKit project fetch/save and project assignment persistence.
 - Added `OrganizationProjectSyncStore` for organization-scoped project filtering, snapshot persistence, CloudKit merge/fetch/save helpers, zone setup, and assignment gating.
@@ -158,7 +162,7 @@
 
 ## Blockers
 - Same-user iCloud sync still needs release-candidate validation before it can be treated as a launch promise; if it is not green by cutoff, local-device persistence remains the ship path and cross-device expectations must stay muted.
-- The fast-ship post-sign-in restored-session freeze is fixed in code again on the session-store side but still needs real-device confirmation; until that rerun is green, the launch-ready device path remains open.
+- The fast-ship sign-in/sign-out seam is now clean on device; the remaining acceptance risk is the end-to-end selected-project receipt flow on hardware rather than session routing.
 - Raw in-sandbox `xcodebuild` commands are still less reliable than elevated CLI or `xcodebuildmcp` paths in this environment because CoreSimulator and DerivedData access remain sandbox-sensitive.
 
 ## Latest Evidence
@@ -208,8 +212,12 @@
 - Focused fast-ship nil-org sign-out parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_signout_nilfix_unit_retry_dd -resultBundlePath /tmp/rheir_signout_nilfix_unit_retry2.xcresult test -only-testing:RHEIRTests/SessionSupportTests` -> PASS (`/tmp/rheir_signout_nilfix_unit_retry2.xcresult`)
 - Focused fast-ship nil-org sign-out UI parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_signout_nilfix_ui_dd -resultBundlePath /tmp/rheir_signout_nilfix_ui.xcresult test -only-testing:RHEIRUITests/RHEIRUITests/testReadyModeShowsMainTabShell -only-testing:RHEIRUITests/RHEIRUITests/testOrganizationSelectionModeAutoResolvesIntoReadyShell` -> PASS (`/tmp/rheir_signout_nilfix_ui.xcresult`, `2 UI tests`)
 - Focused fast-ship nil-org sign-out Gate A: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_signout_nilfix_dd -resultBundlePath /tmp/rheir_gateA_signout_nilfix.xcresult clean build` -> PASS (`/tmp/rheir_gateA_signout_nilfix.xcresult`)
+- Latest device sign-out logs now show the cleared workspace boundary holding cleanly: `Cleared active organization from project view model.`, `Cleared active organization.`, `Clearing organization-scoped projects because no organization is active.`, and `No organization selected; clearing organization-scoped state.` all appear without a stale organization-sync replay before the next Apple sign-in starts.
+- Focused launch-polish budget-bridge parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_launch_polish_unit_dd -resultBundlePath /tmp/rheir_launch_polish_unit.xcresult test -only-testing:RHEIRTests/BudgetBridgeTests` -> PASS (`/tmp/rheir_launch_polish_unit.xcresult`, `1 test`)
+- Focused launch-polish UI parity: first runner bootstrap attempt failed before app launch at `/tmp/rheir_launch_polish_ui.xcresult`; retry `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_launch_polish_ui_retry_dd -resultBundlePath /tmp/rheir_launch_polish_ui_retry.xcresult test -only-testing:RHEIRUITests/RHEIRUITests/testReadyModeShowsMainTabShell` -> PASS (`/tmp/rheir_launch_polish_ui_retry.xcresult`, `1 UI test`)
+- Focused launch-polish Gate A: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_launch_polish_dd -resultBundlePath /tmp/rheir_gateA_launch_polish.xcresult clean build` -> PASS (`/tmp/rheir_gateA_launch_polish.xcresult`)
 - Gate A: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_fastship_scanned_return_dd -resultBundlePath /tmp/rheir_gateA_fastship_scanned_return.xcresult clean build` -> PASS (`/tmp/rheir_gateA_fastship_scanned_return.xcresult`)
 
 ## Next Milestone
-- Re-run the same-device and real-device fast-ship acceptance pack end-to-end on the simplified shell, starting with a confirming restored-session plus sign-out/re-sign-in device rerun that verifies the nil-org clear now prevents stale organization-sync work from replaying after the workspace clears.
-- Once that rerun is green, continue first scan, scanned-receipt return/reopen, relaunch restore, and then decide whether same-user iCloud sync is safe to promise at launch.
+- Continue the same-device and real-device fast-ship acceptance pack end-to-end on the simplified shell with the session seam now green: first scan, scanned-receipt save, leave/return/reopen, and relaunch restore on the selected-project receipts surface.
+- Once that device receipt flow is green, decide whether same-user iCloud sync is safe to promise at launch; if not, keep local-device persistence as the explicit v1 expectation.

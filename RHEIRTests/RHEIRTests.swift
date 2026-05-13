@@ -1478,6 +1478,46 @@ struct CompanyStoreTests {
     }
 }
 
+@MainActor
+struct BudgetBridgeTests {
+
+    @Test
+    func detailedMaterialReceiptValidatesAgainstReceiptLevelLegacyBridge() {
+        let viewModel = ProjectViewModel(
+            offlineDataManager: OfflineDataManager(),
+            projectRepository: RecordingProjectRepository()
+        )
+
+        var project = Project(
+            name: "Bridge Validation Project",
+            client: "Client",
+            totalBudget: 1000,
+            startDate: .now,
+            endDate: .now.addingTimeInterval(86400),
+            organizationID: "org-budget-bridge"
+        )
+
+        project.receipts = [
+            Receipt(
+                vendor: "Supply House",
+                date: .now,
+                amount: 120,
+                category: .plumbing,
+                paymentMethod: "Cash"
+            )
+        ]
+
+        viewModel.selectedProject = project
+
+        let validation = viewModel.validateEnhancedCalculations()
+
+        #expect(validation.contains("Materials:"))
+        #expect(validation.contains("- Enhanced: $120.00"))
+        #expect(validation.contains("- Legacy: $120.00"))
+        #expect(validation.contains("Status: ✅ VALIDATED"))
+    }
+}
+
 struct TeamMemberStoreTests {
 
     @Test

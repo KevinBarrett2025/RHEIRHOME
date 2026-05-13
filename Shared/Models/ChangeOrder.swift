@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(SwiftUI)
+import SwiftUI
+#endif
 
 public struct ChangeOrder: Identifiable, Codable, Hashable, Sendable {
     public let id: UUID
@@ -101,6 +104,20 @@ public enum ChangeOrderStatus: String, CaseIterable, Codable, Sendable {
         case .cancelled: return "gray"
         }
     }
+
+    #if canImport(SwiftUI)
+    public var tintColor: Color {
+        switch self {
+        case .draft: return .gray
+        case .submitted: return .blue
+        case .underReview: return .orange
+        case .approved: return .green
+        case .rejected: return .red
+        case .implemented: return .purple
+        case .cancelled: return .gray
+        }
+    }
+    #endif
     
     public var icon: String {
         switch self {
