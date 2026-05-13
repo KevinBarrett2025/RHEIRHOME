@@ -132,7 +132,8 @@ class AuthViewModel: ObservableObject {
         if let currentOrg = currentOrg {
             Task { @MainActor in
                 self.logOrganizationEvent("Applying active organization to connected project view model.", organizationID: currentOrg.id)
-                await self.setupCloudKitZoneForOrganization(currentOrg.id)
+                let role = self.organizationRoles[currentOrg.id]?.asTeamMemberRole ?? .member
+                projectViewModel.setCurrentOrganization(currentOrg, role: role)
                 
                 // CRITICAL FIX: Sync user role when ProjectViewModel connects - use original OrganizationRole
                 if let userRole = self.organizationRoles[currentOrg.id] {
@@ -208,13 +209,8 @@ class AuthViewModel: ObservableObject {
         
         Task { @MainActor in
             self.logOrganizationEvent("Starting organization switch synchronization.", organizationID: organization.id)
-            await self.setupCloudKitZoneForOrganization(organization.id)
-            
-            // Notify ProjectViewModel of organization change AFTER setting the organization
             await self.projectVM?.organizationDidChange(organization.id)
             
-            // ENTERPRISE FEATURE: Automatic data synchronization
-            self.logOrganizationEvent("Starting organization team-member synchronization.", organizationID: organization.id)
             await self.syncOrganizationTeamMembers()
             
             // CRITICAL: Also sync role after organization change
@@ -426,14 +422,6 @@ class AuthViewModel: ObservableObject {
             self.organizationRoles[organization.id] = .admin;
         }
         
-        logOrganizationEvent("Setting up CloudKit zone for new organization.", organizationID: organization.id)
-        if let projectViewModel = self.projectVM {
-            await projectViewModel.setupCloudKitZoneForOrganization(organization.id);
-            logOrganizationEvent("CloudKit zone setup completed for new organization.", organizationID: organization.id)
-        } else {
-            logWarning("Project view model unavailable during organization creation; zone setup will happen later.")
-        }
-        
         await MainActor.run {
             self.setCurrentOrganization(organization);
         }
@@ -450,19 +438,6 @@ class AuthViewModel: ObservableObject {
         }
     }
     
-    /// CRITICAL: Setup CloudKit zone for organization (PRODUCTION-READY)
-    private func setupCloudKitZoneForOrganization(_ organizationID: String) async {
-        logOrganizationEvent("Setting up CloudKit zone for organization.", organizationID: organizationID)
-        
-        // Call ProjectViewModel's setupCloudKitZoneForOrganization method directly
-        if let projectViewModel = self.projectVM {
-            await projectViewModel.setupCloudKitZoneForOrganization(organizationID)
-            logOrganizationEvent("CloudKit zone setup completed.", organizationID: organizationID)
-        } else {
-            logWarning("Project view model unavailable for direct CloudKit zone setup.")
-        }
-    }
-
     /// Fetch user organizations with their roles (ENTERPRISE-GRADE DATA MANAGEMENT)
     private func fetchUserOrganizationsWithRoles(completion: @escaping ([Organization], [String: OrganizationRole]) -> Void) {
         guard let userID = user?.id else {

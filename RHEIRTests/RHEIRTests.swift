@@ -83,6 +83,9 @@ private final class RecordingSessionProjectViewModel: ProjectViewModel {
 
     override func organizationDidChange(_ orgID: String?) async {
         organizationDidChangeCalls.append(orgID)
+        if let orgID {
+            zoneSetupCalls.append(orgID)
+        }
     }
 
     override func setCurrentUserRole(_ role: OrganizationRole, forOrganization organizationID: String) {

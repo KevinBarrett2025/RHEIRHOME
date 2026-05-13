@@ -807,15 +807,6 @@ class ProjectViewModel: ObservableObject {
         }
         
         updateOrganizationProjects()
-        
-        if let orgID = self.currentOrganizationID {
-            Task {
-                await loadOrganizationSpecificProjects(organizationID: orgID)
-                await MainActor.run {
-                    updateOrganizationProjects()
-                }
-            }
-        }
     }
     
     private func updateOrganizationProjects() {

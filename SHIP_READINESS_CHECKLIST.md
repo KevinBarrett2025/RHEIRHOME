@@ -72,7 +72,7 @@ Exit criteria: release candidate is validated on real hardware and ready for sub
 - Freeze scope and submit.
 
 ## Immediate Next Steps
-1. Re-run the fast-ship real-device acceptance pack starting with the post-Sign in with Apple restored-session path, now that duplicate restored-organization activation has been deduped and session-store workspace resolution waits for org loading to finish.
-2. Continue the selected-project flow on device through first scan, scanned-receipt return/reopen, and relaunch restore once the restored-session freeze no longer reproduces.
+1. Re-run the fast-ship real-device acceptance pack starting with a confirming Sign in with Apple pass, now that the restored-session freeze is cleared and the post-ready organization-switch path has been simplified.
+2. Continue the selected-project flow on device through first scan, scanned-receipt return/reopen, and relaunch restore once the leaner post-sign-in path is confirmed.
 3. Validate same-user iCloud restore on real hardware; if it is not clean by release cutoff, keep the shell but de-scope cross-device expectations from launch.
 4. Only after the device acceptance pack is green, decide whether any remaining shell polish is still launch-critical.

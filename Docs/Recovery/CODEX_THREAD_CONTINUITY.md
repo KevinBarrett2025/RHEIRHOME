@@ -3,16 +3,18 @@
 ## Repo Truth
 - Repo Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Active Branch: `gm/rheir-hardening-phase1`
-- Thread Start SHA: `50b730c67d5d96d6af8c5a04f111f6c6d7f7b8df`
-- Last Commit At Thread Start: `50b730c Phase 2: add fast-ship scanned receipt return/reopen smoke coverage`
+- Thread Start SHA: `cfc46e840a67db987347e2f87b0781431d01247b`
+- Last Commit At Thread Start: `cfc46e8 Phase 2: defer fast-ship session resolution until org load completes`
 
 ## Current Objective
 - Lock RHEIR into the fast-ship v1 release profile so the visible app ships as a single-user contractor tool with the core shell only: `Projects`, `Receipts`, `Labor`, `Tasks`, plus budget `Breakdown` / `Estimator`.
 - Collapse the visible session flow toward `launch -> sign in -> ready`, hiding invite, org-selection, company/admin, and legacy AI-key surfaces unless the app is explicitly forced back into the legacy/full profile.
 - Keep the next seam on real contractor workflows: same-device and real-device QA on the simplified shell now that deterministic manual-receipt relaunch persistence and scanned-receipt return/reopen are both green in simulator.
-- Unblock the current real-device launch freeze after Sign in with Apple, where the restored-organization handoff is stalling on repeated selection-state persistence during streamlined session routing.
+- Keep the post-Sign in with Apple path lean on device now that the restored-session freeze is cleared, by removing duplicate organization-switch and CloudKit zone setup work before continuing the acceptance pack.
 
 ## Current Working Set
+- `Shared/ViewModels/AuthViewModel.swift` and `Shared/ViewModels/ProjectViewModel.swift` now centralize heavy fast-ship organization synchronization under `ProjectViewModel.organizationDidChange(_:)`, removing auth-side duplicate CloudKit zone setup and connect-time eager organization project loads during restored-session handoff.
+- `RHEIRTests/RHEIRTests.swift` now treats `organizationDidChange(_:)` as the authoritative synchronization seam in the session-support recording harness, keeping restored-session coverage aligned with the leaner production path.
 - `Shared/ViewModels/AuthViewModel.swift` now defers restored fast-ship organization activation to the streamlined session store and ignores duplicate same-organization activation work so post-Sign in with Apple restore does not re-run organization/project synchronization twice.
 - `Shared/Views/Auth/AppSessionSupport.swift` now ignores no-op `LocalCacheStore.selectionState` writes, preventing repeated `UserDefaults` persistence churn during restored-session routing.
 - `RHEIRTests/RHEIRTests.swift` now includes restored-session regression coverage proving duplicate organization activation only performs one project-view-model synchronization pass.
@@ -213,6 +215,6 @@
 
 ## Next Required Action
 1. Preserve the repo-local STS docs and the user-owned files (`Shared/Views/Auth/LoginView.swift`, `rheir_knowledge_database.json`, `RHEIRmemories.csv`, `RheirLogo 1024x1024.png`) outside the staged set for the next checkpoint.
-2. Re-run the same-device and real-device acceptance pack on the simplified shell, starting with the post-Sign in with Apple restored-session path that previously froze and now resolves the workspace only after organization loading completes.
-3. If the restored-session rerun is clean, continue first scan, scanned-receipt return/reopen, relaunch restore, and the same-user iCloud restore decision on real hardware.
+2. Re-run the real-device Sign in with Apple seam on the simplified shell and confirm the post-ready path no longer repeats organization switch, snapshot load, and CloudKit zone setup work after workspace resolution.
+3. If that rerun is clean, continue first scan, scanned-receipt return/reopen, relaunch restore, and the same-user iCloud restore decision on real hardware.
 4. Only resume backend estimator rollout and broader runtime QA after the fast-ship device launch path is stable again.
