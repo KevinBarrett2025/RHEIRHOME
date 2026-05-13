@@ -536,6 +536,34 @@ struct SessionSupportTests {
     }
 
     @Test
+    @MainActor
+    func signOutClearsProjectViewModelOrganizationBeforeAsyncRefresh() async {
+        let authViewModel = AuthViewModel(service: StubAuthService())
+        let projectViewModel = RecordingSessionProjectViewModel()
+        let organization = Organization(
+            id: "org-signout-clear",
+            name: "North Shore Builders",
+            members: ["member-1"],
+            adminUserID: "admin-1"
+        )
+
+        authViewModel.organizationRoles[organization.id] = .admin
+        authViewModel.setProjectViewModel(projectViewModel)
+        authViewModel.setCurrentOrganization(organization)
+        try? await Task.sleep(nanoseconds: 100_000_000)
+
+        authViewModel.signOut()
+        try? await Task.sleep(nanoseconds: 100_000_000)
+
+        #expect(projectViewModel.setCurrentOrganizationCalls == [organization.id, nil])
+        #expect(projectViewModel.organizationDidChangeCalls.count == 2)
+        #expect(projectViewModel.organizationDidChangeCalls[0] == organization.id)
+        #expect(projectViewModel.organizationDidChangeCalls[1] == nil)
+        #expect(projectViewModel.currentOrganizationID == nil)
+        #expect(authViewModel.currentOrg == nil)
+    }
+
+    @Test
     func compactsLegacyProjectPayloadsDuringInitialization() throws {
         let suiteName = "SessionSupportTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!

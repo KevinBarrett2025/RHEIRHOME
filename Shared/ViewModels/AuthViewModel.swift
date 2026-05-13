@@ -450,12 +450,13 @@ class AuthViewModel: ObservableObject {
     }
 
     private func notifyProjectViewModelOrganizationChange(_ organizationID: String?) {
-        if organizationID == nil {
-            cancelOrganizationSwitchTask()
-        }
-
         if let projectVM = projectVM {
             Task { @MainActor in
+                if organizationID == nil {
+                    cancelOrganizationSwitchTask()
+                    projectVM.setCurrentOrganization(nil)
+                }
+
                 await projectVM.organizationDidChange(organizationID)
             }
         }

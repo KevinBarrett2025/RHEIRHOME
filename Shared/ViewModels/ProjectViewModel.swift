@@ -1387,6 +1387,10 @@ class ProjectViewModel: ObservableObject {
     // MARK: - PHASE 2A: UUID/String Organization ID Compatibility
     
     func organizationDidChange(_ orgID: String?) async {
+        if orgID == nil, currentOrganizationID != nil {
+            setCurrentOrganization(nil)
+        }
+
         await organizationDidChange()
     }
     

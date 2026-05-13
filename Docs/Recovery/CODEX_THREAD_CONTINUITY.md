@@ -3,19 +3,22 @@
 ## Repo Truth
 - Repo Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Active Branch: `gm/rheir-hardening-phase1`
-- Thread Start SHA: `55e32b7a95a294460d88901a252822251387e595`
-- Last Commit At Thread Start: `55e32b7 Phase 2: streamline fast-ship organization switch sync`
+- Thread Start SHA: `862a29619305b5045445bd699deb309f43eeb88b`
+- Last Commit At Thread Start: `862a296 Phase 2: cancel stale fast-ship organization sync after sign-out`
 
 ## Current Objective
 - Lock RHEIR into the fast-ship v1 release profile so the visible app ships as a single-user contractor tool with the core shell only: `Projects`, `Receipts`, `Labor`, `Tasks`, plus budget `Breakdown` / `Estimator`.
 - Collapse the visible session flow toward `launch -> sign in -> ready`, hiding invite, org-selection, company/admin, and legacy AI-key surfaces unless the app is explicitly forced back into the legacy/full profile.
 - Keep the next seam on real contractor workflows: same-device and real-device QA on the simplified shell now that deterministic manual-receipt relaunch persistence and scanned-receipt return/reopen are both green in simulator.
-- Keep the post-Sign in with Apple path lean on device now that the restored-session freeze is cleared, by stopping stale organization-switch work from surviving sign-out or organization clear boundaries before continuing the acceptance pack.
+- Keep the post-Sign in with Apple path lean on device now that the restored-session freeze is cleared, by making nil-organization clears authoritative in the project sync path so sign-out cannot replay stale organization-switch work before the acceptance pack continues.
 
 ## Current Working Set
 - `Shared/ViewModels/AuthViewModel.swift` now tracks a single in-flight fast-ship organization-switch task, cancelling it when the session signs out or clears the active organization so stale post-ready work cannot keep running into a cleared workspace.
 - `Shared/ViewModels/ProjectViewModel.swift` now invalidates organization synchronization with an `organizationSyncToken` and staleness guards after each async phase, preventing old org-switch work from repopulating projects or team members after `setCurrentOrganization(nil)`.
 - `RHEIRTests/RHEIRTests.swift` now includes a focused regression proving an interrupted organization sync that clears the current organization cannot restore projects, access, or selection when the async flow resumes.
+- `Shared/ViewModels/AuthViewModel.swift` now clears the attached `ProjectViewModel` organization immediately when the fast-ship session signs out or routes a nil organization through `notifyProjectViewModelOrganizationChange(_:)`, instead of letting the async refresh wrapper observe the stale previous org.
+- `Shared/ViewModels/ProjectViewModel.swift` now treats `organizationDidChange(nil)` as an authoritative clear by calling `setCurrentOrganization(nil)` before the legacy async refresh path, closing the device bug where sign-out still reloaded the last organization after the workspace cleared.
+- `RHEIRTests/RHEIRTests.swift` now includes `signOutClearsProjectViewModelOrganizationBeforeAsyncRefresh()`, proving the sign-out path delivers the active org first and the nil clear second to the project-view-model seam before any async refresh runs.
 - `Shared/ViewModels/AuthViewModel.swift` and `Shared/ViewModels/ProjectViewModel.swift` now centralize heavy fast-ship organization synchronization under `ProjectViewModel.organizationDidChange(_:)`, removing auth-side duplicate CloudKit zone setup and connect-time eager organization project loads during restored-session handoff.
 - `RHEIRTests/RHEIRTests.swift` now treats `organizationDidChange(_:)` as the authoritative synchronization seam in the session-support recording harness, keeping restored-session coverage aligned with the leaner production path.
 - `Shared/ViewModels/AuthViewModel.swift` now defers restored fast-ship organization activation to the streamlined session store and ignores duplicate same-organization activation work so post-Sign in with Apple restore does not re-run organization/project synchronization twice.
@@ -218,6 +221,6 @@
 
 ## Next Required Action
 1. Preserve the repo-local STS docs and the user-owned files (`Shared/Views/Auth/LoginView.swift`, `rheir_knowledge_database.json`, `RHEIRmemories.csv`, `RheirLogo 1024x1024.png`) outside the staged set for the next checkpoint.
-2. Re-run the real-device restored-session seam on the simplified shell and explicitly confirm that sign-out or session clear no longer allows stale organization-switch work to replay zone setup, snapshot load, and project refresh after the workspace is cleared.
+2. Re-run the real-device restored-session seam on the simplified shell and explicitly confirm that sign-out or session clear no longer allows `organizationDidChange(nil)` to replay zone setup, snapshot load, and project refresh after the workspace is cleared.
 3. If that rerun is clean, continue first scan, scanned-receipt return/reopen, relaunch restore, and the same-user iCloud restore decision on real hardware.
 4. Only resume broader runtime QA and any post-launch surface expansion after the fast-ship device launch path is stable again.
