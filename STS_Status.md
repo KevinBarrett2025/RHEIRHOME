@@ -3,7 +3,7 @@
 ## Repo
 - Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Branch: `gm/rheir-hardening-phase1`
-- HEAD: `96ffc4deea4f3e5993808741dd2c583cf63ce395`
+- HEAD: `55e32b7a95a294460d88901a252822251387e595`
 
 ## Active Initiative
 - RHEIR release hardening, phase 2 estimator foundation and contractor workflow hardening.
@@ -24,6 +24,8 @@
 - Added focused estimator parity in `RHEIRTests.swift` for totals rollups, approved-baseline bridge fields, variance math, SQLite round trips, actual-cost link replacement, and the draft-to-approved workflow.
 - Added deterministic selected-project AI Project Calculator UI smoke coverage by clearing estimator SQLite artifacts for UI test launches in `RheirApp.swift`, exposing stable estimator-tab/draft/variance accessibility hooks in `BudgetBreakdownView.swift`, and asserting in `RHEIRUITests.swift` that the live budget surface can build and approve a draft estimate deterministically.
 - Added deterministic estimator actual-cost mapping parity by seeding receipts, work hours, and tasks in a dedicated UI launch mode, exposing stable mapping-queue and variance-summary hooks in `BudgetBreakdownView.swift`, and asserting that mapped actuals clear the unmatched queue and move committed/actual variance off zero on the real budget surface.
+- Added fast-ship sign-out/org-clear hardening by cancelling in-flight auth-side organization-switch tasks and invalidating stale `organizationDidChange(_:)` results when the active organization changes or clears.
+- Added focused session-support regression coverage proving an interrupted organization sync cannot restore projects, access, or selection after `setCurrentOrganization(nil)` fires during the sync.
 - Added `ProjectStore` for organization-scoped local project/team-member/assignment persistence.
 - Added `ProjectRepository` for CloudKit project fetch/save and project assignment persistence.
 - Added `OrganizationProjectSyncStore` for organization-scoped project filtering, snapshot persistence, CloudKit merge/fetch/save helpers, zone setup, and assignment gating.
@@ -199,8 +201,13 @@
 - Focused fast-ship org-sync cleanup parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_orgsync_unit_dd -resultBundlePath /tmp/rheir_orgsync_unit.xcresult test -only-testing:RHEIRTests/SessionSupportTests` -> PASS (`/tmp/rheir_orgsync_unit.xcresult`)
 - Focused fast-ship org-sync cleanup UI parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_orgsync_ui_retry_dd -resultBundlePath /tmp/rheir_orgsync_ui_retry.xcresult test -only-testing:RHEIRUITests/RHEIRUITests/testReadyModeShowsMainTabShell -only-testing:RHEIRUITests/RHEIRUITests/testOrganizationSelectionModeAutoResolvesIntoReadyShell` -> PASS (`/tmp/rheir_orgsync_ui_retry.xcresult`, `2 UI tests`)
 - Gate A: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_orgsync_dd -resultBundlePath /tmp/rheir_gateA_orgsync.xcresult clean build` -> PASS (`/tmp/rheir_gateA_orgsync.xcresult`)
+- Latest device log moved the remaining acceptance risk from restored-session freeze to stale organization synchronization surviving sign-out/re-sign-in boundaries after the workspace clears.
+- `AuthViewModel.swift` now cancels the active organization-switch task when fast-ship session state clears, and `ProjectViewModel.swift` now drops stale organization-sync results when the active org no longer matches the in-flight sync token.
+- Focused fast-ship sign-out/org-sync parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_signout_sync_unit_retry_dd -resultBundlePath /tmp/rheir_signout_sync_unit_retry.xcresult test -only-testing:RHEIRTests/SessionSupportTests` -> PASS (`/tmp/rheir_signout_sync_unit_retry.xcresult`)
+- Focused fast-ship sign-out/org-sync UI parity: initial runner bootstrap attempt failed before app launch (`/tmp/rheir_signout_sync_ui_retry.xcresult`); retry PASS with `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_signout_sync_ui_retry2_dd -resultBundlePath /tmp/rheir_signout_sync_ui_retry2.xcresult test -only-testing:RHEIRUITests/RHEIRUITests/testReadyModeShowsMainTabShell -only-testing:RHEIRUITests/RHEIRUITests/testOrganizationSelectionModeAutoResolvesIntoReadyShell` -> PASS (`/tmp/rheir_signout_sync_ui_retry2.xcresult`, `2 UI tests`)
+- Gate A: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_signout_sync_dd -resultBundlePath /tmp/rheir_gateA_signout_sync.xcresult clean build` -> PASS (`/tmp/rheir_gateA_signout_sync.xcresult`)
 - Gate A: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_fastship_scanned_return_dd -resultBundlePath /tmp/rheir_gateA_fastship_scanned_return.xcresult clean build` -> PASS (`/tmp/rheir_gateA_fastship_scanned_return.xcresult`)
 
 ## Next Milestone
-- Re-run the same-device and real-device fast-ship acceptance pack end-to-end on the simplified shell, starting with a confirming Sign in with Apple rerun that verifies the leaner post-ready organization switch path on device.
+- Re-run the same-device and real-device fast-ship acceptance pack end-to-end on the simplified shell, starting with a confirming restored-session plus sign-out/re-sign-in device rerun that verifies stale organization-sync work no longer replays after the workspace clears.
 - Once that rerun is green, continue first scan, scanned-receipt return/reopen, relaunch restore, and then decide whether same-user iCloud sync is safe to promise at launch.

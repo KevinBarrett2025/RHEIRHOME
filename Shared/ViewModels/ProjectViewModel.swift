@@ -79,6 +79,7 @@ class ProjectViewModel: ObservableObject {
     
     private var lastUpdateTimestamp: Date?
     private let updateDebounceInterval: TimeInterval = 0.1 // 100ms debounce
+    private var organizationSyncToken = UUID()
     
     init(
         offlineDataManager: OfflineDataManager,
@@ -257,6 +258,7 @@ class ProjectViewModel: ObservableObject {
     }
     
     func organizationDidChange() async {
+        let syncToken = organizationSyncToken
         Logger.project.info("Starting organization data synchronization.")
         
         guard let currentOrgID = currentOrganizationID else {
@@ -282,24 +284,31 @@ class ProjectViewModel: ObservableObject {
             isDataLoading = true
         }
         
+        guard shouldContinueOrganizationSync(syncToken, for: currentOrgID) else { return }
+        
         // Step 2: Set up CloudKit zone for the new organization
         await setupCloudKitZoneForOrganization(currentOrgID)
+        guard shouldContinueOrganizationSync(syncToken, for: currentOrgID) else { return }
         
         // Step 3: Load projects for the new organization
         await loadOrganizationSpecificProjects(organizationID: currentOrgID)
+        guard shouldContinueOrganizationSync(syncToken, for: currentOrgID) else { return }
         
         // Step 4: Load team members for the new organization
         await loadOrganizationTeamMembers(organizationID: currentOrgID)
+        guard shouldContinueOrganizationSync(syncToken, for: currentOrgID) else { return }
         
         // Step 5: Update organization projects and accessible projects
         await MainActor.run {
             updateOrganizationProjects()
             isDataLoading = false
         }
+        guard shouldContinueOrganizationSync(syncToken, for: currentOrgID) else { return }
         
         // Step 6: Try to load from CloudKit for latest data
         do {
             let cloudKitProjects = try await loadProjectsFromCloudKit()
+            guard shouldContinueOrganizationSync(syncToken, for: currentOrgID) else { return }
             await MainActor.run {
                 mergeCloudKitProjects(cloudKitProjects)
             }
@@ -315,6 +324,24 @@ class ProjectViewModel: ObservableObject {
         Logger.project.notice(
             "Completed organization switch [org=\(currentOrgID, privacy: .private(mask: .hash)) projects=\(self.organizationProjects.count, privacy: .public) teamMembers=\(self.teamMembers.count, privacy: .public) cloudKit=\(self.isUsingCloudKitForOrganizationData, privacy: .public)]"
         )
+    }
+
+    private func shouldContinueOrganizationSync(_ syncToken: UUID, for organizationID: String) -> Bool {
+        guard !Task.isCancelled else {
+            Logger.project.info(
+                "Cancelled organization synchronization before completion [org=\(organizationID, privacy: .private(mask: .hash))]"
+            )
+            return false
+        }
+
+        guard organizationSyncToken == syncToken, currentOrganizationID == organizationID else {
+            Logger.project.info(
+                "Skipped stale organization synchronization result [org=\(organizationID, privacy: .private(mask: .hash)) activeOrg=\(self.currentOrganizationID ?? "nil", privacy: .private(mask: .hash))]"
+            )
+            return false
+        }
+
+        return true
     }
     
     /// Load team members for a specific organization
@@ -786,6 +813,7 @@ class ProjectViewModel: ObservableObject {
     // MARK: - Organization Management
     
     func setCurrentOrganization(_ organization: Organization?, role: TeamMemberRole? = nil) {
+        organizationSyncToken = UUID()
         let previousOrganizationID = currentOrganizationID
         self.currentOrganization = organization
         self.currentOrganizationRole = role

@@ -70,6 +70,7 @@ class AuthViewModel: ObservableObject {
     
     // MARK: - ProjectViewModel Integration (placeholder to avoid import cycle)
     private var projectVM: ProjectViewModel?
+    private var organizationSwitchTask: Task<Void, Never>?
 
     // MARK: - Initialization
     
@@ -123,34 +124,66 @@ class AuthViewModel: ObservableObject {
             Logger.auth.info("\(message, privacy: .public)")
         }
     }
+
+    private func cancelOrganizationSwitchTask() {
+        organizationSwitchTask?.cancel()
+        organizationSwitchTask = nil
+    }
+
+    private func scheduleOrganizationSwitchTask(
+        for organization: Organization,
+        completionMessage: String
+    ) {
+        cancelOrganizationSwitchTask()
+        organizationSwitchTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+
+            await self.projectVM?.organizationDidChange(organization.id)
+
+            guard !Task.isCancelled, self.currentOrg?.id == organization.id else { return }
+
+            await self.syncOrganizationTeamMembers()
+
+            guard !Task.isCancelled, self.currentOrg?.id == organization.id else { return }
+
+            if let userRole = self.organizationRoles[organization.id] {
+                self.projectVM?.setCurrentUserRole(userRole, forOrganization: organization.id)
+                self.logOrganizationEvent("Reapplied current user role after organization switch.", organizationID: organization.id)
+            } else {
+                self.logWarning("Missing organization role after organization switch.")
+            }
+
+            guard !Task.isCancelled, self.currentOrg?.id == organization.id else { return }
+
+            self.ensureAdminTeamMemberExists()
+            self.logOrganizationEvent(completionMessage, organizationID: organization.id)
+            self.organizationSwitchTask = nil
+        }
+    }
     
     /// Set the ProjectViewModel reference for organization synchronization
+    @MainActor
     func setProjectViewModel(_ projectViewModel: ProjectViewModel) {
         self.projectVM = projectViewModel
         logInfo("Connected project view model for organization synchronization.")
         
         if let currentOrg = currentOrg {
-            Task { @MainActor in
-                self.logOrganizationEvent("Applying active organization to connected project view model.", organizationID: currentOrg.id)
-                let role = self.organizationRoles[currentOrg.id]?.asTeamMemberRole ?? .member
-                projectViewModel.setCurrentOrganization(currentOrg, role: role)
-                
-                // CRITICAL FIX: Sync user role when ProjectViewModel connects - use original OrganizationRole
-                if let userRole = self.organizationRoles[currentOrg.id] {
-                    projectViewModel.setCurrentUserRole(userRole, forOrganization: currentOrg.id)
-                    self.logOrganizationEvent("Synchronized current user role to project view model.", organizationID: currentOrg.id)
-                } else {
-                    self.logWarning("Missing organization role during project view model connection.")
-                }
-                
-                // Call organization change directly
-                await projectViewModel.organizationDidChange(currentOrg.id)
-                
-                // CRITICAL: Ensure admin team member exists after connection
-                self.ensureAdminTeamMemberExists()
-                
-                self.logOrganizationEvent("Project view model synchronization finished.", organizationID: currentOrg.id)
+            self.logOrganizationEvent("Applying active organization to connected project view model.", organizationID: currentOrg.id)
+            let role = self.organizationRoles[currentOrg.id]?.asTeamMemberRole ?? .member
+            projectViewModel.setCurrentOrganization(currentOrg, role: role)
+            
+            // CRITICAL FIX: Sync user role when ProjectViewModel connects - use original OrganizationRole
+            if let userRole = self.organizationRoles[currentOrg.id] {
+                projectViewModel.setCurrentUserRole(userRole, forOrganization: currentOrg.id)
+                self.logOrganizationEvent("Synchronized current user role to project view model.", organizationID: currentOrg.id)
+            } else {
+                self.logWarning("Missing organization role during project view model connection.")
             }
+
+            scheduleOrganizationSwitchTask(
+                for: currentOrg,
+                completionMessage: "Project view model synchronization finished."
+            )
         } else {
             logInfo("Project view model connected without an active organization.")
         }
@@ -207,25 +240,11 @@ class AuthViewModel: ObservableObject {
             }
         }
         
-        Task { @MainActor in
-            self.logOrganizationEvent("Starting organization switch synchronization.", organizationID: organization.id)
-            await self.projectVM?.organizationDidChange(organization.id)
-            
-            await self.syncOrganizationTeamMembers()
-            
-            // CRITICAL: Also sync role after organization change
-            if let userRole = self.organizationRoles[organization.id] {
-                self.projectVM?.setCurrentUserRole(userRole, forOrganization: organization.id)
-                self.logOrganizationEvent("Reapplied current user role after organization switch.", organizationID: organization.id)
-            } else {
-                self.logWarning("Missing organization role after organization switch.")
-            }
-            
-            // CRITICAL: Ensure admin team member exists after connection
-            self.ensureAdminTeamMemberExists()
-            
-            self.logOrganizationEvent("Completed organization switch synchronization.", organizationID: organization.id)
-        }
+        self.logOrganizationEvent("Starting organization switch synchronization.", organizationID: organization.id)
+        scheduleOrganizationSwitchTask(
+            for: organization,
+            completionMessage: "Completed organization switch synchronization."
+        )
         
         logOrganizationEvent("Current organization updated.", organizationID: organization.id)
     }
@@ -431,6 +450,10 @@ class AuthViewModel: ObservableObject {
     }
 
     private func notifyProjectViewModelOrganizationChange(_ organizationID: String?) {
+        if organizationID == nil {
+            cancelOrganizationSwitchTask()
+        }
+
         if let projectVM = projectVM {
             Task { @MainActor in
                 await projectVM.organizationDidChange(organizationID)
@@ -699,6 +722,7 @@ class AuthViewModel: ObservableObject {
     
     func signOut() {
         logInfo("Signing out user and clearing organization state.")
+        cancelOrganizationSwitchTask()
         
         localCache.clearSessionState()
         

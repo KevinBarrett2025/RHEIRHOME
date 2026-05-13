@@ -72,6 +72,8 @@
 - `CloudKitAuthService+User` structured logging
 - `EnhancedOrganizationService` structured logging
 - `GlobalChatGPTService` structured logging
+- `AuthViewModel` fast-ship organization-switch task cancellation
+- `ProjectViewModel` stale organization-sync invalidation token
 - `ContextAwareReceiptService` structured logging
 - `ReceiptScannerView` structured logging
 - `EditProjectView` structured logging
@@ -172,6 +174,9 @@
 - Latest focused fast-ship org-sync cleanup parity result: `PASS` (`/tmp/rheir_orgsync_unit.xcresult`)
 - Latest focused fast-ship org-sync cleanup UI parity result: `PASS` (`/tmp/rheir_orgsync_ui_retry.xcresult`, `2 UI tests`)
 - Latest focused fast-ship org-sync cleanup Gate A result: `PASS` (`/tmp/rheir_gateA_orgsync.xcresult`)
+- Latest focused fast-ship sign-out/org-sync parity result: `PASS` (`/tmp/rheir_signout_sync_unit_retry.xcresult`)
+- Latest focused fast-ship sign-out/org-sync UI parity result: `PASS` on retry (`/tmp/rheir_signout_sync_ui_retry2.xcresult`, `2 UI tests`) after an initial runner bootstrap failure (`/tmp/rheir_signout_sync_ui_retry.xcresult`)
+- Latest focused fast-ship sign-out/org-sync Gate A result: `PASS` (`/tmp/rheir_gateA_signout_sync.xcresult`)
 
 ## Known Residual Risks
 - The fast-ship v1 release profile is now the active launch target, but same-user iCloud restore still needs explicit release-candidate validation before it can be treated as a ship promise.
@@ -179,7 +184,7 @@
 - Remaining raw `print(...)` statements are now limited to development-only seams such as `Shared/Services/Development/DevelopmentDataManager.swift`, `Shared/Services/StubServices.swift`, and `Shared/Services/PreviewAuthService.swift`.
 - Stable simulator and elevated CLI simulator paths are warning-clean for the active target, and device launch/file-state validation now shows compact `projects.json`, `offline_projects.json`, and prefs payloads; remaining release hardening centers on the simplified single-user contractor flow plus same-device and real-device QA.
 - The latest device freeze root cause was duplicate restored-organization activation in the fast-ship session path, not scanner or receipt persistence; the latest device sign-in logs now reach `ready` and complete org/project load on real hardware.
-- The current follow-on risk in that seam is redundant post-ready organization-switch work; the current code now centralizes heavy sync under `organizationDidChange(_:)` so the next device rerun can verify a leaner CloudKit zone and snapshot-load path.
+- The current follow-on risk in that seam is stale organization-sync work surviving sign-out or org-clear boundaries; the current code now cancels auth-side org-switch tasks and drops stale `organizationDidChange(_:)` results so the next device rerun can verify the cleared workspace stays cleared.
 - `RHEIRUITests` is now deterministic for signed-out, ready-state, fast-ship organization auto-resolution, project-selection, receipts gate/entry, labor gate/empty state, tasks gate/empty state, manual-entry vendor-picker, manual-entry add-vendor, manual-entry payment-method-picker, manual-entry add-payment-method, manual-entry submission, manual-receipt relaunch persistence, scanned-receipt return/reopen, saved receipt detail, receipt-detail action, persisted receipt-edit mutation, saved-receipt search/browse, category/filter drilldown, `By Vendor` grouped-summary/expansion coverage, and selected-project AI Project Calculator build/approve plus actual-cost mapping coverage; the next hardening slice is same-device and device QA on this simplified shell rather than more surface reshaping or managed-backend expansion.
 - `ProjectViewModel` is still oversized even after the extracted stores, though organization/project synchronization is now isolated behind `OrganizationProjectSyncStore`.
 - `CompanyStore` now lives in the compiled state layer rather than the settings view, but the broader company/project coordination flow still spans multiple UI files.

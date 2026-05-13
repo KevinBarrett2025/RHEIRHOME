@@ -14,6 +14,8 @@
 - `RHEIRTests.swift` now covers estimator rollups, SQLite persistence, versioning/approval, and draft-to-approved workflow behavior.
 - `RHEIRUITests.swift` now covers selected-project AI Project Calculator build/approve behavior on the real budget surface in deterministic UI mode.
 - `RheirApp.swift`, `BudgetBreakdownView.swift`, `RHEIRTests.swift`, and `RHEIRUITests.swift` now also cover seeded receipt/work-hour/task mapping parity so approved budget lines drive live committed/actual variance and clear unmatched queues deterministically.
+- `AuthViewModel.swift` now owns a single cancellable fast-ship organization-switch task, and `ProjectViewModel.swift` now invalidates stale `organizationDidChange(_:)` results when the active organization changes or clears.
+- `RHEIRTests.swift` now covers the interrupted organization-sync path that clears the current org mid-sync and proves stale async work cannot restore projects, access, or selection afterward.
 - `ProjectStore`, `ProjectRepository`, `OrganizationProjectSyncStore`, `ProjectAccessStore`, `ReceiptProjectStore`, `ReceiptIntelligenceStore`, `LaborStore`, `CompanyStore`, and `TeamMemberStore` are active seams in compiled code.
 - Active organization directory, vendor intelligence, and payment intelligence services now use structured logging.
 - Active invite routing, organization setup/selection, and Sign in with Apple coordination now use structured logging.
@@ -143,12 +145,13 @@
 - `AppSessionSupport.swift` and `AuthViewModel.swift` now dedupe restored fast-ship organization activation so `LocalCacheStore.selectionState` is not rewritten in a loop during post-Sign in with Apple session recovery.
 - `SessionStore` now resolves the fast-ship organization on the next main-actor turn after org loading completes, instead of activating the workspace inside synchronous auth publisher callbacks.
 - `AuthViewModel.swift` and `ProjectViewModel.swift` now centralize heavy post-selection organization sync under `organizationDidChange(_:)`, removing auth-side duplicate CloudKit zone setup plus connect-time eager organization project loads from the fast-ship restore path.
+- `AuthViewModel.swift` now cancels in-flight organization-switch work when the fast-ship session clears, and `ProjectViewModel.swift` now refuses stale org-sync results after `setCurrentOrganization(nil)` or a different org selection wins.
 - Continue broader selected-project estimator variance/runtime QA on top of the approved-baseline mapping seam inside the simplified v1 shell.
 - Continue broader selected-project receipt runtime QA in parallel with the estimator seam so the fast-ship contractor workflow stays stable on device and simulator, with same-device and real-device acceptance now the next receipt release seam after scanned-receipt return/reopen parity closed in simulator.
 - Relaunch persistence and scanned-receipt return/reopen are simulator-proven on the simplified shell, and restored-session/session-resolution parity is now green in focused tests; finish same-device and real-device acceptance before cutting a promo candidate.
 - Use `SHIP_READINESS_CHECKLIST.md` as the current release-progress reference alongside the STS docs.
 
 ## Blockers
-- The restored-session freeze after Sign in with Apple is now cleared in the latest device sign-in logs, but the leaner post-ready organization-switch path still needs one confirming device rerun before the rest of the acceptance pack.
+- The restored-session freeze after Sign in with Apple is now cleared in the latest device sign-in logs, but the next device rerun still needs to confirm that sign-out or session clear does not replay stale organization-sync work after the workspace is gone.
 - Same-user iCloud restore/sync is not yet treated as ship-proven; if it fails release-candidate validation, local-device persistence must remain the authoritative launch promise.
 - Raw in-sandbox `xcodebuild` remains less reliable than elevated CLI or the stable `xcodebuildmcp` simulator path in this environment.

@@ -93,6 +93,13 @@ private final class RecordingSessionProjectViewModel: ProjectViewModel {
     }
 }
 
+@MainActor
+private final class InterruptingOrganizationSyncProjectViewModel: ProjectViewModel {
+    override func setupCloudKitZoneForOrganization(_ organizationID: String) async {
+        setCurrentOrganization(nil)
+    }
+}
+
 private actor RecordingCloudKitProjectDatabase: CloudKitProjectDatabase {
     enum Failure: Error {
         case expectedFetchBeforeSave(String)
@@ -484,6 +491,48 @@ struct SessionSupportTests {
         #expect(projectViewModel.zoneSetupCalls == [organization.id])
         #expect(projectViewModel.organizationDidChangeCalls == [organization.id])
         #expect(sessionStore.state == .ready)
+    }
+
+    @Test
+    @MainActor
+    func staleOrganizationSyncDoesNotRestoreProjectsAfterOrganizationClears() async {
+        let suiteName = "SessionSupportTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let organization = Organization(
+            id: "org-sync-stale",
+            name: "North Shore Builders",
+            members: ["member-1"],
+            adminUserID: "admin-1"
+        )
+        let storedProject = Project(
+            name: "Kitchen Remodel",
+            client: "Taylor",
+            totalBudget: 12000,
+            startDate: .now,
+            endDate: .now.addingTimeInterval(86400),
+            organizationID: organization.id
+        )
+
+        let projectStore = ProjectStore(userDefaults: defaults)
+        projectStore.saveProjects([storedProject], for: organization.id)
+
+        let projectViewModel = InterruptingOrganizationSyncProjectViewModel(
+            offlineDataManager: OfflineDataManager(),
+            projectStore: projectStore
+        )
+        projectViewModel.setCurrentOrganization(organization)
+
+        await projectViewModel.organizationDidChange()
+
+        #expect(projectViewModel.currentOrganizationID == nil)
+        #expect(projectViewModel.organizationProjects.isEmpty)
+        #expect(projectViewModel.accessibleProjects.isEmpty)
+        #expect(projectViewModel.selectedProject == nil)
     }
 
     @Test
