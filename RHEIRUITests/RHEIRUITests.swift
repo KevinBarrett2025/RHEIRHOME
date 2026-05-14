@@ -17,6 +17,7 @@ final class RHEIRUITests: XCTestCase {
     private enum UITestLaunchMode: String {
         case signedOut = "signed_out"
         case ready = "ready"
+        case noOrganization = "no_organization"
         case selectingOrganization = "selecting_organization"
         case projectSelection = "project_selection"
         case selectedProject = "selected_project"
@@ -90,6 +91,25 @@ final class RHEIRUITests: XCTestCase {
             "Expected the organization-selection surface to stay hidden in fast-ship v1 mode."
         )
         XCTAssertTrue(tabBar.buttons["Projects"].exists, "Expected Projects tab after streamlined organization resolution.")
+    }
+
+    @MainActor
+    func testNoOrganizationModeUsesFastShipPersonalWorkspace() throws {
+        let app = makeApp(mode: .noOrganization)
+        app.launch()
+
+        let tabBar = app.tabBars.firstMatch
+        XCTAssertTrue(
+            tabBar.waitForExistence(timeout: 5),
+            "Expected fast-ship v1 mode to create a personal workspace fallback and show the main tab shell."
+        )
+
+        XCTAssertFalse(
+            app.staticTexts["Create Your Organization"].exists,
+            "Expected fast-ship v1 mode to hide legacy organization setup when CloudKit organizations are unavailable."
+        )
+        XCTAssertFalse(tabBar.buttons["Company"].exists, "Expected Company tab to stay hidden in fast-ship v1 mode.")
+        XCTAssertTrue(tabBar.buttons["Projects"].exists, "Expected Projects tab after personal workspace fallback.")
     }
 
     @MainActor

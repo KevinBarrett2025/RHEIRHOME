@@ -3,7 +3,7 @@
 ## Repo
 - Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Branch: `gm/rheir-hardening-phase1`
-- HEAD: `4986c4752c7c9944156303d211da0e688151023c`
+- HEAD: `130f53c2bbeccd56baa5299a3583b4d654995b2b`
 
 ## Active Initiative
 - RHEIR release hardening, phase 2 estimator foundation and contractor workflow hardening.
@@ -156,6 +156,8 @@
 - Expanded `Shared/Views/Auth/AppSessionSupport.swift` startup compaction so it now rewrites undecodable legacy project JSON and on-disk `Documents/projects.json` / `Documents/offline_projects.json` payloads before session restore, stripping both `receiptImageData` and legacy `imageDatas` blobs.
 - Hardened `Shared/Services/OfflineDataManager.swift` so offline project files persist `Project.persistenceSafeCopy` payloads instead of raw inline receipt-image blobs.
 - Expanded focused `RHEIRTests/RHEIRTests.swift` parity to prove raw legacy `imageDatas` payloads compact cleanly from `UserDefaults`, on-disk project files, and offline project file writes.
+- Added fast-ship personal-workspace fallback routing so restored signed-in users with no resolved CloudKit organization stay in the simplified v1 shell instead of landing on legacy `Create Your Organization` onboarding.
+- Added focused session and UI smoke coverage proving fast-ship no-organization launch activates a personal workspace, hides Company/admin setup, and lands on the Projects/Receipts/Labor/Tasks shell.
 
 ## In Progress
 - Lock the shipping app into the fast-ship v1 release profile so the visible shell stays single-user focused: `Projects`, `Receipts`, `Labor`, `Tasks`, plus budget `Breakdown` / `Estimator`.
@@ -166,10 +168,12 @@
 
 ## Blockers
 - Same-user iCloud sync still needs release-candidate validation before it can be treated as a launch promise; if it is not green by cutoff, local-device persistence remains the ship path and cross-device expectations must stay muted.
-- The fast-ship sign-in/sign-out seam is now clean on device; the remaining acceptance risk is the end-to-end selected-project receipt flow on hardware rather than session routing.
+- The fast-ship sign-in/sign-out seam is now clean on device, and the no-organization fallback is simulator-proven; the remaining acceptance risk is confirming on hardware that launch never exposes legacy organization onboarding and the selected-project receipt flow remains intact.
 - Raw in-sandbox `xcodebuild` commands are still less reliable than elevated CLI or `xcodebuildmcp` paths in this environment because CoreSimulator and DerivedData access remain sandbox-sensitive.
 
 ## Latest Evidence
+- Fast-ship personal-workspace fallback parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_fastship_personal_workspace_dd -resultBundlePath /tmp/rheir_fastship_personal_workspace_20260514_rerun3.xcresult test -only-testing:RHEIRTests/SessionSupportTests -only-testing:RHEIRUITests/RHEIRUITests/testOrganizationSelectionModeAutoResolvesIntoReadyShell -only-testing:RHEIRUITests/RHEIRUITests/testNoOrganizationModeUsesFastShipPersonalWorkspace` -> PASS (`/tmp/rheir_fastship_personal_workspace_20260514_rerun3.xcresult`, `16 session tests plus 2 UI smokes`)
+- Fast-ship personal-workspace Gate A: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_fastship_personal_workspace_dd -resultBundlePath /tmp/rheir_gateA_fastship_personal_workspace_20260514.xcresult clean build` -> PASS (`/tmp/rheir_gateA_fastship_personal_workspace_20260514.xcresult`)
 - `ReceiptsView.swift` now renders a selected-category drilldown header with the category-scoped total and contributing receipt count, so a Plumbing/Framing/etc. filter shows the spend total at a glance instead of only on individual receipt cards.
 - `Receipt.swift` now exposes `budgetScopedAmount(for:)`, and `ProjectViewModel+Filters.swift` uses it for active Materials, General Conditions, and Contingency spend, preventing mixed itemized receipts from being undercounted in high-level budget totals.
 - `ProjectAccessStore` now resolves a selected project to the matching loaded accessible-project payload, `ProjectViewModel` now detects same-ID project payload changes during organization refresh, and `SessionStore` now reselects a hydrated project when restored selection receipt data is stale.

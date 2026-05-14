@@ -157,6 +157,9 @@
 - `ProjectAccessStore` selected-project payload hydration for launch-restored receipts
 - `ProjectViewModel` same-ID project payload refresh detection during organization reconciliation
 - `SessionStore` restored selected-project rehydration from accessible project payloads
+- `SessionStore` fast-ship personal-workspace fallback when CloudKit organizations are unavailable
+- `AuthRouterView` fast-ship guard that keeps legacy organization setup hidden from the shipping shell
+- `RHEIRUITests` no-organization fast-ship personal-workspace smoke coverage
 - `RHEIRTests` duplicate receipt normalization and CloudKit upsert coverage
 - `VendorKnowledgeService` structured logging
 - `PaymentMethodKnowledgeService` structured logging
@@ -201,6 +204,9 @@
 - Latest focused selected-category header Gate A result: `PASS` (`/tmp/rheir_gateA_receipt_category_header.xcresult`)
 - Latest focused launch-time receipt restore parity result: `PASS` (`/tmp/rheir_receipt_restore_parity_20260514_escalated.xcresult`, focused access-store regression plus restored-session UI smoke)
 - Latest focused launch-time receipt restore Gate A result: `PASS` (`/tmp/rheir_gateA_receipt_restore_20260514.xcresult`)
+- Focused fast-ship personal-workspace fallback parity path: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_fastship_personal_workspace_dd -resultBundlePath /tmp/rheir_fastship_personal_workspace_20260514_rerun3.xcresult test -only-testing:RHEIRTests/SessionSupportTests -only-testing:RHEIRUITests/RHEIRUITests/testOrganizationSelectionModeAutoResolvesIntoReadyShell -only-testing:RHEIRUITests/RHEIRUITests/testNoOrganizationModeUsesFastShipPersonalWorkspace`
+- Latest focused fast-ship personal-workspace fallback parity result: `PASS` (`/tmp/rheir_fastship_personal_workspace_20260514_rerun3.xcresult`, `16 session tests plus 2 UI smokes`)
+- Latest focused fast-ship personal-workspace fallback Gate A result: `PASS` (`/tmp/rheir_gateA_fastship_personal_workspace_20260514.xcresult`)
 
 ## Known Residual Risks
 - The fast-ship v1 release profile is now the active launch target, but same-user iCloud restore still needs explicit release-candidate validation before it can be treated as a ship promise.
@@ -209,6 +215,7 @@
 - Stable simulator and elevated CLI simulator paths are warning-clean for the active target, and device launch/file-state validation now shows compact `projects.json`, `offline_projects.json`, and prefs payloads; remaining release hardening centers on the simplified single-user contractor flow plus same-device and real-device QA.
 - The latest device freeze root cause was duplicate restored-organization activation in the fast-ship session path, not scanner or receipt persistence; the latest device sign-in logs now reach `ready` and complete org/project load on real hardware.
 - The latest device logs now show the sign-out boundary holding cleanly with `Cleared active organization...` and `No organization selected; clearing organization-scoped state.` instead of replaying stale org-sync work. The remaining active device risk is the receipt flow on hardware rather than session routing.
+- The no-organization fast-ship path is simulator-proven, but the device path that previously showed `Create Your Organization` still needs a hardware rerun before treating the personal-workspace fallback as release-accepted.
 - The next device acceptance pass must still confirm the new scanned-item persistence/edit patch on hardware: saved scanned receipts should reopen with itemized lines intact, those lines should appear inside the saved edit sheet, edited mixed-category items should drive category summaries, selected-category headers, and drilldown totals by itemized spend, the list quick-view should open the real receipt image, the scan-review category control should remain legible, and the ellipsis menu should fully cover edit/delete after the duplicate bottom buttons were removed.
 - The latest launch-polish slice removed the last two recurring active-path warnings by aligning receipt-level legacy bridge totals with detailed receipt categories and replacing string asset-name status colors with semantic SwiftUI tint colors.
 - `RHEIRUITests` is now deterministic for signed-out, ready-state, fast-ship organization auto-resolution, project-selection, receipts gate/entry, labor gate/empty state, tasks gate/empty state, manual-entry vendor-picker, manual-entry add-vendor, manual-entry payment-method-picker, manual-entry add-payment-method, manual-entry submission, manual-receipt relaunch persistence, scanned-receipt return/reopen, saved receipt detail, receipt-detail action, persisted receipt-edit mutation, saved-receipt search/browse, category/filter drilldown, `By Vendor` grouped-summary/expansion coverage, and selected-project AI Project Calculator build/approve plus actual-cost mapping coverage; the next hardening slice is same-device and device QA on this simplified shell rather than more surface reshaping or managed-backend expansion.

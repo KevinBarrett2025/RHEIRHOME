@@ -8,6 +8,7 @@ import UIKit
 private enum UITestLaunchMode: String {
     case signedOut = "signed_out"
     case ready = "ready"
+    case noOrganization = "no_organization"
     case selectingOrganization = "selecting_organization"
     case projectSelection = "project_selection"
     case selectedProject = "selected_project"
@@ -63,6 +64,16 @@ private struct AppLaunchConfiguration {
             )
             authViewModel.setCurrentOrganization(organization)
             projectViewModel.setCurrentOrganization(organization, role: .admin)
+
+        case .noOrganization:
+            let user = User(id: "ui-test-no-org-user", email: "no-org-ui-test@rheirhome.com")
+            applyCommonBootstrap(
+                authViewModel: authViewModel,
+                projectViewModel: projectViewModel,
+                user: user,
+                organizations: [],
+                organizationRoles: [:]
+            )
 
         case .selectingOrganization:
             let user = User(id: "ui-test-org-user", email: "org-ui-test@rheirhome.com")
@@ -415,6 +426,8 @@ struct RheirApp: App {
         case .signedOut:
             authService = SignedOutUITestAuthService()
         case .ready:
+            authService = SignedOutUITestAuthService()
+        case .noOrganization:
             authService = SignedOutUITestAuthService()
         case .selectingOrganization:
             authService = SignedOutUITestAuthService()

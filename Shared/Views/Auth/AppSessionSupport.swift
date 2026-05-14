@@ -613,6 +613,9 @@ final class SessionStore: ObservableObject {
                     authViewModel.showAdminInfoUpdate &&
                     authViewModel.currentOrg != nil {
             nextState = .adminOnboarding
+        } else if releaseProfile.shouldUseStreamlinedSessionRouting &&
+                    authViewModel.currentOrg == nil {
+            nextState = .launching
         } else if authViewModel.currentOrg == nil || (!releaseProfile.shouldUseStreamlinedSessionRouting && isChoosingOrganization) {
             nextState = .selectingOrganization
         } else {
@@ -704,9 +707,15 @@ final class SessionStore: ObservableObject {
 
         isChoosingOrganization = false
         clearPendingInviteIfNeededForReleaseProfile()
+        activatePersonalWorkspaceIfNeeded()
 
         if authViewModel.showAdminInfoUpdate {
             authViewModel.dismissAdminInfoUpdate()
+        }
+
+        if authViewModel.needsOrganizationSetup || authViewModel.showOrganizationSetup {
+            authViewModel.needsOrganizationSetup = false
+            authViewModel.showOrganizationSetup = false
         }
     }
 
@@ -755,5 +764,76 @@ final class SessionStore: ObservableObject {
         )
         defer { isResolvingStreamlinedOrganization = false }
         authViewModel.setCurrentOrganization(resolvedOrganization)
+    }
+
+    private func activatePersonalWorkspaceIfNeeded() {
+        guard hasFinishedLaunch,
+              let user = authViewModel.user,
+              authViewModel.currentOrg == nil,
+              !authViewModel.isLoadingOrgs,
+              authViewModel.organizations.isEmpty,
+              authViewModel.userOrganizations.isEmpty,
+              !isProcessingInvite,
+              !isResolvingStreamlinedOrganization else {
+            return
+        }
+
+        let organization = makePersonalWorkspaceOrganization(for: user)
+        isResolvingStreamlinedOrganization = true
+        defer { isResolvingStreamlinedOrganization = false }
+
+        selectionState.organizationID = organization.id
+        localCache.selectionState = selectionState
+        authViewModel.organizationRoles[organization.id] = .admin
+
+        Logger.session.notice(
+            "Activated fast-ship personal workspace fallback [org=\(organization.id, privacy: .private(mask: .hash))]"
+        )
+
+        authViewModel.setCurrentOrganization(organization)
+
+        if !shouldConnectProjectViewModel {
+            projectViewModel.setCurrentOrganization(organization, role: .admin)
+        }
+    }
+
+    private func makePersonalWorkspaceOrganization(for user: User) -> Organization {
+        let organizationID = firstKnownWorkspaceID(for: user)
+
+        return Organization(
+            id: organizationID,
+            name: "Personal Workspace",
+            members: [user.id],
+            adminUserID: user.id,
+            industry: "Construction"
+        )
+    }
+
+    private func firstKnownWorkspaceID(for user: User) -> String {
+        let candidates: [String?] = [
+            selectionState.organizationID,
+            localCache.previousOrganizationID,
+            projectViewModel.selectedProject?.organizationID,
+            projectViewModel.accessibleProjects.first?.organizationID,
+            projectViewModel.organizationProjects.first?.organizationID,
+            projectViewModel.projects.first?.organizationID
+        ]
+
+        if let existingID = candidates.compactMap({ $0?.trimmingCharacters(in: .whitespacesAndNewlines) })
+            .first(where: { !$0.isEmpty }) {
+            return existingID
+        }
+
+        return "personal-\(sanitizedWorkspaceComponent(from: user.id))"
+    }
+
+    private func sanitizedWorkspaceComponent(from value: String) -> String {
+        let sanitized = value.replacingOccurrences(
+            of: "[^A-Za-z0-9-]",
+            with: "-",
+            options: .regularExpression
+        )
+        let trimmed = String(sanitized.prefix(48)).trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+        return trimmed.isEmpty ? "workspace" : trimmed
     }
 }

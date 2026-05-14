@@ -480,7 +480,7 @@ struct SessionSupportTests {
         try? await Task.sleep(nanoseconds: 50_000_000)
         #expect(authViewModel.currentOrg == nil)
         #expect(projectViewModel.setCurrentOrganizationCalls.isEmpty)
-        #expect(sessionStore.state == .selectingOrganization)
+        #expect(sessionStore.state == .launching)
 
         authViewModel.isLoadingOrgs = false
 
@@ -491,6 +491,49 @@ struct SessionSupportTests {
         #expect(projectViewModel.zoneSetupCalls == [organization.id])
         #expect(projectViewModel.organizationDidChangeCalls == [organization.id])
         #expect(sessionStore.state == .ready)
+    }
+
+    @Test
+    @MainActor
+    func streamlinedSessionActivatesPersonalWorkspaceWhenNoCloudOrganizationsResolve() async {
+        let suiteName = "SessionSupportTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let localCache = LocalCacheStore(userDefaults: defaults)
+        let user = User(id: "fast-ship-no-org-user", email: "owner@rheirhome.com")
+        let cachedWorkspaceID = "org-offline-personal"
+        localCache.selectionState = SelectionState(organizationID: cachedWorkspaceID, projectID: nil)
+
+        let authViewModel = AuthViewModel(service: StubAuthService())
+        let projectViewModel = RecordingSessionProjectViewModel()
+        let sessionStore = SessionStore(
+            authViewModel: authViewModel,
+            projectViewModel: projectViewModel,
+            localCache: localCache,
+            launchDelayNanoseconds: 0
+        )
+
+        sessionStore.connectIfNeeded()
+        authViewModel.user = user
+        authViewModel.organizations = []
+        authViewModel.userOrganizations = []
+        authViewModel.isLoadingOrgs = false
+
+        try? await Task.sleep(nanoseconds: 150_000_000)
+
+        #expect(sessionStore.state == .ready)
+        #expect(authViewModel.currentOrg?.id == cachedWorkspaceID)
+        #expect(authViewModel.currentOrg?.name == "Personal Workspace")
+        #expect(authViewModel.needsOrganizationSetup == false)
+        #expect(authViewModel.showOrganizationSetup == false)
+        #expect(authViewModel.organizationRoles[cachedWorkspaceID] == .admin)
+        #expect(projectViewModel.setCurrentOrganizationCalls == [cachedWorkspaceID])
+        #expect(projectViewModel.zoneSetupCalls == [cachedWorkspaceID])
+        #expect(projectViewModel.organizationDidChangeCalls == [cachedWorkspaceID])
     }
 
     @Test

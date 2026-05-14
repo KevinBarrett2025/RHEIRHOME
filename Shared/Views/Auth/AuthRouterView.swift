@@ -4,6 +4,7 @@ struct AuthRouterView: View {
     @EnvironmentObject private var authVM: AuthViewModel
     @EnvironmentObject private var projectVM: ProjectViewModel
     @EnvironmentObject private var sessionStore: SessionStore
+    private let releaseProfile = AppReleaseProfile.current
 
     var body: some View {
         NavigationStack {
@@ -35,7 +36,9 @@ struct AuthRouterView: View {
             }
 
         case .selectingOrganization:
-            if authVM.isLoadingOrgs {
+            if releaseProfile.shouldUseStreamlinedSessionRouting {
+                organizationLoadingView
+            } else if authVM.isLoadingOrgs {
                 organizationLoadingView
             } else if authVM.organizations.isEmpty {
                 OrganizationSetupView()
