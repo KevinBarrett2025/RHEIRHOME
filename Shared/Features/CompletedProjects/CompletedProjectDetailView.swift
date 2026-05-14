@@ -1,7 +1,13 @@
 import SwiftUI
 
 struct CompletedProjectDetailView: View {
+    @EnvironmentObject private var projectVM: ProjectViewModel
+    @Environment(\.dismiss) private var dismiss
+
     let project: Project
+    @State private var isConfirmingReopen = false
+    @State private var isReopening = false
+    @State private var reopenErrorMessage: String?
     
     var body: some View {
         ScrollView {
@@ -51,13 +57,74 @@ struct CompletedProjectDetailView: View {
                         ProjectDetailRow(label: "Total Receipts", value: "\(project.receipts.count)")
                         ProjectDetailRow(label: "Progress Logs", value: "\(project.progressLogs.count)")
                     }
+
+                    ProjectDetailSection(title: "Actions") {
+                        Button {
+                            isConfirmingReopen = true
+                        } label: {
+                            HStack {
+                                Label("Reopen Project", systemImage: "arrow.uturn.backward.circle")
+                                    .fontWeight(.semibold)
+                                Spacer()
+                                if isReopening {
+                                    ProgressView()
+                                }
+                            }
+                        }
+                        .disabled(isReopening)
+                        .accessibilityIdentifier("reopen-completed-project-button")
+
+                        Text("Move this job back to Active Projects so you can add missing receipts, hours, tasks, or year-end corrections.")
+                            .font(.footnote)
+                            .foregroundColor(.secondary)
+                    }
                 }
                 .padding(.horizontal)
             }
         }
         .navigationTitle("Project Closeout")
         .navigationBarTitleDisplayMode(.inline)
+        .confirmationDialog(
+            "Reopen Project?",
+            isPresented: $isConfirmingReopen,
+            titleVisibility: .visible
+        ) {
+            Button("Move to Active") {
+                Task {
+                    await reopenProject()
+                }
+            }
+
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This keeps all closeout data, then returns the project to Active Projects for edits and additional job-cost entries.")
+        }
+        .alert("Could Not Reopen Project", isPresented: Binding(
+            get: { reopenErrorMessage != nil },
+            set: { isPresented in
+                if !isPresented {
+                    reopenErrorMessage = nil
+                }
+            }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(reopenErrorMessage ?? "Try again.")
+        }
         .accessibilityIdentifier("completed-project-detail-\(project.id.uuidString)")
+    }
+
+    private func reopenProject() async {
+        guard !isReopening else { return }
+        isReopening = true
+        defer { isReopening = false }
+
+        guard await projectVM.reopenProject(project, selectProject: true) != nil else {
+            reopenErrorMessage = "The project could not be moved back to Active Projects."
+            return
+        }
+
+        dismiss()
     }
 }
 
@@ -121,5 +188,6 @@ struct CompletedProjectDetailView_Previews: PreviewProvider {
         )
         
         CompletedProjectDetailView(project: sampleProject)
+            .environmentObject(ProjectViewModel(offlineDataManager: OfflineDataManager()))
     }
 }

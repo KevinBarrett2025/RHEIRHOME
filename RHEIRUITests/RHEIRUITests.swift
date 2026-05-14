@@ -212,6 +212,62 @@ final class RHEIRUITests: XCTestCase {
     }
 
     @MainActor
+    func testCompletedProjectCanBeReopenedIntoActiveWorkContext() throws {
+        let app = makeApp(mode: .projectSelection)
+        app.launch()
+
+        XCTAssertTrue(
+            app.staticTexts["Projects"].waitForExistence(timeout: 5),
+            "Expected deterministic project-selection UI test mode to expose the project-selection home."
+        )
+
+        let completedSegment = app.segmentedControls.buttons["Completed"]
+        if completedSegment.waitForExistence(timeout: 3) {
+            completedSegment.tap()
+        } else {
+            app.buttons["Completed"].tap()
+        }
+
+        let completedProjectCard = app.buttons[Self.completedProjectCardIdentifier]
+        XCTAssertTrue(
+            completedProjectCard.waitForExistence(timeout: 5),
+            "Expected the completed project card to be available for reopen."
+        )
+        completedProjectCard.tap()
+
+        let reopenButton = app.buttons["reopen-completed-project-button"]
+        XCTAssertTrue(
+            reopenButton.waitForExistence(timeout: 5),
+            "Expected completed closeout detail to expose a single reopen action."
+        )
+        reopenButton.tap()
+
+        let confirmButton = app.buttons["Move to Active"]
+        XCTAssertTrue(
+            confirmButton.waitForExistence(timeout: 5),
+            "Expected reopen confirmation before moving a completed project back to active."
+        )
+        confirmButton.tap()
+
+        let tabBar = app.tabBars.firstMatch
+        XCTAssertTrue(
+            tabBar.waitForExistence(timeout: 5),
+            "Expected reopening a completed project to restore active project work tabs."
+        )
+
+        XCTAssertTrue(
+            app.staticTexts["3 Active Projects"].waitForExistence(timeout: 5),
+            "Expected the reopened project to return to the Active project scope."
+        )
+
+        tabBar.buttons["Receipts"].tap()
+        XCTAssertTrue(
+            app.staticTexts["Lumber Yard"].waitForExistence(timeout: 5),
+            "Expected the reopened project to keep its existing receipt data available for cleanup."
+        )
+    }
+
+    @MainActor
     func testLaborModeRequiresAndUsesSelectedProjectContext() throws {
         let app = makeApp(mode: .projectSelection)
         app.launch()

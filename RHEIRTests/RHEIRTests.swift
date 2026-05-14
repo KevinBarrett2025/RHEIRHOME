@@ -1422,6 +1422,65 @@ struct ProjectMutationPropagationTests {
         #expect(viewModel.accessibleProjects.first?.status == .completed)
         #expect(projectStore.loadProjects(for: orgID).first?.status == .completed)
     }
+
+    @Test
+    func reopeningCompletedProjectReturnsItToActiveWorkContextWithDataIntact() async {
+        let suiteName = "ProjectReopenVisibilityTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let orgID = UUID().uuidString
+        let repository = RecordingProjectRepository()
+        let projectStore = ProjectStore(userDefaults: defaults)
+        let viewModel = ProjectViewModel(
+            offlineDataManager: OfflineDataManager(),
+            projectStore: projectStore,
+            projectRepository: repository
+        )
+        viewModel.setCurrentOrganization(
+            Organization(id: orgID, name: "Personal Workspace"),
+            role: .admin
+        )
+
+        let receipt = Receipt(
+            id: "reopened-receipt",
+            vendor: "Lumber Yard",
+            date: .now,
+            amount: 812.44,
+            category: .material,
+            paymentMethod: "Card"
+        )
+        let task = ProjectTask(title: "Final punch list", projectID: UUID())
+        var project = Project(
+            id: task.projectID,
+            name: "Closed Deck",
+            client: "Client D",
+            totalBudget: 12000,
+            startDate: .now,
+            endDate: .now.addingTimeInterval(-86400),
+            status: .completed,
+            organizationID: orgID
+        )
+        project.receipts = [receipt]
+        project.tasks = [task]
+        viewModel.projects = [project]
+        viewModel.organizationProjects = [project]
+        viewModel.updateAccessibleProjects()
+
+        let reopenedProject = await viewModel.reopenProject(project)
+
+        #expect(reopenedProject?.status == .active)
+        #expect(viewModel.selectedProject?.id == project.id)
+        #expect(viewModel.activeProjects.map(\.id) == [project.id])
+        #expect(viewModel.completedProjects.isEmpty)
+        #expect(viewModel.selectedProject?.receipts.map(\.id) == [receipt.id])
+        #expect(viewModel.selectedProject?.tasks.map(\.id) == [task.id])
+        #expect(projectStore.loadProjects(for: orgID).first?.status == .active)
+        #expect(repository.savedProjects.first?.project.status == .active)
+    }
 }
 
 struct ReceiptIntelligenceStoreTests {

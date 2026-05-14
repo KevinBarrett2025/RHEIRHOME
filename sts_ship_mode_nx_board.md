@@ -20,6 +20,8 @@
 - `RHEIRTests.swift` now proves project mutation propagation for updates and deletes, including selected-project refresh and derived receipt snapshot invalidation.
 - `LandingPageView` now exposes Active and Completed project scopes in the fast-ship Projects home, completed projects open closeout detail instead of active work context, and `ProjectViewModel` clears the selected project when it is completed.
 - `RHEIRTests.swift` and `RHEIRUITests.swift` now prove completed jobs remain recoverable from Projects and do not reveal Receipts/Labor/Tasks until an active project is selected.
+- `CompletedProjectDetailView` now includes a confirmed `Reopen Project` action, and `ProjectViewModel.reopenProject(_:)` moves a completed job back to Active Projects through the shared mutation seam without losing receipts, tasks, or closeout data.
+- `RheirApp.swift` now clears offline UI-test artifacts before deterministic non-preserved UI launches, keeping completed-project archive/reopen smokes isolated from stale simulator document-storage projects.
 - Canonical tree cleanup completed in the working branch.
 - Session flow consolidated around `AppSessionSupport.swift`.
 - `Project.swift` now carries the first compiled estimator domain with intake, draft, versioned baseline, variance, source-evidence, and proposal-view models plus bridge helpers back into `Project` budget summary fields.
@@ -164,6 +166,7 @@
 
 ## Open Work
 - Use the new global project mutation/refresh contract while restoring Business Resources, Labor, Tasks, Reports, and remaining UI cleanup so those flows inherit immediate refresh instead of adding one-off state writes.
+- Completed-project archive/reopen is simulator-proven; verify the reopen action on device during the next project lifecycle acceptance pass.
 - Reintroduce Business Resources without exposing Company/Organization: workers, job titles, labor rates, vendors, and payment methods/cards.
 - Rework Labor into a shippable contractor workflow with worker/rate management, partial/split payments, check/reference metadata, edit payment, and unpay/reissue.
 - Rework Tasks into a shippable contractor workflow with multi-task CRUD, assignment, due/overdue state, completion proof, photos, and immediate project/report refresh.

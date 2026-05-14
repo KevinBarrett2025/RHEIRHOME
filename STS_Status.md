@@ -3,7 +3,7 @@
 ## Repo
 - Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Branch: `gm/rheir-hardening-phase1`
-- HEAD: `62dda5be97038522de3e7b073ce39b61738da7d1`
+- HEAD: `c5ed7f3fb55dc021d5986e5543272832bcab5d2a`
 
 ## Active Initiative
 - RHEIR release hardening, Fast-Ship Hybrid contractor workflow hardening.
@@ -165,6 +165,8 @@
 - Added focused project mutation propagation tests proving project updates and deletes immediately refresh visible collections, selected-project state, and derived receipt snapshots.
 - Restored completed-project visibility in the fast-ship Projects home with Active/Completed project scopes, closeout detail navigation, and selected-project clearing when an active project is completed.
 - Added deterministic completed-project unit/UI coverage proving completed jobs remain recoverable and do not unlock active Receipts/Labor/Tasks context before a new active project is selected.
+- Added a safe completed-project reopen path so closed jobs can return to Active Projects with receipts, tasks, and closeout data intact for accidental closeout recovery, missing job-cost entries, or year-end corrections.
+- Added deterministic completed-project reopen unit/UI coverage and a UI-test offline artifact reset so archive/reopen parity remains isolated from prior simulator document-storage state.
 
 ## In Progress
 - Lock the shipping app into the Fast-Ship Hybrid release profile so the visible shell stays single-user focused while hidden CloudKit/personal-workspace infrastructure remains available.
@@ -180,6 +182,8 @@
 - Raw in-sandbox `xcodebuild` commands are still less reliable than elevated CLI or `xcodebuildmcp` paths in this environment because CoreSimulator and DerivedData access remain sandbox-sensitive.
 
 ## Latest Evidence
+- Completed-project archive/reopen focused parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_reopen_completed_project_parity_rerun4_dd -resultBundlePath /tmp/rheir_reopen_completed_project_parity_rerun4.xcresult test -only-testing:RHEIRTests/ProjectMutationPropagationTests -only-testing:RHEIRUITests/RHEIRUITests/testProjectSelectionShowsCompletedProjectArchive -only-testing:RHEIRUITests/RHEIRUITests/testCompletedProjectCanBeReopenedIntoActiveWorkContext -only-testing:RHEIRUITests/RHEIRUITests/testProjectSelectionModeRequiresAndAppliesProjectContext` -> PASS (`/tmp/rheir_reopen_completed_project_parity_rerun4.xcresult`, `4 unit tests plus 3 UI tests`)
+- Completed-project archive/reopen Gate A: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_reopen_completed_project_dd -resultBundlePath /tmp/rheir_gateA_reopen_completed_project.xcresult clean build` -> PASS (`/tmp/rheir_gateA_reopen_completed_project.xcresult`)
 - Completed-project archive focused parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_completed_projects_parity_dd -resultBundlePath /tmp/rheir_completed_projects_parity.xcresult test -only-testing:RHEIRTests/ProjectMutationPropagationTests -only-testing:RHEIRUITests/RHEIRUITests/testProjectSelectionShowsCompletedProjectArchive -only-testing:RHEIRUITests/RHEIRUITests/testProjectSelectionModeRequiresAndAppliesProjectContext` -> PASS (`/tmp/rheir_completed_projects_parity.xcresult`, `3 unit tests plus 2 UI tests`)
 - Project mutation contract Gate A: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_mutation_contract_dd -resultBundlePath /tmp/rheir_gateA_mutation_contract.xcresult clean build` -> PASS (`/tmp/rheir_gateA_mutation_contract.xcresult`)
 - Project mutation contract focused parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_mutation_access_parity_dd -resultBundlePath /tmp/rheir_mutation_access_parity.xcresult test -only-testing:RHEIRTests/ProjectMutationPropagationTests -only-testing:RHEIRTests/ProjectAccessStoreTests` -> PASS (`/tmp/rheir_mutation_access_parity.xcresult`, `5 tests across 2 suites`)

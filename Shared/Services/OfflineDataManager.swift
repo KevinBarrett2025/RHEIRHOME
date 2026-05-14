@@ -555,6 +555,23 @@ class OfflineStorageManager {
         self.documentsURL = documentsURL
         createDirectoriesIfNeeded()
     }
+
+    static func clearUITestArtifacts(fileManager: FileManager = .default) {
+        let documentsURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let storage = OfflineStorageManager(documentsURL: documentsURL)
+        let artifactURLs = [
+            storage.projectsURL,
+            storage.progressLogsURL,
+            storage.receiptsURL,
+            storage.workHoursURL,
+            storage.offlineStateURL,
+            storage.photosDirectoryURL
+        ]
+
+        for artifactURL in artifactURLs where fileManager.fileExists(atPath: artifactURL.path) {
+            try? fileManager.removeItem(at: artifactURL)
+        }
+    }
     
     private func createDirectoriesIfNeeded() {
         try? FileManager.default.createDirectory(at: photosDirectoryURL, withIntermediateDirectories: true)

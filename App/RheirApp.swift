@@ -435,6 +435,8 @@ struct RheirApp: App {
         let launchConfiguration = AppLaunchConfiguration()
         if launchConfiguration.uiTestMode != nil && !launchConfiguration.shouldPreserveState {
             LocalCacheStore.shared.clearAllKnownSessionKeys()
+            ProjectStore().clearAllStoredData()
+            OfflineStorageManager.clearUITestArtifacts()
             SQLiteEstimatorStore.clearUITestArtifacts()
         }
         let authService: AuthService

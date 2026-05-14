@@ -292,6 +292,27 @@ class ProjectViewModel: ObservableObject {
             Logger.project.notice("Completed project status update.")
         }
     }
+
+    @discardableResult
+    func reopenProject(_ project: Project, selectProject: Bool = true) async -> Project? {
+        Logger.project.notice("Reopening completed project.")
+
+        var updatedProject = project
+        updatedProject.status = .active
+        updatedProject.lastModifiedDate = Date()
+
+        let reopenedProject = await commitProjectMutation(
+            updatedProject,
+            reason: "reopen project",
+            selectProject: selectProject
+        )
+
+        if reopenedProject != nil {
+            Logger.project.notice("Reopened project into active work context.")
+        }
+
+        return reopenedProject
+    }
     
     func syncAllProjectsToCloudKit(completion: @escaping (Bool, String) -> Void) {
         Logger.project.info("Starting CloudKit sync for all projects.")
@@ -2313,6 +2334,12 @@ final class ProjectStore {
         saveTeamMembers(teamMembers, for: organizationID)
     }
 
+    func clearAllStoredData() {
+        for key in userDefaults.dictionaryRepresentation().keys where isProjectStoreKey(key) {
+            userDefaults.removeObject(forKey: key)
+        }
+    }
+
     private func save<Value: Encodable>(_ value: Value, forKey key: String) {
         guard let data = try? JSONEncoder().encode(value) else {
             Logger.projectStore.error("Failed to encode value for key \(key, privacy: .private(mask: .hash))")
@@ -2337,6 +2364,13 @@ final class ProjectStore {
         }
 
         return try? JSONDecoder().decode(type, from: data)
+    }
+
+    private func isProjectStoreKey(_ key: String) -> Bool {
+        key.hasPrefix(Key.projectsPrefix)
+            || key.hasPrefix(Key.organizationPrefix)
+            || key.hasPrefix(Key.teamMembersPrefix)
+            || key.hasPrefix(Key.projectAssignmentsPrefix)
     }
 }
 

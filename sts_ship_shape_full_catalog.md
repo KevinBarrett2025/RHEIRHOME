@@ -18,6 +18,7 @@
 - Contractor validation track for job costing, payroll, tasks, profitability, and closeout reports
 - Global project mutation/refresh contract
 - Active/Completed project lifecycle recovery
+- Completed-project reopen recovery for accidental closeout, missing job-cost entries, and year-end corrections
 - Business Resources surface for workers, rates, vendors, and payment methods
 - Labor payments with split/partial/edit/unpay semantics
 - Task assignment, due/overdue, completion proof, and photo semantics
@@ -170,6 +171,9 @@
 - `RHEIRTests` project mutation propagation coverage
 - `LandingPageView` fast-ship Active/Completed Projects scope
 - `CompletedProjectDetailView` closeout detail navigation
+- `CompletedProjectDetailView` confirmed completed-project reopen action
+- `ProjectViewModel.reopenProject(_:)` shared mutation seam for restoring completed jobs to active work context
+- `RheirApp` UI-test offline artifact reset for deterministic project archive/reopen smokes
 - `RHEIRUITests` completed-project archive smoke coverage
 - `SessionStore` restored selected-project rehydration from accessible project payloads
 - `SessionStore` fast-ship personal-workspace fallback when CloudKit organizations are unavailable
@@ -187,6 +191,8 @@
 - `SignInWithAppleCoordinator` structured logging
 
 ## Current Validation Baseline
+- Latest completed-project archive/reopen focused parity result: `PASS` (`/tmp/rheir_reopen_completed_project_parity_rerun4.xcresult`, `4 unit tests plus 3 UI tests`)
+- Latest completed-project archive/reopen Gate A result: `PASS` (`/tmp/rheir_gateA_reopen_completed_project.xcresult`)
 - Latest completed-project archive focused parity result: `PASS` (`/tmp/rheir_completed_projects_parity.xcresult`, `3 unit tests plus 2 UI tests`)
 - Latest project mutation contract Gate A result: `PASS` (`/tmp/rheir_gateA_mutation_contract.xcresult`)
 - Latest project mutation contract focused parity result: `PASS` (`/tmp/rheir_mutation_access_parity.xcresult`, `5 tests across 2 suites`)
