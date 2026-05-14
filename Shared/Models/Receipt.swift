@@ -153,6 +153,25 @@ public enum ReceiptCategory: String, CaseIterable, Identifiable, Codable, Hashab
     }
 }
 
+private enum ReceiptBudgetRollup {
+    case materials
+    case generalConditions
+    case contingency
+}
+
+private extension ReceiptCategory {
+    var budgetRollup: ReceiptBudgetRollup {
+        switch self {
+        case .general, .permits, .cleanup:
+            return .generalConditions
+        case .contingency:
+            return .contingency
+        default:
+            return .materials
+        }
+    }
+}
+
 /// Category groups for organizing renovation phases
 public enum CategoryGroup: String, CaseIterable, Identifiable, Codable, Sendable {
     case traditional = "Traditional Budget"
@@ -550,6 +569,28 @@ public struct Receipt: Identifiable, Codable, Hashable, Sendable {
         }
 
         return self.category == category ? signedAmount : 0
+    }
+
+    /// Budget-rollup spend for a category.
+    /// Materials, General Conditions, and Contingency need parent-budget totals,
+    /// while detailed category filters need their exact item-level spend.
+    public func budgetScopedAmount(for category: ReceiptCategory) -> Double {
+        guard [.material, .general, .contingency].contains(category) else {
+            return scopedAmount(for: category)
+        }
+
+        let targetRollup = category.budgetRollup
+
+        if !items.isEmpty {
+            let total = items
+                .filter { $0.category.budgetRollup == targetRollup }
+                .reduce(0.0) { partialResult, item in
+                    partialResult + item.totalPrice
+                }
+            return isReturn ? -total : total
+        }
+
+        return self.category.budgetRollup == targetRollup ? signedAmount : 0
     }
     
     /// Whether this receipt has associated photos

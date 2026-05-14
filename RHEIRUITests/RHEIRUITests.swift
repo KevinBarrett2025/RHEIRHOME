@@ -1056,6 +1056,16 @@ final class RHEIRUITests: XCTestCase {
             "Expected tapping the Framing category filter to drill into the itemized framing spend."
         )
         XCTAssertEqual(
+            app.staticTexts["receipts-category-drilldown-total-framing"].label,
+            "$15.55",
+            "Expected the selected Framing header to show the itemized category total at a glance."
+        )
+        XCTAssertEqual(
+            app.staticTexts["receipts-category-drilldown-count-framing"].label,
+            "1 receipt with Framing spend",
+            "Expected the selected Framing header to show how many receipts contribute itemized spend."
+        )
+        XCTAssertEqual(
             app.staticTexts["receipt-card-amount-ui-test-mixed-category-vendor-framing"].label,
             "$15.55",
             "Expected the drilled-in mixed-category receipt card to show only the scoped framing spend."

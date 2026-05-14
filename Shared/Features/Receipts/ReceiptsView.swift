@@ -401,6 +401,17 @@ struct ReceiptsView: View {
         } else {
             // Show receipts for selected category
             if let selectedCategory {
+                let categoryReceipts = receipts
+                let totalSpent = categoryReceipts.reduce(0) { acc, receipt in
+                    acc + receipt.scopedAmount(for: selectedCategory)
+                }
+
+                CategoryDrilldownHeaderCard(
+                    category: selectedCategory,
+                    receiptCount: categoryReceipts.count,
+                    totalSpent: totalSpent
+                )
+
                 ForEach(receipts) { receipt in
                     EnhancedReceiptCard(
                         receipt: receipt,
@@ -1029,6 +1040,87 @@ struct EnhancedReceiptCard: View {
             return "checkmark.rectangle.fill"
         } else {
             return "creditcard"
+        }
+    }
+}
+
+struct CategoryDrilldownHeaderCard: View {
+    let category: ReceiptCategory
+    let receiptCount: Int
+    let totalSpent: Double
+
+    private var accessibilitySlug: String {
+        receiptsAccessibilitySlug(category.rawValue)
+    }
+
+    var body: some View {
+        HStack(spacing: 14) {
+            Image(systemName: categoryIcon(for: category))
+                .font(.title3.weight(.semibold))
+                .foregroundColor(categoryColor(for: category))
+                .frame(width: 42, height: 42)
+                .background(
+                    Circle()
+                        .fill(categoryColor(for: category).opacity(0.14))
+                )
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("\(category.rawValue) Total")
+                    .font(.headline.weight(.semibold))
+                    .foregroundColor(.primary)
+
+                Text("\(receiptCount) receipt\(receiptCount == 1 ? "" : "s") with \(category.rawValue) spend")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .accessibilityIdentifier("receipts-category-drilldown-count-\(accessibilitySlug)")
+            }
+
+            Spacer()
+
+            Text(totalSpent.formatAsCurrency())
+                .font(.title3.weight(.bold))
+                .foregroundColor(totalSpent < 0 ? .red : .primary)
+                .accessibilityIdentifier("receipts-category-drilldown-total-\(accessibilitySlug)")
+        }
+        .padding()
+        .background(Color(.systemBackground))
+        .cornerRadius(12)
+        .shadow(color: Color.black.opacity(0.1), radius: 2, x: 0, y: 1)
+    }
+
+    private func categoryIcon(for category: ReceiptCategory) -> String {
+        switch category {
+        case .general: return "wrench.and.screwdriver.fill"
+        case .material: return "cube.box.fill"
+        case .contingency: return "exclamationmark.triangle.fill"
+        case .permits: return "doc.text.fill"
+        case .demolition: return "hammer.fill"
+        case .electrical: return "bolt.fill"
+        case .plumbing: return "drop.fill"
+        case .hvac: return "wind"
+        case .paint: return "paintbrush.fill"
+        case .flooring: return "square.grid.4x3.fill"
+        case .kitchen: return "fork.knife"
+        case .bathroom: return "bathtub.fill"
+        default: return "tag.fill"
+        }
+    }
+
+    private func categoryColor(for category: ReceiptCategory) -> Color {
+        switch category {
+        case .general: return .blue
+        case .material: return .green
+        case .contingency: return .orange
+        case .permits: return .purple
+        case .demolition: return .red
+        case .electrical: return .yellow
+        case .plumbing: return .blue
+        case .hvac: return .cyan
+        case .paint: return .pink
+        case .flooring: return .brown
+        case .kitchen: return .orange
+        case .bathroom: return .teal
+        default: return .secondary
         }
     }
 }

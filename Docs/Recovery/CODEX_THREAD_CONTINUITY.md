@@ -3,14 +3,16 @@
 ## Repo Truth
 - Repo Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Active Branch: `gm/rheir-hardening-phase1`
-- Thread Start SHA: `1b74bbee65a05eca6ca90f858003e3c06694c838`
-- Last Commit At Thread Start: `1b74bbee Phase 2: clean fast-ship launch polish warnings`
+- Thread Start SHA: `28fe4450dc668afa58664723d20ae5a570ced216`
+- Last Commit At Thread Start: `28fe445 Phase 2: scope mixed-category receipts by itemized spend`
 
 ## Current Objective
 - Keep RHEIR locked into the fast-ship v1 release profile so the visible app ships as a single-user contractor tool with the core shell only: `Projects`, `Receipts`, `Labor`, `Tasks`, plus budget `Breakdown` / `Estimator`.
 - Preserve the simplified visible session flow `launch -> sign in -> ready`, with invite, org-selection, company/admin, and legacy AI-key surfaces still hidden unless the app is explicitly forced back into the legacy/full profile.
 - Keep the selected-project receipt seam green end-to-end: saved scanned receipt itemized lines now persist into receipt detail and into the ellipsis-menu edit sheet with a dedicated line-item editor, mixed-category receipt category summaries/drilldown cards now honor per-item categories instead of treating the whole receipt total as one category, and the Receipts list quick-view now opens the real receipt image viewer.
-- Keep the next seam on real contractor workflows: rerun same-device and real-device receipt acceptance on the simplified shell once edited mixed-category receipt categories and quick-view image preview both match the saved receipt truth on hardware, then make the same-user iCloud launch call.
+- Add an at-a-glance selected-category header in the Receipts category drilldown so users can see receipt count and item-scoped total spend for the active category before scanning the receipt list.
+- Re-audit receipt/category/materials/general-conditions/contingency UI and calculation paths around the selected-project receipt surface before the next device pass.
+- Keep the next seam on real contractor workflows: rerun same-device and real-device receipt acceptance on the simplified shell once edited mixed-category receipt categories, selected-category totals, and quick-view image preview all match the saved receipt truth on hardware, then make the same-user iCloud launch call.
 
 ## Current Working Set
 - `Shared/Models/Receipt.swift` now persists a trimmed optional top-level `subcategory`, closing the gap where scan-review subcategory input was accepted by the initializer but silently discarded before persistence.
@@ -20,9 +22,13 @@
 - `RHEIRUITests/RHEIRUITests.swift` now proves the top-right actions menu still edits/deletes receipts while scanned receipt item lines survive save, leave/return, reopen, and appear inside the saved-receipt edit sheet with a working line-item editor.
 - `Shared/Models/Receipt.swift` now exposes item-aware represented-category, category-membership, and scoped-amount helpers so mixed-category receipts can attribute spend by line-item category without regressing legacy whole-receipt categorization.
 - `Shared/Features/Receipts/ReceiptsView.swift` now uses those scoped helpers for category summary totals, drilled-in receipt cards, and defensive scoped-card rendering when a category filter is active, so edited mixed-category receipts no longer over-attribute the full receipt total to every category bucket.
+- `Shared/Features/Receipts/ReceiptsView.swift` now renders a selected-category drilldown header with the itemized category total and contributing receipt count above the filtered receipt list.
+- `Shared/Models/Receipt.swift` now exposes `budgetScopedAmount(for:)`, and `Shared/ViewModels/ProjectViewModel+Filters.swift` uses it for active Materials, General Conditions, and Contingency spend so high-level budget totals honor itemized mixed receipts even when the top-level receipt category differs.
 - `Shared/Features/Progress/ZoomableImageView.swift` now exposes a deterministic close-button hook, and `Shared/Features/Receipts/ReceiptsView.swift` now uses the same real image-viewing flow from the list quick-view action instead of the old placeholder sheet.
 - `App/RheirApp.swift` now seeds a dedicated `mixed_category_receipt` deterministic UI-test launch mode, and `RHEIRUITests/RHEIRUITests.swift` now proves mixed-category category drilldown uses itemized spend while receipt-card quick-view opens the real saved receipt image.
 - `RHEIRTests/RHEIRTests.swift` now includes `ReceiptCategoryBreakdownTests`, proving itemized receipts use line-item categories for scoped spend while legacy receipts still fall back to receipt-level categorization when no line items exist.
+- Latest selected-category header focused parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_receipt_category_header_final3_dd -resultBundlePath /tmp/rheir_receipt_category_header_final3.xcresult test -only-testing:RHEIRTests/ReceiptCategoryBreakdownTests -only-testing:RHEIRTests/BudgetBridgeTests -only-testing:RHEIRUITests/RHEIRUITests/testMixedCategoryReceiptCategoryDrilldownUsesItemizedSpend -only-testing:RHEIRUITests/RHEIRUITests/testReceiptCardQuickViewShowsSavedReceiptImage` -> PASS.
+- Latest selected-category header Gate A: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_receipt_category_header_dd -resultBundlePath /tmp/rheir_gateA_receipt_category_header.xcresult clean build` -> PASS.
 - `Shared/ViewModels/AuthViewModel.swift` now tracks a single in-flight fast-ship organization-switch task, cancelling it when the session signs out or clears the active organization so stale post-ready work cannot keep running into a cleared workspace.
 - `Shared/ViewModels/ProjectViewModel.swift` now invalidates organization synchronization with an `organizationSyncToken` and staleness guards after each async phase, preventing old org-switch work from repopulating projects or team members after `setCurrentOrganization(nil)`.
 - `RHEIRTests/RHEIRTests.swift` now includes a focused regression proving an interrupted organization sync that clears the current organization cannot restore projects, access, or selection when the async flow resumes.

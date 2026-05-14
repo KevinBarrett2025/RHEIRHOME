@@ -62,6 +62,35 @@ extension ProjectViewModel {
         return result
     }
 
+    private func budgetReceiptCategory(for budgetCategory: EnhancedBudgetCategory) -> ReceiptCategory? {
+        switch budgetCategory {
+        case .materials:
+            return .material
+        case .generalConditions:
+            return .general
+        case .contingency:
+            return .contingency
+        case .labor:
+            return nil
+        }
+    }
+
+    private func itemizedReceiptSpending(for budgetCategory: EnhancedBudgetCategory) -> Double {
+        guard let receiptCategory = budgetReceiptCategory(for: budgetCategory) else { return 0 }
+
+        let result = currentReceipts.reduce(0.0) { total, receipt in
+            let amount = receipt.budgetScopedAmount(for: receiptCategory)
+            guard amount.isFinite else { return total }
+            return total + amount
+        }
+
+        guard result.isFinite else {
+            logInvalidBudgetValue("itemizedReceiptSpending[\(budgetCategory.rawValue)]", value: result)
+            return 0
+        }
+        return result
+    }
+
     // MARK: - Enhanced Budget Category Mapping
     
     /// Map a receipt category to its parent budget category
@@ -181,68 +210,12 @@ extension ProjectViewModel {
 
     /// Enhanced calculation for Materials spending using detailed categories
     var enhancedSpentMaterials: Double {
-        guard let project = selectedProject else { return 0 }
-        
-        let materialCategories = getReceiptCategories(for: .materials)
-        
-        let spending = project.receipts.reduce(0.0) { total, receipt in
-            // Check if receipt category maps to materials
-            if materialCategories.contains(receipt.category) {
-                // Calculate from items if available
-                if !receipt.items.isEmpty {
-                    let itemsTotal = receipt.items.reduce(0.0) { itemTotal, item in
-                        if materialCategories.contains(item.category) {
-                            let amount = receipt.isReturn ? -item.totalPrice : item.totalPrice
-                            return itemTotal + amount
-                        }
-                        return itemTotal
-                    }
-                    return total + itemsTotal
-                } else {
-                    // Use receipt-level amount for legacy receipts
-                    let amount = receipt.isReturn ? -receipt.amount : receipt.amount
-                    return total + amount
-                }
-            }
-            return total
-        }
-        
-        guard spending.isFinite else {
-            logInvalidBudgetValue("enhancedSpentMaterials", value: spending)
-            return 0
-        }
-        return spending
+        itemizedReceiptSpending(for: .materials)
     }
 
     /// Enhanced calculation for General Conditions spending using detailed categories
     var enhancedSpentGeneralConditions: Double {
-        guard let project = selectedProject else { return 0 }
-        
-        let generalCategories = getReceiptCategories(for: .generalConditions)
-        
-        let receiptSpending = project.receipts.reduce(0.0) { total, receipt in
-            // Check if receipt category maps to general conditions
-            if generalCategories.contains(receipt.category) {
-                // Calculate from items if available
-                if !receipt.items.isEmpty {
-                    let itemsTotal = receipt.items.reduce(0.0) { itemTotal, item in
-                        if generalCategories.contains(item.category) {
-                            let amount = receipt.isReturn ? -item.totalPrice : item.totalPrice
-                            return itemTotal + amount
-                        }
-                        return itemTotal
-                    }
-                    return total + itemsTotal
-                } else {
-                    // Use receipt-level amount for legacy receipts
-                    let amount = receipt.isReturn ? -receipt.amount : receipt.amount
-                    return total + amount
-                }
-            }
-            return total
-        }
-        
-        // Add labor hours for general conditions
+        let receiptSpending = itemizedReceiptSpending(for: .generalConditions)
         let totalSpending = receiptSpending + hoursGeneralConditions
         
         guard totalSpending.isFinite else {
@@ -254,33 +227,7 @@ extension ProjectViewModel {
 
     /// Enhanced calculation for Contingency spending using detailed categories
     var enhancedSpentContingency: Double {
-        guard let project = selectedProject else { return 0 }
-        
-        let contingencyCategories = getReceiptCategories(for: .contingency)
-        
-        let receiptSpending = project.receipts.reduce(0.0) { total, receipt in
-            // Check if receipt category maps to contingency
-            if contingencyCategories.contains(receipt.category) {
-                // Calculate from items if available
-                if !receipt.items.isEmpty {
-                    let itemsTotal = receipt.items.reduce(0.0) { itemTotal, item in
-                        if contingencyCategories.contains(item.category) {
-                            let amount = receipt.isReturn ? -item.totalPrice : item.totalPrice
-                            return itemTotal + amount
-                        }
-                        return itemTotal
-                    }
-                    return total + itemsTotal
-                } else {
-                    // Use receipt-level amount for legacy receipts
-                    let amount = receipt.isReturn ? -receipt.amount : receipt.amount
-                    return total + amount
-                }
-            }
-            return total
-        }
-        
-        // Add labor hours for contingency
+        let receiptSpending = itemizedReceiptSpending(for: .contingency)
         let totalSpending = receiptSpending + hoursContingency
         
         guard totalSpending.isFinite else {

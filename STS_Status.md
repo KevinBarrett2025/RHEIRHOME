@@ -3,7 +3,7 @@
 ## Repo
 - Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Branch: `gm/rheir-hardening-phase1`
-- HEAD: `b4388fc23899b0596b5d2f0bf3ec16112fc890ff`
+- HEAD: `28fe4450dc668afa58664723d20ae5a570ced216`
 
 ## Active Initiative
 - RHEIR release hardening, phase 2 estimator foundation and contractor workflow hardening.
@@ -146,6 +146,9 @@
 - Added focused parity for project access normalization and assignment filtering in `RHEIRTests/RHEIRTests.swift`.
 - Hardened oversized organization-scoped project persistence by stripping inline receipt image data from serialized `ProjectStore` snapshots and CloudKit `fullProjectData` payloads via `Receipt.persistenceSafeCopy`, `Project.persistenceSafeCopy`, and the active project save path.
 - Added focused project-payload regression coverage in `RHEIRTests/RHEIRTests.swift` that proves stored projects and persistence-safe serialized payloads retain receipt metadata while removing inline receipt image data and names.
+- Added an itemized Receipts category drilldown header so selected categories show receipt count plus the category-scoped total before the receipt list.
+- Added a receipt budget-rollup helper and routed the active Materials / General Conditions / Contingency budget bridge through itemized spend, so mixed receipts no longer require a receipt-level category match before contributing to high-level budget totals.
+- Added focused receipt/category parity proving itemized selected-category totals, quick receipt image view, and mixed-receipt high-level budget rollups stay correct.
 - Added startup legacy project-payload compaction in `Shared/Views/Auth/AppSessionSupport.swift` so `LocalCacheStore` rewrites stale `projects*` `UserDefaults` blobs through `Project.persistenceSafeCopy` before legacy session migration runs.
 - Hardened `Shared/ViewModels/ProjectViewModel+Import.swift` so the legacy `projects_backup` fallback also strips inline receipt image data before writing to `UserDefaults`.
 - Expanded focused `RHEIRTests/RHEIRTests.swift` parity to prove startup compaction preserves legacy org selection and receipt metadata while clearing inline receipt image data from both org-scoped project payloads and the legacy backup blob.
@@ -166,6 +169,10 @@
 - Raw in-sandbox `xcodebuild` commands are still less reliable than elevated CLI or `xcodebuildmcp` paths in this environment because CoreSimulator and DerivedData access remain sandbox-sensitive.
 
 ## Latest Evidence
+- `ReceiptsView.swift` now renders a selected-category drilldown header with the category-scoped total and contributing receipt count, so a Plumbing/Framing/etc. filter shows the spend total at a glance instead of only on individual receipt cards.
+- `Receipt.swift` now exposes `budgetScopedAmount(for:)`, and `ProjectViewModel+Filters.swift` uses it for active Materials, General Conditions, and Contingency spend, preventing mixed itemized receipts from being undercounted in high-level budget totals.
+- Focused selected-category receipt parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_receipt_category_header_final3_dd -resultBundlePath /tmp/rheir_receipt_category_header_final3.xcresult test -only-testing:RHEIRTests/ReceiptCategoryBreakdownTests -only-testing:RHEIRTests/BudgetBridgeTests -only-testing:RHEIRUITests/RHEIRUITests/testMixedCategoryReceiptCategoryDrilldownUsesItemizedSpend -only-testing:RHEIRUITests/RHEIRUITests/testReceiptCardQuickViewShowsSavedReceiptImage` -> PASS (`/tmp/rheir_receipt_category_header_final3.xcresult`, `4 tests across 2 suites plus 2 UI tests`)
+- Focused selected-category receipt Gate A: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_receipt_category_header_dd -resultBundlePath /tmp/rheir_gateA_receipt_category_header.xcresult clean build` -> PASS (`/tmp/rheir_gateA_receipt_category_header.xcresult`)
 - `Receipt.swift` now persists a trimmed optional top-level `subcategory`, fixing the scanned-receipt path where scan-review subcategory input existed in UI but was dropped before persistence.
 - `ScannedReceiptEntryView.swift` now copies AI-detected line items into `Receipt.items`, stores the top-level subcategory, and no longer renders the full receipt-category taxonomy as an unusable segmented control during scan review.
 - `ReceiptDetailView.swift` now treats the ellipsis menu as the single edit/delete action surface, exposes deterministic item/subcategory hooks, and renders persisted scanned line items after save/reopen instead of duplicating bottom action buttons.

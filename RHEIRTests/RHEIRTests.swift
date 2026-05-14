@@ -1516,6 +1516,43 @@ struct BudgetBridgeTests {
         #expect(validation.contains("- Legacy: $120.00"))
         #expect(validation.contains("Status: ✅ VALIDATED"))
     }
+
+    @Test
+    func itemizedBudgetBridgeCountsTraditionalCategoriesAcrossMixedReceipt() {
+        let viewModel = ProjectViewModel(
+            offlineDataManager: OfflineDataManager(),
+            projectRepository: RecordingProjectRepository()
+        )
+
+        var project = Project(
+            name: "Mixed Budget Receipt Project",
+            client: "Client",
+            totalBudget: 1000,
+            startDate: .now,
+            endDate: .now.addingTimeInterval(86400),
+            organizationID: "org-mixed-budget-bridge"
+        )
+
+        var receipt = Receipt(
+            vendor: "Home Depot",
+            date: .now,
+            amount: 100,
+            category: .material,
+            paymentMethod: "Credit Card"
+        )
+        receipt.items = [
+            ReceiptItem(name: "Stud Pack", unitPrice: 50, totalPrice: 50, category: .framing),
+            ReceiptItem(name: "Permit Fee", unitPrice: 30, totalPrice: 30, category: .permits),
+            ReceiptItem(name: "Unknown Overage", unitPrice: 20, totalPrice: 20, category: .contingency)
+        ]
+        project.receipts = [receipt]
+
+        viewModel.selectedProject = project
+
+        #expect(viewModel.spentMaterials == 50)
+        #expect(viewModel.spentGeneralConditions == 30)
+        #expect(viewModel.spentContingency == 20)
+    }
 }
 
 struct TeamMemberStoreTests {
@@ -1679,6 +1716,9 @@ struct ReceiptCategoryBreakdownTests {
         #expect(receipt.scopedAmount(for: .framing) == 15.55)
         #expect(receipt.scopedAmount(for: .roofing) == 8.40)
         #expect(receipt.scopedAmount(for: .material) == 0)
+        #expect(receipt.budgetScopedAmount(for: .material) == 36.29)
+        #expect(receipt.budgetScopedAmount(for: .general) == 0)
+        #expect(receipt.budgetScopedAmount(for: .contingency) == 0)
     }
 
     @Test
