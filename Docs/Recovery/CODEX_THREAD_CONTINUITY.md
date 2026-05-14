@@ -9,8 +9,8 @@
 ## Current Objective
 - Keep RHEIR locked into the fast-ship v1 release profile so the visible app ships as a single-user contractor tool with the core shell only: `Projects`, `Receipts`, `Labor`, `Tasks`, plus budget `Breakdown` / `Estimator`.
 - Preserve the simplified visible session flow `launch -> sign in -> ready`, with invite, org-selection, company/admin, and legacy AI-key surfaces still hidden unless the app is explicitly forced back into the legacy/full profile.
-- Keep the selected-project receipt seam green end-to-end: saved scanned receipt itemized lines now persist into receipt detail and into the ellipsis-menu edit sheet with a dedicated line-item editor.
-- Keep the next seam on real contractor workflows: rerun same-device and real-device receipt acceptance on the simplified shell now that saved scanned receipts can be reviewed, reopened, and edited end-to-end, then make the same-user iCloud launch call.
+- Keep the selected-project receipt seam green end-to-end: saved scanned receipt itemized lines now persist into receipt detail and into the ellipsis-menu edit sheet with a dedicated line-item editor, mixed-category receipt category summaries/drilldown cards now honor per-item categories instead of treating the whole receipt total as one category, and the Receipts list quick-view now opens the real receipt image viewer.
+- Keep the next seam on real contractor workflows: rerun same-device and real-device receipt acceptance on the simplified shell once edited mixed-category receipt categories and quick-view image preview both match the saved receipt truth on hardware, then make the same-user iCloud launch call.
 
 ## Current Working Set
 - `Shared/Models/Receipt.swift` now persists a trimmed optional top-level `subcategory`, closing the gap where scan-review subcategory input was accepted by the initializer but silently discarded before persistence.
@@ -18,6 +18,11 @@
 - `Shared/Features/Receipts/ReceiptDetailView.swift` now keeps the ellipsis menu as the single receipt-detail edit/delete action surface, exposes item/subcategory accessibility hooks, and shows saved scanned items once they persist into the live receipt model.
 - `Shared/Features/Receipts/ReceiptEditView.swift` now renders persisted `Receipt.items` inside the saved-receipt edit sheet, exposes deterministic item row hooks, and opens a focused `Edit Line Item` editor so saved scanned breakdown lines can be reviewed and edited after save/reopen.
 - `RHEIRUITests/RHEIRUITests.swift` now proves the top-right actions menu still edits/deletes receipts while scanned receipt item lines survive save, leave/return, reopen, and appear inside the saved-receipt edit sheet with a working line-item editor.
+- `Shared/Models/Receipt.swift` now exposes item-aware represented-category, category-membership, and scoped-amount helpers so mixed-category receipts can attribute spend by line-item category without regressing legacy whole-receipt categorization.
+- `Shared/Features/Receipts/ReceiptsView.swift` now uses those scoped helpers for category summary totals, drilled-in receipt cards, and defensive scoped-card rendering when a category filter is active, so edited mixed-category receipts no longer over-attribute the full receipt total to every category bucket.
+- `Shared/Features/Progress/ZoomableImageView.swift` now exposes a deterministic close-button hook, and `Shared/Features/Receipts/ReceiptsView.swift` now uses the same real image-viewing flow from the list quick-view action instead of the old placeholder sheet.
+- `App/RheirApp.swift` now seeds a dedicated `mixed_category_receipt` deterministic UI-test launch mode, and `RHEIRUITests/RHEIRUITests.swift` now proves mixed-category category drilldown uses itemized spend while receipt-card quick-view opens the real saved receipt image.
+- `RHEIRTests/RHEIRTests.swift` now includes `ReceiptCategoryBreakdownTests`, proving itemized receipts use line-item categories for scoped spend while legacy receipts still fall back to receipt-level categorization when no line items exist.
 - `Shared/ViewModels/AuthViewModel.swift` now tracks a single in-flight fast-ship organization-switch task, cancelling it when the session signs out or clears the active organization so stale post-ready work cannot keep running into a cleared workspace.
 - `Shared/ViewModels/ProjectViewModel.swift` now invalidates organization synchronization with an `organizationSyncToken` and staleness guards after each async phase, preventing old org-switch work from repopulating projects or team members after `setCurrentOrganization(nil)`.
 - `RHEIRTests/RHEIRTests.swift` now includes a focused regression proving an interrupted organization sync that clears the current organization cannot restore projects, access, or selection when the async flow resumes.
@@ -231,6 +236,6 @@
 ## Next Required Action
 1. Preserve the repo-local STS docs and the user-owned files (`Shared/Views/Auth/LoginView.swift`, `rheir_knowledge_database.json`, `RHEIRmemories.csv`, `RheirLogo 1024x1024.png`) outside the staged set for the next checkpoint.
 2. Re-run the real-device selected-project receipt flow on the simplified shell and explicitly confirm that scanned receipt itemized lines now persist after save, leave/return, reopen, and relaunch restore.
-3. Confirm on device that the scan-review category control is usable with the full taxonomy and that receipt details rely on the top-right actions menu without needing duplicate bottom edit/delete buttons.
+3. Confirm on device that edited mixed-category receipt items drive Receipts category summaries and drilled-in card totals by itemized spend, that the list quick-view opens the real saved receipt image, and that receipt details rely on the top-right actions menu without needing duplicate bottom edit/delete buttons.
 4. Make the same-user iCloud restore launch decision only after the device receipt flow is green end-to-end; if it is not clean by cutoff, keep local-device persistence as the ship promise.
 5. Only resume broader runtime QA and any post-launch surface expansion after the fast-ship device receipt path is stable again.

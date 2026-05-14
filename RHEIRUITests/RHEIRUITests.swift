@@ -22,6 +22,7 @@ final class RHEIRUITests: XCTestCase {
         case selectedProject = "selected_project"
         case estimatorMapping = "estimator_mapping"
         case scannedReceiptReview = "scanned_receipt_review"
+        case mixedCategoryReceipt = "mixed_category_receipt"
         case restoredSession = "restored_session"
     }
 
@@ -1011,6 +1012,84 @@ final class RHEIRUITests: XCTestCase {
         XCTAssertTrue(
             waitForNonExistence(of: generalFilterButton, timeout: 5),
             "Expected the General Conditions filter to disappear while the receipts surface is drilled into Materials."
+        )
+    }
+
+    @MainActor
+    func testMixedCategoryReceiptCategoryDrilldownUsesItemizedSpend() throws {
+        let app = makeApp(mode: .mixedCategoryReceipt)
+        app.launch()
+        app.tabBars.buttons["Receipts"].tap()
+
+        let categoriesViewModeButton = app.buttons["receipts-view-mode-categories"]
+        XCTAssertTrue(
+            categoriesViewModeButton.waitForExistence(timeout: 5),
+            "Expected the receipts screen to expose the Categories view mode for mixed-category receipt coverage."
+        )
+        categoriesViewModeButton.tap()
+
+        XCTAssertEqual(
+            app.staticTexts["receipts-category-summary-total-plumbing"].label,
+            "$12.34",
+            "Expected the Plumbing category summary to use the itemized plumbing spend, not the full receipt total."
+        )
+        XCTAssertEqual(
+            app.staticTexts["receipts-category-summary-total-framing"].label,
+            "$15.55",
+            "Expected the Framing category summary to use the itemized framing spend, not the full receipt total."
+        )
+        XCTAssertEqual(
+            app.staticTexts["receipts-category-summary-total-roofing"].label,
+            "$8.40",
+            "Expected the Roofing category summary to use the itemized roofing spend, not the full receipt total."
+        )
+
+        let framingFilterButton = app.buttons["receipts-category-filter-framing"]
+        XCTAssertTrue(
+            framingFilterButton.waitForExistence(timeout: 5),
+            "Expected the mixed-category seeded receipt to expose the Framing category filter."
+        )
+        framingFilterButton.tap()
+
+        XCTAssertTrue(
+            waitForSelectedValue(on: framingFilterButton, timeout: 5),
+            "Expected tapping the Framing category filter to drill into the itemized framing spend."
+        )
+        XCTAssertEqual(
+            app.staticTexts["receipt-card-amount-ui-test-mixed-category-vendor-framing"].label,
+            "$15.55",
+            "Expected the drilled-in mixed-category receipt card to show only the scoped framing spend."
+        )
+        XCTAssertEqual(
+            app.staticTexts["receipt-card-category-ui-test-mixed-category-vendor-framing"].label,
+            "Framing",
+            "Expected the drilled-in mixed-category receipt card to label itself with the selected itemized category."
+        )
+    }
+
+    @MainActor
+    func testReceiptCardQuickViewShowsSavedReceiptImage() throws {
+        let app = makeApp(mode: .mixedCategoryReceipt)
+        app.launch()
+        app.tabBars.buttons["Receipts"].tap()
+
+        let viewImageButton = app.buttons["receipt-card-view-image-ui-test-mixed-category-vendor"]
+        XCTAssertTrue(
+            viewImageButton.waitForExistence(timeout: 5),
+            "Expected the saved receipt card to expose the quick image preview action."
+        )
+        viewImageButton.tap()
+
+        let closeButton = app.buttons["zoomable-image-close"]
+        XCTAssertTrue(
+            closeButton.waitForExistence(timeout: 5),
+            "Expected tapping the receipt-card quick view action to present the real receipt image viewer."
+        )
+        closeButton.tap()
+
+        XCTAssertTrue(
+            waitForNonExistence(of: closeButton, timeout: 5),
+            "Expected dismissing the quick receipt image preview to close the viewer."
         )
     }
 

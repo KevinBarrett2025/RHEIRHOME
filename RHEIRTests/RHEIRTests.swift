@@ -1637,6 +1637,66 @@ struct TeamMemberStoreTests {
     }
 }
 
+struct ReceiptCategoryBreakdownTests {
+    @Test
+    func itemizedReceiptsUseItemCategoriesForScopedSpend() {
+        var receipt = Receipt(
+            vendor: "Home Depot",
+            date: .now,
+            amount: 36.29,
+            category: .material
+        )
+        receipt.items = [
+            ReceiptItem(
+                name: "Copper Tee",
+                quantity: 1,
+                unitPrice: 12.34,
+                totalPrice: 12.34,
+                category: .plumbing
+            ),
+            ReceiptItem(
+                name: "2x4 Stud",
+                quantity: 1,
+                unitPrice: 15.55,
+                totalPrice: 15.55,
+                category: .framing
+            ),
+            ReceiptItem(
+                name: "Roof Patch",
+                quantity: 1,
+                unitPrice: 8.40,
+                totalPrice: 8.40,
+                category: .roofing
+            )
+        ]
+
+        #expect(receipt.representedCategories == Set([.plumbing, .framing, .roofing]))
+        #expect(receipt.hasScopedCategory(.plumbing))
+        #expect(receipt.hasScopedCategory(.framing))
+        #expect(receipt.hasScopedCategory(.roofing))
+        #expect(!receipt.hasScopedCategory(.material))
+        #expect(receipt.scopedAmount(for: .plumbing) == 12.34)
+        #expect(receipt.scopedAmount(for: .framing) == 15.55)
+        #expect(receipt.scopedAmount(for: .roofing) == 8.40)
+        #expect(receipt.scopedAmount(for: .material) == 0)
+    }
+
+    @Test
+    func legacyReceiptsFallbackToReceiptLevelCategory() {
+        let receipt = Receipt(
+            vendor: "Permit Office",
+            date: .now,
+            amount: 55,
+            category: .permits
+        )
+
+        #expect(receipt.representedCategories == Set([.permits]))
+        #expect(receipt.hasScopedCategory(.permits))
+        #expect(receipt.scopedAmount(for: .permits) == 55)
+        #expect(receipt.scopedAmount(for: .material) == 0)
+    }
+}
+
 struct ReceiptProjectStoreTests {
 
     @Test

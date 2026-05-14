@@ -14,6 +14,12 @@ private func receiptsAccessibilitySlug(_ value: String) -> String {
         .trimmingCharacters(in: CharacterSet(charactersIn: "-"))
 }
 
+struct ReceiptCardScope {
+    let category: ReceiptCategory
+    let amount: Double
+    let items: [ReceiptItem]
+}
+
 struct ReceiptsView: View {
     @EnvironmentObject var projectVM: ProjectViewModel
     @EnvironmentObject var authVM: AuthViewModel
@@ -47,7 +53,7 @@ struct ReceiptsView: View {
         }
     }
     
-    private var receipts: [Receipt] {
+    private var baseReceipts: [Receipt] {
         guard let project = projectVM.selectedProject else { return [] }
         
         var filteredReceipts = project.normalizedReceiptCopy.receipts
@@ -61,19 +67,28 @@ struct ReceiptsView: View {
             }
         }
         
-        // Apply category filter
-        if let selectedCategory = selectedCategory {
-            filteredReceipts = filteredReceipts.filter { receipt in
-                receipt.category == selectedCategory ||
-                receipt.items.contains { $0.category == selectedCategory }
-            }
-        }
-        
         return filteredReceipts.sorted { $0.date > $1.date }
+    }
+
+    private var receipts: [Receipt] {
+        guard let selectedCategory else { return baseReceipts }
+
+        return baseReceipts.filter { receipt in
+            receipt.hasScopedCategory(selectedCategory)
+        }
     }
     
     private var receiptsByCategory: [ReceiptCategory: [Receipt]] {
-        Dictionary(grouping: receipts) { $0.category }
+        Dictionary(
+            uniqueKeysWithValues: activeCategories.map { category in
+                (
+                    category,
+                    baseReceipts.filter { receipt in
+                        receipt.hasScopedCategory(category)
+                    }
+                )
+            }
+        )
     }
     
     private var receiptsByVendor: [String: [Receipt]] {
@@ -82,7 +97,18 @@ struct ReceiptsView: View {
     
     // Get categories that actually have receipts
     private var activeCategories: [ReceiptCategory] {
-        Array(Set(receipts.map { $0.category })).sorted { $0.rawValue < $1.rawValue }
+        if let selectedCategory {
+            return [selectedCategory]
+        }
+
+        return Array(
+            Set(
+                baseReceipts.flatMap { receipt in
+                    Array(receipt.representedCategories)
+                }
+            )
+        )
+        .sorted { $0.rawValue < $1.rawValue }
     }
 
     private var hasScannerAIAccess: Bool {
@@ -338,6 +364,7 @@ struct ReceiptsView: View {
         ForEach(receipts) { receipt in
             EnhancedReceiptCard(
                 receipt: receipt,
+                scope: scope(for: receipt, category: selectedCategory),
                 onView: {
                     receiptToView = receipt
                 },
@@ -359,7 +386,7 @@ struct ReceiptsView: View {
             ForEach(activeCategories, id: \.self) { category in
                 let categoryReceipts = receiptsByCategory[category] ?? []
                 let totalSpent = categoryReceipts.reduce(0) { acc, receipt in
-                    acc + (receipt.isReturn ? -receipt.amount : receipt.amount)
+                    acc + receipt.scopedAmount(for: category)
                 }
                 
                 CategorySummaryCard(
@@ -373,20 +400,25 @@ struct ReceiptsView: View {
             }
         } else {
             // Show receipts for selected category
-            ForEach(receipts) { receipt in
-                EnhancedReceiptCard(
-                    receipt: receipt,
-                    onView: {
-                        receiptToView = receipt
-                    },
-                    onEdit: {
-                        receiptToEdit = receipt
-                    },
-                    onDelete: {
-                        receiptToDelete = receipt
-                        showingDeleteAlert = true
-                    }
-                )
+            if let selectedCategory {
+                ForEach(receipts) { receipt in
+                    EnhancedReceiptCard(
+                        receipt: receipt,
+                        scope: scope(for: receipt, category: selectedCategory),
+                        onView: {
+                            receiptToView = receipt
+                        },
+                        onEdit: {
+                            receiptToEdit = receipt
+                        },
+                        onDelete: {
+                            receiptToDelete = receipt
+                            showingDeleteAlert = true
+                        }
+                    )
+                    .id("\(receipt.id)-\(receiptsAccessibilitySlug(selectedCategory.rawValue))")
+                }
+                .id("receipts-category-drilldown-\(selectedCategory.rawValue)")
             }
         }
     }
@@ -724,17 +756,73 @@ struct ReceiptsView: View {
 
         return "Try a different vendor, note, or item search."
     }
+
+    private func scope(for receipt: Receipt, category: ReceiptCategory?) -> ReceiptCardScope? {
+        guard let category else { return nil }
+        return ReceiptCardScope(
+            category: category,
+            amount: receipt.scopedAmount(for: category),
+            items: receipt.scopedItems(for: category)
+        )
+    }
 }
 
 // MARK: - Supporting View Components
 
 struct EnhancedReceiptCard: View {
     let receipt: Receipt
+    let scope: ReceiptCardScope?
     let onView: () -> Void
     let onEdit: () -> Void
     let onDelete: () -> Void
     
     @State private var showingFullImage = false
+
+    init(
+        receipt: Receipt,
+        scope: ReceiptCardScope? = nil,
+        onView: @escaping () -> Void,
+        onEdit: @escaping () -> Void,
+        onDelete: @escaping () -> Void
+    ) {
+        self.receipt = receipt
+        self.scope = scope
+        self.onView = onView
+        self.onEdit = onEdit
+        self.onDelete = onDelete
+    }
+
+    private var accessibilitySlug: String {
+        receiptsAccessibilitySlug(receipt.vendor)
+    }
+
+    private var scopedAccessibilitySuffix: String {
+        guard let scope else { return "" }
+        return "-\(receiptsAccessibilitySlug(scope.category.rawValue))"
+    }
+
+    private var displayedCategory: ReceiptCategory {
+        scope?.category ?? receipt.category
+    }
+
+    private var displayedAmount: Double {
+        scope?.amount ?? receipt.signedAmount
+    }
+
+    private var matchedItems: [ReceiptItem] {
+        scope?.items ?? []
+    }
+
+    private var categoryContextSummary: String? {
+        guard let scope, !matchedItems.isEmpty else { return nil }
+
+        let previewNames = matchedItems.prefix(2).map(\.name).joined(separator: ", ")
+        let remainderCount = matchedItems.count - min(matchedItems.count, 2)
+        let remainderText = remainderCount > 0 ? " +\(remainderCount) more" : ""
+        let itemLabel = matchedItems.count == 1 ? "item" : "items"
+
+        return "\(matchedItems.count) \(scope.category.rawValue.lowercased()) \(itemLabel): \(previewNames)\(remainderText)"
+    }
     
     var body: some View {
         Button(action: onView) {
@@ -762,12 +850,13 @@ struct EnhancedReceiptCard: View {
                         }
                         
                         HStack {
-                            Image(systemName: categoryIcon(for: receipt.category))
+                            Image(systemName: categoryIcon(for: displayedCategory))
                                 .font(.caption)
                                 .foregroundColor(.blue)
-                            Text(receipt.category.rawValue)
+                            Text(displayedCategory.rawValue)
                                 .font(.subheadline)
                                 .foregroundColor(.secondary)
+                                .accessibilityIdentifier("receipt-card-category-\(accessibilitySlug)\(scopedAccessibilitySuffix)")
                             
                             Spacer()
                             
@@ -778,10 +867,11 @@ struct EnhancedReceiptCard: View {
                     }
                     
                     VStack(alignment: .trailing, spacing: 4) {
-                        Text((receipt.isReturn ? -receipt.amount : receipt.amount).formatAsCurrency())
+                        Text(displayedAmount.formatAsCurrency())
                             .font(.title3)
                             .fontWeight(.bold)
-                            .foregroundColor(receipt.isReturn ? .red : .primary)
+                            .foregroundColor(displayedAmount < 0 ? .red : .primary)
+                            .accessibilityIdentifier("receipt-card-amount-\(accessibilitySlug)\(scopedAccessibilitySuffix)")
                         
                         if receipt.taxAmount > 0 {
                             Text("Tax: \(receipt.taxAmount.formatAsCurrency())")
@@ -795,6 +885,17 @@ struct EnhancedReceiptCard: View {
                     HStack {
                         Text(receipt.notes)
                             .font(.subheadline)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.leading)
+                            .lineLimit(2)
+                        Spacer()
+                    }
+                }
+
+                if let categoryContextSummary {
+                    HStack {
+                        Text(categoryContextSummary)
+                            .font(.caption)
                             .foregroundColor(.secondary)
                             .multilineTextAlignment(.leading)
                             .lineLimit(2)
@@ -856,9 +957,11 @@ struct EnhancedReceiptCard: View {
                         Text("Receipt #\(receipt.receiptNumber)")
                             .font(.caption)
                             .foregroundColor(.secondary)
+                            }
+                        }
+                        .accessibilityIdentifier("receipt-card-view-image-\(accessibilitySlug)")
+                        .buttonStyle(.borderless)
                     }
-                }
-            }
             .padding()
             .background(Color(.systemBackground))
             .cornerRadius(12)
@@ -883,10 +986,15 @@ struct EnhancedReceiptCard: View {
         }
         .sheet(isPresented: $showingFullImage) {
             if receipt.hasReceiptImage {
-                // Temporarily disabled - ReceiptImageViewer compilation issue
-                // ReceiptImageViewer(receipt: receipt)
-                Text("Receipt Image Viewer Coming Soon")
-                    .padding()
+                if let receiptImage = receipt.receiptImage {
+                    ZoomableImageView(image: receiptImage) {
+                        showingFullImage = false
+                    }
+                    .ignoresSafeArea()
+                } else {
+                    Text("Receipt image unavailable")
+                        .padding()
+                }
             }
         }
     }
@@ -1018,6 +1126,197 @@ struct CategorySummaryCard: View {
     }
 }
 
+struct ScopedReceiptCard: View {
+    let receipt: Receipt
+    let category: ReceiptCategory
+    let onView: () -> Void
+    let onEdit: () -> Void
+    let onDelete: () -> Void
+
+    @State private var showingFullImage = false
+
+    private var accessibilitySlug: String {
+        receiptsAccessibilitySlug(receipt.vendor)
+    }
+
+    private var categorySlug: String {
+        receiptsAccessibilitySlug(category.rawValue)
+    }
+
+    private var scopedAmount: Double {
+        receipt.scopedAmount(for: category)
+    }
+
+    private var matchedItems: [ReceiptItem] {
+        receipt.scopedItems(for: category)
+    }
+
+    private var scopedSummary: String? {
+        guard !matchedItems.isEmpty else { return nil }
+
+        let previewNames = matchedItems.prefix(2).map(\.name).joined(separator: ", ")
+        let remainderCount = matchedItems.count - min(matchedItems.count, 2)
+        let remainderText = remainderCount > 0 ? " +\(remainderCount) more" : ""
+        let itemLabel = matchedItems.count == 1 ? "item" : "items"
+
+        return "\(matchedItems.count) \(category.rawValue.lowercased()) \(itemLabel): \(previewNames)\(remainderText)"
+    }
+
+    var body: some View {
+        Button(action: onView) {
+            VStack(spacing: 12) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text(receipt.vendor)
+                                .font(.headline)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.primary)
+
+                            Spacer()
+
+                            if receipt.isReturn {
+                                Text("RETURN")
+                                    .font(.caption2)
+                                    .fontWeight(.bold)
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 3)
+                                    .background(Color.red)
+                                    .cornerRadius(6)
+                            }
+                        }
+
+                        HStack {
+                            Image(systemName: "tag")
+                                .font(.caption)
+                                .foregroundColor(.blue)
+                            Text(category.rawValue)
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                                .accessibilityIdentifier("receipt-card-category-\(accessibilitySlug)-\(categorySlug)")
+
+                            Spacer()
+
+                            Text(receipt.date.formatted(date: .abbreviated, time: .omitted))
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+
+                    VStack(alignment: .trailing, spacing: 4) {
+                        Text(scopedAmount.formatAsCurrency())
+                            .font(.title3)
+                            .fontWeight(.bold)
+                            .foregroundColor(scopedAmount < 0 ? .red : .primary)
+                            .accessibilityIdentifier("receipt-card-amount-\(accessibilitySlug)-\(categorySlug)")
+
+                        if receipt.taxAmount > 0 {
+                            Text("Tax: \(receipt.taxAmount.formatAsCurrency())")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
+
+                if !receipt.notes.isEmpty {
+                    HStack {
+                        Text(receipt.notes)
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.leading)
+                            .lineLimit(2)
+                        Spacer()
+                    }
+                }
+
+                if let scopedSummary {
+                    HStack {
+                        Text(scopedSummary)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.leading)
+                            .lineLimit(2)
+                        Spacer()
+                    }
+                }
+
+                HStack {
+                    if !receipt.paymentMethod.isEmpty {
+                        HStack(spacing: 6) {
+                            Image(systemName: "creditcard.fill")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            Text(receipt.paymentMethod)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+
+                    Spacer()
+
+                    if receipt.hasReceiptImage {
+                        Button {
+                            showingFullImage = true
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "photo.fill")
+                                    .font(.caption)
+                                    .foregroundColor(.blue)
+                                Text("View")
+                                    .font(.caption2)
+                                    .foregroundColor(.blue)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    if !receipt.receiptNumber.isEmpty {
+                        Text("Receipt #\(receipt.receiptNumber)")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                .accessibilityIdentifier("receipt-card-view-image-\(accessibilitySlug)")
+            }
+            .padding()
+            .background(Color(.systemBackground))
+            .cornerRadius(12)
+            .shadow(color: Color.black.opacity(0.1), radius: 2, x: 0, y: 1)
+        }
+        .accessibilityIdentifier("receipt-card-\(receipt.vendor)-\(categorySlug)")
+        .buttonStyle(.plain)
+        .contextMenu {
+            if receipt.hasReceiptImage {
+                Button("View Receipt Image") {
+                    showingFullImage = true
+                }
+            }
+
+            Button("Edit") {
+                onEdit()
+            }
+
+            Button("Delete", role: .destructive) {
+                onDelete()
+            }
+        }
+        .sheet(isPresented: $showingFullImage) {
+            if receipt.hasReceiptImage {
+                if let receiptImage = receipt.receiptImage {
+                    ZoomableImageView(image: receiptImage) {
+                        showingFullImage = false
+                    }
+                    .ignoresSafeArea()
+                } else {
+                    Text("Receipt image unavailable")
+                        .padding()
+                }
+            }
+        }
+    }
+}
+
 struct VendorGroupCard: View {
     let vendorName: String
     let receipts: [Receipt]
@@ -1081,6 +1380,7 @@ struct VendorGroupCard: View {
                     ForEach(receipts.sorted { $0.date > $1.date }) { receipt in
                         EnhancedReceiptCard(
                             receipt: receipt,
+                            scope: nil,
                             onView: { onReceiptView(receipt) },
                             onEdit: { onReceiptEdit(receipt) },
                             onDelete: { onReceiptDelete(receipt) }

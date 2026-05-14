@@ -1,6 +1,9 @@
 import Combine
 import Foundation
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#endif
 
 private enum UITestLaunchMode: String {
     case signedOut = "signed_out"
@@ -10,6 +13,7 @@ private enum UITestLaunchMode: String {
     case selectedProject = "selected_project"
     case estimatorMapping = "estimator_mapping"
     case scannedReceiptReview = "scanned_receipt_review"
+    case mixedCategoryReceipt = "mixed_category_receipt"
     case restoredSession = "restored_session"
 }
 
@@ -87,7 +91,7 @@ private struct AppLaunchConfiguration {
             )
             authViewModel.currentOrg = nil
 
-        case .projectSelection, .selectedProject, .estimatorMapping, .scannedReceiptReview:
+        case .projectSelection, .selectedProject, .estimatorMapping, .scannedReceiptReview, .mixedCategoryReceipt:
             let user = User(id: "ui-test-project-user", email: "project-ui-test@rheirhome.com")
             let organization = Organization(
                 id: "ui-test-project-org",
@@ -101,9 +105,15 @@ private struct AppLaunchConfiguration {
                 client: "Avery Homes",
                 organizationID: organization.id
             )
-            let kitchenProject = uiTestMode == .estimatorMapping
-                ? makeUITestEstimatorMappingProject(from: kitchenProjectSeed)
-                : kitchenProjectSeed
+            let kitchenProject: Project
+            switch uiTestMode {
+            case .estimatorMapping:
+                kitchenProject = makeUITestEstimatorMappingProject(from: kitchenProjectSeed)
+            case .mixedCategoryReceipt:
+                kitchenProject = makeUITestMixedCategoryProject(from: kitchenProjectSeed)
+            default:
+                kitchenProject = kitchenProjectSeed
+            }
             let bathProject = makeUITestProject(
                 id: UUID(uuidString: "4F874307-DB41-446C-9A9E-DB94283E4E28")!,
                 name: "Primary Bath Upgrade",
@@ -126,7 +136,7 @@ private struct AppLaunchConfiguration {
             projectViewModel.projects = [kitchenProject, bathProject]
             projectViewModel.organizationProjects = [kitchenProject, bathProject]
             projectViewModel.accessibleProjects = [kitchenProject, bathProject]
-            if uiTestMode == .selectedProject || uiTestMode == .estimatorMapping || uiTestMode == .scannedReceiptReview {
+            if uiTestMode == .selectedProject || uiTestMode == .estimatorMapping || uiTestMode == .scannedReceiptReview || uiTestMode == .mixedCategoryReceipt {
                 projectViewModel.selectProject(kitchenProject)
             } else {
                 projectViewModel.deselectProject()
@@ -268,6 +278,83 @@ private struct AppLaunchConfiguration {
         seededProject.tasks = [task]
         return seededProject
     }
+
+    private func makeUITestMixedCategoryProject(from project: Project) -> Project {
+        var seededProject = project
+
+        var receipt = Receipt(
+            id: "ui-test-mixed-category-receipt-001",
+            vendor: "UI Test Mixed Category Vendor",
+            date: Date(timeIntervalSince1970: 1_736_207_200),
+            amount: 36.29,
+            notes: "Mixed-category Home Depot run",
+            category: .material,
+            paymentMethod: "Credit Card"
+        )
+        receipt.projectID = project.id
+        receipt.receiptNumber = "MIX-3629"
+        receipt.taxAmount = 2.29
+        receipt.items = [
+            ReceiptItem(
+                name: "Copper Tee",
+                quantity: 1,
+                unitPrice: 12.34,
+                totalPrice: 12.34,
+                category: .plumbing
+            ),
+            ReceiptItem(
+                name: "2x4 Stud",
+                quantity: 1,
+                unitPrice: 15.55,
+                totalPrice: 15.55,
+                category: .framing
+            ),
+            ReceiptItem(
+                name: "Roof Patch",
+                quantity: 1,
+                unitPrice: 8.40,
+                totalPrice: 8.40,
+                category: .roofing
+            )
+        ]
+
+        #if canImport(UIKit)
+        receipt.setReceiptImage(makeUITestReceiptImage())
+        #endif
+
+        seededProject.receipts = [receipt]
+        return seededProject
+    }
+
+    #if canImport(UIKit)
+    private func makeUITestReceiptImage() -> UIImage {
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: 320, height: 640))
+        return renderer.image { context in
+            UIColor.white.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 320, height: 640))
+
+            UIColor(white: 0.94, alpha: 1).setFill()
+            context.fill(CGRect(x: 24, y: 24, width: 272, height: 592))
+
+            let titleAttributes: [NSAttributedString.Key: Any] = [
+                .font: UIFont.boldSystemFont(ofSize: 20),
+                .foregroundColor: UIColor.black
+            ]
+            NSString(string: "Mixed Category Supply").draw(at: CGPoint(x: 40, y: 52), withAttributes: titleAttributes)
+
+            let bodyAttributes: [NSAttributedString.Key: Any] = [
+                .font: UIFont.systemFont(ofSize: 16),
+                .foregroundColor: UIColor.darkGray
+            ]
+            NSString(string: "Copper Tee      $12.34").draw(at: CGPoint(x: 40, y: 124), withAttributes: bodyAttributes)
+            NSString(string: "2x4 Stud        $15.55").draw(at: CGPoint(x: 40, y: 160), withAttributes: bodyAttributes)
+            NSString(string: "Roof Patch      $8.40").draw(at: CGPoint(x: 40, y: 196), withAttributes: bodyAttributes)
+            NSString(string: "Tax             $2.29").draw(at: CGPoint(x: 40, y: 264), withAttributes: bodyAttributes)
+            NSString(string: "Total           $36.29").draw(at: CGPoint(x: 40, y: 300), withAttributes: bodyAttributes)
+            NSString(string: "Receipt # MIX-3629").draw(at: CGPoint(x: 40, y: 352), withAttributes: bodyAttributes)
+        }
+    }
+    #endif
 }
 
 private final class SignedOutUITestAuthService: AuthService {
@@ -338,6 +425,8 @@ struct RheirApp: App {
         case .estimatorMapping:
             authService = SignedOutUITestAuthService()
         case .scannedReceiptReview:
+            authService = SignedOutUITestAuthService()
+        case .mixedCategoryReceipt:
             authService = SignedOutUITestAuthService()
         case .restoredSession:
             authService = SignedOutUITestAuthService()

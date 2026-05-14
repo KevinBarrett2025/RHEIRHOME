@@ -41,6 +41,7 @@ struct ZoomableImageView: UIViewRepresentable {
         closeButton.tintColor = .white
         closeButton.layer.cornerRadius = 20
         closeButton.translatesAutoresizingMaskIntoConstraints = false
+        closeButton.accessibilityIdentifier = "zoomable-image-close"
         closeButton.addTarget(context.coordinator, action: #selector(Coordinator.dismissTapped), for: .touchUpInside)
 
         containerView.addSubview(scrollView)

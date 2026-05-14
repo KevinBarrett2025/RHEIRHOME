@@ -507,6 +507,50 @@ public struct Receipt: Identifiable, Codable, Hashable, Sendable {
         self.receiptImageData = data
         self.receiptImageName = data != nil ? "receipt_\(id).jpg" : nil
     }
+
+    /// Signed receipt total (sales positive, returns negative).
+    public var signedAmount: Double {
+        isReturn ? -amount : amount
+    }
+
+    /// Categories represented by this receipt.
+    /// When itemization exists, item categories are authoritative.
+    public var representedCategories: Set<ReceiptCategory> {
+        if !items.isEmpty {
+            return Set(items.map(\.category))
+        }
+        return [category]
+    }
+
+    /// Itemized lines that belong to a specific category.
+    public func scopedItems(for category: ReceiptCategory) -> [ReceiptItem] {
+        guard !items.isEmpty else { return [] }
+        return items.filter { $0.category == category }
+    }
+
+    /// Whether the receipt contributes spend to a specific category.
+    /// Itemized categories take precedence when present.
+    public func hasScopedCategory(_ category: ReceiptCategory) -> Bool {
+        if !items.isEmpty {
+            return items.contains { $0.category == category }
+        }
+        return self.category == category
+    }
+
+    /// Category-scoped spend for UI and analytics.
+    /// Itemized categories take precedence when present.
+    public func scopedAmount(for category: ReceiptCategory) -> Double {
+        if !items.isEmpty {
+            let total = items
+                .filter { $0.category == category }
+                .reduce(0.0) { partialResult, item in
+                    partialResult + item.totalPrice
+                }
+            return isReturn ? -total : total
+        }
+
+        return self.category == category ? signedAmount : 0
+    }
     
     /// Whether this receipt has associated photos
     public var hasPhotos: Bool {

@@ -142,7 +142,7 @@
   - Device build/install verification: PASS (`xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'id=00008140-0011492622E8801C' -derivedDataPath /tmp/rheir_phase2_device_verify_v2_dd -resultBundlePath /tmp/rheir_phase2_device_verify_v2_build.xcresult build`, `/tmp/rheir_phase2_device_verify_v2_build.xcresult`) with copied device payloads showing `projects.json` shrunk to `2947` bytes and `offline_projects.json` to `3437` bytes without inline image blobs
 
 ## Open Work
-- Re-run the real-device selected-project receipt flow with the new scan-review/detail/edit patch and explicitly confirm that scanned line items persist after save/reopen/relaunch, appear inside the saved edit sheet, the category control is legible, and the ellipsis menu fully replaces the removed duplicate action buttons.
+- Re-run the real-device selected-project receipt flow with the new scan-review/detail/edit patch and explicitly confirm that scanned line items persist after save/reopen/relaunch, edited mixed-category items roll up by itemized spend in the Categories view instead of the receipt grand total, the list quick-view opens the real saved receipt image, the category control is legible, and the ellipsis menu fully replaces the removed duplicate action buttons.
 - Production raw `print(...)` cleanup is effectively complete; only development-only seams still emit raw tracing.
 - Continue shrinking the remaining oversized active state owners.
 - Keep the shipping app locked to the fast-ship v1 release profile so the visible shell stays single-user and avoids team/admin detours.
