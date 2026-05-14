@@ -62,17 +62,19 @@ final class RHEIRUITests: XCTestCase {
         let app = makeApp(mode: .ready)
         app.launch()
 
-        let tabBar = app.tabBars.firstMatch
         XCTAssertTrue(
-            tabBar.waitForExistence(timeout: 5),
-            "Expected deterministic ready UI test mode to render the main tab shell."
+            app.staticTexts["Projects"].waitForExistence(timeout: 5),
+            "Expected deterministic ready UI test mode to render the project-selection home."
         )
-
-        XCTAssertTrue(tabBar.buttons["Projects"].exists, "Expected Projects tab in ready UI test mode.")
-        XCTAssertTrue(tabBar.buttons["Receipts"].exists, "Expected Receipts tab in ready UI test mode.")
-        XCTAssertTrue(tabBar.buttons["Labor"].exists, "Expected Labor tab in ready UI test mode.")
-        XCTAssertTrue(tabBar.buttons["Tasks"].exists, "Expected Tasks tab in ready UI test mode.")
-        XCTAssertFalse(tabBar.buttons["Company"].exists, "Expected the fast-ship v1 shell to hide the Company tab.")
+        XCTAssertTrue(
+            app.staticTexts["Choose a project to begin"].exists,
+            "Expected fast-ship mode to explain that project context unlocks the work tabs."
+        )
+        XCTAssertFalse(
+            app.tabBars.firstMatch.exists,
+            "Expected fast-ship mode to hide the work-tab bar until a project is selected."
+        )
+        XCTAssertFalse(app.buttons["Company"].exists, "Expected the fast-ship v1 shell to hide the Company tab.")
     }
 
     @MainActor
@@ -80,17 +82,19 @@ final class RHEIRUITests: XCTestCase {
         let app = makeApp(mode: .selectingOrganization)
         app.launch()
 
-        let tabBar = app.tabBars.firstMatch
         XCTAssertTrue(
-            tabBar.waitForExistence(timeout: 5),
-            "Expected fast-ship v1 mode to bypass the organization picker and resolve directly into the main tab shell."
+            app.staticTexts["Projects"].waitForExistence(timeout: 5),
+            "Expected fast-ship v1 mode to bypass the organization picker and resolve directly into the project-selection home."
         )
 
         XCTAssertFalse(
             app.navigationBars["Organizations"].exists,
             "Expected the organization-selection surface to stay hidden in fast-ship v1 mode."
         )
-        XCTAssertTrue(tabBar.buttons["Projects"].exists, "Expected Projects tab after streamlined organization resolution.")
+        XCTAssertFalse(
+            app.tabBars.firstMatch.exists,
+            "Expected fast-ship v1 mode to hide work tabs until project context is selected."
+        )
     }
 
     @MainActor
@@ -98,18 +102,17 @@ final class RHEIRUITests: XCTestCase {
         let app = makeApp(mode: .noOrganization)
         app.launch()
 
-        let tabBar = app.tabBars.firstMatch
         XCTAssertTrue(
-            tabBar.waitForExistence(timeout: 5),
-            "Expected fast-ship v1 mode to create a personal workspace fallback and show the main tab shell."
+            app.staticTexts["Projects"].waitForExistence(timeout: 5),
+            "Expected fast-ship v1 mode to create a personal workspace fallback and show the project-selection home."
         )
 
         XCTAssertFalse(
             app.staticTexts["Create Your Organization"].exists,
             "Expected fast-ship v1 mode to hide legacy organization setup when CloudKit organizations are unavailable."
         )
-        XCTAssertFalse(tabBar.buttons["Company"].exists, "Expected Company tab to stay hidden in fast-ship v1 mode.")
-        XCTAssertTrue(tabBar.buttons["Projects"].exists, "Expected Projects tab after personal workspace fallback.")
+        XCTAssertFalse(app.tabBars.firstMatch.exists, "Expected work tabs to stay hidden until project context is selected.")
+        XCTAssertFalse(app.buttons["Company"].exists, "Expected Company tab to stay hidden in fast-ship v1 mode.")
     }
 
     @MainActor
@@ -117,34 +120,35 @@ final class RHEIRUITests: XCTestCase {
         let app = makeApp(mode: .projectSelection)
         app.launch()
 
-        let chooseProjectButton = app.buttons["project-selection-menu"]
         XCTAssertTrue(
-            chooseProjectButton.waitForExistence(timeout: 5),
-            "Expected deterministic project-selection UI test mode to expose the project picker."
+            app.staticTexts["Projects"].waitForExistence(timeout: 5),
+            "Expected deterministic project-selection UI test mode to expose the project-selection home."
         )
 
         XCTAssertTrue(
-            app.staticTexts["project-selection-guidance"].waitForExistence(timeout: 5),
-            "Expected the multi-project no-selection guidance before a project is chosen."
+            app.staticTexts["Choose a project to begin"].exists,
+            "Expected the fast-ship project-selection guidance before a project is chosen."
         )
 
-        app.tabBars.buttons["Receipts"].tap()
+        XCTAssertFalse(
+            app.tabBars.firstMatch.exists,
+            "Expected Receipts/Labor/Tasks tabs to stay hidden before a project is selected."
+        )
 
-        let receiptsGateMessage = app.staticTexts["Choose a project from the Projects tab before viewing receipts."]
+        let projectCard = app.buttons[Self.selectedProjectCardIdentifier]
         XCTAssertTrue(
-            receiptsGateMessage.waitForExistence(timeout: 5),
-            "Expected Receipts to require a selected project before showing receipt content."
+            projectCard.waitForExistence(timeout: 5),
+            "Expected deterministic project-selection UI test mode to expose selectable project cards."
         )
-        let goToProjectsButton = app.buttons["project-selection-required-action"]
+        projectCard.tap()
+
+        let tabBar = app.tabBars.firstMatch
         XCTAssertTrue(
-            goToProjectsButton.exists,
-            "Expected the fast-ship receipt gate to expose the shared Go to Projects action."
+            tabBar.waitForExistence(timeout: 5),
+            "Expected work tabs to appear after selecting project context."
         )
-        goToProjectsButton.tap()
-        XCTAssertTrue(
-            chooseProjectButton.waitForExistence(timeout: 5),
-            "Expected the shared project gate action to return the user to the Projects shell."
-        )
+        tabBar.buttons["Receipts"].tap()
+        XCTAssertTrue(app.staticTexts["No Receipts Yet"].waitForExistence(timeout: 5))
 
         app.terminate()
 
@@ -166,16 +170,14 @@ final class RHEIRUITests: XCTestCase {
     func testLaborModeRequiresAndUsesSelectedProjectContext() throws {
         let app = makeApp(mode: .projectSelection)
         app.launch()
-        app.tabBars.buttons["Labor"].tap()
 
-        let laborGateMessage = app.staticTexts["Choose a project before viewing or logging labor hours."]
         XCTAssertTrue(
-            laborGateMessage.waitForExistence(timeout: 5),
-            "Expected Labor to require a selected project before showing project-scoped labor content."
+            app.staticTexts["Choose a project to begin"].waitForExistence(timeout: 5),
+            "Expected project-selection mode to keep users on the context picker before Labor is available."
         )
-        XCTAssertTrue(
-            app.buttons["project-selection-required-action"].exists,
-            "Expected the fast-ship labor gate to expose the shared Go to Projects action."
+        XCTAssertFalse(
+            app.tabBars.firstMatch.exists,
+            "Expected Labor tab to stay hidden before project context is selected."
         )
 
         app.terminate()
@@ -206,16 +208,14 @@ final class RHEIRUITests: XCTestCase {
     func testTasksModeRequiresAndUsesSelectedProjectContext() throws {
         let app = makeApp(mode: .projectSelection)
         app.launch()
-        app.tabBars.buttons["Tasks"].tap()
 
-        let tasksGateMessage = app.staticTexts["Choose a project before viewing or managing tasks."]
         XCTAssertTrue(
-            tasksGateMessage.waitForExistence(timeout: 5),
-            "Expected Tasks to require a selected project before showing project-scoped task content."
+            app.staticTexts["Choose a project to begin"].waitForExistence(timeout: 5),
+            "Expected project-selection mode to keep users on the context picker before Tasks is available."
         )
-        XCTAssertTrue(
-            app.buttons["project-selection-required-action"].exists,
-            "Expected the fast-ship tasks gate to expose the shared Go to Projects action."
+        XCTAssertFalse(
+            app.tabBars.firstMatch.exists,
+            "Expected Tasks tab to stay hidden before project context is selected."
         )
 
         app.terminate()

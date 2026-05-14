@@ -3,7 +3,7 @@
 ## Repo
 - Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Branch: `gm/rheir-hardening-phase1`
-- HEAD: `130f53c2bbeccd56baa5299a3583b4d654995b2b`
+- HEAD: `e50e320afd09ab05f663633952b52a69e3ef0486`
 
 ## Active Initiative
 - RHEIR release hardening, phase 2 estimator foundation and contractor workflow hardening.
@@ -158,6 +158,8 @@
 - Expanded focused `RHEIRTests/RHEIRTests.swift` parity to prove raw legacy `imageDatas` payloads compact cleanly from `UserDefaults`, on-disk project files, and offline project file writes.
 - Added fast-ship personal-workspace fallback routing so restored signed-in users with no resolved CloudKit organization stay in the simplified v1 shell instead of landing on legacy `Create Your Organization` onboarding.
 - Added focused session and UI smoke coverage proving fast-ship no-organization launch activates a personal workspace, hides Company/admin setup, and lands on the Projects/Receipts/Labor/Tasks shell.
+- Reworked the fast-ship project-selection home so Receipts, Labor, and Tasks tabs stay hidden until a project is selected, removing the empty-tab trap while preserving selected-project work tabs after context is chosen.
+- Simplified the fast-ship Projects screen by removing visible workspace/org copy, the redundant choose/change project dropdown, the logo block, and technical device/iCloud project indicators from the v1 project-selection path.
 
 ## In Progress
 - Lock the shipping app into the fast-ship v1 release profile so the visible shell stays single-user focused: `Projects`, `Receipts`, `Labor`, `Tasks`, plus budget `Breakdown` / `Estimator`.
@@ -174,6 +176,8 @@
 ## Latest Evidence
 - Fast-ship personal-workspace fallback parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_fastship_personal_workspace_dd -resultBundlePath /tmp/rheir_fastship_personal_workspace_20260514_rerun3.xcresult test -only-testing:RHEIRTests/SessionSupportTests -only-testing:RHEIRUITests/RHEIRUITests/testOrganizationSelectionModeAutoResolvesIntoReadyShell -only-testing:RHEIRUITests/RHEIRUITests/testNoOrganizationModeUsesFastShipPersonalWorkspace` -> PASS (`/tmp/rheir_fastship_personal_workspace_20260514_rerun3.xcresult`, `16 session tests plus 2 UI smokes`)
 - Fast-ship personal-workspace Gate A: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_fastship_personal_workspace_dd -resultBundlePath /tmp/rheir_gateA_fastship_personal_workspace_20260514.xcresult clean build` -> PASS (`/tmp/rheir_gateA_fastship_personal_workspace_20260514.xcresult`)
+- Fast-ship project-context shell parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_project_context_shell_dd -resultBundlePath /tmp/rheir_project_context_shell_20260514.xcresult test -only-testing:RHEIRUITests/RHEIRUITests/testReadyModeShowsMainTabShell -only-testing:RHEIRUITests/RHEIRUITests/testOrganizationSelectionModeAutoResolvesIntoReadyShell -only-testing:RHEIRUITests/RHEIRUITests/testNoOrganizationModeUsesFastShipPersonalWorkspace -only-testing:RHEIRUITests/RHEIRUITests/testProjectSelectionModeRequiresAndAppliesProjectContext -only-testing:RHEIRUITests/RHEIRUITests/testLaborModeRequiresAndUsesSelectedProjectContext -only-testing:RHEIRUITests/RHEIRUITests/testTasksModeRequiresAndUsesSelectedProjectContext` -> PASS (`/tmp/rheir_project_context_shell_20260514.xcresult`, `6 UI tests`)
+- Fast-ship project-context shell Gate A: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_project_context_shell_dd -resultBundlePath /tmp/rheir_gateA_project_context_shell_20260514.xcresult clean build` -> PASS (`/tmp/rheir_gateA_project_context_shell_20260514.xcresult`)
 - `ReceiptsView.swift` now renders a selected-category drilldown header with the category-scoped total and contributing receipt count, so a Plumbing/Framing/etc. filter shows the spend total at a glance instead of only on individual receipt cards.
 - `Receipt.swift` now exposes `budgetScopedAmount(for:)`, and `ProjectViewModel+Filters.swift` uses it for active Materials, General Conditions, and Contingency spend, preventing mixed itemized receipts from being undercounted in high-level budget totals.
 - `ProjectAccessStore` now resolves a selected project to the matching loaded accessible-project payload, `ProjectViewModel` now detects same-ID project payload changes during organization refresh, and `SessionStore` now reselects a hydrated project when restored selection receipt data is stale.

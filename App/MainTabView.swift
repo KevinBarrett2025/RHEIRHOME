@@ -9,47 +9,58 @@ struct MainTabView: View {
     @State private var selection: Tab = .projects
 
     var body: some View {
-        TabView(selection: $selection) {
-            LandingPageView(selectedTab: $selection)
-                .environmentObject(projectVM)
-                .environmentObject(sessionStore)
-                .tabItem { Label("Projects", systemImage: "folder") }
-                .tag(Tab.projects)
-
-            ReceiptsView(selectedTab: $selection)
-                .environmentObject(projectVM)
-                .environmentObject(sessionStore)
-                .tabItem { Label("Receipts", systemImage: "tray.full") }
-                .tag(Tab.receipts)
-
-            LaborModuleView(selectedTab: $selection)
-                .environmentObject(projectVM)
-                .environmentObject(sessionStore)
-                .tabItem { Label("Labor", systemImage: "clock") }
-                .tag(Tab.labor)
-
-            NavigationStack {
-                TasksListView(selectedTab: $selection)
+        Group {
+            if releaseProfile.shouldUseStreamlinedSessionRouting && projectVM.selectedProject == nil {
+                LandingPageView(selectedTab: $selection)
                     .environmentObject(projectVM)
                     .environmentObject(sessionStore)
-            }
-            .tabItem { Label("Tasks", systemImage: "checklist") }
-            .tag(Tab.tasks)
-
-            if !releaseProfile.shouldHideCompanySurface {
-                NavigationStack {
-                    MasterCompanySettingsView()
+                    .onAppear {
+                        selection = .projects
+                    }
+            } else {
+                TabView(selection: $selection) {
+                    LandingPageView(selectedTab: $selection)
                         .environmentObject(projectVM)
-                        .environmentObject(authVM)
                         .environmentObject(sessionStore)
+                        .tabItem { Label("Projects", systemImage: "folder") }
+                        .tag(Tab.projects)
+
+                    ReceiptsView(selectedTab: $selection)
+                        .environmentObject(projectVM)
+                        .environmentObject(sessionStore)
+                        .tabItem { Label("Receipts", systemImage: "tray.full") }
+                        .tag(Tab.receipts)
+
+                    LaborModuleView(selectedTab: $selection)
+                        .environmentObject(projectVM)
+                        .environmentObject(sessionStore)
+                        .tabItem { Label("Labor", systemImage: "clock") }
+                        .tag(Tab.labor)
+
+                    NavigationStack {
+                        TasksListView(selectedTab: $selection)
+                            .environmentObject(projectVM)
+                            .environmentObject(sessionStore)
+                    }
+                    .tabItem { Label("Tasks", systemImage: "checklist") }
+                    .tag(Tab.tasks)
+
+                    if !releaseProfile.shouldHideCompanySurface {
+                        NavigationStack {
+                            MasterCompanySettingsView()
+                                .environmentObject(projectVM)
+                                .environmentObject(authVM)
+                                .environmentObject(sessionStore)
+                        }
+                        .tabItem { Label("Company", systemImage: "building.2") }
+                        .tag(Tab.company)
+                    }
                 }
-                .tabItem { Label("Company", systemImage: "building.2") }
-                .tag(Tab.company)
-            }
-        }
-        .onAppear {
-            if !releaseProfile.mainTabs.contains(selection) {
-                selection = .projects
+                .onAppear {
+                    if !releaseProfile.mainTabs.contains(selection) {
+                        selection = .projects
+                    }
+                }
             }
         }
     }

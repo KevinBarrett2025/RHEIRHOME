@@ -24,11 +24,15 @@ struct LandingPageView: View {
         NavigationStack {
             ZStack {
                 VStack {
-                    // Use UniversalHeaderView instead of custom header to get tier switcher
-                    UniversalHeaderView(
-                        showSettingsGear: true,
-                        showProjectContext: false
-                    )
+                    if releaseProfile.shouldHideCollaborationSurface {
+                        fastShipHeaderSection
+                    } else {
+                        // Use UniversalHeaderView instead of custom header to get tier switcher
+                        UniversalHeaderView(
+                            showSettingsGear: true,
+                            showProjectContext: false
+                        )
+                    }
                     
                     // Additional context info below header
                     if authVM.currentOrg != nil && !releaseProfile.shouldHideCollaborationSurface {
@@ -75,9 +79,10 @@ struct LandingPageView: View {
                         .padding(.bottom, 8)
                     }
 
-                    selectionContextSection
-                    
-                    logoSection
+                    if !releaseProfile.shouldHideCollaborationSurface {
+                        selectionContextSection
+                        logoSection
+                    }
                     
                     if activeProjects.isEmpty {
                         emptyStateSection
@@ -135,6 +140,76 @@ struct LandingPageView: View {
             .scaledToFit()
             .frame(height: 120)
             .padding(.top, 8)
+    }
+
+    private var fastShipHeaderSection: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(alignment: .center) {
+                Text("Projects")
+                    .font(.largeTitle.weight(.bold))
+                    .foregroundColor(.primary)
+                    .accessibilityIdentifier("fast-ship-projects-title")
+
+                Spacer()
+
+                NavigationLink {
+                    PersonalSettingsView()
+                        .environmentObject(viewModel)
+                        .environmentObject(authVM)
+                } label: {
+                    Image(systemName: "gearshape.fill")
+                        .font(.title2)
+                        .foregroundColor(.secondary)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .accessibilityLabel("Settings")
+            }
+
+            if let selectedProject = viewModel.selectedProject {
+                HStack(spacing: 10) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(.green)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Current Project")
+                            .font(.caption.weight(.semibold))
+                            .textCase(.uppercase)
+                            .foregroundColor(.secondary)
+                        Text(selectedProject.name)
+                            .font(.headline)
+                            .foregroundColor(.primary)
+                            .lineLimit(1)
+                    }
+
+                    Spacer()
+                }
+                .padding(14)
+                .background(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(Color(.secondarySystemBackground))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(Color.green.opacity(0.35), lineWidth: 1)
+                )
+                .accessibilityIdentifier("fast-ship-current-project-card")
+            } else {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Choose a project to begin")
+                        .font(.title3.weight(.semibold))
+                        .foregroundColor(.primary)
+                    Text("Receipts, labor, tasks, and budget unlock after a project is selected.")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .accessibilityIdentifier("fast-ship-project-selection-guidance")
+            }
+        }
+        .padding(.horizontal)
+        .padding(.top, 8)
+        .padding(.bottom, 8)
     }
 
     @ViewBuilder
@@ -324,13 +399,15 @@ struct LandingPageView: View {
                                 .font(.headline)
                         }
                         
-                        HStack(spacing: 12) {
-                            Label("\(viewModel.projects.filter { $0.status == .active }.count)", systemImage: "iphone")
-                                .font(.caption)
-                                .foregroundColor(.blue)
-                            Label("\(viewModel.accessibleProjects.filter { $0.status == .active }.count)", systemImage: "icloud")
-                                .font(.caption)
-                                .foregroundColor(.green)
+                        if !releaseProfile.shouldHideCollaborationSurface {
+                            HStack(spacing: 12) {
+                                Label("\(viewModel.projects.filter { $0.status == .active }.count)", systemImage: "iphone")
+                                    .font(.caption)
+                                    .foregroundColor(.blue)
+                                Label("\(viewModel.accessibleProjects.filter { $0.status == .active }.count)", systemImage: "icloud")
+                                    .font(.caption)
+                                    .foregroundColor(.green)
+                            }
                         }
                         
                         // Show organization context for multi-org users
@@ -356,27 +433,29 @@ struct LandingPageView: View {
                     }
                     Spacer()
                     
-                    Menu {
-                        // Multi-org actions
-                        if !releaseProfile.shouldHideCollaborationSurface && authVM.userOrganizations.count > 1 {
-                            Button("Switch Organization") {
-                                // This would trigger the organization selector
-                            }
-                        }
-                        
-                        if !activeProjects.isEmpty {
-                            Divider()
-                            
-                            ForEach(activeProjects) { project in
-                                Button("Complete '\(project.name)'") {
-                                    viewModel.markProjectAsCompleted(project)
+                    if !releaseProfile.shouldHideCollaborationSurface {
+                        Menu {
+                            // Multi-org actions
+                            if authVM.userOrganizations.count > 1 {
+                                Button("Switch Organization") {
+                                    // This would trigger the organization selector
                                 }
                             }
+
+                            if !activeProjects.isEmpty {
+                                Divider()
+
+                                ForEach(activeProjects) { project in
+                                    Button("Complete '\(project.name)'") {
+                                        viewModel.markProjectAsCompleted(project)
+                                    }
+                                }
+                            }
+                        } label: {
+                            Image(systemName: "ellipsis.circle")
+                                .font(.title3)
+                                .foregroundColor(.secondary)
                         }
-                    } label: {
-                        Image(systemName: "ellipsis.circle")
-                            .font(.title3)
-                            .foregroundColor(.secondary)
                     }
                     
                     Button {
@@ -417,10 +496,12 @@ struct LandingPageView: View {
                                 .font(.headline)
                                 .lineLimit(1)
                             Spacer()
-                            // Show source indicator
-                            Image(systemName: isSharedProject ? "icloud.fill" : "iphone")
-                                .font(.caption)
-                                .foregroundColor(isSharedProject ? .green : .blue)
+                            if !releaseProfile.shouldHideCollaborationSurface {
+                                // Show source indicator
+                                Image(systemName: isSharedProject ? "icloud.fill" : "iphone")
+                                    .font(.caption)
+                                    .foregroundColor(isSharedProject ? .green : .blue)
+                            }
                         }
                         Text("Client: \(project.client)")
                             .font(.subheadline)
@@ -432,7 +513,15 @@ struct LandingPageView: View {
                     Text("Budget: $\(project.totalBudget, specifier: "%.0f")")
                         .font(.caption)
                     Spacer()
-                    if isSharedProject {
+                    if isSelected && releaseProfile.shouldHideCollaborationSurface {
+                        Text("Selected")
+                            .font(.caption2.weight(.semibold))
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(Color.blue.opacity(0.18))
+                            .foregroundColor(.blue)
+                            .cornerRadius(6)
+                    } else if isSharedProject && !releaseProfile.shouldHideCollaborationSurface {
                         Text(releaseProfile.shouldHideCollaborationSurface ? "Synced" : "Shared")
                             .font(.caption2)
                             .padding(.horizontal, 6)
@@ -452,9 +541,9 @@ struct LandingPageView: View {
                     .fill(isSharedProject ? Color.green.opacity(0.05) : Color(.systemGray6))
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(
-                        isSelected ? Color.gray : (isSharedProject ? Color.green.opacity(0.3) : Color.gray.opacity(0.3)),
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(
+                        isSelected ? Color.blue : (isSharedProject && !releaseProfile.shouldHideCollaborationSurface ? Color.green.opacity(0.3) : Color.gray.opacity(0.3)),
                         lineWidth: isSelected ? 3 : 1
                     )
             )
