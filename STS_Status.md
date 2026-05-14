@@ -3,7 +3,7 @@
 ## Repo
 - Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Branch: `gm/rheir-hardening-phase1`
-- HEAD: `e23c6a1c139ca9d8fd9919cbe5ba1826621975e5`
+- HEAD: `62dda5be97038522de3e7b073ce39b61738da7d1`
 
 ## Active Initiative
 - RHEIR release hardening, Fast-Ship Hybrid contractor workflow hardening.
@@ -163,10 +163,12 @@
 - Preserved the Fast-Ship Hybrid Working-App Plan in `RHEIR_FAST_SHIP_HYBRID_WORKING_APP_PLAN.md` and tied `SHIP_READINESS_CHECKLIST.md` to the contractor-first release blockers: global refresh, completed projects, Business Resources, Labor, Tasks, Reports, UI cleanup, and device acceptance.
 - Centralized active project mutations through the shared `ProjectViewModel` mutation seam so create/update/delete, receipts, labor/time-entry, and team-member labor-reference changes refresh selected project state, visible project lists, access payloads, derived receipt/labor caches, local storage, and CloudKit sync from one path.
 - Added focused project mutation propagation tests proving project updates and deletes immediately refresh visible collections, selected-project state, and derived receipt snapshots.
+- Restored completed-project visibility in the fast-ship Projects home with Active/Completed project scopes, closeout detail navigation, and selected-project clearing when an active project is completed.
+- Added deterministic completed-project unit/UI coverage proving completed jobs remain recoverable and do not unlock active Receipts/Labor/Tasks context before a new active project is selected.
 
 ## In Progress
 - Lock the shipping app into the Fast-Ship Hybrid release profile so the visible shell stays single-user focused while hidden CloudKit/personal-workspace infrastructure remains available.
-- Implement the remaining Working-App release blockers in this order: completed projects, Business Resources, Labor, Tasks, Reports, UI cleanup, and device acceptance.
+- Implement the remaining Working-App release blockers in this order: Business Resources, Labor, Tasks, Reports, UI cleanup, and device acceptance.
 - Continue broader selected-project estimator variance/runtime QA on top of the approved-baseline mapping seam inside the simplified v1 shell.
 - Continue broader selected-project receipt runtime QA in parallel, with same-device/device validation now the active release seam after manual-receipt relaunch, scanned-receipt return/reopen, and launch-time receipt hydration parity are green in simulator.
 - Continue shrinking the remaining oversized active state owners around the new sync and access store boundaries.
@@ -178,6 +180,7 @@
 - Raw in-sandbox `xcodebuild` commands are still less reliable than elevated CLI or `xcodebuildmcp` paths in this environment because CoreSimulator and DerivedData access remain sandbox-sensitive.
 
 ## Latest Evidence
+- Completed-project archive focused parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_completed_projects_parity_dd -resultBundlePath /tmp/rheir_completed_projects_parity.xcresult test -only-testing:RHEIRTests/ProjectMutationPropagationTests -only-testing:RHEIRUITests/RHEIRUITests/testProjectSelectionShowsCompletedProjectArchive -only-testing:RHEIRUITests/RHEIRUITests/testProjectSelectionModeRequiresAndAppliesProjectContext` -> PASS (`/tmp/rheir_completed_projects_parity.xcresult`, `3 unit tests plus 2 UI tests`)
 - Project mutation contract Gate A: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_mutation_contract_dd -resultBundlePath /tmp/rheir_gateA_mutation_contract.xcresult clean build` -> PASS (`/tmp/rheir_gateA_mutation_contract.xcresult`)
 - Project mutation contract focused parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_mutation_access_parity_dd -resultBundlePath /tmp/rheir_mutation_access_parity.xcresult test -only-testing:RHEIRTests/ProjectMutationPropagationTests -only-testing:RHEIRTests/ProjectAccessStoreTests` -> PASS (`/tmp/rheir_mutation_access_parity.xcresult`, `5 tests across 2 suites`)
 - Fast-Ship Hybrid Working-App plan Gate A: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_working_app_plan_docs_dd -resultBundlePath /tmp/rheir_gateA_working_app_plan_docs.xcresult clean build` -> PASS (`/tmp/rheir_gateA_working_app_plan_docs.xcresult`)

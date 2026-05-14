@@ -18,6 +18,8 @@
 - `ProjectViewModel` now centralizes active project mutations through one seam that updates selected project state, visible project lists, access payloads, derived receipt/labor caches, local persistence, and CloudKit sync scheduling.
 - `ProjectViewModel+Receipts.swift`, `ProjectViewModel+TimeEntry.swift`, `ProjectViewModel+Clocking.swift`, and `ProjectViewModel+Employees.swift` now route receipt, labor, clocking, and team-member labor-reference writes through the same mutation contract.
 - `RHEIRTests.swift` now proves project mutation propagation for updates and deletes, including selected-project refresh and derived receipt snapshot invalidation.
+- `LandingPageView` now exposes Active and Completed project scopes in the fast-ship Projects home, completed projects open closeout detail instead of active work context, and `ProjectViewModel` clears the selected project when it is completed.
+- `RHEIRTests.swift` and `RHEIRUITests.swift` now prove completed jobs remain recoverable from Projects and do not reveal Receipts/Labor/Tasks until an active project is selected.
 - Canonical tree cleanup completed in the working branch.
 - Session flow consolidated around `AppSessionSupport.swift`.
 - `Project.swift` now carries the first compiled estimator domain with intake, draft, versioned baseline, variance, source-evidence, and proposal-view models plus bridge helpers back into `Project` budget summary fields.
@@ -161,8 +163,7 @@
   - Device build/install verification: PASS (`xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'id=00008140-0011492622E8801C' -derivedDataPath /tmp/rheir_phase2_device_verify_v2_dd -resultBundlePath /tmp/rheir_phase2_device_verify_v2_build.xcresult build`, `/tmp/rheir_phase2_device_verify_v2_build.xcresult`) with copied device payloads showing `projects.json` shrunk to `2947` bytes and `offline_projects.json` to `3437` bytes without inline image blobs
 
 ## Open Work
-- Use the new global project mutation/refresh contract while restoring completed/past projects, Business Resources, Labor, Tasks, Reports, and remaining UI cleanup so those flows inherit immediate refresh instead of adding one-off state writes.
-- Restore completed/past projects as a visible Active/Completed Projects flow so closed jobs remain recoverable.
+- Use the new global project mutation/refresh contract while restoring Business Resources, Labor, Tasks, Reports, and remaining UI cleanup so those flows inherit immediate refresh instead of adding one-off state writes.
 - Reintroduce Business Resources without exposing Company/Organization: workers, job titles, labor rates, vendors, and payment methods/cards.
 - Rework Labor into a shippable contractor workflow with worker/rate management, partial/split payments, check/reference metadata, edit payment, and unpay/reissue.
 - Rework Tasks into a shippable contractor workflow with multi-task CRUD, assignment, due/overdue state, completion proof, photos, and immediate project/report refresh.

@@ -2,6 +2,22 @@ import SwiftUI
 import OSLog
 
 struct LandingPageView: View {
+    private enum ProjectListScope: String, CaseIterable, Identifiable {
+        case active = "Active"
+        case completed = "Completed"
+
+        var id: String { rawValue }
+
+        func title(for count: Int) -> String {
+            switch self {
+            case .active:
+                return count == 1 ? "Active Project" : "Active Projects"
+            case .completed:
+                return count == 1 ? "Completed Project" : "Completed Projects"
+            }
+        }
+    }
+
     @EnvironmentObject var viewModel: ProjectViewModel
     @EnvironmentObject var authVM: AuthViewModel
     @EnvironmentObject private var sessionStore: SessionStore
@@ -13,11 +29,29 @@ struct LandingPageView: View {
     @State private var showingStatusAlert = false
     @State private var statusMessage = ""
     @State private var showAdminOnboardingSheet = false
+    @State private var projectListScope: ProjectListScope = .active
     @Namespace private var animation
 
     private var activeProjects: [Project] {
         // Use role-based filtered projects instead of all projects
         return viewModel.accessibleProjects.filter { $0.status == .active }
+    }
+
+    private var completedProjects: [Project] {
+        viewModel.accessibleProjects.filter { $0.status == .completed }
+    }
+
+    private var visibleProjects: [Project] {
+        switch projectListScope {
+        case .active:
+            return activeProjects
+        case .completed:
+            return completedProjects
+        }
+    }
+
+    private var visibleProjectsTitle: String {
+        "\(visibleProjects.count) \(projectListScope.title(for: visibleProjects.count))"
     }
 
     var body: some View {
@@ -84,7 +118,11 @@ struct LandingPageView: View {
                         logoSection
                     }
                     
-                    if activeProjects.isEmpty {
+                    if !activeProjects.isEmpty || !completedProjects.isEmpty {
+                        projectScopePicker
+                    }
+
+                    if visibleProjects.isEmpty {
                         emptyStateSection
                     } else {
                         projectsListSection
@@ -140,6 +178,19 @@ struct LandingPageView: View {
             .scaledToFit()
             .frame(height: 120)
             .padding(.top, 8)
+    }
+
+    private var projectScopePicker: some View {
+        Picker("Project status", selection: $projectListScope) {
+            ForEach(ProjectListScope.allCases) { scope in
+                Text(scope.rawValue)
+                    .tag(scope)
+            }
+        }
+        .pickerStyle(.segmented)
+        .padding(.horizontal)
+        .padding(.bottom, 4)
+        .accessibilityIdentifier("project-status-scope-picker")
     }
 
     private var fastShipHeaderSection: some View {
@@ -295,15 +346,19 @@ struct LandingPageView: View {
         VStack {
             Spacer()
             VStack(spacing: 12) {
-                Image(systemName: "folder.circle")
+                Image(systemName: projectListScope == .active ? "folder.circle" : "checkmark.circle")
                     .font(.system(size: 60))
                     .foregroundColor(.secondary)
                 
-                Text("No active projects.")
+                Text(projectListScope == .active ? "No active projects." : "No completed projects yet.")
                     .font(.headline)
                     .foregroundColor(.secondary)
                 
-                if releaseProfile.shouldHideCollaborationSurface {
+                if projectListScope == .completed {
+                    Text("Closed-out jobs will appear here after you mark a project complete.")
+                        .multilineTextAlignment(.center)
+                        .foregroundColor(.secondary)
+                } else if releaseProfile.shouldHideCollaborationSurface {
                     VStack(spacing: 8) {
                         Text("Create your first project to start tracking receipts, labor, tasks, and budget.")
                             .multilineTextAlignment(.center)
@@ -387,7 +442,7 @@ struct LandingPageView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         if !releaseProfile.shouldHideCollaborationSurface, let role = authVM.currentOrganizationRole {
                             HStack {
-                                Text("\(activeProjects.count) Active Projects")
+                                Text(visibleProjectsTitle)
                                     .font(.headline)
                                 
                                 Text("(\(role.displayName))")
@@ -395,7 +450,7 @@ struct LandingPageView: View {
                                     .foregroundColor(.secondary)
                             }
                         } else {
-                            Text("\(activeProjects.count) Active Projects")
+                            Text(visibleProjectsTitle)
                                 .font(.headline)
                         }
                         
@@ -469,8 +524,13 @@ struct LandingPageView: View {
                 }
                 .padding(.horizontal)
                 
-                ForEach(activeProjects) { project in
-                    projectCard(for: project)
+                ForEach(visibleProjects) { project in
+                    switch projectListScope {
+                    case .active:
+                        projectCard(for: project)
+                    case .completed:
+                        completedProjectCard(for: project)
+                    }
                 }
             }
             .padding()
@@ -558,6 +618,61 @@ struct LandingPageView: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel(project.name)
         .accessibilityIdentifier("project-card-\(project.id.uuidString)")
+    }
+
+    private func completedProjectCard(for project: Project) -> some View {
+        NavigationLink {
+            CompletedProjectDetailView(project: project)
+                .environmentObject(viewModel)
+        } label: {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(project.name)
+                            .font(.headline)
+                            .lineLimit(1)
+                        Text("Client: \(project.client)")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                    }
+
+                    Spacer()
+
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.title3)
+                        .foregroundColor(.blue)
+                }
+
+                HStack {
+                    Text("Final Budget: $\(project.totalBudget, specifier: "%.0f")")
+                        .font(.caption)
+                    Spacer()
+                    Text("Closed \(project.endDate, style: .date)")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+
+                HStack(spacing: 12) {
+                    Label("\(project.receipts.count)", systemImage: "receipt")
+                    Label("\(project.workHours.count)", systemImage: "clock")
+                    Label("\(project.tasks.filter { $0.isCompleted }.count)/\(project.tasks.count)", systemImage: "checklist")
+                }
+                .font(.caption2)
+                .foregroundColor(.secondary)
+            }
+            .padding()
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Color.blue.opacity(0.06))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(Color.blue.opacity(0.28), lineWidth: 1)
+            )
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Completed project \(project.name)")
+        .accessibilityIdentifier("completed-project-card-\(project.id.uuidString)")
     }
     
     // MARK: - Project Loading Methods

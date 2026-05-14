@@ -30,6 +30,7 @@ Exit criteria: a single user can move through the core contractor workflows pred
   - no visible organization setup/admin/team onboarding
   - no Receipts/Labor/Tasks tabs until a project is selected
   - completed projects remain visible through an Active/Completed project view
+  - current baseline: Projects home exposes Active and Completed scopes, completed jobs open a closeout detail, and completing a selected project clears active work context
 - Restore Business Resources without exposing Company/Organization:
   - workers/team members
   - job titles and labor rates
@@ -96,8 +97,7 @@ Exit criteria: release candidate is validated on real hardware and ready for sub
 - Freeze scope and submit.
 
 ## Immediate Next Steps
-1. Commit the project mutation/refresh contract slice with Gate A plus focused parity evidence.
-2. Restore completed-project visibility through an Active/Completed Projects flow so closed jobs remain recoverable.
-3. Restore Business Resources before expanding Labor and Tasks, because those flows depend on reusable workers, rates, vendors, and payment methods.
-4. Rework Labor and Tasks to shippable contractor workflows with focused unit/UI parity for each slice.
-5. Finish Reports and device acceptance after the underlying data flows refresh immediately and persist across relaunch.
+1. Commit the completed-project archive slice with Gate A plus focused parity evidence.
+2. Restore Business Resources before expanding Labor and Tasks, because those flows depend on reusable workers, rates, vendors, and payment methods.
+3. Rework Labor and Tasks to shippable contractor workflows with focused unit/UI parity for each slice.
+4. Finish Reports and device acceptance after the underlying data flows refresh immediately and persist across relaunch.

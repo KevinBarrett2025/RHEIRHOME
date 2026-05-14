@@ -1378,6 +1378,50 @@ struct ProjectMutationPropagationTests {
         #expect(viewModel.accessibleProjects.isEmpty)
         #expect(viewModel.lastProjectMutationReason == "delete project")
     }
+
+    @Test
+    func completingSelectedProjectPreservesItAsCompletedAndClearsWorkContext() async {
+        let suiteName = "ProjectCompletionVisibilityTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let orgID = UUID().uuidString
+        let projectStore = ProjectStore(userDefaults: defaults)
+        let viewModel = ProjectViewModel(
+            offlineDataManager: OfflineDataManager(),
+            projectStore: projectStore,
+            projectRepository: RecordingProjectRepository()
+        )
+        viewModel.setCurrentOrganization(
+            Organization(id: orgID, name: "Personal Workspace"),
+            role: .admin
+        )
+
+        var project = Project(
+            name: "Closed Kitchen",
+            client: "Client C",
+            totalBudget: 24000,
+            startDate: .now,
+            endDate: .now.addingTimeInterval(86400),
+            organizationID: orgID
+        )
+        viewModel.projects = [project]
+        viewModel.organizationProjects = [project]
+        viewModel.selectedProject = project
+        viewModel.updateAccessibleProjects()
+
+        project.status = .completed
+        await viewModel.updateProject(project)
+
+        #expect(viewModel.selectedProject == nil)
+        #expect(viewModel.activeProjects.isEmpty)
+        #expect(viewModel.completedProjects.map(\.id) == [project.id])
+        #expect(viewModel.accessibleProjects.first?.status == .completed)
+        #expect(projectStore.loadProjects(for: orgID).first?.status == .completed)
+    }
 }
 
 struct ReceiptIntelligenceStoreTests {

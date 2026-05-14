@@ -1041,8 +1041,10 @@ class ProjectViewModel: ObservableObject {
 
         offlineDataManager.updateProject(secureProject)
 
-        if selectProject || selectedProject?.id == secureProject.id {
+        if secureProject.status == .active, (selectProject || selectedProject?.id == secureProject.id) {
             selectedProject = secureProject
+        } else if selectedProject?.id == secureProject.id {
+            selectedProject = nil
         }
 
         updateAccessibleProjects()
@@ -1716,6 +1718,10 @@ class ProjectViewModel: ObservableObject {
     func selectProject(_ project: Project) {
         if let currentOrganizationID, project.organizationID != currentOrganizationID {
             Logger.project.warning("Ignored project selection outside the active organization.")
+            return
+        }
+        guard project.status == .active else {
+            Logger.project.warning("Ignored non-active project selection.")
             return
         }
         selectedProject = project

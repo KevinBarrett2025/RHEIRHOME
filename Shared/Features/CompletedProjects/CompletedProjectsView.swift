@@ -4,7 +4,7 @@ struct CompletedProjectsView: View {
     @EnvironmentObject var projectVM: ProjectViewModel
     
     private var completedProjects: [Project] {
-        return projectVM.projects.filter { $0.status == .completed }
+        return projectVM.accessibleProjects.filter { $0.status == .completed }
     }
     
     var body: some View {

@@ -168,6 +168,9 @@
 - `ProjectViewModel` global mutation contract for selected project, project lists, access payloads, derived receipt/labor caches, local storage, and CloudKit sync scheduling
 - `ProjectViewModel+Receipts` / `ProjectViewModel+TimeEntry` / `ProjectViewModel+Clocking` / `ProjectViewModel+Employees` shared mutation routing
 - `RHEIRTests` project mutation propagation coverage
+- `LandingPageView` fast-ship Active/Completed Projects scope
+- `CompletedProjectDetailView` closeout detail navigation
+- `RHEIRUITests` completed-project archive smoke coverage
 - `SessionStore` restored selected-project rehydration from accessible project payloads
 - `SessionStore` fast-ship personal-workspace fallback when CloudKit organizations are unavailable
 - `AuthRouterView` fast-ship guard that keeps legacy organization setup hidden from the shipping shell
@@ -184,6 +187,7 @@
 - `SignInWithAppleCoordinator` structured logging
 
 ## Current Validation Baseline
+- Latest completed-project archive focused parity result: `PASS` (`/tmp/rheir_completed_projects_parity.xcresult`, `3 unit tests plus 2 UI tests`)
 - Latest project mutation contract Gate A result: `PASS` (`/tmp/rheir_gateA_mutation_contract.xcresult`)
 - Latest project mutation contract focused parity result: `PASS` (`/tmp/rheir_mutation_access_parity.xcresult`, `5 tests across 2 suites`)
 - Simulator build path: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_fastship_v1_dd -resultBundlePath /tmp/rheir_gateA_fastship_v1.xcresult clean build`

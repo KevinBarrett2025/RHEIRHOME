@@ -28,6 +28,7 @@ final class RHEIRUITests: XCTestCase {
     }
 
     private static let selectedProjectCardIdentifier = "project-card-A7A92AF6-2E2B-4F51-BEA4-4B53CF2A7D11"
+    private static let completedProjectCardIdentifier = "completed-project-card-2D617D4E-8B4F-4C3A-B874-2F774AAFE61C"
     private static let estimatorMappingReceiptButtonIdentifier = "ai-project-calculator-map-receipt-ui-test-estimator-receipt-001"
     private static let estimatorMappingWorkHourButtonIdentifier = "ai-project-calculator-map-hour-5D8CB53E-67D7-468C-8171-1A0A0C830511"
     private static let estimatorMappingTaskButtonIdentifier = "ai-project-calculator-map-task-8A6A2F75-0B87-4E33-9264-BF6C3E3BC84D"
@@ -163,6 +164,50 @@ final class RHEIRUITests: XCTestCase {
         XCTAssertFalse(
             selectedProjectApp.staticTexts["Choose a project from the Projects tab before viewing receipts."].exists,
             "Expected the project-selection gate to disappear when project context is already seeded."
+        )
+    }
+
+    @MainActor
+    func testProjectSelectionShowsCompletedProjectArchive() throws {
+        let app = makeApp(mode: .projectSelection)
+        app.launch()
+
+        XCTAssertTrue(
+            app.staticTexts["Projects"].waitForExistence(timeout: 5),
+            "Expected deterministic project-selection UI test mode to expose the project-selection home."
+        )
+
+        XCTAssertTrue(
+            app.staticTexts["2 Active Projects"].exists,
+            "Expected the active project scope to remain focused on open jobs."
+        )
+
+        let completedSegment = app.segmentedControls.buttons["Completed"]
+        if completedSegment.waitForExistence(timeout: 3) {
+            completedSegment.tap()
+        } else {
+            app.buttons["Completed"].tap()
+        }
+
+        XCTAssertTrue(
+            app.staticTexts["1 Completed Project"].waitForExistence(timeout: 5),
+            "Expected completed projects to be visible from the Projects screen instead of disappearing."
+        )
+
+        let completedProjectCard = app.buttons[Self.completedProjectCardIdentifier]
+        XCTAssertTrue(
+            completedProjectCard.waitForExistence(timeout: 5),
+            "Expected the completed project card to be recoverable from the Completed scope."
+        )
+        completedProjectCard.tap()
+
+        XCTAssertTrue(
+            app.navigationBars["Project Closeout"].waitForExistence(timeout: 5),
+            "Expected completed projects to open a closeout detail instead of becoming active work context."
+        )
+        XCTAssertFalse(
+            app.tabBars.firstMatch.exists,
+            "Expected viewing completed projects before active selection to keep Receipts/Labor/Tasks hidden."
         )
     }
 

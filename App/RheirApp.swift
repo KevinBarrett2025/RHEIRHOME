@@ -131,6 +131,23 @@ private struct AppLaunchConfiguration {
                 client: "Northline Custom",
                 organizationID: organization.id
             )
+            var completedProject = makeUITestProject(
+                id: UUID(uuidString: "2D617D4E-8B4F-4C3A-B874-2F774AAFE61C")!,
+                name: "Completed Deck Build",
+                client: "Harper Family",
+                organizationID: organization.id
+            )
+            completedProject.status = .completed
+            completedProject.receipts = [
+                Receipt(
+                    id: "ui-test-completed-receipt-001",
+                    vendor: "Lumber Yard",
+                    date: Date(timeIntervalSince1970: 1_737_676_800),
+                    amount: 812.44,
+                    category: .material,
+                    paymentMethod: "Card"
+                )
+            ]
 
             applyCommonBootstrap(
                 authViewModel: authViewModel,
@@ -144,9 +161,9 @@ private struct AppLaunchConfiguration {
             projectViewModel.currentOrganizationRole = .admin
             projectViewModel.currentOrganizationID = organization.id
             projectViewModel.isUsingCloudKitForOrganizationData = false
-            projectViewModel.projects = [kitchenProject, bathProject]
-            projectViewModel.organizationProjects = [kitchenProject, bathProject]
-            projectViewModel.accessibleProjects = [kitchenProject, bathProject]
+            projectViewModel.projects = [kitchenProject, bathProject, completedProject]
+            projectViewModel.organizationProjects = [kitchenProject, bathProject, completedProject]
+            projectViewModel.accessibleProjects = [kitchenProject, bathProject, completedProject]
             if uiTestMode == .selectedProject || uiTestMode == .estimatorMapping || uiTestMode == .scannedReceiptReview || uiTestMode == .mixedCategoryReceipt {
                 projectViewModel.selectProject(kitchenProject)
             } else {
