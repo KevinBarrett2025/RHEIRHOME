@@ -3,16 +3,17 @@
 ## Repo Truth
 - Repo Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Active Branch: `gm/rheir-hardening-phase1`
-- Thread Start SHA: `28fe4450dc668afa58664723d20ae5a570ced216`
-- Last Commit At Thread Start: `28fe445 Phase 2: scope mixed-category receipts by itemized spend`
+- Thread Start SHA: `4986c4752c7c9944156303d211da0e688151023c`
+- Last Commit At Thread Start: `4986c47 Phase 2: add itemized category drilldown totals`
 
 ## Current Objective
 - Keep RHEIR locked into the fast-ship v1 release profile so the visible app ships as a single-user contractor tool with the core shell only: `Projects`, `Receipts`, `Labor`, `Tasks`, plus budget `Breakdown` / `Estimator`.
 - Preserve the simplified visible session flow `launch -> sign in -> ready`, with invite, org-selection, company/admin, and legacy AI-key surfaces still hidden unless the app is explicitly forced back into the legacy/full profile.
 - Keep the selected-project receipt seam green end-to-end: saved scanned receipt itemized lines now persist into receipt detail and into the ellipsis-menu edit sheet with a dedicated line-item editor, mixed-category receipt category summaries/drilldown cards now honor per-item categories instead of treating the whole receipt total as one category, and the Receipts list quick-view now opens the real receipt image viewer.
 - Add an at-a-glance selected-category header in the Receipts category drilldown so users can see receipt count and item-scoped total spend for the active category before scanning the receipt list.
+- Fix selected-project receipt restore so existing project receipts are visible immediately on launch, before any scan/manual receipt mutation hydrates the selected-project model.
 - Re-audit receipt/category/materials/general-conditions/contingency UI and calculation paths around the selected-project receipt surface before the next device pass.
-- Keep the next seam on real contractor workflows: rerun same-device and real-device receipt acceptance on the simplified shell once edited mixed-category receipt categories, selected-category totals, and quick-view image preview all match the saved receipt truth on hardware, then make the same-user iCloud launch call.
+- Keep the next seam on real contractor workflows: rerun same-device and real-device receipt acceptance on the simplified shell once edited mixed-category receipt categories, selected-category totals, quick-view image preview, and launch-time restored receipt visibility all match the saved receipt truth on hardware, then make the same-user iCloud launch call.
 
 ## Current Working Set
 - `Shared/Models/Receipt.swift` now persists a trimmed optional top-level `subcategory`, closing the gap where scan-review subcategory input was accepted by the initializer but silently discarded before persistence.
@@ -27,8 +28,12 @@
 - `Shared/Features/Progress/ZoomableImageView.swift` now exposes a deterministic close-button hook, and `Shared/Features/Receipts/ReceiptsView.swift` now uses the same real image-viewing flow from the list quick-view action instead of the old placeholder sheet.
 - `App/RheirApp.swift` now seeds a dedicated `mixed_category_receipt` deterministic UI-test launch mode, and `RHEIRUITests/RHEIRUITests.swift` now proves mixed-category category drilldown uses itemized spend while receipt-card quick-view opens the real saved receipt image.
 - `RHEIRTests/RHEIRTests.swift` now includes `ReceiptCategoryBreakdownTests`, proving itemized receipts use line-item categories for scoped spend while legacy receipts still fall back to receipt-level categorization when no line items exist.
+- `ProjectAccessStore` now resolves a restored selected-project ID to the matching loaded accessible-project payload, `ProjectViewModel` now treats same-ID receipt payload changes as organization refresh changes, and `SessionStore` now reselects the hydrated project when restored selected-project receipts are stale.
+- Latest launch-time receipt restore focused parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_receipt_restore_parity_escalated_dd -resultBundlePath /tmp/rheir_receipt_restore_parity_20260514_escalated.xcresult test -only-testing:RHEIRTests/ProjectAccessStoreTests -only-testing:RHEIRUITests/RHEIRUITests/testManualReceiptPersistsAcrossFastShipRelaunch` -> PASS.
+- Latest launch-time receipt restore Gate A: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_receipt_restore_dd -resultBundlePath /tmp/rheir_gateA_receipt_restore_20260514.xcresult clean build` -> PASS.
 - Latest selected-category header focused parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_receipt_category_header_final3_dd -resultBundlePath /tmp/rheir_receipt_category_header_final3.xcresult test -only-testing:RHEIRTests/ReceiptCategoryBreakdownTests -only-testing:RHEIRTests/BudgetBridgeTests -only-testing:RHEIRUITests/RHEIRUITests/testMixedCategoryReceiptCategoryDrilldownUsesItemizedSpend -only-testing:RHEIRUITests/RHEIRUITests/testReceiptCardQuickViewShowsSavedReceiptImage` -> PASS.
 - Latest selected-category header Gate A: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_receipt_category_header_dd -resultBundlePath /tmp/rheir_gateA_receipt_category_header.xcresult clean build` -> PASS.
+- Next device acceptance must verify launch -> selected project -> receipts list shows existing persisted receipts immediately, with no add/scan action required to hydrate the list.
 - `Shared/ViewModels/AuthViewModel.swift` now tracks a single in-flight fast-ship organization-switch task, cancelling it when the session signs out or clears the active organization so stale post-ready work cannot keep running into a cleared workspace.
 - `Shared/ViewModels/ProjectViewModel.swift` now invalidates organization synchronization with an `organizationSyncToken` and staleness guards after each async phase, preventing old org-switch work from repopulating projects or team members after `setCurrentOrganization(nil)`.
 - `RHEIRTests/RHEIRTests.swift` now includes a focused regression proving an interrupted organization sync that clears the current organization cannot restore projects, access, or selection when the async flow resumes.

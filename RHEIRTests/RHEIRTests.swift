@@ -1161,6 +1161,42 @@ struct ProjectAccessStoreTests {
         #expect(result.selectedProject?.id == selectedID)
         #expect(result.duplicateCount == 1)
     }
+
+    @Test
+    func hydratesSelectedProjectFromAccessibleProjectPayload() {
+        let orgID = "org-project-restore"
+        let selectedID = UUID()
+        let restoredShell = Project(
+            id: selectedID,
+            name: "Restored Shell",
+            client: "Client A",
+            totalBudget: 100000,
+            startDate: .now,
+            endDate: .now.addingTimeInterval(86400),
+            organizationID: orgID
+        )
+        var loadedProject = restoredShell
+        loadedProject.receipts = [
+            Receipt(
+                id: "persisted-receipt-1",
+                vendor: "Home Depot",
+                date: .now,
+                amount: 59.71,
+                category: .material,
+                paymentMethod: "Credit Card"
+            )
+        ]
+
+        let store = ProjectAccessStore()
+        let result = store.unrestrictedState(
+            organizationProjects: [loadedProject],
+            selectedProject: restoredShell
+        )
+
+        #expect(result.selectedProject?.id == selectedID)
+        #expect(result.selectedProject?.receipts.map(\.id) == ["persisted-receipt-1"])
+        #expect(result.selectedProject?.receipts.first?.amount == 59.71)
+    }
 }
 
 struct ReceiptIntelligenceStoreTests {

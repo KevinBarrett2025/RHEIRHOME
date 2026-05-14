@@ -154,6 +154,9 @@
 - `RHEIRUITests` saved scanned-receipt edit-sheet item visibility coverage
 - `ReceiptsView` selected-category drilldown header with itemized total and receipt count
 - `RHEIRUITests` selected-category receipt header and quick-image smoke coverage
+- `ProjectAccessStore` selected-project payload hydration for launch-restored receipts
+- `ProjectViewModel` same-ID project payload refresh detection during organization reconciliation
+- `SessionStore` restored selected-project rehydration from accessible project payloads
 - `RHEIRTests` duplicate receipt normalization and CloudKit upsert coverage
 - `VendorKnowledgeService` structured logging
 - `PaymentMethodKnowledgeService` structured logging
@@ -196,6 +199,8 @@
 - Latest focused mixed-category receipt Gate A result: `PASS` (`/tmp/rheir_gateA_receipt_itemized_category.xcresult`)
 - Latest focused selected-category header and budget-rollup parity result: `PASS` (`/tmp/rheir_receipt_category_header_final3.xcresult`, `4 tests across 2 suites plus 2 UI tests`)
 - Latest focused selected-category header Gate A result: `PASS` (`/tmp/rheir_gateA_receipt_category_header.xcresult`)
+- Latest focused launch-time receipt restore parity result: `PASS` (`/tmp/rheir_receipt_restore_parity_20260514_escalated.xcresult`, focused access-store regression plus restored-session UI smoke)
+- Latest focused launch-time receipt restore Gate A result: `PASS` (`/tmp/rheir_gateA_receipt_restore_20260514.xcresult`)
 
 ## Known Residual Risks
 - The fast-ship v1 release profile is now the active launch target, but same-user iCloud restore still needs explicit release-candidate validation before it can be treated as a ship promise.

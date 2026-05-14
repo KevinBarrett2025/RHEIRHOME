@@ -16,6 +16,49 @@ extension Logger {
     static let project = Logger(subsystem: "com.RheirHome.RHEIR", category: "project")
 }
 
+private struct ProjectRefreshSignature: Equatable {
+    let id: UUID
+    let organizationID: String
+    let status: ProjectStatus
+    let lastModifiedDate: Date
+    let receipts: [ReceiptRefreshSignature]
+    let taskIDs: [UUID]
+    let workHourIDs: [UUID]
+
+    init(_ project: Project) {
+        let normalizedProject = project.normalizedReceiptCopy
+        id = normalizedProject.id
+        organizationID = normalizedProject.organizationID
+        status = normalizedProject.status
+        lastModifiedDate = normalizedProject.lastModifiedDate
+        receipts = normalizedProject.receipts.map(ReceiptRefreshSignature.init)
+        taskIDs = normalizedProject.tasks.map(\.id)
+        workHourIDs = normalizedProject.workHours.map(\.id)
+    }
+}
+
+private struct ReceiptRefreshSignature: Equatable {
+    let id: String
+    let vendor: String
+    let date: Date
+    let amount: Double
+    let category: ReceiptCategory
+    let subcategory: String?
+    let receiptNumber: String
+    let items: [ReceiptItem]
+
+    init(_ receipt: Receipt) {
+        id = receipt.id
+        vendor = receipt.vendor
+        date = receipt.date
+        amount = receipt.amount
+        category = receipt.category
+        subcategory = receipt.subcategory
+        receiptNumber = receipt.receiptNumber
+        items = receipt.items
+    }
+}
+
 @MainActor
 class ProjectViewModel: ObservableObject {
     @Published var projects: [Project] = []
@@ -846,6 +889,9 @@ class ProjectViewModel: ObservableObject {
         }
         lastUpdateTimestamp = now
 
+        let previousOrganizationSignatures = organizationProjects.map(ProjectRefreshSignature.init)
+        let previousAccessibleSignatures = accessibleProjects.map(ProjectRefreshSignature.init)
+        let previousSelectedSignature = selectedProject.map(ProjectRefreshSignature.init)
         let previousOrganizationProjectIDs = Set(organizationProjects.map(\.id))
         let previousAccessibleProjectIDs = Set(accessibleProjects.map(\.id))
         let previousOrganizationCount = organizationProjects.count
@@ -862,12 +908,17 @@ class ProjectViewModel: ObservableObject {
 
         let newOrganizationProjectIDs = Set(refreshResult.organizationProjects.map(\.id))
         let newAccessibleProjectIDs = Set(accessState.accessibleProjects.map(\.id))
+        let newOrganizationSignatures = refreshResult.organizationProjects.map(ProjectRefreshSignature.init)
+        let newAccessibleSignatures = accessState.accessibleProjects.map(ProjectRefreshSignature.init)
+        let newSelectedSignature = accessState.selectedProject.map(ProjectRefreshSignature.init)
         let hasChanged =
             previousOrganizationCount != refreshResult.organizationProjects.count
             || previousOrganizationProjectIDs != newOrganizationProjectIDs
+            || previousOrganizationSignatures != newOrganizationSignatures
             || accessibleProjects.count != accessState.accessibleProjects.count
             || previousAccessibleProjectIDs != newAccessibleProjectIDs
-            || selectedProject?.id != accessState.selectedProject?.id
+            || previousAccessibleSignatures != newAccessibleSignatures
+            || previousSelectedSignature != newSelectedSignature
 
         guard hasChanged else {
             Logger.project.debug(
@@ -1936,9 +1987,7 @@ final class ProjectAccessStore {
             return nil
         }
 
-        return accessibleProjects.contains(where: { $0.id == selectedProject.id })
-            ? selectedProject
-            : nil
+        return accessibleProjects.first(where: { $0.id == selectedProject.id })?.normalizedReceiptCopy
     }
 
     private func normalizedProjects(from projects: [Project]) -> [Project] {

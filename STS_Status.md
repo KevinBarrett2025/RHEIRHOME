@@ -3,7 +3,7 @@
 ## Repo
 - Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Branch: `gm/rheir-hardening-phase1`
-- HEAD: `28fe4450dc668afa58664723d20ae5a570ced216`
+- HEAD: `4986c4752c7c9944156303d211da0e688151023c`
 
 ## Active Initiative
 - RHEIR release hardening, phase 2 estimator foundation and contractor workflow hardening.
@@ -149,6 +149,7 @@
 - Added an itemized Receipts category drilldown header so selected categories show receipt count plus the category-scoped total before the receipt list.
 - Added a receipt budget-rollup helper and routed the active Materials / General Conditions / Contingency budget bridge through itemized spend, so mixed receipts no longer require a receipt-level category match before contributing to high-level budget totals.
 - Added focused receipt/category parity proving itemized selected-category totals, quick receipt image view, and mixed-receipt high-level budget rollups stay correct.
+- Hardened selected-project restore reconciliation so a launch-restored project selection is rehydrated from the loaded organization project payload, making persisted receipts visible immediately instead of waiting for a scan/manual receipt mutation to refresh `selectedProject`.
 - Added startup legacy project-payload compaction in `Shared/Views/Auth/AppSessionSupport.swift` so `LocalCacheStore` rewrites stale `projects*` `UserDefaults` blobs through `Project.persistenceSafeCopy` before legacy session migration runs.
 - Hardened `Shared/ViewModels/ProjectViewModel+Import.swift` so the legacy `projects_backup` fallback also strips inline receipt image data before writing to `UserDefaults`.
 - Expanded focused `RHEIRTests/RHEIRTests.swift` parity to prove startup compaction preserves legacy org selection and receipt metadata while clearing inline receipt image data from both org-scoped project payloads and the legacy backup blob.
@@ -159,7 +160,7 @@
 ## In Progress
 - Lock the shipping app into the fast-ship v1 release profile so the visible shell stays single-user focused: `Projects`, `Receipts`, `Labor`, `Tasks`, plus budget `Breakdown` / `Estimator`.
 - Continue broader selected-project estimator variance/runtime QA on top of the approved-baseline mapping seam inside the simplified v1 shell.
-- Continue broader selected-project receipt runtime QA in parallel, with same-device/device validation now the active release seam after both manual-receipt relaunch and scanned-receipt return/reopen parity are green in simulator.
+- Continue broader selected-project receipt runtime QA in parallel, with same-device/device validation now the active release seam after manual-receipt relaunch, scanned-receipt return/reopen, and launch-time receipt hydration parity are green in simulator.
 - Continue shrinking the remaining oversized active state owners around the new sync and access store boundaries.
 - Expand deterministic parity beyond the focused `RHEIRTests` suite.
 
@@ -171,6 +172,9 @@
 ## Latest Evidence
 - `ReceiptsView.swift` now renders a selected-category drilldown header with the category-scoped total and contributing receipt count, so a Plumbing/Framing/etc. filter shows the spend total at a glance instead of only on individual receipt cards.
 - `Receipt.swift` now exposes `budgetScopedAmount(for:)`, and `ProjectViewModel+Filters.swift` uses it for active Materials, General Conditions, and Contingency spend, preventing mixed itemized receipts from being undercounted in high-level budget totals.
+- `ProjectAccessStore` now resolves a selected project to the matching loaded accessible-project payload, `ProjectViewModel` now detects same-ID project payload changes during organization refresh, and `SessionStore` now reselects a hydrated project when restored selection receipt data is stale.
+- Focused launch-time receipt restore parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_receipt_restore_parity_escalated_dd -resultBundlePath /tmp/rheir_receipt_restore_parity_20260514_escalated.xcresult test -only-testing:RHEIRTests/ProjectAccessStoreTests -only-testing:RHEIRUITests/RHEIRUITests/testManualReceiptPersistsAcrossFastShipRelaunch` -> PASS (`/tmp/rheir_receipt_restore_parity_20260514_escalated.xcresult`, focused access-store regression plus restored-session UI smoke)
+- Focused launch-time receipt restore Gate A: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_receipt_restore_dd -resultBundlePath /tmp/rheir_gateA_receipt_restore_20260514.xcresult clean build` -> PASS (`/tmp/rheir_gateA_receipt_restore_20260514.xcresult`)
 - Focused selected-category receipt parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_receipt_category_header_final3_dd -resultBundlePath /tmp/rheir_receipt_category_header_final3.xcresult test -only-testing:RHEIRTests/ReceiptCategoryBreakdownTests -only-testing:RHEIRTests/BudgetBridgeTests -only-testing:RHEIRUITests/RHEIRUITests/testMixedCategoryReceiptCategoryDrilldownUsesItemizedSpend -only-testing:RHEIRUITests/RHEIRUITests/testReceiptCardQuickViewShowsSavedReceiptImage` -> PASS (`/tmp/rheir_receipt_category_header_final3.xcresult`, `4 tests across 2 suites plus 2 UI tests`)
 - Focused selected-category receipt Gate A: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_receipt_category_header_dd -resultBundlePath /tmp/rheir_gateA_receipt_category_header.xcresult clean build` -> PASS (`/tmp/rheir_gateA_receipt_category_header.xcresult`)
 - `Receipt.swift` now persists a trimmed optional top-level `subcategory`, fixing the scanned-receipt path where scan-review subcategory input existed in UI but was dropped before persistence.

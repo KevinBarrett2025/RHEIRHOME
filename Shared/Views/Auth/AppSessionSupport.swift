@@ -674,8 +674,11 @@ final class SessionStore: ObservableObject {
             .filter { $0.organizationID == organizationID && $0.status == .active }
 
         if let selectedProject = projectViewModel.selectedProject,
-           activeProjects.contains(where: { $0.id == selectedProject.id }) {
-            localCache.storeLastSelectedProjectID(selectedProject.id.uuidString, for: organizationID)
+           let hydratedProject = activeProjects.first(where: { $0.id == selectedProject.id }) {
+            if selectedProject.normalizedReceiptCopy.receipts != hydratedProject.normalizedReceiptCopy.receipts {
+                projectViewModel.selectProject(hydratedProject)
+            }
+            localCache.storeLastSelectedProjectID(hydratedProject.id.uuidString, for: organizationID)
             return
         }
 
