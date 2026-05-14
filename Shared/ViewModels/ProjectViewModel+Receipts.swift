@@ -145,9 +145,13 @@ extension ProjectViewModel {
         }
         
         // Add or replace the receipt so duplicate IDs do not poison the selected-project list.
-        organizationProjects[idx] = organizationProjects[idx].upsertingReceipt(updatedReceipt)
-        selectedProject = organizationProjects[idx]
-        invalidateReceiptCache() // Invalidate cache when receipts change
+        let updatedProject = organizationProjects[idx].upsertingReceipt(updatedReceipt)
+        applyProjectMutationLocally(
+            updatedProject,
+            reason: "add receipt legacy",
+            selectProject: true,
+            scheduleCloudSync: true
+        )
         
         // 🧠 ENTERPRISE INTELLIGENCE: Process receipt for organizational learning
         Task {
@@ -219,9 +223,12 @@ extension ProjectViewModel {
         
         // Update receipt in project
         currentProject = currentProject.upsertingReceipt(updatedReceipt)
-        organizationProjects[pIdx] = currentProject
-        selectedProject = currentProject
-        invalidateReceiptCache() // Invalidate cache when receipts change
+        applyProjectMutationLocally(
+            currentProject,
+            reason: "update receipt legacy",
+            selectProject: true,
+            scheduleCloudSync: true
+        )
         
         // 🧠 ENTERPRISE INTELLIGENCE: Process updated receipt for organizational learning
         Task {

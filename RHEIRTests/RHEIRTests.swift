@@ -1242,6 +1242,144 @@ struct ProjectAccessStoreTests {
     }
 }
 
+@MainActor
+struct ProjectMutationPropagationTests {
+
+    @Test
+    func updateProjectPropagatesToVisibleCollectionsAndDerivedSnapshots() async {
+        let suiteName = "ProjectMutationPropagationTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let orgID = UUID().uuidString
+        let repository = RecordingProjectRepository()
+        let projectStore = ProjectStore(userDefaults: defaults)
+        let viewModel = ProjectViewModel(
+            offlineDataManager: OfflineDataManager(),
+            projectStore: projectStore,
+            projectRepository: repository
+        )
+        viewModel.setCurrentOrganization(
+            Organization(id: orgID, name: "Personal Workspace"),
+            role: .admin
+        )
+
+        let teamMember = TeamMember(
+            name: "Alice Mason",
+            email: "alice@example.com",
+            jobTitle: "Lead Carpenter",
+            organizationID: orgID
+        )
+        viewModel.teamMembers = [teamMember]
+        viewModel.updateTeamMemberCaches()
+
+        var project = Project(
+            name: "Kitchen Remodel",
+            client: "Client A",
+            totalBudget: 42000,
+            startDate: .now,
+            endDate: .now.addingTimeInterval(86400),
+            organizationID: orgID
+        )
+        viewModel.projects = [project]
+        viewModel.organizationProjects = [project]
+        viewModel.selectedProject = project
+        viewModel.updateAccessibleProjects()
+
+        let start = Date()
+        let receipt = Receipt(
+            id: "receipt-propagation",
+            vendor: "Home Depot",
+            date: start,
+            amount: 120,
+            category: .material,
+            paymentMethod: "Credit Card"
+        )
+        let workHour = WorkHour(
+            date: start,
+            startTime: start,
+            endTime: start.addingTimeInterval(7_200),
+            lunchStart: nil,
+            lunchEnd: nil,
+            employee: teamMember.name,
+            employeeID: teamMember.id,
+            rate: 50,
+            category: "Labor",
+            isPaid: false,
+            paymentMethod: nil,
+            paymentNote: nil,
+            paymentTimestamp: nil
+        )
+        let task = ProjectTask(
+            title: "Frame wall",
+            projectID: project.id
+        )
+
+        project.receipts = [receipt]
+        project.loggedHours = [workHour]
+        project.tasks = [task]
+
+        let previousMutationVersion = viewModel.projectMutationVersion
+        await viewModel.updateProject(project)
+
+        #expect(viewModel.projectMutationVersion != previousMutationVersion)
+        #expect(viewModel.lastProjectMutationReason == "update project")
+        #expect(viewModel.selectedProject?.receipts.map(\.id) == [receipt.id])
+        #expect(viewModel.organizationProjects.first(where: { $0.id == project.id })?.tasks.map(\.id) == [task.id])
+        #expect(viewModel.projects.first(where: { $0.id == project.id })?.loggedHours.map(\.id) == [workHour.id])
+        #expect(viewModel.accessibleProjects.first(where: { $0.id == project.id })?.receipts.map(\.id) == [receipt.id])
+        #expect(viewModel.projectTotalHours == 2)
+        #expect(viewModel.projectUnpaidAmount == 100)
+        #expect(repository.savedProjects.first?.project.receipts.map(\.id) == [receipt.id])
+        #expect(projectStore.loadProjects(for: orgID).first?.tasks.map(\.id) == [task.id])
+    }
+
+    @Test
+    func deleteProjectClearsVisibleCollectionsAndSelection() async {
+        let suiteName = "ProjectMutationDeletionTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let orgID = UUID().uuidString
+        let viewModel = ProjectViewModel(
+            offlineDataManager: OfflineDataManager(),
+            projectStore: ProjectStore(userDefaults: defaults),
+            projectRepository: RecordingProjectRepository()
+        )
+        viewModel.setCurrentOrganization(
+            Organization(id: orgID, name: "Personal Workspace"),
+            role: .admin
+        )
+
+        let project = Project(
+            name: "Bathroom Remodel",
+            client: "Client B",
+            totalBudget: 18000,
+            startDate: .now,
+            endDate: .now.addingTimeInterval(86400),
+            organizationID: orgID
+        )
+        viewModel.projects = [project]
+        viewModel.organizationProjects = [project]
+        viewModel.selectedProject = project
+        viewModel.updateAccessibleProjects()
+
+        await viewModel.deleteProject(project)
+
+        #expect(viewModel.selectedProject == nil)
+        #expect(viewModel.organizationProjects.isEmpty)
+        #expect(viewModel.projects.isEmpty)
+        #expect(viewModel.accessibleProjects.isEmpty)
+        #expect(viewModel.lastProjectMutationReason == "delete project")
+    }
+}
+
 struct ReceiptIntelligenceStoreTests {
 
     @Test

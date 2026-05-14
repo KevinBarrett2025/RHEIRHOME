@@ -15,6 +15,9 @@
 - `LandingPageView` now uses a simplified fast-ship Projects header and project list, hiding workspace/org labels, the redundant choose/change project dropdown, the logo block, and technical device/iCloud indicators from the v1 home path.
 - `RHEIR_FAST_SHIP_HYBRID_WORKING_APP_PLAN.md` now preserves the contractor-first release plan: global refresh, completed projects, Business Resources, Labor, Tasks, Reports, UI cleanup, and device acceptance.
 - `SHIP_READINESS_CHECKLIST.md` now tracks the Working-App release blockers and contractor validation requirements instead of treating the fast-ship reset as only a collaboration-hiding pass.
+- `ProjectViewModel` now centralizes active project mutations through one seam that updates selected project state, visible project lists, access payloads, derived receipt/labor caches, local persistence, and CloudKit sync scheduling.
+- `ProjectViewModel+Receipts.swift`, `ProjectViewModel+TimeEntry.swift`, `ProjectViewModel+Clocking.swift`, and `ProjectViewModel+Employees.swift` now route receipt, labor, clocking, and team-member labor-reference writes through the same mutation contract.
+- `RHEIRTests.swift` now proves project mutation propagation for updates and deletes, including selected-project refresh and derived receipt snapshot invalidation.
 - Canonical tree cleanup completed in the working branch.
 - Session flow consolidated around `AppSessionSupport.swift`.
 - `Project.swift` now carries the first compiled estimator domain with intake, draft, versioned baseline, variance, source-evidence, and proposal-view models plus bridge helpers back into `Project` budget summary fields.
@@ -158,7 +161,7 @@
   - Device build/install verification: PASS (`xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'id=00008140-0011492622E8801C' -derivedDataPath /tmp/rheir_phase2_device_verify_v2_dd -resultBundlePath /tmp/rheir_phase2_device_verify_v2_build.xcresult build`, `/tmp/rheir_phase2_device_verify_v2_build.xcresult`) with copied device payloads showing `projects.json` shrunk to `2947` bytes and `offline_projects.json` to `3437` bytes without inline image blobs
 
 ## Open Work
-- Implement the global project mutation/refresh contract so selected project, project lists, budget analytics, receipt filters, labor totals, task counts, reports, local storage, and CloudKit sync update from one source of truth.
+- Use the new global project mutation/refresh contract while restoring completed/past projects, Business Resources, Labor, Tasks, Reports, and remaining UI cleanup so those flows inherit immediate refresh instead of adding one-off state writes.
 - Restore completed/past projects as a visible Active/Completed Projects flow so closed jobs remain recoverable.
 - Reintroduce Business Resources without exposing Company/Organization: workers, job titles, labor rates, vendors, and payment methods/cards.
 - Rework Labor into a shippable contractor workflow with worker/rate management, partial/split payments, check/reference metadata, edit payment, and unpay/reissue.

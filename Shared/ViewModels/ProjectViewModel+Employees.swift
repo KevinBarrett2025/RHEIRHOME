@@ -239,12 +239,12 @@ extension ProjectViewModel {
         }
 
         let mutation = teamMemberStore.removeLoggedHours(for: toDelete, in: organizationProjects[projIdx])
-        organizationProjects[projIdx] = mutation.project
-        selectedProject = mutation.project
-
-        saveOrganizationSpecificBackup()
-        recomputeLaborData()
-        debouncedSaveProjects()
+        applyProjectMutationLocally(
+            mutation.project,
+            reason: "delete team member labor references",
+            selectProject: true,
+            scheduleCloudSync: true
+        )
 
         Logger.teamMember.notice(
             "Deleted team member and removed related logged hours [directoryRemoved=\(removedDirectoryCount, privacy: .public) hoursRemoved=\(mutation.changedCount, privacy: .public)]"
@@ -265,11 +265,12 @@ extension ProjectViewModel {
         )
 
         if mutation.changedCount > 0 {
-            organizationProjects[projIdx] = mutation.project
-            selectedProject = mutation.project
-            saveOrganizationSpecificBackup()
-            recomputeLaborData()
-            debouncedSaveProjects()
+            applyProjectMutationLocally(
+                mutation.project,
+                reason: "rename team member labor references",
+                selectProject: true,
+                scheduleCloudSync: true
+            )
             Logger.teamMember.info(
                 "Renamed logged-hour team-member references [count=\(mutation.changedCount, privacy: .public)]"
             )

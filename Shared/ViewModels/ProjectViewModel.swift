@@ -71,13 +71,15 @@ class ProjectViewModel: ObservableObject {
     @Published var isBulkSyncing = false
     @Published var bulkSyncProgress: Double = 0.0
     @Published var intelligenceSnapshotVersion = UUID()
-    
+
     // PHASE 2A: Add missing properties for LandingPageView compatibility
     @Published var navigateToBudgetBreakdown: Bool = false
     @Published var accessibleProjects: [Project] = []
     @Published var currentOrganizationID: String?
     @Published var isSavingProject: Bool = false
     @Published var activeSaveOperations: [String] = []
+    @Published var projectMutationVersion = UUID()
+    @Published var lastProjectMutationReason: String?
     
     // Team member properties
     @Published var teamMembers: [TeamMember] = []
@@ -156,7 +158,7 @@ class ProjectViewModel: ObservableObject {
         self.receiptProjectStore = receiptProjectStore
         self.laborStore = laborStore
         self.teamMemberStore = teamMemberStore
-        
+
         // TODO: Re-add service assignments in Phase 2
         // self.cloudKitService = cloudKitService
         // self.sharingService = sharingService
@@ -956,6 +958,8 @@ class ProjectViewModel: ObservableObject {
     internal func updateAccessibleProjects() {
         let previousCount = accessibleProjects.count
         let previousSelectedProjectID = selectedProject?.id
+        let previousAccessibleSignatures = accessibleProjects.map(ProjectRefreshSignature.init)
+        let previousSelectedSignature = selectedProject.map(ProjectRefreshSignature.init)
         let accessState = projectAccessStore.unrestrictedState(
             organizationProjects: organizationProjects,
             selectedProject: selectedProject
@@ -963,10 +967,14 @@ class ProjectViewModel: ObservableObject {
         let newAccessibleProjects = accessState.accessibleProjects
         let newAccessibleProjectIDs = Set(newAccessibleProjects.map(\.id))
         let previousAccessibleProjectIDs = Set(accessibleProjects.map(\.id))
+        let newAccessibleSignatures = newAccessibleProjects.map(ProjectRefreshSignature.init)
+        let newSelectedSignature = accessState.selectedProject.map(ProjectRefreshSignature.init)
 
         let hasChanged = newAccessibleProjects.count != previousCount
             || newAccessibleProjectIDs != previousAccessibleProjectIDs
+            || newAccessibleSignatures != previousAccessibleSignatures
             || previousSelectedProjectID != accessState.selectedProject?.id
+            || previousSelectedSignature != newSelectedSignature
         
         if hasChanged {
             accessibleProjects = newAccessibleProjects
@@ -995,37 +1003,132 @@ class ProjectViewModel: ObservableObject {
     }
     
     // MARK: - Project Management
-    
+
+    @discardableResult
+    internal func applyProjectMutationLocally(
+        _ project: Project,
+        reason: String,
+        selectProject: Bool = false,
+        scheduleCloudSync: Bool = false
+    ) -> Project? {
+        guard let orgID = currentOrganizationID else {
+            Logger.project.error("Cannot apply project mutation without an active organization [reason=\(reason, privacy: .public)].")
+            return nil
+        }
+
+        let duplicateReceiptCount = project.duplicateReceiptCount
+        var secureProject = project.normalizedReceiptCopy
+        secureProject.organizationID = orgID
+        secureProject.lastModifiedDate = Date()
+
+        if duplicateReceiptCount > 0 {
+            Logger.project.warning(
+                "Normalized duplicate receipt IDs before project mutation [reason=\(reason, privacy: .public) project=\(secureProject.id.uuidString, privacy: .private(mask: .hash)) removed=\(duplicateReceiptCount, privacy: .public)]"
+            )
+        }
+
+        if let index = organizationProjects.firstIndex(where: { $0.id == secureProject.id }) {
+            organizationProjects[index] = secureProject
+        } else {
+            organizationProjects.append(secureProject)
+        }
+
+        if let index = projects.firstIndex(where: { $0.id == secureProject.id }) {
+            projects[index] = secureProject
+        } else {
+            projects.append(secureProject)
+        }
+
+        offlineDataManager.updateProject(secureProject)
+
+        if selectProject || selectedProject?.id == secureProject.id {
+            selectedProject = secureProject
+        }
+
+        updateAccessibleProjects()
+
+        if selectedProject?.id == secureProject.id {
+            recomputeLaborData()
+        } else {
+            updateTeamMemberCaches()
+        }
+
+        invalidateReceiptCache()
+        recomputeFilteredReceipts()
+        projectMutationVersion = UUID()
+        lastProjectMutationReason = reason
+        saveOrganizationSpecificBackup()
+
+        if scheduleCloudSync {
+            scheduleProjectMutationCloudSync(secureProject, reason: reason)
+        }
+
+        Logger.project.notice(
+            "Applied project mutation [reason=\(reason, privacy: .public) project=\(secureProject.id.uuidString, privacy: .private(mask: .hash))]"
+        )
+
+        return secureProject
+    }
+
+    @discardableResult
+    internal func commitProjectMutation(
+        _ project: Project,
+        reason: String,
+        selectProject: Bool = false,
+        syncToCloudKit: Bool = true
+    ) async -> Project? {
+        guard let secureProject = applyProjectMutationLocally(
+            project,
+            reason: reason,
+            selectProject: selectProject,
+            scheduleCloudSync: false
+        ) else {
+            return nil
+        }
+
+        guard syncToCloudKit else {
+            return secureProject
+        }
+
+        await syncProjectMutationToCloudKit(secureProject, reason: reason)
+        return secureProject
+    }
+
+    private func scheduleProjectMutationCloudSync(_ project: Project, reason: String) {
+        guard isUsingCloudKitForOrganizationData else { return }
+
+        Task { @MainActor [weak self] in
+            await self?.syncProjectMutationToCloudKit(project, reason: reason)
+        }
+    }
+
+    private func syncProjectMutationToCloudKit(_ project: Project, reason: String) async {
+        do {
+            try await saveProjectToCloudKit(project)
+            Logger.project.info(
+                "Synced project mutation to CloudKit [reason=\(reason, privacy: .public)]"
+            )
+        } catch {
+            Logger.project.error(
+                "Applied project mutation locally but failed CloudKit sync [reason=\(reason, privacy: .public) error=\(error.localizedDescription, privacy: .public)]"
+            )
+        }
+    }
+
     func createNewProject(project: Project) async throws {
         guard let orgID = currentOrganizationID else {
             Logger.project.error("Cannot create a project without an active organization.")
             throw NSError(domain: "RHEIR", code: -1, userInfo: [NSLocalizedDescriptionKey: "No organization selected"])
         }
-        
+
         var secureProject = project
         secureProject.organizationID = orgID
-        
-        await MainActor.run {
-            organizationProjects.append(secureProject)
-            projects.append(secureProject)
-            selectedProject = secureProject
-            updateAccessibleProjects()
-        }
-        
-        saveOrganizationSpecificBackup()
-        
-        await MainActor.run {
-            offlineDataManager.addProject(secureProject)
-        }
-        
-        do {
-            try await saveProjectToCloudKit(secureProject)
-            Logger.project.info("Created project and saved it to CloudKit.")
-        } catch {
-            Logger.project.error(
-                "Created project locally but failed CloudKit save: \(error.localizedDescription, privacy: .public)"
-            )
-        }
+
+        await commitProjectMutation(
+            secureProject,
+            reason: "create project",
+            selectProject: true
+        )
         
         Logger.project.notice(
             "Created new project [org=\(orgID, privacy: .private(mask: .hash))]"
@@ -1040,23 +1143,11 @@ class ProjectViewModel: ObservableObject {
         
         var secureProject = project
         secureProject.organizationID = orgID
-        
-        await MainActor.run {
-            if !organizationProjects.contains(where: { $0.id == secureProject.id }) {
-                organizationProjects.append(secureProject)
-            }
-        }
-        
-        saveOrganizationSpecificBackup()
-        
-        do {
-            try await saveProjectToCloudKit(secureProject)
-            Logger.project.info("Added project and saved it to CloudKit.")
-        } catch {
-            Logger.project.error(
-                "Added project locally but failed CloudKit save: \(error.localizedDescription, privacy: .public)"
-            )
-        }
+
+        await commitProjectMutation(
+            secureProject,
+            reason: "add project"
+        )
         
         Logger.project.notice(
             "Added project to active organization [org=\(orgID, privacy: .private(mask: .hash))]"
@@ -1069,55 +1160,44 @@ class ProjectViewModel: ObservableObject {
             return
         }
         
-        let duplicateReceiptCount = project.duplicateReceiptCount
-        var secureProject = project.normalizedReceiptCopy
-        secureProject.organizationID = orgID
-        secureProject.lastModifiedDate = Date()
-
-        if duplicateReceiptCount > 0 {
-            Logger.project.warning(
-                "Normalized duplicate receipt IDs before project save [project=\(secureProject.id.uuidString, privacy: .private(mask: .hash)) removed=\(duplicateReceiptCount, privacy: .public)]"
-            )
-        }
+        await commitProjectMutation(
+            project,
+            reason: "update project"
+        )
         
-        await MainActor.run {
-            if let index = organizationProjects.firstIndex(where: { $0.id == secureProject.id }) {
-                organizationProjects[index] = secureProject
-            } else {
-                organizationProjects.append(secureProject)
-            }
-            
-            if selectedProject?.id == secureProject.id { 
-                selectedProject = secureProject 
-            }
-        }
-        
-        saveOrganizationSpecificBackup()
-        
-        do {
-            try await saveProjectToCloudKit(secureProject)
-            Logger.project.info("Updated project and synced it to CloudKit.")
-        } catch {
-            Logger.project.error(
-                "Updated project locally but failed CloudKit update: \(error.localizedDescription, privacy: .public)"
-            )
-        }
-        
-        Logger.project.notice("Updated project.")
+        Logger.project.notice("Updated project [org=\(orgID, privacy: .private(mask: .hash))].")
     }
     
     func deleteProject(_ project: Project) async {
-        // Delete from local storage
-        await MainActor.run {
-            offlineDataManager.deleteProject(project)
+        organizationProjects.removeAll { $0.id == project.id }
+        projects.removeAll { $0.id == project.id }
+        if selectedProject?.id == project.id {
+            selectedProject = nil
         }
+
+        updateAccessibleProjects()
+        invalidateReceiptCache()
+        recomputeFilteredReceipts()
+        projectMutationVersion = UUID()
+        lastProjectMutationReason = "delete project"
+        saveOrganizationSpecificBackup()
+        offlineDataManager.deleteProject(project)
     }
     
     func deleteProjectPermanently(_ project: Project) async {
-        // Delete permanently from local storage
-        await MainActor.run {
-            offlineDataManager.deleteProjectPermanently(project)
+        organizationProjects.removeAll { $0.id == project.id }
+        projects.removeAll { $0.id == project.id }
+        if selectedProject?.id == project.id {
+            selectedProject = nil
         }
+
+        updateAccessibleProjects()
+        invalidateReceiptCache()
+        recomputeFilteredReceipts()
+        projectMutationVersion = UUID()
+        lastProjectMutationReason = "delete project permanently"
+        saveOrganizationSpecificBackup()
+        offlineDataManager.deleteProjectPermanently(project)
     }
     
     // MARK: - CloudKit Integration
@@ -1314,35 +1394,19 @@ class ProjectViewModel: ObservableObject {
             )
         }
 
-        await MainActor.run {
-            receiptProjectStore.synchronize(
-                updatedProject,
-                resolution: resolution,
-                organizationProjects: &organizationProjects,
-                allProjects: &projects
-            )
-
-            if self.selectedProject?.id == projectID {
-                self.selectedProject = updatedProject
-                Logger.receiptWorkflow.debug("Updated selected project after receipt add.")
-            }
-        }
-
-        saveOrganizationSpecificBackup()
-
-        do {
-            try await saveProjectToCloudKit(updatedProject)
-            Logger.receiptWorkflow.info(
-                "Saved receipt-bearing project to CloudKit [storage=\(resolution.storage.logLabel, privacy: .public)]"
-            )
-        } catch {
+        guard let committedProject = await commitProjectMutation(
+            updatedProject,
+            reason: "add receipt",
+            selectProject: selectedProject?.id == projectID
+        ) else {
             Logger.receiptWorkflow.error(
-                "Failed CloudKit save after receipt add: \(error.localizedDescription, privacy: .public)"
+                "Failed to apply receipt add mutation [project=\(projectID.uuidString, privacy: .private(mask: .hash))]"
             )
+            return
         }
 
         Logger.receiptWorkflow.notice(
-            "Completed receipt add [vendor=\(receipt.vendor, privacy: .private(mask: .hash)) amount=\(receipt.amount, privacy: .public) storage=\(resolution.storage.logLabel, privacy: .public) receiptCount=\(updatedProject.receipts.count, privacy: .public)]"
+            "Completed receipt add [vendor=\(receipt.vendor, privacy: .private(mask: .hash)) amount=\(receipt.amount, privacy: .public) storage=\(resolution.storage.logLabel, privacy: .public) receiptCount=\(committedProject.receipts.count, privacy: .public)]"
         )
     }
     

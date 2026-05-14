@@ -42,6 +42,7 @@ Exit criteria: a single user can move through the core contractor workflows pred
   - project reports show profitability, vendor spend, payment-method spend, and closeout summaries
 - Fix global refresh as a release blocker:
   - mutations update selected project, project lists, budget analytics, receipt filters, labor totals, task counts, reports, local storage, and CloudKit sync from one source of truth
+  - current baseline: project create/update/delete, receipt add/update, labor/time-entry, clocking, and team-member labor-reference changes route through the shared `ProjectViewModel` mutation seam
   - no stale UI that only refreshes after a scan/add/manual mutation
 - Remove dead or redundant UI:
   - no placeholder sheets
@@ -95,8 +96,8 @@ Exit criteria: release candidate is validated on real hardware and ready for sub
 - Freeze scope and submit.
 
 ## Immediate Next Steps
-1. Preserve the Fast-Ship Hybrid Working-App Plan in repo docs and commit it as a docs-only checkpoint with Gate A plus focused documentation/parity evidence.
-2. Start the implementation sequence with the global project mutation/refresh contract so later Projects, Receipts, Labor, Tasks, Budget, Resources, and Reports work from one source of truth.
-3. Restore completed-project visibility and Business Resources before expanding Labor and Tasks, because those flows depend on reusable workers, rates, vendors, and payment methods.
+1. Commit the project mutation/refresh contract slice with Gate A plus focused parity evidence.
+2. Restore completed-project visibility through an Active/Completed Projects flow so closed jobs remain recoverable.
+3. Restore Business Resources before expanding Labor and Tasks, because those flows depend on reusable workers, rates, vendors, and payment methods.
 4. Rework Labor and Tasks to shippable contractor workflows with focused unit/UI parity for each slice.
 5. Finish Reports and device acceptance after the underlying data flows refresh immediately and persist across relaunch.

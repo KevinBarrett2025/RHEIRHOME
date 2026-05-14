@@ -72,18 +72,19 @@ extension ProjectViewModel {
             Logger.labor.debug("Team member already assigned to project [teamMember=\(employeeID.uuidString, privacy: .private(mask: .hash))]")
         }
 
-        organizationProjects[idx].loggedHours.append(wh)
-        selectedProject = organizationProjects[idx]
+        var updatedProject = organizationProjects[idx]
+        updatedProject.loggedHours.append(wh)
+        applyProjectMutationLocally(
+            updatedProject,
+            reason: "log labor hours",
+            selectProject: true,
+            scheduleCloudSync: true
+        )
 
         Logger.labor.notice(
-            "Logged hours for project [project=\(sel.id.uuidString, privacy: .private(mask: .hash)) totalEntries=\(self.organizationProjects[idx].loggedHours.count, privacy: .public)]"
+            "Logged hours for project [project=\(sel.id.uuidString, privacy: .private(mask: .hash)) totalEntries=\(updatedProject.loggedHours.count, privacy: .public)]"
         )
-        
-        // Invalidate caches and recompute data
-        recomputeLaborData()
-        invalidateReceiptCache()
-        debouncedSaveProjects()
-        
+
         Logger.labor.info("Saved work-hour entry [hours=\(wh.hours, privacy: .public)]")
     }
     
@@ -123,8 +124,14 @@ extension ProjectViewModel {
             Logger.labor.info("Auto-assigned team member from live tracking [teamMember=\(teamMember.id.uuidString, privacy: .private(mask: .hash))]")
         }
         
-        organizationProjects[idx].loggedHours.append(workHour)
-        selectedProject = organizationProjects[idx]
+        var updatedProject = organizationProjects[idx]
+        updatedProject.loggedHours.append(workHour)
+        applyProjectMutationLocally(
+            updatedProject,
+            reason: "start live labor tracking",
+            selectProject: true,
+            scheduleCloudSync: true
+        )
         
         Logger.labor.notice("Started live tracking [teamMember=\(teamMember.id.uuidString, privacy: .private(mask: .hash))]")
         return workHour.id
@@ -159,13 +166,14 @@ extension ProjectViewModel {
             }
         }
         
-        organizationProjects[idx].loggedHours[whIdx] = workHour
-        selectedProject = organizationProjects[idx]
-        
-        // Recompute labor data
-        recomputeLaborData()
-        invalidateReceiptCache()
-        debouncedSaveProjects()
+        var updatedProject = organizationProjects[idx]
+        updatedProject.loggedHours[whIdx] = workHour
+        applyProjectMutationLocally(
+            updatedProject,
+            reason: "stop live labor tracking",
+            selectProject: true,
+            scheduleCloudSync: true
+        )
         
         Logger.labor.notice("Stopped live tracking [hours=\(workHour.hours, privacy: .public)]")
         return true
@@ -198,8 +206,12 @@ extension ProjectViewModel {
             }
         }
         
-        selectedProject = organizationProjects[idx]
-        debouncedSaveProjects()
+        applyProjectMutationLocally(
+            organizationProjects[idx],
+            reason: "approve labor hours",
+            selectProject: true,
+            scheduleCloudSync: true
+        )
         
         Logger.labor.notice("Approved work-hour entries [count=\(approvedCount, privacy: .public)]")
     }
@@ -298,13 +310,14 @@ extension ProjectViewModel {
             Logger.labor.info("Auto-assigned team member from updated hours [teamMember=\(employeeID.uuidString, privacy: .private(mask: .hash))]")
         }
 
-        organizationProjects[idx].loggedHours[whIdx] = entry
-        selectedProject = organizationProjects[idx]
-        
-        // Invalidate caches and recompute data
-        recomputeLaborData()
-        invalidateReceiptCache()
-        debouncedSaveProjects()
+        var updatedProject = organizationProjects[idx]
+        updatedProject.loggedHours[whIdx] = entry
+        applyProjectMutationLocally(
+            updatedProject,
+            reason: "update labor hours",
+            selectProject: true,
+            scheduleCloudSync: true
+        )
     }
 
     /// Mark an entry as paid.
@@ -336,16 +349,17 @@ extension ProjectViewModel {
         let hoursToDelete = offsets.map { organizationProjects[idx].loggedHours[$0] }
             .filter { $0.isPaid == paid }
         
-        organizationProjects[idx].loggedHours.removeAll { wh in
+        var updatedProject = organizationProjects[idx]
+        updatedProject.loggedHours.removeAll { wh in
             hoursToDelete.contains { $0.id == wh.id }
         }
-        
-        selectedProject = organizationProjects[idx]
-        
-        // Invalidate caches and recompute data
-        recomputeLaborData()
-        invalidateReceiptCache()
-        debouncedSaveProjects()
+
+        applyProjectMutationLocally(
+            updatedProject,
+            reason: "delete labor hours by offset",
+            selectProject: true,
+            scheduleCloudSync: true
+        )
     }
 
     /// Delete multiple entries by their IDs.
@@ -356,16 +370,18 @@ extension ProjectViewModel {
 
         let beforeCount = organizationProjects[idx].loggedHours.count
         
-        organizationProjects[idx].loggedHours.removeAll { ids.contains($0.id) }
-        selectedProject = organizationProjects[idx]
+        var updatedProject = organizationProjects[idx]
+        updatedProject.loggedHours.removeAll { ids.contains($0.id) }
         
-        let afterCount = organizationProjects[idx].loggedHours.count
+        let afterCount = updatedProject.loggedHours.count
         Logger.labor.notice("Deleted work-hour entries [count=\(beforeCount - afterCount, privacy: .public)]")
-        
-        // Invalidate caches and recompute data
-        recomputeLaborData()
-        invalidateReceiptCache()
-        debouncedSaveProjects()
+
+        applyProjectMutationLocally(
+            updatedProject,
+            reason: "delete labor hours by id",
+            selectProject: true,
+            scheduleCloudSync: true
+        )
     }
 
     /// Total earnings for an employee filtered by paid status.
@@ -415,12 +431,14 @@ extension ProjectViewModel {
                 paymentNote: nil,
                 paymentTimestamp: nil
             )
-            organizationProjects[idx].loggedHours.append(wh)
-            selectedProject = organizationProjects[idx]
-            
-            recomputeLaborData()
-            invalidateReceiptCache()
-            debouncedSaveProjects()
+            var updatedProject = organizationProjects[idx]
+            updatedProject.loggedHours.append(wh)
+            applyProjectMutationLocally(
+                updatedProject,
+                reason: "quick clock in",
+                selectProject: true,
+                scheduleCloudSync: true
+            )
         }
     }
 }

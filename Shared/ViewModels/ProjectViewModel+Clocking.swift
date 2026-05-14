@@ -28,16 +28,14 @@ extension ProjectViewModel {
             paymentNote: nil,
             paymentTimestamp: nil
         )
-        organizationProjects[idx].loggedHours.append(wh)
-        selectedProject = organizationProjects[idx]
-        
-        // CRITICAL: Recompute ALL data immediately
-        recomputeLaborData()
-        
-        // Save to CloudKit
-        Task {
-            await saveAllProjectsToCloudKit()
-        }
+        var updatedProject = organizationProjects[idx]
+        updatedProject.loggedHours.append(wh)
+        applyProjectMutationLocally(
+            updatedProject,
+            reason: "clock in labor",
+            selectProject: true,
+            scheduleCloudSync: true
+        )
     }
 
     /// Clock an employee out now.

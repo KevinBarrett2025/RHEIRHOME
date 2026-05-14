@@ -3,8 +3,8 @@
 ## Repo Truth
 - Repo Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Active Branch: `gm/rheir-hardening-phase1`
-- Thread Start SHA: `7f4bcfdba425835dfaaeced5c3455a45b5a28adb`
-- Last Commit At Thread Start: `7f4bcfd Phase 2: gate work tabs behind project context`
+- Thread Start SHA: `e23c6a1c139ca9d8fd9919cbe5ba1826621975e5`
+- Last Commit At Thread Start: `e23c6a1 Phase 2: preserve fast-ship working-app plan (docs only)`
 
 ## Current Objective
 - Keep RHEIR locked into the fast-ship v1 release profile so the visible app ships as a single-user contractor tool with the core shell only: `Projects`, `Receipts`, `Labor`, `Tasks`, plus budget `Breakdown` / `Estimator`.
@@ -19,6 +19,11 @@
 - Keep the next seam on real contractor workflows: rerun same-device and real-device receipt acceptance on the simplified shell once edited mixed-category receipt categories, selected-category totals, quick-view image preview, and launch-time restored receipt visibility all match the saved receipt truth on hardware, then make the same-user iCloud launch call.
 
 ## Current Working Set
+- `Shared/ViewModels/ProjectViewModel.swift` now owns the global project mutation seam for create/update/add/delete, receipt additions, task/progress/work-hour compatibility paths, selected-project refresh, accessible-project refresh signatures, local storage, and CloudKit sync.
+- `Shared/ViewModels/ProjectViewModel+Receipts.swift`, `ProjectViewModel+TimeEntry.swift`, `ProjectViewModel+Clocking.swift`, and `ProjectViewModel+Employees.swift` now route the active receipt/labor/team-member project mutations through that shared propagation path so selected project, project lists, filtered receipts, labor totals, access payloads, backups, and sync work update together.
+- `RHEIRTests/RHEIRTests.swift` now includes `ProjectMutationPropagationTests`, proving project updates and deletes propagate through selected project state, organization/all/access project lists, derived labor totals, receipt caches, local project storage, and CloudKit repository writes.
+- Latest project mutation contract parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_mutation_access_parity_dd -resultBundlePath /tmp/rheir_mutation_access_parity.xcresult test -only-testing:RHEIRTests/ProjectMutationPropagationTests -only-testing:RHEIRTests/ProjectAccessStoreTests` -> PASS (`/tmp/rheir_mutation_access_parity.xcresult`, `5 tests across 2 suites`).
+- Latest project mutation contract Gate A: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_mutation_contract_dd -resultBundlePath /tmp/rheir_gateA_mutation_contract.xcresult clean build` -> PASS (`/tmp/rheir_gateA_mutation_contract.xcresult`).
 - `Shared/Models/Receipt.swift` now persists a trimmed optional top-level `subcategory`, closing the gap where scan-review subcategory input was accepted by the initializer but silently discarded before persistence.
 - `Shared/Features/Receipts/ScannedReceiptEntryView.swift` now persists `analysisResult.items` into the saved `Receipt.items` payload, stores the top-level subcategory, and drops the unusable segmented category picker treatment so the scan-review taxonomy stays legible with the full case set.
 - `Shared/Features/Receipts/ReceiptDetailView.swift` now keeps the ellipsis menu as the single receipt-detail edit/delete action surface, exposes item/subcategory accessibility hooks, and shows saved scanned items once they persist into the live receipt model.
@@ -261,8 +266,8 @@
 - This repo follows a repo-local STS equivalent defined in the root governance docs because the original STS spine docs were not present here.
 
 ## Next Required Action
-1. Commit only the Fast-Ship Hybrid Working-App plan/governance-doc checkpoint after staging the docs set and preserving the user-owned local files (`Shared/Views/Auth/LoginView.swift`, `rheir_knowledge_database.json`, `RHEIRmemories.csv`, `RheirLogo 1024x1024.png`) outside the staged set.
-2. Start the first code slice with the global project mutation/refresh contract so selected project, project lists, budget analytics, receipt filters, labor totals, task counts, reports, local storage, and CloudKit sync update from one source of truth.
-3. Restore completed-project visibility and Business Resources before expanding Labor and Tasks, because those flows depend on reusable workers, rates, vendors, and payment methods.
+1. Commit only the project mutation contract slice after staging the code/test/docs set and preserving the user-owned local files (`Shared/Views/Auth/LoginView.swift`, `rheir_knowledge_database.json`, `RHEIRmemories.csv`, `RheirLogo 1024x1024.png`) outside the staged set.
+2. Restore completed-project visibility as the next code slice, using the mutation contract so completed/archived project state remains visible, recoverable, persisted, and reflected in reports.
+3. Reintroduce Business Resources before expanding Labor and Tasks, because those flows depend on reusable workers, rates, vendors, and payment methods.
 4. Rework Labor and Tasks as release blockers with focused parity per module, then wire Reports to the same mutation/refresh contract.
 5. Continue device acceptance after each slice, with same-user iCloud restore treated as optional until release-candidate validation proves it stable.
