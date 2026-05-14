@@ -4,6 +4,7 @@
 - `00_READ_FIRST_MAIN_AUTHORITY.md`
 - `10_GM_TESTING_GROUNDS_RUNBOOK.md`
 - `20_GM_TO_MAIN_PROMOTION_RUNBOOK.md`
+- `RHEIR_FAST_SHIP_HYBRID_WORKING_APP_PLAN.md`
 - `SHIP_READINESS_CHECKLIST.md`
 - `STS_Rule_of_Law.md`
 - `STS_Status.md`
@@ -13,6 +14,14 @@
 - `Docs/Recovery/CODEX_THREAD_CONTINUITY.md`
 
 ## Active Hardening Seams
+- Fast-Ship Hybrid Working-App release blockers
+- Contractor validation track for job costing, payroll, tasks, profitability, and closeout reports
+- Global project mutation/refresh contract
+- Active/Completed project lifecycle recovery
+- Business Resources surface for workers, rates, vendors, and payment methods
+- Labor payments with split/partial/edit/unpay semantics
+- Task assignment, due/overdue, completion proof, and photo semantics
+- Contractor reports for category spend, vendor spend, payment-method spend, payroll, profit/loss, and closeout
 - `LocalCacheStore`
 - `ProjectStore`
 - `ProjectRepository`
@@ -199,6 +208,8 @@
 - Latest focused launch-polish Gate A result: `PASS` (`/tmp/rheir_gateA_launch_polish.xcresult`)
 - Latest focused scanned-item/detail-action UI parity result: initial runner bootstrap failure at `/tmp/rheir_receipt_item_menu_ui2.xcresult`; retry `PASS` (`/tmp/rheir_receipt_item_menu_ui_retry.xcresult`, `4 UI tests`)
 - Latest focused scanned-item/detail-action Gate A result: `PASS` (`/tmp/rheir_gateA_receipt_item_menu2.xcresult`)
+- Latest Fast-Ship Hybrid Working-App plan Gate A result: `PASS` (`/tmp/rheir_gateA_working_app_plan_docs.xcresult`)
+- Latest Fast-Ship Hybrid Working-App plan focused docs/shell parity result: `PASS` (`/tmp/rheir_working_app_plan_docs_parity.xcresult`, `6 UI tests`)
 - Latest focused saved scanned-item edit-sheet UI parity result: `PASS` (`/tmp/rheir_receipt_edit_items_ui.xcresult`, `3 UI tests`)
 - Latest focused saved scanned-item edit-sheet Gate A result: `PASS` (`/tmp/rheir_gateA_receipt_edit_items.xcresult`)
 - Latest focused mixed-category receipt parity result: `PASS` (`/tmp/rheir_receipt_itemized_category_ui_retry8.xcresult`, `4 tests across 2 suites`)

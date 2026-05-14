@@ -3,7 +3,8 @@
 ## Current Status
 - Branch: `gm/rheir-hardening-phase1`
 - Status: in `Release Hardening`
-- Release posture: narrowed to a fast-ship v1 single-user contractor release
+- Release posture: Fast-Ship Hybrid single-user contractor release with hidden CloudKit/personal-workspace infrastructure
+- Governing plan: `RHEIR_FAST_SHIP_HYBRID_WORKING_APP_PLAN.md`
 
 ## Phase 1: Foundation Completion
 Exit criteria: architecture is stable, noisy legacy behavior is reduced, and warning debt is controlled.
@@ -25,6 +26,28 @@ Exit criteria: architecture is stable, noisy legacy behavior is reduced, and war
 ## Phase 2: Release Hardening
 Exit criteria: a single user can move through the core contractor workflows predictably, with the simplified v1 shell, stable persistence, and clean App Store posture.
 
+- Preserve the Fast-Ship Hybrid shell:
+  - no visible organization setup/admin/team onboarding
+  - no Receipts/Labor/Tasks tabs until a project is selected
+  - completed projects remain visible through an Active/Completed project view
+- Restore Business Resources without exposing Company/Organization:
+  - workers/team members
+  - job titles and labor rates
+  - vendors
+  - payment methods/cards
+- Make contractor job-costing accurate:
+  - itemized receipt categories drive category totals and budget actuals
+  - labor logs drive project cost and payroll summaries
+  - tasks drive progress, overdue state, and completion proof
+  - project reports show profitability, vendor spend, payment-method spend, and closeout summaries
+- Fix global refresh as a release blocker:
+  - mutations update selected project, project lists, budget analytics, receipt filters, labor totals, task counts, reports, local storage, and CloudKit sync from one source of truth
+  - no stale UI that only refreshes after a scan/add/manual mutation
+- Remove dead or redundant UI:
+  - no placeholder sheets
+  - no duplicate action buttons when a menu owns the action
+  - no redundant choose/change project controls
+  - no broken links or unimplemented "coming soon" actions in v1
 - Add UI smoke coverage for:
   - sign in
   - simplified ready shell with no collaboration/admin detour
@@ -72,7 +95,8 @@ Exit criteria: release candidate is validated on real hardware and ready for sub
 - Freeze scope and submit.
 
 ## Immediate Next Steps
-1. Continue the fast-ship real-device acceptance pack on the selected-project receipts surface with the latest scan-review/detail patch: first scan, save, leave `Receipts`, return, and reopen the saved receipt.
-2. On that device rerun, explicitly confirm that scanned itemized lines persist, the scan-review category control is usable, and the top-right ellipsis menu fully replaces the removed duplicate edit/delete buttons.
-3. Terminate and relaunch the app on device, then confirm the saved receipt and selected-project context persist cleanly through restore.
-4. Validate same-user iCloud restore on real hardware; if it is not clean by release cutoff, keep the shell but de-scope cross-device expectations from launch.
+1. Preserve the Fast-Ship Hybrid Working-App Plan in repo docs and commit it as a docs-only checkpoint with Gate A plus focused documentation/parity evidence.
+2. Start the implementation sequence with the global project mutation/refresh contract so later Projects, Receipts, Labor, Tasks, Budget, Resources, and Reports work from one source of truth.
+3. Restore completed-project visibility and Business Resources before expanding Labor and Tasks, because those flows depend on reusable workers, rates, vendors, and payment methods.
+4. Rework Labor and Tasks to shippable contractor workflows with focused unit/UI parity for each slice.
+5. Finish Reports and device acceptance after the underlying data flows refresh immediately and persist across relaunch.

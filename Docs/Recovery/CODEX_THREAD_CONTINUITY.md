@@ -3,11 +3,13 @@
 ## Repo Truth
 - Repo Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Active Branch: `gm/rheir-hardening-phase1`
-- Thread Start SHA: `130f53c2bbeccd56baa5299a3583b4d654995b2b`
-- Last Commit At Thread Start: `130f53c Phase 2: hydrate restored project receipts on launch`
+- Thread Start SHA: `7f4bcfdba425835dfaaeced5c3455a45b5a28adb`
+- Last Commit At Thread Start: `7f4bcfd Phase 2: gate work tabs behind project context`
 
 ## Current Objective
 - Keep RHEIR locked into the fast-ship v1 release profile so the visible app ships as a single-user contractor tool with the core shell only: `Projects`, `Receipts`, `Labor`, `Tasks`, plus budget `Breakdown` / `Estimator`.
+- Preserve and implement `RHEIR_FAST_SHIP_HYBRID_WORKING_APP_PLAN.md`, shifting the active release objective from only hiding collaboration to shipping a contractor-ready working app across Projects, Receipts, Labor, Tasks, Budget, Resources, and Reports.
+- Treat contractor job-costing validation as a release requirement: itemized materials, labor/payroll, tasks/progress, payment status, profitability, and closeout reports must answer real contractor operating questions.
 - Preserve the simplified visible session flow `launch -> sign in -> ready`, with invite, org-selection, company/admin, and legacy AI-key surfaces still hidden unless the app is explicitly forced back into the legacy/full profile.
 - Keep the selected-project receipt seam green end-to-end: saved scanned receipt itemized lines now persist into receipt detail and into the ellipsis-menu edit sheet with a dedicated line-item editor, mixed-category receipt category summaries/drilldown cards now honor per-item categories instead of treating the whole receipt total as one category, and the Receipts list quick-view now opens the real receipt image viewer.
 - Add an at-a-glance selected-category header in the Receipts category drilldown so users can see receipt count and item-scoped total spend for the active category before scanning the receipt list.
@@ -259,8 +261,8 @@
 - This repo follows a repo-local STS equivalent defined in the root governance docs because the original STS spine docs were not present here.
 
 ## Next Required Action
-1. Preserve the repo-local STS docs and the user-owned files (`Shared/Views/Auth/LoginView.swift`, `rheir_knowledge_database.json`, `RHEIRmemories.csv`, `RheirLogo 1024x1024.png`) outside the staged set for the next checkpoint.
-2. Re-run the real-device selected-project receipt flow on the simplified shell and explicitly confirm that scanned receipt itemized lines now persist after save, leave/return, reopen, and relaunch restore.
-3. Confirm on device that edited mixed-category receipt items drive Receipts category summaries and drilled-in card totals by itemized spend, that the list quick-view opens the real saved receipt image, and that receipt details rely on the top-right actions menu without needing duplicate bottom edit/delete buttons.
-4. Make the same-user iCloud restore launch decision only after the device receipt flow is green end-to-end; if it is not clean by cutoff, keep local-device persistence as the ship promise.
-5. Only resume broader runtime QA and any post-launch surface expansion after the fast-ship device receipt path is stable again.
+1. Commit only the Fast-Ship Hybrid Working-App plan/governance-doc checkpoint after staging the docs set and preserving the user-owned local files (`Shared/Views/Auth/LoginView.swift`, `rheir_knowledge_database.json`, `RHEIRmemories.csv`, `RheirLogo 1024x1024.png`) outside the staged set.
+2. Start the first code slice with the global project mutation/refresh contract so selected project, project lists, budget analytics, receipt filters, labor totals, task counts, reports, local storage, and CloudKit sync update from one source of truth.
+3. Restore completed-project visibility and Business Resources before expanding Labor and Tasks, because those flows depend on reusable workers, rates, vendors, and payment methods.
+4. Rework Labor and Tasks as release blockers with focused parity per module, then wire Reports to the same mutation/refresh contract.
+5. Continue device acceptance after each slice, with same-user iCloud restore treated as optional until release-candidate validation proves it stable.

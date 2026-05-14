@@ -3,10 +3,10 @@
 ## Repo
 - Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Branch: `gm/rheir-hardening-phase1`
-- HEAD: `e50e320afd09ab05f663633952b52a69e3ef0486`
+- HEAD: `7f4bcfdba425835dfaaeced5c3455a45b5a28adb`
 
 ## Active Initiative
-- RHEIR release hardening, phase 2 estimator foundation and contractor workflow hardening.
+- RHEIR release hardening, Fast-Ship Hybrid contractor workflow hardening.
 
 ## Completed
 - Recovery tag created before cleanup.
@@ -160,9 +160,11 @@
 - Added focused session and UI smoke coverage proving fast-ship no-organization launch activates a personal workspace, hides Company/admin setup, and lands on the Projects/Receipts/Labor/Tasks shell.
 - Reworked the fast-ship project-selection home so Receipts, Labor, and Tasks tabs stay hidden until a project is selected, removing the empty-tab trap while preserving selected-project work tabs after context is chosen.
 - Simplified the fast-ship Projects screen by removing visible workspace/org copy, the redundant choose/change project dropdown, the logo block, and technical device/iCloud project indicators from the v1 project-selection path.
+- Preserved the Fast-Ship Hybrid Working-App Plan in `RHEIR_FAST_SHIP_HYBRID_WORKING_APP_PLAN.md` and tied `SHIP_READINESS_CHECKLIST.md` to the contractor-first release blockers: global refresh, completed projects, Business Resources, Labor, Tasks, Reports, UI cleanup, and device acceptance.
 
 ## In Progress
-- Lock the shipping app into the fast-ship v1 release profile so the visible shell stays single-user focused: `Projects`, `Receipts`, `Labor`, `Tasks`, plus budget `Breakdown` / `Estimator`.
+- Lock the shipping app into the Fast-Ship Hybrid release profile so the visible shell stays single-user focused while hidden CloudKit/personal-workspace infrastructure remains available.
+- Implement the Working-App release blockers in this order: global project mutation/refresh contract, completed projects, Business Resources, Labor, Tasks, Reports, UI cleanup, and device acceptance.
 - Continue broader selected-project estimator variance/runtime QA on top of the approved-baseline mapping seam inside the simplified v1 shell.
 - Continue broader selected-project receipt runtime QA in parallel, with same-device/device validation now the active release seam after manual-receipt relaunch, scanned-receipt return/reopen, and launch-time receipt hydration parity are green in simulator.
 - Continue shrinking the remaining oversized active state owners around the new sync and access store boundaries.
@@ -174,6 +176,8 @@
 - Raw in-sandbox `xcodebuild` commands are still less reliable than elevated CLI or `xcodebuildmcp` paths in this environment because CoreSimulator and DerivedData access remain sandbox-sensitive.
 
 ## Latest Evidence
+- Fast-Ship Hybrid Working-App plan Gate A: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_working_app_plan_docs_dd -resultBundlePath /tmp/rheir_gateA_working_app_plan_docs.xcresult clean build` -> PASS (`/tmp/rheir_gateA_working_app_plan_docs.xcresult`)
+- Fast-Ship Hybrid Working-App plan focused docs/shell parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_working_app_plan_docs_parity_dd -resultBundlePath /tmp/rheir_working_app_plan_docs_parity.xcresult test -only-testing:RHEIRUITests/RHEIRUITests/testReadyModeShowsMainTabShell -only-testing:RHEIRUITests/RHEIRUITests/testOrganizationSelectionModeAutoResolvesIntoReadyShell -only-testing:RHEIRUITests/RHEIRUITests/testNoOrganizationModeUsesFastShipPersonalWorkspace -only-testing:RHEIRUITests/RHEIRUITests/testProjectSelectionModeRequiresAndAppliesProjectContext -only-testing:RHEIRUITests/RHEIRUITests/testLaborModeRequiresAndUsesSelectedProjectContext -only-testing:RHEIRUITests/RHEIRUITests/testTasksModeRequiresAndUsesSelectedProjectContext` -> PASS (`/tmp/rheir_working_app_plan_docs_parity.xcresult`, `6 UI tests`)
 - Fast-ship personal-workspace fallback parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_fastship_personal_workspace_dd -resultBundlePath /tmp/rheir_fastship_personal_workspace_20260514_rerun3.xcresult test -only-testing:RHEIRTests/SessionSupportTests -only-testing:RHEIRUITests/RHEIRUITests/testOrganizationSelectionModeAutoResolvesIntoReadyShell -only-testing:RHEIRUITests/RHEIRUITests/testNoOrganizationModeUsesFastShipPersonalWorkspace` -> PASS (`/tmp/rheir_fastship_personal_workspace_20260514_rerun3.xcresult`, `16 session tests plus 2 UI smokes`)
 - Fast-ship personal-workspace Gate A: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_fastship_personal_workspace_dd -resultBundlePath /tmp/rheir_gateA_fastship_personal_workspace_20260514.xcresult clean build` -> PASS (`/tmp/rheir_gateA_fastship_personal_workspace_20260514.xcresult`)
 - Fast-ship project-context shell parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_project_context_shell_dd -resultBundlePath /tmp/rheir_project_context_shell_20260514.xcresult test -only-testing:RHEIRUITests/RHEIRUITests/testReadyModeShowsMainTabShell -only-testing:RHEIRUITests/RHEIRUITests/testOrganizationSelectionModeAutoResolvesIntoReadyShell -only-testing:RHEIRUITests/RHEIRUITests/testNoOrganizationModeUsesFastShipPersonalWorkspace -only-testing:RHEIRUITests/RHEIRUITests/testProjectSelectionModeRequiresAndAppliesProjectContext -only-testing:RHEIRUITests/RHEIRUITests/testLaborModeRequiresAndUsesSelectedProjectContext -only-testing:RHEIRUITests/RHEIRUITests/testTasksModeRequiresAndUsesSelectedProjectContext` -> PASS (`/tmp/rheir_project_context_shell_20260514.xcresult`, `6 UI tests`)
