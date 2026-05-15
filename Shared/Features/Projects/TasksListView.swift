@@ -9,6 +9,7 @@ struct TasksListView: View {
     @State private var searchText = ""
     @State private var selectedFilter: TaskFilter = .all
     @State private var selectedTask: ProjectTask?
+    @State private var taskPendingCompletion: ProjectTask?
     @State private var showingTaskDetail = false
     
     enum TaskFilter: String, CaseIterable {
@@ -94,6 +95,13 @@ struct TasksListView: View {
         return tasks.filter { $0.isOverdue && !$0.isCompleted }
     }
 
+    private var sectionTasks: [ProjectTask] {
+        if selectedFilter == .all && !overdueTasks.isEmpty {
+            return filteredTasks.filter { !$0.isOverdue || $0.isCompleted }
+        }
+        return filteredTasks
+    }
+
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
@@ -116,6 +124,15 @@ struct TasksListView: View {
             .sheet(item: $selectedTask) { task in
                 TaskDetailView(task: task)
                     .environmentObject(projectVM)
+            }
+            .sheet(item: $taskPendingCompletion) { task in
+                TaskCompletionEditor(task: task) { completedTask in
+                    guard let project = projectVM.selectedProject else { return }
+                    Task {
+                        await projectVM.updateTask(completedTask, in: project.id)
+                    }
+                }
+                .environmentObject(projectVM)
             }
         }
     }
@@ -155,6 +172,7 @@ struct TasksListView: View {
             Button(action: { showingNewTask = true }) {
                 Image(systemName: "plus")
             }
+            .accessibilityIdentifier("tasks-add-button")
             .disabled(projectVM.selectedProject == nil)
         }
     }
@@ -162,7 +180,7 @@ struct TasksListView: View {
     @ViewBuilder
     private var newTaskSheet: some View {
         if let project = projectVM.selectedProject {
-            TaskCreateEditView(project: project, onSave: { task in
+            TaskCreateEditView(project: project, task: nil, onSave: { task in
                 Task {
                     await projectVM.addTask(task, to: project.id)
                 }
@@ -185,9 +203,9 @@ struct TasksListView: View {
                 }
             }
             
-            if !filteredTasks.isEmpty {
+            if !sectionTasks.isEmpty {
                 Section(sectionHeader) {
-                    ForEach(filteredTasks) { task in
+                    ForEach(sectionTasks) { task in
                         TaskRowView(task: task) {
                             selectedTask = task
                             showingTaskDetail = true
@@ -195,7 +213,7 @@ struct TasksListView: View {
                         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                             if !task.isCompleted {
                                 Button("Complete") {
-                                    markTaskCompleted(task)
+                                    taskPendingCompletion = task
                                 }
                                 .tint(.green)
                             }
@@ -250,7 +268,7 @@ struct TasksListView: View {
     private var sectionHeader: String {
         switch selectedFilter {
         case .all:
-            return "All Tasks (\(filteredTasks.count))"
+            return "All Other Tasks (\(sectionTasks.count))"
         case .active:
             return "Active Tasks (\(filteredTasks.count))"
         case .completed:
@@ -290,18 +308,6 @@ struct TasksListView: View {
     
     // MARK: - Task Actions
     
-    private func markTaskCompleted(_ task: ProjectTask) {
-        guard let currentUserID = getCurrentUserID(),
-              let project = projectVM.selectedProject else { return }
-        
-        var completedTask = task
-        completedTask.markCompleted(by: [UUID(uuidString: currentUserID) ?? UUID()], notes: "Marked complete")
-        
-        Task {
-            await projectVM.updateTask(completedTask, in: project.id)
-        }
-    }
-    
     private func reopenTask(_ task: ProjectTask) {
         guard let project = projectVM.selectedProject else { return }
         
@@ -325,14 +331,12 @@ struct TasksListView: View {
         }
     }
     
-    private func getCurrentUserID() -> String? {
-        return UserDefaults.standard.string(forKey: "apple_user_id")
-    }
 }
 
 struct TaskRowView: View {
     let task: ProjectTask
     let onTap: () -> Void
+    @EnvironmentObject var projectVM: ProjectViewModel
     
     var body: some View {
         Button(action: onTap) {
@@ -364,6 +368,13 @@ struct TaskRowView: View {
                             .font(.caption)
                             .foregroundColor(.secondary)
                             .lineLimit(2)
+                    }
+
+                    if !task.assignedEmployeeIDs.isEmpty {
+                        Text(assigneeSummary)
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
                     }
                     
                     HStack {
@@ -424,6 +435,7 @@ struct TaskRowView: View {
             .opacity(task.isCompleted ? 0.7 : 1.0)
         }
         .buttonStyle(PlainButtonStyle())
+        .accessibilityIdentifier("task-row-\(task.id.uuidString)")
     }
     
     private func priorityColor(_ priority: TaskPriority) -> Color {
@@ -433,6 +445,11 @@ struct TaskRowView: View {
         case .high: return .orange
         case .urgent: return .red
         }
+    }
+
+    private var assigneeSummary: String {
+        let names = task.assignedEmployeeIDs.compactMap { projectVM.getTeamMember(by: $0)?.name }
+        return names.isEmpty ? "Assigned worker unavailable" : "Assigned: \(names.joined(separator: ", "))"
     }
 }
 
@@ -491,9 +508,9 @@ struct TaskSummaryView: View {
     }
 }
 
-// Temporary placeholder views - these will be replaced with actual implementations
 struct TaskCreateEditView: View {
     let project: Project
+    let task: ProjectTask?
     let onSave: (ProjectTask) -> Void
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var projectVM: ProjectViewModel
@@ -504,6 +521,20 @@ struct TaskCreateEditView: View {
     @State private var priority: TaskPriority = .medium
     @State private var category: TaskCategory = .general
     @State private var estimatedHours = 1.0
+    @State private var selectedEmployeeIDs: Set<UUID> = []
+
+    init(project: Project, task: ProjectTask?, onSave: @escaping (ProjectTask) -> Void) {
+        self.project = project
+        self.task = task
+        self.onSave = onSave
+        _title = State(initialValue: task?.title ?? "")
+        _description = State(initialValue: task?.description ?? "")
+        _dueDate = State(initialValue: task?.dueDate ?? Date())
+        _priority = State(initialValue: task?.priority ?? .medium)
+        _category = State(initialValue: task?.category ?? .general)
+        _estimatedHours = State(initialValue: task?.estimatedHours ?? 1.0)
+        _selectedEmployeeIDs = State(initialValue: Set(task?.assignedEmployeeIDs ?? []))
+    }
     
     var body: some View {
         NavigationStack {
@@ -543,8 +574,40 @@ struct TaskCreateEditView: View {
                             .textFieldStyle(RoundedBorderTextFieldStyle())
                     }
                 }
+
+                Section("Assign Workers") {
+                    let availableWorkers = projectVM.teamMembers.filter { $0.employmentStatus.canBeAssignedToProjects }
+                    if availableWorkers.isEmpty {
+                        Text("No active workers available")
+                            .foregroundColor(.secondary)
+                    } else {
+                        ForEach(availableWorkers) { worker in
+                            Button {
+                                if selectedEmployeeIDs.contains(worker.id) {
+                                    selectedEmployeeIDs.remove(worker.id)
+                                } else {
+                                    selectedEmployeeIDs.insert(worker.id)
+                                }
+                            } label: {
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(worker.name)
+                                        Text(worker.jobTitle)
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
+                                    Spacer()
+                                    Image(systemName: selectedEmployeeIDs.contains(worker.id) ? "checkmark.circle.fill" : "circle")
+                                        .foregroundColor(selectedEmployeeIDs.contains(worker.id) ? .blue : .secondary)
+                                }
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityIdentifier("task-worker-\(worker.id.uuidString)")
+                        }
+                    }
+                }
             }
-            .navigationTitle("New Task")
+            .navigationTitle(task == nil ? "New Task" : "Edit Task")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -555,26 +618,40 @@ struct TaskCreateEditView: View {
                 
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Save") {
-                        createTask()
+                        saveTask()
                     }
+                    .accessibilityIdentifier("task-save-button")
                     .disabled(title.isEmpty)
                 }
             }
         }
     }
     
-    private func createTask() {
-        let task = ProjectTask(
-            title: title,
-            description: description,
+    private func saveTask() {
+        let updatedTask = ProjectTask(
+            id: task?.id ?? UUID(),
+            title: title.trimmingCharacters(in: .whitespacesAndNewlines),
+            description: description.trimmingCharacters(in: .whitespacesAndNewlines),
             dueDate: dueDate,
+            isCompleted: task?.isCompleted ?? false,
+            completedDate: task?.completedDate,
             priority: priority,
             category: category,
             estimatedHours: estimatedHours,
-            projectID: project.id
+            actualHours: task?.actualHours ?? 0,
+            projectID: project.id,
+            budgetLineID: task?.budgetLineID,
+            estimateVersionID: task?.estimateVersionID,
+            phaseName: task?.phaseName,
+            photoIDs: task?.photoIDs ?? [],
+            assignedEmployeeIDs: Array(selectedEmployeeIDs),
+            completedByEmployeeIDs: task?.completedByEmployeeIDs ?? [],
+            completionNotes: task?.completionNotes ?? "",
+            createdAt: task?.createdAt ?? Date(),
+            updatedAt: Date()
         )
         
-        onSave(task)
+        onSave(updatedTask)
     }
 }
 
@@ -583,6 +660,7 @@ struct TaskDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var projectVM: ProjectViewModel
     @State private var showingEditTask = false
+    @State private var showingCompletionSheet = false
     
     var body: some View {
         NavigationStack {
@@ -621,9 +699,17 @@ struct TaskDetailView: View {
                         }
                         
                         DetailRow(title: "Estimated Hours", value: "\(String(format: "%.1f", task.estimatedHours)) hours", icon: "clock")
+
+                        if !task.assignedEmployeeIDs.isEmpty {
+                            DetailRow(title: "Assigned", value: assigneeSummary, icon: "person.2.fill")
+                        }
                         
                         if task.isCompleted, let completedDate = task.completedDate {
                             DetailRow(title: "Completed", value: completedDate.formatted(date: .abbreviated, time: .shortened), icon: "checkmark.circle.fill")
+                        }
+
+                        if !task.completionNotes.isEmpty {
+                            DetailRow(title: "Proof Notes", value: task.completionNotes, icon: "note.text")
                         }
                     }
                     .padding()
@@ -647,7 +733,7 @@ struct TaskDetailView: View {
                     Menu {
                         if !task.isCompleted {
                             Button("Mark Complete") {
-                                markTaskCompleted()
+                                showingCompletionSheet = true
                             }
                         } else {
                             Button("Reopen Task") {
@@ -665,26 +751,32 @@ struct TaskDetailView: View {
                     } label: {
                         Image(systemName: "ellipsis.circle")
                     }
+                    .accessibilityIdentifier("task-detail-menu")
                 }
             }
         }
         .sheet(isPresented: $showingEditTask) {
-            // Placeholder for edit view
-            Text("Edit Task Placeholder")
+            if let project = projectVM.selectedProject {
+                TaskCreateEditView(project: project, task: task) { updatedTask in
+                    Task {
+                        await projectVM.updateTask(updatedTask, in: project.id)
+                    }
+                    showingEditTask = false
+                }
+                .environmentObject(projectVM)
+            }
         }
-    }
-    
-    private func markTaskCompleted() {
-        guard let currentUserID = getCurrentUserID(),
-              let project = projectVM.selectedProject else { return }
-        
-        var completedTask = task
-        completedTask.markCompleted(by: [UUID(uuidString: currentUserID) ?? UUID()], notes: "Marked complete")
-        
-        Task {
-            await projectVM.updateTask(completedTask, in: project.id)
+        .sheet(isPresented: $showingCompletionSheet) {
+            TaskCompletionEditor(task: task) { completedTask in
+                guard let project = projectVM.selectedProject else { return }
+                Task {
+                    await projectVM.updateTask(completedTask, in: project.id)
+                }
+                showingCompletionSheet = false
+                dismiss()
+            }
+            .environmentObject(projectVM)
         }
-        dismiss()
     }
     
     private func reopenTask() {
@@ -712,8 +804,108 @@ struct TaskDetailView: View {
         dismiss()
     }
     
-    private func getCurrentUserID() -> String? {
-        return UserDefaults.standard.string(forKey: "apple_user_id")
+    private var assigneeSummary: String {
+        let names = task.assignedEmployeeIDs.compactMap { projectVM.getTeamMember(by: $0)?.name }
+        return names.isEmpty ? "Unavailable" : names.joined(separator: ", ")
+    }
+}
+
+private struct TaskCompletionEditor: View {
+    let task: ProjectTask
+    let onComplete: (ProjectTask) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject var projectVM: ProjectViewModel
+    @State private var selectedEmployeeIDs: Set<UUID>
+    @State private var completionNotes: String
+    @State private var completedAt: Date
+
+    init(task: ProjectTask, onComplete: @escaping (ProjectTask) -> Void) {
+        self.task = task
+        self.onComplete = onComplete
+        _selectedEmployeeIDs = State(initialValue: Set(task.assignedEmployeeIDs))
+        _completionNotes = State(initialValue: task.completionNotes)
+        _completedAt = State(initialValue: task.completedDate ?? Date())
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Task") {
+                    Text(task.title)
+                        .font(.headline)
+                    if !task.description.isEmpty {
+                        Text(task.description)
+                            .foregroundColor(.secondary)
+                    }
+                }
+
+                Section("Completed By") {
+                    let activeWorkers = projectVM.teamMembers.filter { $0.employmentStatus.canBeAssignedToProjects }
+                    if activeWorkers.isEmpty {
+                        Text("No active workers available")
+                            .foregroundColor(.secondary)
+                    } else {
+                        ForEach(activeWorkers) { worker in
+                            Button {
+                                if selectedEmployeeIDs.contains(worker.id) {
+                                    selectedEmployeeIDs.remove(worker.id)
+                                } else {
+                                    selectedEmployeeIDs.insert(worker.id)
+                                }
+                            } label: {
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(worker.name)
+                                        Text(worker.jobTitle)
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
+                                    Spacer()
+                                    Image(systemName: selectedEmployeeIDs.contains(worker.id) ? "checkmark.circle.fill" : "circle")
+                                        .foregroundColor(selectedEmployeeIDs.contains(worker.id) ? .green : .secondary)
+                                }
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityIdentifier("task-completion-worker-\(worker.id.uuidString)")
+                        }
+                    }
+                }
+
+                Section("Completion Proof") {
+                    DatePicker("Completed At", selection: $completedAt, displayedComponents: [.date, .hourAndMinute])
+                    TextField("Completion notes", text: $completionNotes, axis: .vertical)
+                        .lineLimit(2...5)
+                }
+            }
+            .navigationTitle("Complete Task")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Complete") {
+                        completeTask()
+                    }
+                    .fontWeight(.semibold)
+                }
+            }
+        }
+    }
+
+    private func completeTask() {
+        var completedTask = task
+        completedTask.markCompleted(
+            by: Array(selectedEmployeeIDs),
+            notes: completionNotes.trimmingCharacters(in: .whitespacesAndNewlines)
+        )
+        completedTask.completedDate = completedAt
+        onComplete(completedTask)
+        dismiss()
     }
 }
 

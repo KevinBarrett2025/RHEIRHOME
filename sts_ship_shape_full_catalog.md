@@ -201,6 +201,7 @@
 - `LaborPaymentView` unpaid/paid/summary tabs, partial payment entry, method/reference capture, and unpay/reissue reversal
 - `LaborPaymentView` logged-hour editing, payment correction, and compact tab selector
 - `LaborPaymentView` professional bordered paid-ledger card layout with earned, paid, balance/overpayment, method, and reference rows
+- `TasksListView` active compiled task editor/detail hardening for assignment editing, due/overdue separation, proof-note completion, and immediate refresh
 - `RHEIRTests` Labor payment ledger coverage
 - `RHEIRTests` Labor editability and partial-payment persistence coverage
 - `RHEIRTests` Labor overpayment-after-edited-hours regression coverage
@@ -217,6 +218,10 @@
 - `SignInWithAppleCoordinator` structured logging
 
 ## Current Validation Baseline
+- Latest Tasks first-slice Gate A result: `PASS` (`/tmp/rheir_gateA_tasks_first_slice_rerun2.xcresult`)
+- Latest Tasks first-slice focused UI parity result: `PASS` (`/tmp/rheir_tasks_first_slice_ui_rerun2.xcresult`, `1 UI test`)
+- Latest Tasks first-slice mutation parity result: `PASS` (`/tmp/rheir_tasks_first_slice_mutation_parity.xcresult`, `4 tests`)
+- Latest Tasks first-slice pbxproj drift: `NONE`
 - Latest Labor accounting hardening ledger parity result: `PASS` (`/tmp/rheir_labor_accounting_overpayment_final.xcresult, /tmp/rheir_labor_accounting_acceptance_final.xcresult, /tmp/rheir_labor_accounting_existing_ledger_final.xcresult`, `4 focused tests across 3 result bundles`)
 - Latest Labor accounting hardening UI smoke result: `PASS` (`/tmp/rheir_labor_accounting_ui_final.xcresult`, `1 UI test`)
 - Latest Labor accounting hardening visual evidence: `/tmp/rheir_labor_accounting_ui_final_attachments/C1B62C59-44D4-4B22-9FDC-2E3756510199.png`

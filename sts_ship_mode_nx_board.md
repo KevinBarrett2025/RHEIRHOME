@@ -40,6 +40,9 @@
 - `LaborPaymentView` now renders paid entries as bordered professional accounting cards with earned, paid, balance/overpayment, method, reference, and action rows instead of loose floating content.
 - `BusinessWorkersResourceView` now keeps active-worker rows stable during transient empty team-member refreshes, preventing the device-observed temporary all-workers-empty state while still clearing the list when no active workers remain.
 - `ProjectViewModel.saveTeamMemberToCloudKit(_:)` now fetches existing team-member records before save and persists termination metadata, so worker updates/removals update the existing CloudKit record instead of failing with duplicate insert collisions.
+- Labor + Business Resources physical-device acceptance is now PASS for multi-rate workers, editable hours, partial/split payments, payment correction, worker deactivation, add-rate-in-flow, unpay/reissue, and persisted totals.
+- `TasksListView` now uses the active compiled task editor/detail path for assignment editing, routes completion through proof capture instead of blind completion, separates overdue work from the general list without duplicating rows, and refreshes immediately through the shared mutation seam.
+- `RHEIRUITests.swift` now proves task assignment editing, due/overdue display, completion proof notes, and immediate overdue-section refresh on the live task surface.
 - Canonical tree cleanup completed in the working branch.
 - Session flow consolidated around `AppSessionSupport.swift`.
 - `Project.swift` now carries the first compiled estimator domain with intake, draft, versioned baseline, variance, source-evidence, and proposal-view models plus bridge helpers back into `Project` budget summary fields.
@@ -200,11 +203,9 @@
 - Use the new global project mutation/refresh contract while hardening Tasks, Reports, and remaining UI cleanup so those flows inherit immediate refresh instead of adding one-off state writes.
 - Completed-project archive/reopen is simulator-proven; verify the reopen action on device during the next project lifecycle acceptance pass.
 - Business Resources hub entry is simulator-proven; verify add/edit workers, vendors, and payment methods on device during the next Labor/Resources acceptance pass.
-- Labor payment hardening is simulator-proven for multi-rate worker/rate management, editable logged hours, partial/split payments, payment correction, check/reference metadata, and unpay/reissue; complete device acceptance before marking Labor release-accepted.
-- Log Hours rate-menu hardening is simulator-proven for actual-rate-only selection and in-flow rate creation; verify that quick-add path on device during the same Labor acceptance pass.
-- Labor accounting and UI professionalism are explicit release criteria before Tasks: paid history must survive later edits, over/under balances must be visible, totals must reconcile from persistence, and compact device sheets/rows must remain bounded and untruncated.
-- Re-run the worker-removal path on device and confirm removing one worker leaves the remaining workers visible immediately, then confirm relaunch preserves the deactivated worker state without `record to insert already exists` CloudKit errors.
-- Rework Tasks into a shippable contractor workflow with multi-task CRUD, assignment, due/overdue state, completion proof, photos, and immediate project/report refresh.
+- Labor + Business Resources device acceptance is PASS for multi-rate worker/rate management, editable logged hours, partial/split payments, payment correction, check/reference metadata, worker removal, add-rate-in-flow, unpay/reissue, and persisted totals.
+- Labor accounting and UI professionalism remain standing release criteria for every later seam: paid history must survive later edits, over/under balances must be visible, totals must reconcile from persistence, and compact device sheets/rows must remain bounded and untruncated.
+- Continue Tasks hardening from the now simulator-proven first slice into multi-task CRUD acceptance, completion-photo proof capture/persistence, and real-device validation of immediate project/report refresh.
 - Finish Reports around contractor outputs: project summary, category/cost-code spend, vendor spend, payment-method spend, labor payroll, profit/loss, and closeout/export summaries.
 - Remove placeholder/dead/redundant UI across active v1 flows before promo candidacy.
 - Re-run the real-device project-selection home and confirm the bottom tab bar is hidden before project selection, project cards are the only path into project work, and selecting a project reveals Receipts/Labor/Tasks.

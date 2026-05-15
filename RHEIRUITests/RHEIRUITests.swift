@@ -22,6 +22,7 @@ final class RHEIRUITests: XCTestCase {
         case projectSelection = "project_selection"
         case selectedProject = "selected_project"
         case laborManagement = "labor_management"
+        case taskManagement = "task_management"
         case estimatorMapping = "estimator_mapping"
         case scannedReceiptReview = "scanned_receipt_review"
         case mixedCategoryReceipt = "mixed_category_receipt"
@@ -499,6 +500,48 @@ final class RHEIRUITests: XCTestCase {
             selectedProjectApp.staticTexts["Choose a project before viewing or managing tasks."].exists,
             "Expected the tasks project-selection gate to disappear when project context is already seeded."
         )
+    }
+
+    @MainActor
+    func testTaskManagementSupportsAssignmentEditingCompletionProofAndRefresh() throws {
+        let app = makeApp(mode: .taskManagement)
+        app.launch()
+        app.tabBars.buttons["Tasks"].tap()
+
+        XCTAssertTrue(
+            app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Overdue Tasks (1)")).firstMatch.waitForExistence(timeout: 5),
+            "Expected seeded overdue work to surface immediately."
+        )
+        XCTAssertTrue(app.staticTexts["Assigned: Sam Carter"].exists)
+
+        let overdueTask = app.buttons["task-row-A11B1F20-08A0-4B3B-9A52-9A687EE92001"]
+        XCTAssertTrue(overdueTask.waitForExistence(timeout: 5))
+        overdueTask.tap()
+
+        XCTAssertTrue(app.navigationBars["Task Details"].waitForExistence(timeout: 5))
+        app.buttons["task-detail-menu"].tap()
+        app.buttons["Edit Task"].tap()
+        XCTAssertTrue(app.navigationBars["Edit Task"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["task-worker-BC02E8DE-0E43-4B8A-BA12-4B8E99730BE7"].exists)
+        app.buttons["task-worker-BC02E8DE-0E43-4B8A-BA12-4B8E99730BE7"].tap()
+        app.buttons["task-save-button"].tap()
+
+        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Mia Lopez")).firstMatch.waitForExistence(timeout: 5))
+
+        app.buttons["task-detail-menu"].tap()
+        app.buttons["Mark Complete"].tap()
+        XCTAssertTrue(app.navigationBars["Complete Task"].waitForExistence(timeout: 5))
+        let notesField = app.textFields["Completion notes"]
+        XCTAssertTrue(notesField.waitForExistence(timeout: 5))
+        notesField.tap()
+        notesField.typeText("Framing verified before inspection.")
+        app.buttons["Complete"].tap()
+
+        XCTAssertTrue(
+            app.staticTexts["All Other Tasks (2)"].waitForExistence(timeout: 5),
+            "Expected task completion to refresh the live task list immediately."
+        )
+        XCTAssertFalse(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Overdue Tasks (1)")).firstMatch.exists)
     }
 
     @MainActor

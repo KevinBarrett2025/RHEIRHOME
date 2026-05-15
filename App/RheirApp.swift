@@ -13,6 +13,7 @@ private enum UITestLaunchMode: String {
     case projectSelection = "project_selection"
     case selectedProject = "selected_project"
     case laborManagement = "labor_management"
+    case taskManagement = "task_management"
     case estimatorMapping = "estimator_mapping"
     case scannedReceiptReview = "scanned_receipt_review"
     case mixedCategoryReceipt = "mixed_category_receipt"
@@ -103,7 +104,7 @@ private struct AppLaunchConfiguration {
             )
             authViewModel.currentOrg = nil
 
-        case .projectSelection, .selectedProject, .laborManagement, .estimatorMapping, .scannedReceiptReview, .mixedCategoryReceipt:
+        case .projectSelection, .selectedProject, .laborManagement, .taskManagement, .estimatorMapping, .scannedReceiptReview, .mixedCategoryReceipt:
             let user = User(id: "ui-test-project-user", email: "project-ui-test@rheirhome.com")
             let organization = Organization(
                 id: "ui-test-project-org",
@@ -119,7 +120,7 @@ private struct AppLaunchConfiguration {
             )
             let kitchenProject: Project
             switch uiTestMode {
-            case .laborManagement:
+            case .laborManagement, .taskManagement:
                 kitchenProject = makeUITestLaborManagementProject(from: kitchenProjectSeed).project
             case .estimatorMapping:
                 kitchenProject = makeUITestEstimatorMappingProject(from: kitchenProjectSeed)
@@ -167,15 +168,18 @@ private struct AppLaunchConfiguration {
             projectViewModel.projects = [kitchenProject, bathProject, completedProject]
             projectViewModel.organizationProjects = [kitchenProject, bathProject, completedProject]
             projectViewModel.accessibleProjects = [kitchenProject, bathProject, completedProject]
-            if uiTestMode == .laborManagement {
+            if uiTestMode == .laborManagement || uiTestMode == .taskManagement {
                 let seed = makeUITestLaborManagementProject(from: kitchenProjectSeed)
-                projectViewModel.projects = [seed.project, bathProject, completedProject]
-                projectViewModel.organizationProjects = [seed.project, bathProject, completedProject]
-                projectViewModel.accessibleProjects = [seed.project, bathProject, completedProject]
+                let selectedProject = uiTestMode == .taskManagement
+                    ? makeUITestTaskManagementProject(from: seed.project, teamMembers: seed.teamMembers)
+                    : seed.project
+                projectViewModel.projects = [selectedProject, bathProject, completedProject]
+                projectViewModel.organizationProjects = [selectedProject, bathProject, completedProject]
+                projectViewModel.accessibleProjects = [selectedProject, bathProject, completedProject]
                 seed.teamMembers.forEach { member in
                     projectViewModel.addTeamMemberToOrganization(member)
                 }
-                projectViewModel.selectProject(seed.project)
+                projectViewModel.selectProject(selectedProject)
                 projectViewModel.recomputeLaborData()
             } else if uiTestMode == .selectedProject || uiTestMode == .estimatorMapping || uiTestMode == .scannedReceiptReview || uiTestMode == .mixedCategoryReceipt {
                 projectViewModel.selectProject(kitchenProject)
@@ -395,6 +399,37 @@ private struct AppLaunchConfiguration {
         return (seededProject, [lead, helper])
     }
 
+    private func makeUITestTaskManagementProject(from project: Project, teamMembers: [TeamMember]) -> Project {
+        var seededProject = project
+        let leadID = teamMembers[0].id
+        let helperID = teamMembers[1].id
+        seededProject.tasks = [
+            ProjectTask(
+                id: UUID(uuidString: "A11B1F20-08A0-4B3B-9A52-9A687EE92001")!,
+                title: "Frame pantry wall",
+                description: "Frame the new pantry opening before inspection.",
+                dueDate: Date(timeIntervalSinceNow: -86_400),
+                priority: .high,
+                category: .general,
+                estimatedHours: 4,
+                projectID: project.id,
+                assignedEmployeeIDs: [leadID]
+            ),
+            ProjectTask(
+                id: UUID(uuidString: "A11B1F20-08A0-4B3B-9A52-9A687EE92002")!,
+                title: "Protect finished floors",
+                description: "Lay ram board before cabinet delivery.",
+                dueDate: Date(timeIntervalSinceNow: 86_400),
+                priority: .medium,
+                category: .cleanup,
+                estimatedHours: 1,
+                projectID: project.id,
+                assignedEmployeeIDs: [helperID]
+            )
+        ]
+        return seededProject
+    }
+
     private func makeUITestMixedCategoryProject(from project: Project) -> Project {
         var seededProject = project
 
@@ -543,6 +578,8 @@ struct RheirApp: App {
         case .selectedProject:
             authService = SignedOutUITestAuthService()
         case .laborManagement:
+            authService = SignedOutUITestAuthService()
+        case .taskManagement:
             authService = SignedOutUITestAuthService()
         case .estimatorMapping:
             authService = SignedOutUITestAuthService()
