@@ -204,6 +204,7 @@
 - `TasksListView` active compiled task editor/detail hardening for assignment editing, due/overdue separation, proof-note completion, and immediate refresh
 - `TaskCompletionEditor` completion-proof enforcement and completed-by attribution in the active task detail path
 - `TasksListView` visible in-screen Add Task/filter control bar plus live task-detail refresh after edits
+- `TaskCompletionEditor` optional photo-proof picker/upload path with completion blocked on upload failure and detail-level persisted photo count
 - `RHEIRTests` Labor payment ledger coverage
 - `RHEIRTests` Labor editability and partial-payment persistence coverage
 - `RHEIRTests` Labor overpayment-after-edited-hours regression coverage
@@ -220,6 +221,11 @@
 - `SignInWithAppleCoordinator` structured logging
 
 ## Current Validation Baseline
+- Latest Tasks photo-proof Gate A result: `PASS` (`/tmp/rheir_gateA_tasks_photo_proof.xcresult`)
+- Latest Tasks photo-proof focused parity result: `PASS` (`/tmp/rheir_tasks_photo_proof_parity_visual.xcresult`, `2 UI tests plus 4 mutation tests`)
+- Latest Tasks photo-proof visual evidence: kept xcresult attachment `Task completion photo proof sheet`
+- Latest Tasks photo-proof pbxproj drift: `NONE`
+- Latest Tasks photo-proof remaining risk: physical-device validation still needs to exercise real photo picker selection and CloudKit upload.
 - Latest Tasks completion-proof focused UI parity result: `PASS` (`/tmp/rheir_tasks_completion_proof_ui.xcresult`, `1 UI test`)
 - Latest Tasks CRUD focused parity result: `PASS` (`/tmp/rheir_tasks_crud_parity_final_rerun.xcresult`, `2 UI tests plus 4 mutation tests`)
 - Latest Tasks first-slice Gate A result: `PASS` (`/tmp/rheir_gateA_tasks_first_slice_rerun2.xcresult`)

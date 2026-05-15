@@ -533,6 +533,11 @@ final class RHEIRUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Complete Task"].waitForExistence(timeout: 5))
         let notesField = app.textFields["Completion notes"]
         XCTAssertTrue(notesField.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["task-proof-photo-button"].exists)
+        let proofSheetAttachment = XCTAttachment(screenshot: app.screenshot())
+        proofSheetAttachment.name = "Task completion photo proof sheet"
+        proofSheetAttachment.lifetime = .keepAlways
+        add(proofSheetAttachment)
         XCTAssertFalse(
             app.buttons["Complete"].isEnabled,
             "Expected completion to require proof notes before saving."

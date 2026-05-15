@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct TasksListView: View {
     @EnvironmentObject var projectVM: ProjectViewModel
@@ -723,6 +724,10 @@ struct TaskDetailView: View {
                             DetailRow(title: "Completed By", value: completedBySummary, icon: "person.crop.circle.badge.checkmark")
                         }
 
+                        if !liveTask.photoIDs.isEmpty {
+                            DetailRow(title: "Photo Proof", value: "\(liveTask.photoIDs.count)", icon: "photo.on.rectangle.angled")
+                        }
+
                         if !liveTask.completionNotes.isEmpty {
                             DetailRow(title: "Proof Notes", value: liveTask.completionNotes, icon: "note.text")
                         }
@@ -842,6 +847,11 @@ private struct TaskCompletionEditor: View {
     @State private var selectedEmployeeIDs: Set<UUID>
     @State private var completionNotes: String
     @State private var completedAt: Date
+    @State private var selectedProofImage: UIImage?
+    @State private var showingImagePicker = false
+    @State private var isUploadingPhoto = false
+    @State private var uploadErrorMessage: String?
+    @StateObject private var photoService = CloudKitPhotoService()
 
     init(task: ProjectTask, onComplete: @escaping (ProjectTask) -> Void) {
         self.task = task
@@ -905,6 +915,33 @@ private struct TaskCompletionEditor: View {
                             .font(.caption)
                             .foregroundColor(.orange)
                     }
+
+                    if let selectedProofImage {
+                        Image(uiImage: selectedProofImage)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(height: 140)
+                            .frame(maxWidth: .infinity)
+                            .clipped()
+                            .cornerRadius(8)
+                            .accessibilityIdentifier("task-proof-photo-preview")
+                    }
+
+                    Button {
+                        showingImagePicker = true
+                    } label: {
+                        Label(
+                            selectedProofImage == nil ? "Add Photo Proof" : "Replace Photo Proof",
+                            systemImage: "camera.fill"
+                        )
+                    }
+                    .accessibilityIdentifier("task-proof-photo-button")
+
+                    if let uploadErrorMessage {
+                        Text(uploadErrorMessage)
+                            .font(.caption)
+                            .foregroundColor(.red)
+                    }
                 }
             }
             .navigationTitle("Complete Task")
@@ -918,12 +955,17 @@ private struct TaskCompletionEditor: View {
 
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Complete") {
-                        completeTask()
+                        Task {
+                            await completeTask()
+                        }
                     }
                     .fontWeight(.semibold)
-                    .disabled(!canCompleteTask)
+                    .disabled(!canCompleteTask || isUploadingPhoto)
                 }
             }
+        }
+        .sheet(isPresented: $showingImagePicker) {
+            ImagePicker(sourceType: .photoLibrary, image: $selectedProofImage)
         }
     }
 
@@ -935,10 +977,36 @@ private struct TaskCompletionEditor: View {
         !selectedEmployeeIDs.isEmpty && !trimmedCompletionNotes.isEmpty
     }
 
-    private func completeTask() {
+    private func completeTask() async {
         guard canCompleteTask else { return }
 
         var completedTask = task
+        if let selectedProofImage {
+            guard let imageData = selectedProofImage.jpegData(compressionQuality: 0.82),
+                  let project = projectVM.selectedProject,
+                  let organizationID = UUID(uuidString: project.organizationID) else {
+                uploadErrorMessage = "Photo proof could not be prepared for upload."
+                return
+            }
+
+            isUploadingPhoto = true
+            defer { isUploadingPhoto = false }
+
+            do {
+                let uploadedPhoto = try await photoService.uploadTaskPhoto(
+                    imageData: imageData,
+                    taskID: task.id,
+                    projectID: project.id,
+                    organizationID: organizationID,
+                    caption: trimmedCompletionNotes
+                )
+                completedTask.addPhoto(uploadedPhoto.id)
+            } catch {
+                uploadErrorMessage = "Photo proof upload failed. Try again before completing."
+                return
+            }
+        }
+
         completedTask.markCompleted(
             by: Array(selectedEmployeeIDs),
             notes: trimmedCompletionNotes

@@ -3,8 +3,8 @@
 ## Repo Truth
 - Repo Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Active Branch: `gm/rheir-hardening-phase1`
-- Thread Start SHA: `43719729103b94c54a599a70cd40312e73db9886`
-- Last Commit At Thread Start: `4371972 Phase 2: harden Log Hours rate entry`
+- Thread Start SHA: `d5aa12b035ae81c513da22b3290af3ce91f58081`
+- Last Commit At Thread Start: `d5aa12b Phase 2: harden task CRUD flow`
 
 ## Current Objective
 - Keep RHEIR locked into the fast-ship v1 release profile so the visible app ships as a single-user contractor tool with the core shell only: `Projects`, `Receipts`, `Labor`, `Tasks`, plus budget `Breakdown` / `Estimator`.
@@ -17,6 +17,7 @@
 - Tasks are now the active blocker after Labor acceptance. The first simulator-proven slice covers assignment editing, due/overdue separation without duplicate rows, completion proof notes, and immediate selected-project refresh without bypassing the shared project mutation seam.
 - The next Tasks hardening guardrail is also simulator-proven: completion now requires a worker plus non-empty proof notes, and completed task detail shows the recorded completer names for later audit/review.
 - The latest Tasks CRUD slice closes two live-workflow gaps: Add Task/filter controls are visible in the hidden-navigation-bar layout, and task detail now resolves live project state so edits do not leave stale sheet content behind.
+- The current in-progress Tasks photo-proof slice wires optional real photo proof into the compiled completion editor: selected images upload through `CloudKitPhotoService.uploadTaskPhoto` before completion, upload failure blocks completion with an inline error, and completed task detail shows persisted photo-proof count.
 - Treat contractor job-costing validation as a release requirement: itemized materials, labor/payroll, tasks/progress, payment status, profitability, and closeout reports must answer real contractor operating questions.
 - Preserve the simplified visible session flow `launch -> sign in -> ready`, with invite, org-selection, company/admin, and legacy AI-key surfaces still hidden unless the app is explicitly forced back into the legacy/full profile.
 - Keep the selected-project receipt seam green end-to-end: saved scanned receipt itemized lines now persist into receipt detail and into the ellipsis-menu edit sheet with a dedicated line-item editor, mixed-category receipt category summaries/drilldown cards now honor per-item categories instead of treating the whole receipt total as one category, and the Receipts list quick-view now opens the real receipt image viewer.
@@ -33,10 +34,16 @@
 - `Shared/Features/Projects/TasksListView.swift` now owns the first active Tasks hardening slice in the compiled app path: create/edit uses the real editor, assignment is visible and editable, overdue tasks are not duplicated in the general list, and completion requires proof notes instead of blind completion.
 - `TaskCompletionEditor` now disables `Complete` until both a completing worker and proof notes are present, and task detail now renders `Completed By` from the persisted completer ids.
 - `TasksListView` now renders a visible in-screen task control bar and resolves task detail from the current selected-project task payload, while `RHEIRUITests.swift` covers create/edit/delete/reopen behavior on the seeded multi-task project.
+- `TaskCompletionEditor` now exposes an optional `Add Photo Proof` control backed by the shared `ImagePicker` and `CloudKitPhotoService`; selected photos are attached to `ProjectTask.photoIDs` only after upload succeeds, keeping proof metadata tied to persisted completion records.
 - `App/RheirApp.swift` now seeds a deterministic task-management project with assigned overdue and future work, and `RHEIRUITests/RHEIRUITests.swift` proves assignment editing, completion proof capture, and immediate overdue refresh on the live task surface.
 - Latest Tasks first-slice focused UI parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -resultBundlePath /tmp/rheir_tasks_first_slice_ui_rerun2.xcresult test '-only-testing:RHEIRUITests/RHEIRUITests/testTaskManagementSupportsAssignmentEditingCompletionProofAndRefresh()'` -> PASS (`/tmp/rheir_tasks_first_slice_ui_rerun2.xcresult`, `1 UI test`).
 - Latest Tasks completion-proof focused UI parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -resultBundlePath /tmp/rheir_tasks_completion_proof_ui.xcresult test '-only-testing:RHEIRUITests/RHEIRUITests/testTaskManagementSupportsAssignmentEditingCompletionProofAndRefresh()'` -> PASS (`/tmp/rheir_tasks_completion_proof_ui.xcresult`, `1 UI test`).
 - Latest Tasks CRUD focused parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -resultBundlePath /tmp/rheir_tasks_crud_parity_final_rerun.xcresult test '-only-testing:RHEIRUITests/RHEIRUITests/testTaskManagementSupportsAssignmentEditingCompletionProofAndRefresh()' '-only-testing:RHEIRUITests/RHEIRUITests/testTaskManagementSupportsCreateEditReopenAndDelete()' -only-testing:RHEIRTests/ProjectMutationPropagationTests` -> PASS (`/tmp/rheir_tasks_crud_parity_final_rerun.xcresult`, `2 UI tests plus 4 mutation tests`; includes kept UI attachment named `Tasks CRUD control bar`).
+- Latest Tasks photo-proof Gate A: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -resultBundlePath /tmp/rheir_gateA_tasks_photo_proof.xcresult clean build` -> PASS (`/tmp/rheir_gateA_tasks_photo_proof.xcresult`).
+- Latest Tasks photo-proof focused parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -resultBundlePath /tmp/rheir_tasks_photo_proof_parity_visual.xcresult test '-only-testing:RHEIRUITests/RHEIRUITests/testTaskManagementSupportsAssignmentEditingCompletionProofAndRefresh()' '-only-testing:RHEIRUITests/RHEIRUITests/testTaskManagementSupportsCreateEditReopenAndDelete()' -only-testing:RHEIRTests/ProjectMutationPropagationTests` -> PASS (`/tmp/rheir_tasks_photo_proof_parity_visual.xcresult`, `2 UI tests plus 4 mutation tests`).
+- Latest Tasks photo-proof visual evidence: kept xcresult attachment named `Task completion photo proof sheet`.
+- Latest Tasks photo-proof pbxproj drift: NONE.
+- Remaining Tasks photo-proof risk: simulator parity confirms the entry point and preservation of task completion/edit/reopen behavior; physical-device validation still needs to select a real photo and prove CloudKit upload/relaunch persistence.
 - Latest Tasks first-slice mutation parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -resultBundlePath /tmp/rheir_tasks_first_slice_mutation_parity.xcresult test -only-testing:RHEIRTests/ProjectMutationPropagationTests` -> PASS (`/tmp/rheir_tasks_first_slice_mutation_parity.xcresult`, `4 tests`).
 - Latest Tasks first-slice Gate A: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -resultBundlePath /tmp/rheir_gateA_tasks_first_slice_rerun2.xcresult clean build` -> PASS (`/tmp/rheir_gateA_tasks_first_slice_rerun2.xcresult`).
 - Latest Tasks first-slice pbxproj drift: NONE.
@@ -335,6 +342,6 @@
 
 ## Next Required Action
 1. Run physical-device/manual UX confirmation for the Labor + Business Resources acceptance pass: add/edit a worker, log hours, record a partial payment with method/reference, add a second/split payment, reverse/unpay/reissue, relaunch, and confirm Labor totals remain correct.
-2. Continue Tasks hardening from the now simulator-proven first slice into multi-task CRUD acceptance, completion-photo proof capture/persistence, and real-device validation of immediate refresh.
+2. Continue Tasks hardening with physical-device validation of completion-photo proof capture/upload/persistence, then move into any remaining immediate project/report refresh seams.
 3. Finish Reports after Labor/Tasks data flows are stable, starting with labor payroll and project closeout summaries.
 4. Continue device acceptance after each slice, with same-user iCloud restore treated as optional until release-candidate validation proves it stable.
