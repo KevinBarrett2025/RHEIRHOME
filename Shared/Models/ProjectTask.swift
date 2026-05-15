@@ -18,7 +18,9 @@ public struct ProjectTask: Identifiable, Codable, Sendable {
     public var phaseName: String?
     
     // Visual documentation - CloudKit photo system
+    // photoIDs are before/scope reference photos. completionPhotoIDs are after/proof photos.
     public var photoIDs: [UUID]
+    public var completionPhotoIDs: [UUID]
     
     // Completion tracking
     public var assignedEmployeeIDs: [UUID]
@@ -45,6 +47,7 @@ public struct ProjectTask: Identifiable, Codable, Sendable {
         estimateVersionID: UUID? = nil,
         phaseName: String? = nil,
         photoIDs: [UUID] = [],
+        completionPhotoIDs: [UUID] = [],
         assignedEmployeeIDs: [UUID] = [],
         completedByEmployeeIDs: [UUID] = [],
         completionNotes: String = "",
@@ -66,6 +69,7 @@ public struct ProjectTask: Identifiable, Codable, Sendable {
         self.estimateVersionID = estimateVersionID
         self.phaseName = phaseName
         self.photoIDs = photoIDs
+        self.completionPhotoIDs = completionPhotoIDs
         self.assignedEmployeeIDs = assignedEmployeeIDs
         self.completedByEmployeeIDs = completedByEmployeeIDs
         self.completionNotes = completionNotes
@@ -94,6 +98,13 @@ public struct ProjectTask: Identifiable, Codable, Sendable {
             updatedAt = Date() 
         }
     }
+
+    public mutating func addCompletionPhoto(_ photoID: UUID) {
+        if !completionPhotoIDs.contains(photoID) {
+            completionPhotoIDs.append(photoID)
+            updatedAt = Date()
+        }
+    }
     
     public mutating func removePhoto(_ photoID: UUID) {
         photoIDs.removeAll { $0 == photoID }
@@ -101,11 +112,66 @@ public struct ProjectTask: Identifiable, Codable, Sendable {
     }
     
     public var hasPhotos: Bool {
-        !photoIDs.isEmpty
+        !photoIDs.isEmpty || !completionPhotoIDs.isEmpty
     }
     
     public var photoCount: Int {
-        photoIDs.count
+        photoIDs.count + completionPhotoIDs.count
+    }
+
+    public var completionPhotoCount: Int {
+        completionPhotoIDs.count
+    }
+}
+
+extension ProjectTask {
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case title
+        case description
+        case dueDate
+        case isCompleted
+        case completedDate
+        case priority
+        case category
+        case estimatedHours
+        case actualHours
+        case projectID
+        case budgetLineID
+        case estimateVersionID
+        case phaseName
+        case photoIDs
+        case completionPhotoIDs
+        case assignedEmployeeIDs
+        case completedByEmployeeIDs
+        case completionNotes
+        case createdAt
+        case updatedAt
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        title = try container.decode(String.self, forKey: .title)
+        description = try container.decodeIfPresent(String.self, forKey: .description) ?? ""
+        dueDate = try container.decodeIfPresent(Date.self, forKey: .dueDate)
+        isCompleted = try container.decodeIfPresent(Bool.self, forKey: .isCompleted) ?? false
+        completedDate = try container.decodeIfPresent(Date.self, forKey: .completedDate)
+        priority = try container.decodeIfPresent(TaskPriority.self, forKey: .priority) ?? .medium
+        category = try container.decodeIfPresent(TaskCategory.self, forKey: .category) ?? .general
+        estimatedHours = try container.decodeIfPresent(Double.self, forKey: .estimatedHours) ?? 1.0
+        actualHours = try container.decodeIfPresent(Double.self, forKey: .actualHours) ?? 0.0
+        projectID = try container.decode(UUID.self, forKey: .projectID)
+        budgetLineID = try container.decodeIfPresent(UUID.self, forKey: .budgetLineID)
+        estimateVersionID = try container.decodeIfPresent(UUID.self, forKey: .estimateVersionID)
+        phaseName = try container.decodeIfPresent(String.self, forKey: .phaseName)
+        photoIDs = try container.decodeIfPresent([UUID].self, forKey: .photoIDs) ?? []
+        completionPhotoIDs = try container.decodeIfPresent([UUID].self, forKey: .completionPhotoIDs) ?? []
+        assignedEmployeeIDs = try container.decodeIfPresent([UUID].self, forKey: .assignedEmployeeIDs) ?? []
+        completedByEmployeeIDs = try container.decodeIfPresent([UUID].self, forKey: .completedByEmployeeIDs) ?? []
+        completionNotes = try container.decodeIfPresent(String.self, forKey: .completionNotes) ?? ""
+        createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+        updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt) ?? createdAt
     }
 }
 

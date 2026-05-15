@@ -1,5 +1,15 @@
 import SwiftUI
 import UIKit
+import PhotosUI
+import OSLog
+
+private struct TaskPhotoSelectionID: Identifiable {
+    let id: UUID
+
+    init(_ id: UUID) {
+        self.id = id
+    }
+}
 
 struct TasksListView: View {
     @EnvironmentObject var projectVM: ProjectViewModel
@@ -520,6 +530,7 @@ struct TaskCreateEditView: View {
     let onSave: (ProjectTask) -> Void
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var projectVM: ProjectViewModel
+    @StateObject private var photoService = CloudKitPhotoService()
     
     @State private var title = ""
     @State private var description = ""
@@ -528,11 +539,19 @@ struct TaskCreateEditView: View {
     @State private var category: TaskCategory = .general
     @State private var estimatedHours = 1.0
     @State private var selectedEmployeeIDs: Set<UUID> = []
+    @State private var selectedBeforeImages: [UIImage] = []
+    @State private var selectedBeforePhotoItems: [PhotosPickerItem] = []
+    @State private var cameraImage: UIImage?
+    @State private var showingCamera = false
+    @State private var isUploadingPhotos = false
+    @State private var uploadErrorMessage: String?
+    private let taskID: UUID
 
     init(project: Project, task: ProjectTask?, onSave: @escaping (ProjectTask) -> Void) {
         self.project = project
         self.task = task
         self.onSave = onSave
+        self.taskID = task?.id ?? UUID()
         _title = State(initialValue: task?.title ?? "")
         _description = State(initialValue: task?.description ?? "")
         _dueDate = State(initialValue: task?.dueDate ?? Date())
@@ -552,6 +571,8 @@ struct TaskCreateEditView: View {
                         .lineLimit(3...6)
                         .accessibilityIdentifier("task-description-field")
                 }
+
+                beforePhotosSection
                 
                 Section("Settings") {
                     DatePicker("Due Date", selection: $dueDate, displayedComponents: .date)
@@ -614,6 +635,7 @@ struct TaskCreateEditView: View {
                         }
                     }
                 }
+
             }
             .navigationTitle(task == nil ? "New Task" : "Edit Task")
             .navigationBarTitleDisplayMode(.inline)
@@ -626,18 +648,114 @@ struct TaskCreateEditView: View {
                 
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Save") {
-                        saveTask()
+                        Task {
+                            await saveTask()
+                        }
                     }
                     .accessibilityIdentifier("task-save-button")
-                    .disabled(title.isEmpty)
+                    .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isUploadingPhotos)
                 }
+            }
+        }
+        .sheet(isPresented: $showingCamera) {
+            ImagePicker(sourceType: .camera, image: $cameraImage)
+        }
+        .onChange(of: selectedBeforePhotoItems) { _, newItems in
+            Task {
+                await appendImages(from: newItems)
+            }
+        }
+        .onChange(of: cameraImage) { _, image in
+            guard let image else { return }
+            selectedBeforeImages.append(image)
+            cameraImage = nil
+        }
+    }
+
+    private var beforePhotosSection: some View {
+        Section("Before Photos") {
+            Text("Add photos that explain the work scope before the task starts.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+
+            if let task, !task.photoIDs.isEmpty {
+                Text("\(task.photoIDs.count) saved before photo\(task.photoIDs.count == 1 ? "" : "s")")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+            }
+
+            if !selectedBeforeImages.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 10) {
+                        ForEach(Array(selectedBeforeImages.enumerated()), id: \.offset) { _, image in
+                            Image(uiImage: image)
+                                .resizable()
+                                .scaledToFill()
+                                .frame(width: 88, height: 88)
+                                .clipped()
+                                .cornerRadius(8)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+                .accessibilityIdentifier("task-before-photo-preview")
+            }
+
+            Button {
+                showingCamera = true
+            } label: {
+                Label("Take Before Photo", systemImage: "camera.fill")
+            }
+            .accessibilityIdentifier("task-before-camera-button")
+            .disabled(!UIImagePickerController.isSourceTypeAvailable(.camera))
+
+            PhotosPicker(
+                selection: $selectedBeforePhotoItems,
+                maxSelectionCount: 12,
+                matching: .images
+            ) {
+                Label("Choose Before Photos", systemImage: "photo.on.rectangle.angled")
+                    .accessibilityIdentifier("task-before-library-button")
+            }
+            .accessibilityIdentifier("task-before-library-button")
+
+            if let uploadErrorMessage {
+                Text(uploadErrorMessage)
+                    .font(.caption)
+                    .foregroundColor(.red)
             }
         }
     }
     
-    private func saveTask() {
+    private func saveTask() async {
+        var photoIDs = task?.photoIDs ?? []
+
+        if !selectedBeforeImages.isEmpty {
+            guard let organizationID = UUID(uuidString: project.organizationID) else {
+                uploadErrorMessage = "Before photos could not be prepared for upload."
+                return
+            }
+
+            isUploadingPhotos = true
+            defer { isUploadingPhotos = false }
+
+            do {
+                let uploadedPhotos = try await uploadImages(
+                    selectedBeforeImages,
+                    taskID: taskID,
+                    projectID: project.id,
+                    organizationID: organizationID,
+                    caption: "Before task photo"
+                )
+                photoIDs.append(contentsOf: uploadedPhotos.map(\.id))
+            } catch {
+                uploadErrorMessage = "Before photo upload failed. Try again before saving."
+                return
+            }
+        }
+
         let updatedTask = ProjectTask(
-            id: task?.id ?? UUID(),
+            id: taskID,
             title: title.trimmingCharacters(in: .whitespacesAndNewlines),
             description: description.trimmingCharacters(in: .whitespacesAndNewlines),
             dueDate: dueDate,
@@ -651,7 +769,8 @@ struct TaskCreateEditView: View {
             budgetLineID: task?.budgetLineID,
             estimateVersionID: task?.estimateVersionID,
             phaseName: task?.phaseName,
-            photoIDs: task?.photoIDs ?? [],
+            photoIDs: uniquePhotoIDs(photoIDs),
+            completionPhotoIDs: task?.completionPhotoIDs ?? [],
             assignedEmployeeIDs: Array(selectedEmployeeIDs),
             completedByEmployeeIDs: task?.completedByEmployeeIDs ?? [],
             completionNotes: task?.completionNotes ?? "",
@@ -661,6 +780,52 @@ struct TaskCreateEditView: View {
         
         onSave(updatedTask)
     }
+
+    private func uniquePhotoIDs(_ photoIDs: [UUID]) -> [UUID] {
+        var seenPhotoIDs = Set<UUID>()
+        return photoIDs.filter { seenPhotoIDs.insert($0).inserted }
+    }
+
+    private func appendImages(from items: [PhotosPickerItem]) async {
+        var loadedImages: [UIImage] = []
+        for item in items {
+            if let data = try? await item.loadTransferable(type: Data.self),
+               let image = UIImage(data: data) {
+                loadedImages.append(image)
+            }
+        }
+
+        await MainActor.run {
+            selectedBeforeImages.append(contentsOf: loadedImages)
+            selectedBeforePhotoItems = []
+        }
+    }
+
+    private func uploadImages(
+        _ images: [UIImage],
+        taskID: UUID,
+        projectID: UUID,
+        organizationID: UUID,
+        caption: String
+    ) async throws -> [TaskPhoto] {
+        var uploadedPhotos: [TaskPhoto] = []
+        for (index, image) in images.enumerated() {
+            guard let imageData = image.jpegData(compressionQuality: 0.82) else {
+                throw CocoaError(.fileWriteUnknown)
+            }
+
+            let uploadedPhoto = try await photoService.uploadTaskPhoto(
+                imageData: imageData,
+                taskID: taskID,
+                projectID: projectID,
+                organizationID: organizationID,
+                fileName: "task_\(taskID.uuidString)_before_\(index)_\(Date().timeIntervalSince1970).jpg",
+                caption: caption
+            )
+            uploadedPhotos.append(uploadedPhoto)
+        }
+        return uploadedPhotos
+    }
 }
 
 struct TaskDetailView: View {
@@ -669,6 +834,7 @@ struct TaskDetailView: View {
     @EnvironmentObject var projectVM: ProjectViewModel
     @State private var showingEditTask = false
     @State private var showingCompletionSheet = false
+    @State private var selectedPhotoID: TaskPhotoSelectionID?
 
     private var liveTask: ProjectTask {
         projectVM.selectedProject?.tasks.first(where: { $0.id == task.id }) ?? task
@@ -724,10 +890,6 @@ struct TaskDetailView: View {
                             DetailRow(title: "Completed By", value: completedBySummary, icon: "person.crop.circle.badge.checkmark")
                         }
 
-                        if !liveTask.photoIDs.isEmpty {
-                            DetailRow(title: "Photo Proof", value: "\(liveTask.photoIDs.count)", icon: "photo.on.rectangle.angled")
-                        }
-
                         if !liveTask.completionNotes.isEmpty {
                             DetailRow(title: "Proof Notes", value: liveTask.completionNotes, icon: "note.text")
                         }
@@ -735,6 +897,26 @@ struct TaskDetailView: View {
                     .padding()
                     .background(Color(.systemGray6))
                     .cornerRadius(12)
+
+                    if !liveTask.photoIDs.isEmpty {
+                        TaskPhotoGridSection(
+                            title: "Before Photos",
+                            subtitle: "Work-scope reference",
+                            photoIDs: liveTask.photoIDs,
+                            taskID: liveTask.id,
+                            selectedPhotoID: $selectedPhotoID
+                        )
+                    }
+
+                    if !liveTask.completionPhotoIDs.isEmpty {
+                        TaskPhotoGridSection(
+                            title: "After Photos",
+                            subtitle: "Completion proof",
+                            photoIDs: liveTask.completionPhotoIDs,
+                            taskID: liveTask.id,
+                            selectedPhotoID: $selectedPhotoID
+                        )
+                    }
                     
                     Spacer()
                 }
@@ -800,6 +982,11 @@ struct TaskDetailView: View {
             }
             .environmentObject(projectVM)
         }
+        .fullScreenCover(item: $selectedPhotoID) { identifiablePhotoID in
+            TaskAsyncPhotoDetailView(photoID: identifiablePhotoID.id, taskID: liveTask.id) {
+                selectedPhotoID = nil
+            }
+        }
     }
     
     private func reopenTask() {
@@ -847,8 +1034,10 @@ private struct TaskCompletionEditor: View {
     @State private var selectedEmployeeIDs: Set<UUID>
     @State private var completionNotes: String
     @State private var completedAt: Date
-    @State private var selectedProofImage: UIImage?
-    @State private var showingImagePicker = false
+    @State private var selectedProofImages: [UIImage] = []
+    @State private var selectedProofPhotoItems: [PhotosPickerItem] = []
+    @State private var cameraImage: UIImage?
+    @State private var showingCamera = false
     @State private var isUploadingPhoto = false
     @State private var uploadErrorMessage: String?
     @StateObject private var photoService = CloudKitPhotoService()
@@ -916,26 +1105,40 @@ private struct TaskCompletionEditor: View {
                             .foregroundColor(.orange)
                     }
 
-                    if let selectedProofImage {
-                        Image(uiImage: selectedProofImage)
-                            .resizable()
-                            .scaledToFill()
-                            .frame(height: 140)
-                            .frame(maxWidth: .infinity)
-                            .clipped()
-                            .cornerRadius(8)
-                            .accessibilityIdentifier("task-proof-photo-preview")
+                    if !selectedProofImages.isEmpty {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 10) {
+                                ForEach(Array(selectedProofImages.enumerated()), id: \.offset) { _, image in
+                                    Image(uiImage: image)
+                                        .resizable()
+                                        .scaledToFill()
+                                        .frame(width: 88, height: 88)
+                                        .clipped()
+                                        .cornerRadius(8)
+                                }
+                            }
+                            .padding(.vertical, 4)
+                        }
+                        .accessibilityIdentifier("task-proof-photo-preview")
                     }
 
                     Button {
-                        showingImagePicker = true
+                        showingCamera = true
                     } label: {
-                        Label(
-                            selectedProofImage == nil ? "Add Photo Proof" : "Replace Photo Proof",
-                            systemImage: "camera.fill"
-                        )
+                        Label("Take After Photo", systemImage: "camera.fill")
                     }
                     .accessibilityIdentifier("task-proof-photo-button")
+                    .disabled(!UIImagePickerController.isSourceTypeAvailable(.camera))
+
+                    PhotosPicker(
+                        selection: $selectedProofPhotoItems,
+                        maxSelectionCount: 12,
+                        matching: .images
+                    ) {
+                        Label("Choose After Photos", systemImage: "photo.on.rectangle.angled")
+                            .accessibilityIdentifier("task-proof-library-button")
+                    }
+                    .accessibilityIdentifier("task-proof-library-button")
 
                     if let uploadErrorMessage {
                         Text(uploadErrorMessage)
@@ -964,8 +1167,18 @@ private struct TaskCompletionEditor: View {
                 }
             }
         }
-        .sheet(isPresented: $showingImagePicker) {
-            ImagePicker(sourceType: .photoLibrary, image: $selectedProofImage)
+        .sheet(isPresented: $showingCamera) {
+            ImagePicker(sourceType: .camera, image: $cameraImage)
+        }
+        .onChange(of: selectedProofPhotoItems) { _, newItems in
+            Task {
+                await appendImages(from: newItems)
+            }
+        }
+        .onChange(of: cameraImage) { _, image in
+            guard let image else { return }
+            selectedProofImages.append(image)
+            cameraImage = nil
         }
     }
 
@@ -981,9 +1194,8 @@ private struct TaskCompletionEditor: View {
         guard canCompleteTask else { return }
 
         var completedTask = task
-        if let selectedProofImage {
-            guard let imageData = selectedProofImage.jpegData(compressionQuality: 0.82),
-                  let project = projectVM.selectedProject,
+        if !selectedProofImages.isEmpty {
+            guard let project = projectVM.selectedProject,
                   let organizationID = UUID(uuidString: project.organizationID) else {
                 uploadErrorMessage = "Photo proof could not be prepared for upload."
                 return
@@ -993,14 +1205,16 @@ private struct TaskCompletionEditor: View {
             defer { isUploadingPhoto = false }
 
             do {
-                let uploadedPhoto = try await photoService.uploadTaskPhoto(
-                    imageData: imageData,
+                let uploadedPhotos = try await uploadImages(
+                    selectedProofImages,
                     taskID: task.id,
                     projectID: project.id,
                     organizationID: organizationID,
                     caption: trimmedCompletionNotes
                 )
-                completedTask.addPhoto(uploadedPhoto.id)
+                for uploadedPhoto in uploadedPhotos {
+                    completedTask.addCompletionPhoto(uploadedPhoto.id)
+                }
             } catch {
                 uploadErrorMessage = "Photo proof upload failed. Try again before completing."
                 return
@@ -1014,6 +1228,217 @@ private struct TaskCompletionEditor: View {
         completedTask.completedDate = completedAt
         onComplete(completedTask)
         dismiss()
+    }
+
+    private func appendImages(from items: [PhotosPickerItem]) async {
+        var loadedImages: [UIImage] = []
+        for item in items {
+            if let data = try? await item.loadTransferable(type: Data.self),
+               let image = UIImage(data: data) {
+                loadedImages.append(image)
+            }
+        }
+
+        await MainActor.run {
+            selectedProofImages.append(contentsOf: loadedImages)
+            selectedProofPhotoItems = []
+        }
+    }
+
+    private func uploadImages(
+        _ images: [UIImage],
+        taskID: UUID,
+        projectID: UUID,
+        organizationID: UUID,
+        caption: String
+    ) async throws -> [TaskPhoto] {
+        var uploadedPhotos: [TaskPhoto] = []
+        for (index, image) in images.enumerated() {
+            guard let imageData = image.jpegData(compressionQuality: 0.82) else {
+                throw CocoaError(.fileWriteUnknown)
+            }
+
+            let uploadedPhoto = try await photoService.uploadTaskPhoto(
+                imageData: imageData,
+                taskID: taskID,
+                projectID: projectID,
+                organizationID: organizationID,
+                fileName: "task_\(taskID.uuidString)_after_\(index)_\(Date().timeIntervalSince1970).jpg",
+                caption: caption
+            )
+            uploadedPhotos.append(uploadedPhoto)
+        }
+        return uploadedPhotos
+    }
+}
+
+private struct TaskPhotoGridSection: View {
+    let title: String
+    let subtitle: String
+    let photoIDs: [UUID]
+    let taskID: UUID
+    @Binding var selectedPhotoID: TaskPhotoSelectionID?
+
+    private let columns = [
+        GridItem(.flexible(), spacing: 8),
+        GridItem(.flexible(), spacing: 8),
+        GridItem(.flexible(), spacing: 8)
+    ]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.headline)
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                Spacer()
+                Text("\(photoIDs.count)")
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.secondary)
+            }
+
+            LazyVGrid(columns: columns, spacing: 8) {
+                ForEach(photoIDs, id: \.self) { photoID in
+                    Button {
+                        selectedPhotoID = TaskPhotoSelectionID(photoID)
+                    } label: {
+                        TaskAsyncPhoto(photoID: photoID, taskID: taskID) { image in
+                            image
+                                .resizable()
+                                .scaledToFill()
+                                .frame(height: 92)
+                                .frame(maxWidth: .infinity)
+                                .clipped()
+                                .cornerRadius(8)
+                        } placeholder: {
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(Color(.systemGray5))
+                                .frame(height: 92)
+                                .overlay {
+                                    ProgressView()
+                                        .scaleEffect(0.7)
+                                }
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("task-photo-\(photoID.uuidString)")
+                }
+            }
+        }
+        .padding()
+        .background(Color(.systemGray6))
+        .cornerRadius(12)
+    }
+}
+
+private struct TaskAsyncPhoto<Content: View, Placeholder: View>: View {
+    let photoID: UUID
+    let taskID: UUID
+    let content: (Image) -> Content
+    let placeholder: () -> Placeholder
+
+    @State private var loadedImage: UIImage?
+    @StateObject private var photoService = CloudKitPhotoService()
+
+    var body: some View {
+        Group {
+            if let loadedImage {
+                content(Image(uiImage: loadedImage))
+            } else {
+                placeholder()
+            }
+        }
+        .task {
+            await loadPhoto()
+        }
+    }
+
+    private func loadPhoto() async {
+        do {
+            let taskPhotos = try await photoService.fetchTaskPhotos(taskID: taskID)
+            guard let taskPhoto = taskPhotos.first(where: { $0.id == photoID }),
+                  let assetURL = taskPhoto.ckAssetURL else { return }
+            let imageData = try await photoService.downloadPhotoData(from: assetURL)
+            guard let image = UIImage(data: imageData) else { return }
+            await MainActor.run {
+                loadedImage = image
+            }
+        } catch {
+            Logger.cloudKitPhoto.error(
+                "Failed to load task photo [task=\(taskID.uuidString, privacy: .private(mask: .hash)) photo=\(photoID.uuidString, privacy: .private(mask: .hash)) error=\(error.localizedDescription, privacy: .public)]"
+            )
+        }
+    }
+}
+
+private struct TaskAsyncPhotoDetailView: View {
+    let photoID: UUID
+    let taskID: UUID
+    let onDismiss: () -> Void
+
+    @State private var loadedImage: UIImage?
+    @State private var isLoading = true
+    @StateObject private var photoService = CloudKitPhotoService()
+
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+
+            if let loadedImage {
+                ZoomableImageView(image: loadedImage, onDismiss: onDismiss)
+            } else if isLoading {
+                ProgressView("Loading photo...")
+                    .foregroundColor(.white)
+            } else {
+                VStack(spacing: 16) {
+                    Image(systemName: "photo")
+                        .font(.system(size: 56))
+                        .foregroundColor(.gray)
+                    Text("Photo could not be loaded")
+                        .foregroundColor(.gray)
+                    Button("Close") {
+                        onDismiss()
+                    }
+                    .foregroundColor(.white)
+                }
+            }
+        }
+        .task {
+            await loadPhoto()
+        }
+    }
+
+    private func loadPhoto() async {
+        isLoading = true
+        do {
+            let taskPhotos = try await photoService.fetchTaskPhotos(taskID: taskID)
+            guard let taskPhoto = taskPhotos.first(where: { $0.id == photoID }),
+                  let assetURL = taskPhoto.ckAssetURL else {
+                await MainActor.run { isLoading = false }
+                return
+            }
+            let imageData = try await photoService.downloadPhotoData(from: assetURL)
+            guard let image = UIImage(data: imageData) else {
+                await MainActor.run { isLoading = false }
+                return
+            }
+            await MainActor.run {
+                loadedImage = image
+                isLoading = false
+            }
+        } catch {
+            Logger.cloudKitPhoto.error(
+                "Failed to load task photo detail [task=\(taskID.uuidString, privacy: .private(mask: .hash)) photo=\(photoID.uuidString, privacy: .private(mask: .hash)) error=\(error.localizedDescription, privacy: .public)]"
+            )
+            await MainActor.run {
+                isLoading = false
+            }
+        }
     }
 }
 

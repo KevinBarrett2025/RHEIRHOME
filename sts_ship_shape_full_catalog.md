@@ -205,6 +205,7 @@
 - `TaskCompletionEditor` completion-proof enforcement and completed-by attribution in the active task detail path
 - `TasksListView` visible in-screen Add Task/filter control bar plus live task-detail refresh after edits
 - `TaskCompletionEditor` optional photo-proof picker/upload path with completion blocked on upload failure and detail-level persisted photo count
+- `TasksListView` before/after task-photo proof semantics with create/edit before photos, completion after photos, camera capture, multi-select Photos picker intake, separate detail grids, and full-screen pinch-to-zoom previews
 - `RHEIRTests` Labor payment ledger coverage
 - `RHEIRTests` Labor editability and partial-payment persistence coverage
 - `RHEIRTests` Labor overpayment-after-edited-hours regression coverage
@@ -221,11 +222,11 @@
 - `SignInWithAppleCoordinator` structured logging
 
 ## Current Validation Baseline
-- Latest Tasks photo-proof Gate A result: `PASS` (`/tmp/rheir_gateA_tasks_photo_proof.xcresult`)
-- Latest Tasks photo-proof focused parity result: `PASS` (`/tmp/rheir_tasks_photo_proof_parity_visual.xcresult`, `2 UI tests plus 4 mutation tests`)
-- Latest Tasks photo-proof visual evidence: kept xcresult attachment `Task completion photo proof sheet`
-- Latest Tasks photo-proof pbxproj drift: `NONE`
-- Latest Tasks photo-proof remaining risk: physical-device validation still needs to exercise real photo picker selection and CloudKit upload.
+- Latest Tasks before/after photo-proof Gate A result: `PASS` (`/tmp/rheir_gateA_tasks_before_after_photos_final2.xcresult`)
+- Latest Tasks before/after photo-proof focused parity result: `PASS` (`/tmp/rheir_tasks_before_after_photos_parity_final2.xcresult`, `2 UI tests plus 4 mutation tests`)
+- Latest Tasks before/after photo-proof visual evidence: kept xcresult attachments `Task before photo controls` and `Task completion photo proof sheet`
+- Latest Tasks before/after photo-proof pbxproj drift: `NONE`
+- Latest Tasks before/after photo-proof remaining risk: physical-device validation still needs to exercise real camera capture, multi-select Photos selection, CloudKit upload/relaunch persistence, before/after separation, and full-screen pinch-to-zoom preview.
 - Latest Tasks completion-proof focused UI parity result: `PASS` (`/tmp/rheir_tasks_completion_proof_ui.xcresult`, `1 UI test`)
 - Latest Tasks CRUD focused parity result: `PASS` (`/tmp/rheir_tasks_crud_parity_final_rerun.xcresult`, `2 UI tests plus 4 mutation tests`)
 - Latest Tasks first-slice Gate A result: `PASS` (`/tmp/rheir_gateA_tasks_first_slice_rerun2.xcresult`)

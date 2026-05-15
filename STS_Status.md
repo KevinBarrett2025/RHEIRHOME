@@ -3,7 +3,7 @@
 ## Repo
 - Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Branch: `gm/rheir-hardening-phase1`
-- HEAD: `d5aa12b035ae81c513da22b3290af3ce91f58081`
+- HEAD: `117d5755bf2449139366c4bdeda6f7ff7d9ea6ac`
 
 ## Active Initiative
 - RHEIR release hardening, Fast-Ship Hybrid contractor workflow hardening.
@@ -193,6 +193,7 @@
 - Task completion proof now requires both a completing worker and non-empty proof notes, and completed task detail exposes the recorded `Completed By` attribution instead of leaving completion ownership implicit.
 - Tasks CRUD hardening now keeps add/filter controls visible in the actual hidden-navigation-bar layout, resolves task detail from live selected-project state after edits, and is simulator-proven for create, edit, delete, complete, and reopen refresh behavior.
 - Task completion now supports optional real photo proof in the compiled completion editor. Selected proof images upload through `CloudKitPhotoService.uploadTaskPhoto` before completion, upload failure blocks completion with inline error messaging, and task detail shows persisted photo-proof count.
+- Task photos now follow before/after job-proof semantics: task creation/editing can attach before/scope photos from camera or multi-select Photos, completion can attach after/proof photos from camera or multi-select Photos, and task detail renders separate Before Photos and After Photos grids whose images open full screen with pinch-to-zoom.
 - Log Hours in-flow rate selection is simulator-proven for actual-rate-only selection plus direct add-rate entry into worker editing; verify the same quick-add flow on device during the remaining Labor acceptance pass.
 - Business Resources is simulator-proven for hub entry and worker/rate access; verify add/edit workers, vendors, and payment methods on device alongside the Labor acceptance pass.
 - Worker removal is simulator-proven for stable active-roster presentation during refresh and CloudKit update/upsert semantics; verify the latest device run no longer shows the temporary all-workers-empty state or CloudKit duplicate-record error.
@@ -209,11 +210,11 @@
 - Raw in-sandbox `xcodebuild` commands are still less reliable than elevated CLI or `xcodebuildmcp` paths in this environment because CoreSimulator and DerivedData access remain sandbox-sensitive.
 
 ## Latest Evidence
-- Tasks photo-proof Gate A: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -resultBundlePath /tmp/rheir_gateA_tasks_photo_proof.xcresult clean build` -> PASS (`/tmp/rheir_gateA_tasks_photo_proof.xcresult`)
-- Tasks photo-proof focused parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -resultBundlePath /tmp/rheir_tasks_photo_proof_parity_visual.xcresult test '-only-testing:RHEIRUITests/RHEIRUITests/testTaskManagementSupportsAssignmentEditingCompletionProofAndRefresh()' '-only-testing:RHEIRUITests/RHEIRUITests/testTaskManagementSupportsCreateEditReopenAndDelete()' -only-testing:RHEIRTests/ProjectMutationPropagationTests` -> PASS (`/tmp/rheir_tasks_photo_proof_parity_visual.xcresult`, `2 UI tests plus 4 mutation tests`)
-- Tasks photo-proof visual evidence: kept xcresult attachment named `Task completion photo proof sheet`
-- Tasks photo-proof pbxproj drift: NONE
-- Remaining photo-proof risk: simulator parity confirms the completion-sheet entry point and existing completion/edit/reopen refresh behavior; physical-device validation is still needed for actual Photos picker selection and CloudKit upload.
+- Tasks before/after photo-proof Gate A: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -resultBundlePath /tmp/rheir_gateA_tasks_before_after_photos_final2.xcresult clean build` -> PASS (`/tmp/rheir_gateA_tasks_before_after_photos_final2.xcresult`)
+- Tasks before/after photo-proof focused parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -resultBundlePath /tmp/rheir_tasks_before_after_photos_parity_final2.xcresult test '-only-testing:RHEIRUITests/RHEIRUITests/testTaskManagementSupportsAssignmentEditingCompletionProofAndRefresh()' '-only-testing:RHEIRUITests/RHEIRUITests/testTaskManagementSupportsCreateEditReopenAndDelete()' -only-testing:RHEIRTests/ProjectMutationPropagationTests` -> PASS (`/tmp/rheir_tasks_before_after_photos_parity_final2.xcresult`, `2 UI tests plus 4 mutation tests`)
+- Tasks before/after photo-proof visual evidence: kept xcresult attachments named `Task before photo controls` and `Task completion photo proof sheet`
+- Tasks before/after photo-proof pbxproj drift: NONE
+- Remaining photo-proof risk: simulator parity confirms the camera/library entry points, before/after separation, full task completion/edit/reopen behavior, and visual controls; physical-device validation still needs to capture a real camera photo, multi-select real Photos assets, prove CloudKit upload/relaunch persistence, and open the saved images full screen with pinch-to-zoom.
 - Labor accounting hardening focused ledger parity: overpayment regression, Labor/Business Resources acceptance, and existing partial-payment ledger tests each passed in focused runs (`/tmp/rheir_labor_accounting_overpayment_final.xcresult`, `/tmp/rheir_labor_accounting_acceptance_final.xcresult`, `/tmp/rheir_labor_accounting_existing_ledger_final.xcresult`; `4 focused tests across 3 result bundles`)
 - Labor accounting hardening UI smoke with screenshot: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -only-testing:RHEIRUITests/RHEIRUITests/testLaborManagementOpensWorkerPaymentLedger -resultBundlePath /tmp/rheir_labor_accounting_ui_final.xcresult test` -> PASS (`/tmp/rheir_labor_accounting_ui_final.xcresult`, `1 UI test`)
 - Labor accounting hardening visual evidence: `/tmp/rheir_labor_accounting_ui_final_attachments/C1B62C59-44D4-4B22-9FDC-2E3756510199.png`

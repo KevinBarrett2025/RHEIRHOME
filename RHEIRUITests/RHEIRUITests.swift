@@ -522,8 +522,12 @@ final class RHEIRUITests: XCTestCase {
         app.buttons["task-detail-menu"].tap()
         app.buttons["Edit Task"].tap()
         XCTAssertTrue(app.navigationBars["Edit Task"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.buttons["task-worker-BC02E8DE-0E43-4B8A-BA12-4B8E99730BE7"].exists)
-        app.buttons["task-worker-BC02E8DE-0E43-4B8A-BA12-4B8E99730BE7"].tap()
+        let reassignmentWorker = revealElement(
+            identifier: "task-worker-BC02E8DE-0E43-4B8A-BA12-4B8E99730BE7",
+            in: app
+        )
+        XCTAssertTrue(reassignmentWorker.exists)
+        reassignmentWorker.tap()
         app.buttons["task-save-button"].tap()
 
         XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Mia Lopez")).firstMatch.waitForExistence(timeout: 5))
@@ -534,6 +538,8 @@ final class RHEIRUITests: XCTestCase {
         let notesField = app.textFields["Completion notes"]
         XCTAssertTrue(notesField.waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["task-proof-photo-button"].exists)
+        let proofLibraryButton = revealElement(identifier: "task-proof-library-button", in: app)
+        XCTAssertTrue(proofLibraryButton.exists)
         let proofSheetAttachment = XCTAttachment(screenshot: app.screenshot())
         proofSheetAttachment.name = "Task completion photo proof sheet"
         proofSheetAttachment.lifetime = .keepAlways
@@ -577,6 +583,12 @@ final class RHEIRUITests: XCTestCase {
         XCTAssertTrue(titleField.waitForExistence(timeout: 5))
         titleField.tap()
         titleField.typeText("Stage backsplash tile")
+        XCTAssertTrue(revealElement(identifier: "task-before-camera-button", in: app).exists)
+        XCTAssertTrue(revealElement(identifier: "task-before-library-button", in: app).exists)
+        let beforePhotoAttachment = XCTAttachment(screenshot: app.screenshot())
+        beforePhotoAttachment.name = "Task before photo controls"
+        beforePhotoAttachment.lifetime = .keepAlways
+        add(beforePhotoAttachment)
         app.buttons["task-save-button"].tap()
 
         let newTask = app.staticTexts["Stage backsplash tile"]
