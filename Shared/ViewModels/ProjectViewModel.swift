@@ -222,9 +222,14 @@ class ProjectViewModel: ObservableObject {
         let container = CKContainer(identifier: "iCloud.com.rheirhome.rheirhomeappV3")
         let privateDatabase = container.privateCloudDatabase
         
-        // Create TeamMember record using CloudKit schema
         let recordID = CKRecord.ID(recordName: "team_member_\(teamMember.id.uuidString)")
-        let record = CKRecord(recordType: "TeamMember", recordID: recordID)
+        let record: CKRecord
+
+        do {
+            record = try await privateDatabase.record(for: recordID)
+        } catch let error as CKError where error.code == .unknownItem {
+            record = CKRecord(recordType: "TeamMember", recordID: recordID)
+        }
         
         // Map to CloudKit schema fields (based on provided schema)
         record["id"] = teamMember.id.uuidString as CKRecordValue
@@ -238,8 +243,13 @@ class ProjectViewModel: ObservableObject {
         record["hasAppAccess"] = (teamMember.hasAppAccess ? 1 : 0) as CKRecordValue
         record["employmentStatus"] = teamMember.employmentStatus.rawValue as CKRecordValue
         record["employmentType"] = teamMember.employmentType.rawValue as CKRecordValue
+        record["terminationDate"] = teamMember.terminationDate as CKRecordValue?
+        record["terminationReason"] = teamMember.terminationReason as CKRecordValue?
+        record["terminationType"] = teamMember.terminationType?.rawValue as CKRecordValue?
         record["environment"] = "production" as CKRecordValue
-        record["dateAdded"] = Date() as CKRecordValue
+        if record["dateAdded"] == nil {
+            record["dateAdded"] = Date() as CKRecordValue
+        }
         record["lastModified"] = Date() as CKRecordValue
         
         // Add app user ID if available

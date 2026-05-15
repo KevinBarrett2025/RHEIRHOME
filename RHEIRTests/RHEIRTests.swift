@@ -1391,7 +1391,7 @@ struct ProjectMutationPropagationTests {
         let orgID = UUID().uuidString
         let projectStore = ProjectStore(userDefaults: defaults)
         let viewModel = ProjectViewModel(
-            offlineDataManager: OfflineDataManager(),
+            offlineDataManager: OfflineDataManager(networkMonitoringEnabled: false),
             projectStore: projectStore,
             projectRepository: RecordingProjectRepository()
         )

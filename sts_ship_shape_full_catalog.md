@@ -189,6 +189,8 @@
 - `BusinessWorkersResourceView` worker and default-rate management surface
 - `BusinessWorkersResourceView` multi-rate add/edit routing through enhanced team-member management
 - `BusinessWorkersResourceView` worker deactivation/removal preserving historical labor/payroll records
+- `BusinessWorkersResourceView` active-worker cache stability during transient refreshes
+- `ProjectViewModel` TeamMember CloudKit fetch-before-save update path
 - `LaborModuleView` top-aligned worker/rate and payment-ledger entry surface
 - `WorkHour` `LaborPaymentEntry` ledger model with derived paid/unpaid balances
 - `WorkHour` paid-cash versus earned/applied labor separation with explicit overpayment support
@@ -219,6 +221,10 @@
 - Latest Labor accounting hardening visual evidence: `/tmp/rheir_labor_accounting_ui_final_attachments/C1B62C59-44D4-4B22-9FDC-2E3756510199.png`
 - Latest Labor accounting hardening Gate A result: `PASS` (`/tmp/rheir_gateA_labor_accounting_hardening_final.xcresult`)
 - Latest Labor accounting hardening pbxproj drift: `NONE`
+- Latest worker-removal stability Gate A result: `PASS` (`/tmp/rheir_gateA_worker_removal_stability_rerun.xcresult`)
+- Latest worker-removal stability Labor/Business acceptance result: `PASS` (`/tmp/rheir_worker_removal_acceptance_exact_rerun.xcresult`, `1 Swift Testing acceptance test`)
+- Latest worker-removal stability Business Resources UI smoke result: `PASS` (`/tmp/rheir_worker_removal_business_resources_ui_rerun.xcresult`, `1 UI test`)
+- Latest worker-removal stability pbxproj drift: `NONE`
 - Latest Labor editability full unit parity result: `PASS` (`/tmp/rheir_labor_business_editability_unit.xcresult`, `68 tests in 20 suites`)
 - Latest Labor editability Gate A result: `PASS` (`/tmp/rheir_gateA_labor_editability.xcresult`)
 - Latest Labor editability pbxproj drift: `NONE`

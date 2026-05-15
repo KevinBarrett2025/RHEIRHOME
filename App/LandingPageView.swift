@@ -935,15 +935,32 @@ struct BusinessWorkersResourceView: View {
     @EnvironmentObject private var projectVM: ProjectViewModel
     @State private var editorState: BusinessWorkerEditorState?
     @State private var removingWorker: TeamMember?
+    @State private var cachedActiveWorkers: [TeamMember] = []
 
     private var workers: [TeamMember] {
-        projectVM.teamMembers
+        let liveWorkers = activeWorkers(from: projectVM.teamMembers)
+        if liveWorkers.isEmpty, projectVM.teamMembers.isEmpty, !cachedActiveWorkers.isEmpty {
+            return cachedActiveWorkers
+        }
+
+        return liveWorkers
+    }
+
+    private func activeWorkers(from members: [TeamMember]) -> [TeamMember] {
+        members
             .filter { member in
                 guard !member.isArchived, member.isActive else { return false }
                 guard let organizationID = projectVM.currentOrganizationID else { return true }
                 return member.organizationID == organizationID
             }
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
+    private func refreshCachedWorkers(from members: [TeamMember]) {
+        let liveWorkers = activeWorkers(from: members)
+        if !liveWorkers.isEmpty || !members.isEmpty {
+            cachedActiveWorkers = liveWorkers
+        }
     }
 
     var body: some View {
@@ -1023,6 +1040,12 @@ struct BusinessWorkersResourceView: View {
         } message: {
             Text("\(removingWorker?.name ?? "This worker") will no longer appear in active worker lists. Existing hours, rates, and payment history stay in project records.")
         }
+        .onAppear {
+            refreshCachedWorkers(from: projectVM.teamMembers)
+        }
+        .onChange(of: projectVM.teamMembers) { _, members in
+            refreshCachedWorkers(from: members)
+        }
     }
 
     private func workerRow(_ worker: TeamMember) -> some View {
@@ -1077,6 +1100,7 @@ struct BusinessWorkersResourceView: View {
     private func removeFromActiveWorkers(_ worker: TeamMember) {
         var updatedWorker = worker
         updatedWorker.terminate(reason: "Removed from active worker list", type: .endOfContract)
+        cachedActiveWorkers.removeAll { $0.id == worker.id }
         projectVM.updateTeamMember(updatedWorker)
     }
 

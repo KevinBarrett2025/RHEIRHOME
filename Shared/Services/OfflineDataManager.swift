@@ -68,8 +68,10 @@ class OfflineDataManager: ObservableObject {
     
     private var cancellables = Set<AnyCancellable>()
     
-    init() {
-        setupNetworkMonitoring()
+    init(networkMonitoringEnabled: Bool = true) {
+        if networkMonitoringEnabled {
+            setupNetworkMonitoring()
+        }
         setupSyncQueue()
         loadOfflineState()
         loadDataIntoPublishedProperties()

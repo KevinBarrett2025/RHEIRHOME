@@ -37,6 +37,8 @@
 - `ProjectViewModel+Clocking` now carries earned, unpaid, paid-cash, and overpaid labor totals separately so job cost and payroll balances can reconcile from the same persisted payment ledger without inflating earned labor.
 - `BusinessWorkersResourceView` now removes workers by deactivating/end-of-contracting them, preserving historical labor and payroll records while keeping inactive workers out of the active roster.
 - `LaborPaymentView` now renders paid entries as bordered professional accounting cards with earned, paid, balance/overpayment, method, reference, and action rows instead of loose floating content.
+- `BusinessWorkersResourceView` now keeps active-worker rows stable during transient empty team-member refreshes, preventing the device-observed temporary all-workers-empty state while still clearing the list when no active workers remain.
+- `ProjectViewModel.saveTeamMemberToCloudKit(_:)` now fetches existing team-member records before save and persists termination metadata, so worker updates/removals update the existing CloudKit record instead of failing with duplicate insert collisions.
 - Canonical tree cleanup completed in the working branch.
 - Session flow consolidated around `AppSessionSupport.swift`.
 - `Project.swift` now carries the first compiled estimator domain with intake, draft, versioned baseline, variance, source-evidence, and proposal-view models plus bridge helpers back into `Project` budget summary fields.
@@ -199,6 +201,7 @@
 - Business Resources hub entry is simulator-proven; verify add/edit workers, vendors, and payment methods on device during the next Labor/Resources acceptance pass.
 - Labor payment hardening is simulator-proven for multi-rate worker/rate management, editable logged hours, partial/split payments, payment correction, check/reference metadata, and unpay/reissue; complete device acceptance before marking Labor release-accepted.
 - Labor accounting and UI professionalism are explicit release criteria before Tasks: paid history must survive later edits, over/under balances must be visible, totals must reconcile from persistence, and compact device sheets/rows must remain bounded and untruncated.
+- Re-run the worker-removal path on device and confirm removing one worker leaves the remaining workers visible immediately, then confirm relaunch preserves the deactivated worker state without `record to insert already exists` CloudKit errors.
 - Rework Tasks into a shippable contractor workflow with multi-task CRUD, assignment, due/overdue state, completion proof, photos, and immediate project/report refresh.
 - Finish Reports around contractor outputs: project summary, category/cost-code spend, vendor spend, payment-method spend, labor payroll, profit/loss, and closeout/export summaries.
 - Remove placeholder/dead/redundant UI across active v1 flows before promo candidacy.
