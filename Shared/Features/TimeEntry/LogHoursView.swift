@@ -11,6 +11,7 @@ struct LogHoursView: View {
     @State private var lunchStart: Date?
     @State private var lunchEnd: Date?
     @State private var selectedRate: EmployeeRate?
+    @State private var editingRateWorker: TeamMember?
     @State private var category = "Labor"
     @State private var notes = ""
     @State private var hasLunchBreak = false
@@ -121,20 +122,42 @@ struct LogHoursView: View {
                     }
                     
                     if let employee = selectedEmployee {
-                        Picker("Rate", selection: $selectedRate) {
-                            Text("Select Rate...").tag(EmployeeRate?.none)
-                            ForEach(employee.rates) { rate in
-                                HStack {
-                                    Text("\(rate.taskType)")
-                                    Spacer()
-                                    Text("\(rate.rate.formatAsCurrency())/hr")
-                                    if rate.isDefault {
-                                        Text("(Default)")
-                                            .foregroundColor(.green)
+                        HStack {
+                            Text("Rate")
+                            Spacer()
+                            Menu {
+                                ForEach(employee.rates) { rate in
+                                    Button {
+                                        selectedRate = rate
+                                    } label: {
+                                        HStack {
+                                            Text("\(rate.taskType) - \(rate.rate.formatAsCurrency())/hr")
+                                            if selectedRate?.id == rate.id {
+                                                Image(systemName: "checkmark")
+                                            }
+                                        }
                                     }
+                                    .accessibilityIdentifier("log-hours-rate-option-\(rate.id.uuidString)")
                                 }
-                                .tag(EmployeeRate?.some(rate))
+
+                                Divider()
+
+                                Button {
+                                    editingRateWorker = employee
+                                } label: {
+                                    Label("Add New Rate...", systemImage: "plus.circle")
+                                }
+                                .accessibilityIdentifier("log-hours-add-rate-button")
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Text(rateMenuTitle)
+                                        .foregroundStyle(selectedRate == nil ? .secondary : .primary)
+                                    Image(systemName: "chevron.up.chevron.down")
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                }
                             }
+                            .accessibilityIdentifier("log-hours-rate-menu")
                         }
                         
                         // Show team member info
@@ -265,6 +288,13 @@ struct LogHoursView: View {
                     .disabled(!isValidForm || projectVM.selectedProject == nil)
                 }
             }
+            .sheet(item: $editingRateWorker) { worker in
+                EnhancedEditTeamMemberView(member: worker)
+                    .environmentObject(projectVM)
+            }
+            .onChange(of: projectVM.teamMembers) { _, members in
+                refreshSelectedEmployee(from: members)
+            }
             .onAppear {
                 // Set default end time to 1 hour after start time
                 endTime = startTime.addingTimeInterval(3600)
@@ -319,6 +349,27 @@ struct LogHoursView: View {
         
         Logger.labor.notice("Hours logged successfully from LogHoursView.")
         isPresented = false
+    }
+
+    private var rateMenuTitle: String {
+        guard let selectedRate else { return "Choose Rate" }
+        return "\(selectedRate.taskType) - \(selectedRate.rate.formatAsCurrency())/hr"
+    }
+
+    private func refreshSelectedEmployee(from members: [TeamMember]) {
+        guard let currentEmployee = selectedEmployee,
+              let refreshedEmployee = members.first(where: { $0.id == currentEmployee.id }) else {
+            return
+        }
+
+        selectedEmployee = refreshedEmployee
+
+        if let selectedRate,
+           let refreshedRate = refreshedEmployee.rates.first(where: { $0.id == selectedRate.id }) {
+            self.selectedRate = refreshedRate
+        } else {
+            self.selectedRate = refreshedEmployee.defaultRate ?? refreshedEmployee.rates.first
+        }
     }
 }
 

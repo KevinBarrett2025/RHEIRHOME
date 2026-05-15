@@ -344,6 +344,67 @@ final class RHEIRUITests: XCTestCase {
     }
 
     @MainActor
+    func testLogHoursRateMenuShowsOnlyConfiguredRatesAndCanAddRateInFlow() throws {
+        let app = makeApp(mode: .laborManagement)
+        app.launch()
+
+        app.tabBars.buttons["Labor"].tap()
+        XCTAssertTrue(
+            app.staticTexts["Labor Summary"].waitForExistence(timeout: 5),
+            "Expected labor-management mode to open the selected-project labor surface."
+        )
+
+        let logHoursButton = app.buttons["labor-log-hours-button"]
+        XCTAssertTrue(
+            logHoursButton.waitForExistence(timeout: 5),
+            "Expected Labor to expose the in-context log-hours action."
+        )
+        logHoursButton.tap()
+
+        XCTAssertTrue(
+            app.navigationBars["Log Hours"].waitForExistence(timeout: 5),
+            "Expected the log-hours sheet to open."
+        )
+
+        app.buttons.matching(
+            NSPredicate(format: "label BEGINSWITH %@", "Select Team Member")
+        ).firstMatch.tap()
+        app.buttons["Sam Carter"].tap()
+
+        let rateMenu = app.buttons["log-hours-rate-menu"]
+        XCTAssertTrue(
+            rateMenu.waitForExistence(timeout: 5),
+            "Expected a configured-rate menu after choosing a worker."
+        )
+        rateMenu.tap()
+
+        XCTAssertFalse(
+            app.buttons["Select Rate..."].exists,
+            "Expected instructional copy to stay out of the selectable rate list."
+        )
+        XCTAssertTrue(
+            app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Framing")).firstMatch.exists,
+            "Expected configured worker rates to remain selectable."
+        )
+
+        let addRateButton = app.buttons["log-hours-add-rate-button"]
+        XCTAssertTrue(
+            addRateButton.waitForExistence(timeout: 5),
+            "Expected the rate menu to keep the in-flow add-rate action."
+        )
+        addRateButton.tap()
+
+        XCTAssertTrue(
+            app.navigationBars["Edit Sam Carter"].waitForExistence(timeout: 5),
+            "Expected adding a missing rate while logging hours to open the worker editor."
+        )
+        XCTAssertTrue(
+            app.staticTexts["Pay Rates"].exists,
+            "Expected the worker editor to expose pay-rate management immediately."
+        )
+    }
+
+    @MainActor
     func testLaborManagementOpensWorkerPaymentLedger() throws {
         let app = makeApp(mode: .laborManagement)
         app.launch()

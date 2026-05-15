@@ -33,6 +33,7 @@
 - `LaborPaymentView` now exposes logged-hour editing, paid-entry hour editing, payment correction, and a compact tab selector so Unpaid/Paid/Summary remains legible on device.
 - `ProjectViewModel+TimeEntry` now supports payment correction through the shared mutation seam, preserving a reversal audit trail before recording the corrected payment.
 - `RHEIRTests` now expands the Labor/Business Resources acceptance path across multi-rate worker persistence, edited hours, corrected partial payments, split payment, unpay/reissue, and reload persistence.
+- `LogHoursView` now exposes only actual configured worker rates in the rate menu and restores the in-context `Add New Rate...` path into worker editing for field changes discovered while hours are being entered.
 - `WorkHour` now separates actual paid cash from earned/applied labor so editing paid hours downward preserves the historical payment ledger and surfaces an explicit overpayment instead of rewriting the payment total to the edited earned amount.
 - `ProjectViewModel+Clocking` now carries earned, unpaid, paid-cash, and overpaid labor totals separately so job cost and payroll balances can reconcile from the same persisted payment ledger without inflating earned labor.
 - `BusinessWorkersResourceView` now removes workers by deactivating/end-of-contracting them, preserving historical labor and payroll records while keeping inactive workers out of the active roster.
@@ -200,6 +201,7 @@
 - Completed-project archive/reopen is simulator-proven; verify the reopen action on device during the next project lifecycle acceptance pass.
 - Business Resources hub entry is simulator-proven; verify add/edit workers, vendors, and payment methods on device during the next Labor/Resources acceptance pass.
 - Labor payment hardening is simulator-proven for multi-rate worker/rate management, editable logged hours, partial/split payments, payment correction, check/reference metadata, and unpay/reissue; complete device acceptance before marking Labor release-accepted.
+- Log Hours rate-menu hardening is simulator-proven for actual-rate-only selection and in-flow rate creation; verify that quick-add path on device during the same Labor acceptance pass.
 - Labor accounting and UI professionalism are explicit release criteria before Tasks: paid history must survive later edits, over/under balances must be visible, totals must reconcile from persistence, and compact device sheets/rows must remain bounded and untruncated.
 - Re-run the worker-removal path on device and confirm removing one worker leaves the remaining workers visible immediately, then confirm relaunch preserves the deactivated worker state without `record to insert already exists` CloudKit errors.
 - Rework Tasks into a shippable contractor workflow with multi-task CRUD, assignment, due/overdue state, completion proof, photos, and immediate project/report refresh.

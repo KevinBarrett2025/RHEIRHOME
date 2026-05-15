@@ -23,6 +23,7 @@
 - Labor payments with split/partial/edit/unpay semantics
 - Labor accounting invariants for paid-cash history, earned/applied labor, unpaid balances, overpayment balances, and full-ledger reversal behavior
 - Labor and Business Resources UI professionalism/no-truncation checks for compact device sheets and accounting rows
+- Log Hours actual-rate-only selection with in-flow add-rate editing from the project labor entry path
 - Task assignment, due/overdue, completion proof, and photo semantics
 - Contractor reports for category spend, vendor spend, payment-method spend, payroll, profit/loss, and closeout
 - `LocalCacheStore`
@@ -225,6 +226,10 @@
 - Latest worker-removal stability Labor/Business acceptance result: `PASS` (`/tmp/rheir_worker_removal_acceptance_exact_rerun.xcresult`, `1 Swift Testing acceptance test`)
 - Latest worker-removal stability Business Resources UI smoke result: `PASS` (`/tmp/rheir_worker_removal_business_resources_ui_rerun.xcresult`, `1 UI test`)
 - Latest worker-removal stability pbxproj drift: `NONE`
+- Latest Log Hours rate-menu Gate A result: `PASS` (`/tmp/rheir_gateA_log_hours_rate_menu.xcresult`)
+- Latest Log Hours rate-menu focused UI parity result: `PASS` (`/tmp/rheir_log_hours_rate_menu_ui_rerun.xcresult`, `1 UI test`)
+- Latest Log Hours rate-menu Labor acceptance result: `PASS` (`/tmp/rheir_log_hours_rate_menu_acceptance_rerun.xcresult`, `1 Swift Testing acceptance test`)
+- Latest Log Hours rate-menu pbxproj drift: `NONE`
 - Latest Labor editability full unit parity result: `PASS` (`/tmp/rheir_labor_business_editability_unit.xcresult`, `68 tests in 20 suites`)
 - Latest Labor editability Gate A result: `PASS` (`/tmp/rheir_gateA_labor_editability.xcresult`)
 - Latest Labor editability pbxproj drift: `NONE`
