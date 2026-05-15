@@ -1854,6 +1854,136 @@ struct LaborPaymentLedgerTests {
         #expect(reversedCleanupHour?.effectiveUnpaidAmount == 60)
         #expect(viewModel.projectUnpaidAmount == 60)
     }
+
+    @Test
+    func laborBusinessResourcesAcceptancePersistsPaymentReissueFlow() {
+        let suiteName = "LaborBusinessResourcesAcceptance.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let orgID = UUID().uuidString
+        let projectStore = ProjectStore(userDefaults: defaults)
+        let viewModel = ProjectViewModel(
+            offlineDataManager: OfflineDataManager(),
+            projectStore: projectStore,
+            projectRepository: RecordingProjectRepository()
+        )
+        viewModel.setCurrentOrganization(
+            Organization(id: orgID, name: "Personal Workspace"),
+            role: .admin
+        )
+
+        var project = Project(
+            name: "Device Acceptance Kitchen",
+            client: "Avery Homes",
+            totalBudget: 100000,
+            startDate: .now,
+            endDate: .now.addingTimeInterval(86400),
+            organizationID: orgID
+        )
+        viewModel.projects = [project]
+        viewModel.organizationProjects = [project]
+        viewModel.accessibleProjects = [project]
+        viewModel.selectProject(project)
+
+        var worker = TeamMember(
+            name: "Jordan Lee",
+            email: "jordan@example.com",
+            phone: "555-0142",
+            jobTitle: "Carpenter",
+            rates: [EmployeeRate(taskType: "Framing", rate: 44, isDefault: true)],
+            organizationID: orgID
+        )
+        viewModel.addTeamMember(worker)
+
+        worker.jobTitle = "Lead Carpenter"
+        worker.rates = [EmployeeRate(taskType: "Finish Carpentry", rate: 48, isDefault: true)]
+        viewModel.updateTeamMember(worker)
+
+        let loadedWorker = projectStore.loadTeamMembers(for: orgID).first { $0.id == worker.id }
+        #expect(loadedWorker?.jobTitle == "Lead Carpenter")
+        #expect(loadedWorker?.defaultRate?.rate == 48)
+
+        let shiftStart = Date(timeIntervalSince1970: 1_736_380_800)
+        viewModel.logHours(
+            startTime: shiftStart,
+            endTime: shiftStart.addingTimeInterval(14_400),
+            employee: worker.name,
+            rate: 48,
+            category: "Finish Carpentry",
+            lunchBreakDuration: nil,
+            employeeID: worker.id
+        )
+
+        guard let loggedHour = viewModel.selectedProject?.loggedHours.first else {
+            Issue.record("Expected fresh logged labor hours to persist into the selected project.")
+            return
+        }
+
+        #expect(viewModel.selectedProject?.assignedTeamMemberIDs.contains(worker.id.uuidString) == true)
+        #expect(loggedHour.hours == 4)
+        #expect(loggedHour.straightTimePay == 192)
+        #expect(viewModel.projectUnpaidAmount == 192)
+
+        viewModel.recordLaborPayment(
+            for: [loggedHour],
+            amount: 75,
+            method: "Check",
+            reference: "CHK-2001",
+            note: "Partial labor payment"
+        )
+
+        let partiallyPaidHour = viewModel.selectedProject?.loggedHours.first { $0.id == loggedHour.id }
+        #expect(partiallyPaidHour?.effectivePaidAmount == 75)
+        #expect(partiallyPaidHour?.effectiveUnpaidAmount == 117)
+        #expect(partiallyPaidHour?.paymentEntries.last?.reference == "CHK-2001")
+
+        viewModel.recordLaborPayment(
+            for: viewModel.selectedProject?.loggedHours.filter { $0.id == loggedHour.id } ?? [],
+            amount: 117,
+            method: "Bank Transfer",
+            reference: "ACH-2002",
+            note: "Final split payment"
+        )
+
+        let fullyPaidHour = viewModel.selectedProject?.loggedHours.first { $0.id == loggedHour.id }
+        #expect(fullyPaidHour?.effectivePaidAmount == 192)
+        #expect(fullyPaidHour?.effectiveUnpaidAmount == 0)
+        #expect(fullyPaidHour?.isFullyPaid == true)
+        #expect(fullyPaidHour?.paymentEntries.map(\.reference) == ["CHK-2001", "ACH-2002"])
+        #expect(viewModel.projectUnpaidAmount == 0)
+
+        if let fullyPaidHour {
+            viewModel.reverseLaborPayments(for: fullyPaidHour)
+        }
+
+        let reversedHour = viewModel.selectedProject?.loggedHours.first { $0.id == loggedHour.id }
+        #expect(reversedHour?.effectivePaidAmount == 0)
+        #expect(reversedHour?.effectiveUnpaidAmount == 192)
+        #expect(reversedHour?.paymentEntries.last?.isReversal == true)
+
+        viewModel.recordLaborPayment(
+            for: viewModel.selectedProject?.loggedHours.filter { $0.id == loggedHour.id } ?? [],
+            amount: 192,
+            method: "Check",
+            reference: "REISSUE-2003",
+            note: "Reissued check"
+        )
+
+        let reissuedHour = viewModel.selectedProject?.loggedHours.first { $0.id == loggedHour.id }
+        #expect(reissuedHour?.effectivePaidAmount == 192)
+        #expect(reissuedHour?.effectiveUnpaidAmount == 0)
+        #expect(reissuedHour?.paymentEntries.last?.reference == "REISSUE-2003")
+
+        let restoredProject = projectStore.loadProjects(for: orgID).first { $0.id == project.id }
+        let restoredHour = restoredProject?.loggedHours.first { $0.id == loggedHour.id }
+        #expect(restoredHour?.effectivePaidAmount == 192)
+        #expect(restoredHour?.effectiveUnpaidAmount == 0)
+        #expect(restoredHour?.paymentEntries.last?.reference == "REISSUE-2003")
+    }
 }
 
 struct CompanyStoreTests {
