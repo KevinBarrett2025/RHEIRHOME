@@ -3,8 +3,8 @@
 ## Repo Truth
 - Repo Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Active Branch: `gm/rheir-hardening-phase1`
-- Thread Start SHA: `2d40ca55d66b89578482f2bc558cd712aa84b1eb`
-- Last Commit At Thread Start: `2d40ca5 Phase 2: restore business resources hub`
+- Thread Start SHA: `62ca340665e5232cd989f595d46cbe8c92d4ef8e`
+- Last Commit At Thread Start: `62ca340 Phase 2: harden labor payment flow`
 
 ## Current Objective
 - Keep RHEIR locked into the fast-ship v1 release profile so the visible app ships as a single-user contractor tool with the core shell only: `Projects`, `Receipts`, `Labor`, `Tasks`, plus budget `Breakdown` / `Estimator`.
@@ -49,6 +49,9 @@
 - Latest Labor payment focused parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,name=STS iPhone 17 Phase017,OS=26.2' -derivedDataPath /tmp/rheir_labor_payment_parity_dd -resultBundlePath /tmp/rheir_labor_payment_parity_final_rerun.xcresult -only-testing:RHEIRTests/LaborPaymentLedgerTests -only-testing:RHEIRUITests/RHEIRUITests/testLaborManagementOpensWorkerPaymentLedger test` -> PASS (`/tmp/rheir_labor_payment_parity_final_rerun.xcresult`, `2 unit tests plus 1 UI test`).
 - Latest Labor payment Gate A: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_labor_payment_dd -resultBundlePath /tmp/rheir_gateA_labor_payment_rerun.xcresult clean build` -> PASS (`/tmp/rheir_gateA_labor_payment_rerun.xcresult`).
 - `RHEIR.xcodeproj/project.pbxproj` drift is intentional in this Labor slice: the existing `Shared/Features/Labor/LaborPaymentView.swift` file is now included in the compiled app target so worker rows can open the real payment ledger.
+- Latest combined Labor + Business Resources simulator acceptance parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_labor_business_acceptance_dd -resultBundlePath /tmp/rheir_labor_business_acceptance.xcresult test -only-testing:RHEIRTests/LaborPaymentLedgerTests -only-testing:RHEIRUITests/RHEIRUITests/testBusinessResourcesEntryOpensReusableResourceHub -only-testing:RHEIRUITests/RHEIRUITests/testLaborManagementOpensWorkerPaymentLedger` -> PASS (`/tmp/rheir_labor_business_acceptance.xcresult`, `2 unit tests plus 2 UI tests`).
+- Latest combined Labor + Business Resources Gate A: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_labor_business_acceptance_dd -resultBundlePath /tmp/rheir_gateA_labor_business_acceptance.xcresult clean build` -> PASS (`/tmp/rheir_gateA_labor_business_acceptance.xcresult`).
+- Remaining Labor/Business Resources acceptance risk is manual/device coverage for add/edit worker, fresh hour logging, second/split payment capture, unpay/reissue, and relaunch paid/unpaid total persistence; the deterministic simulator seam is green.
 - `Shared/Models/Receipt.swift` now persists a trimmed optional top-level `subcategory`, closing the gap where scan-review subcategory input was accepted by the initializer but silently discarded before persistence.
 - `Shared/Features/Receipts/ScannedReceiptEntryView.swift` now persists `analysisResult.items` into the saved `Receipt.items` payload, stores the top-level subcategory, and drops the unusable segmented category picker treatment so the scan-review taxonomy stays legible with the full case set.
 - `Shared/Features/Receipts/ReceiptDetailView.swift` now keeps the ellipsis menu as the single receipt-detail edit/delete action surface, exposes item/subcategory accessibility hooks, and shows saved scanned items once they persist into the live receipt model.
@@ -291,7 +294,7 @@
 - This repo follows a repo-local STS equivalent defined in the root governance docs because the original STS spine docs were not present here.
 
 ## Next Required Action
-1. Run the next real-device Labor acceptance pass: add/edit a worker, log hours, record a partial payment with method/reference, add a second payment, reverse/unpay, relaunch, and confirm Labor totals remain correct.
+1. Run the remaining manual/device Labor + Business Resources acceptance pass: add/edit a worker, log hours, record a partial payment with method/reference, add a second/split payment, reverse/unpay/reissue, relaunch, and confirm Labor totals remain correct.
 2. Rework Tasks as the next release blocker with focused parity for multi-task CRUD, assignment, due/overdue state, completion proof/photos, and immediate refresh.
 3. Finish Reports after Labor/Tasks data flows are stable, starting with labor payroll and project closeout summaries.
 4. Continue device acceptance after each slice, with same-user iCloud restore treated as optional until release-candidate validation proves it stable.
