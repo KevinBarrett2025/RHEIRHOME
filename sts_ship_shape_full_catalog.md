@@ -227,6 +227,10 @@
 - Latest Tasks before/after photo-proof visual evidence: kept xcresult attachments `Task before photo controls` and `Task completion photo proof sheet`
 - Latest Tasks before/after photo-proof pbxproj drift: `NONE`
 - Latest Tasks before/after photo-proof remaining risk: physical-device validation still needs to exercise real camera capture, multi-select Photos selection, CloudKit upload/relaunch persistence, before/after separation, and full-screen pinch-to-zoom preview.
+- Latest Tasks photo-gallery/report Gate A result: `PASS` (`/tmp/rheir_gateA_tasks_photo_gallery_final.xcresult`)
+- Latest Tasks photo-gallery/report focused parity result: `PASS` (`/tmp/rheir_tasks_photo_gallery_reports_parity_20260515.xcresult`, `2 UI tests plus 4 mutation tests`)
+- Latest Tasks photo-gallery/report visual evidence: kept xcresult attachments `Task detail bottom completion action`, `Task completion photo proof sheet`, `Tasks CRUD control bar`, and `Task before photo controls`
+- Latest Tasks photo-gallery/report pbxproj drift: `NONE`
 - Latest Tasks completion-proof focused UI parity result: `PASS` (`/tmp/rheir_tasks_completion_proof_ui.xcresult`, `1 UI test`)
 - Latest Tasks CRUD focused parity result: `PASS` (`/tmp/rheir_tasks_crud_parity_final_rerun.xcresult`, `2 UI tests plus 4 mutation tests`)
 - Latest Tasks first-slice Gate A result: `PASS` (`/tmp/rheir_gateA_tasks_first_slice_rerun2.xcresult`)

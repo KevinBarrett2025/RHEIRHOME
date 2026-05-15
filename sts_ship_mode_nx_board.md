@@ -48,6 +48,8 @@
 - `RHEIRUITests.swift` now covers create, edit, delete, complete, and reopen behavior on a multi-task project in addition to the earlier proof/assignment acceptance path.
 - `TaskCompletionEditor` now supports optional real photo proof through the shared image picker and `CloudKitPhotoService`; selected photos upload before completion, upload failure blocks completion, and task detail exposes the persisted photo-proof count.
 - `TasksListView` now separates task scope photos from completion proof photos: create/edit supports before photos, completion supports after photos, both paths support camera capture plus multi-select Photos library intake, and task detail shows separate Before/After photo grids with full-screen pinch-to-zoom previews.
+- `TasksListView` now carries the next task UX seam: before/after previews are swipeable from create/edit, active-detail, and completed-detail contexts; thumbnails expose delete badges where correction is logical; task detail keeps a visible bottom `Mark Complete` action; and the task summary is pinned near the top instead of buried below the list.
+- `BudgetBreakdownView` and `PDFReportViews` now surface task progress, open/overdue counts, before/after proof totals, and task rows in project reporting paths so task work feeds later contractor documents.
 - Canonical tree cleanup completed in the working branch.
 - Session flow consolidated around `AppSessionSupport.swift`.
 - `Project.swift` now carries the first compiled estimator domain with intake, draft, versioned baseline, variance, source-evidence, and proposal-view models plus bridge helpers back into `Project` budget summary fields.
@@ -216,6 +218,7 @@
 - Labor accounting and UI professionalism remain standing release criteria for every later seam: paid history must survive later edits, over/under balances must be visible, totals must reconcile from persistence, and compact device sheets/rows must remain bounded and untruncated.
 - Continue Tasks hardening from the now simulator-proven CRUD and before/after photo slices into real-device validation of immediate project/report refresh and persisted photo proof.
 - Before/after task photo proof is simulator-proven; next device pass must capture a real camera photo, multi-select Photos assets, confirm CloudKit upload succeeds before save/completion, relaunch, verify before/after separation persists, and open saved images full screen with pinch-to-zoom.
+- Task photo-gallery/report hardening is simulator-proven; next device pass should also verify swipeable galleries across create/detail/completed contexts, thumbnail delete correction, visible bottom Mark Complete, pinned summary position, and task report fields.
 - Finish Reports around contractor outputs: project summary, category/cost-code spend, vendor spend, payment-method spend, labor payroll, profit/loss, and closeout/export summaries.
 - Remove placeholder/dead/redundant UI across active v1 flows before promo candidacy.
 - Re-run the real-device project-selection home and confirm the bottom tab bar is hidden before project selection, project cards are the only path into project work, and selecting a project reveals Receipts/Labor/Tasks.

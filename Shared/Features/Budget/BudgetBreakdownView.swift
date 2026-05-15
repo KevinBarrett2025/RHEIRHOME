@@ -1428,42 +1428,103 @@ struct ProjectReportsView: View {
     var body: some View {
         NavigationView {
             ScrollView {
-                VStack(spacing: 20) {
-                    // Placeholder for detailed reports
-                    VStack(spacing: 16) {
+                VStack(alignment: .leading, spacing: 20) {
+                    HStack(spacing: 12) {
                         Image(systemName: "chart.bar.doc.horizontal.fill")
-                            .font(.system(size: 48))
+                            .font(.system(size: 36))
                             .foregroundColor(.blue)
-                        
-                        Text("Detailed Reports")
-                            .font(.title2)
-                            .fontWeight(.bold)
-                        
-                        Text("Comprehensive project analytics and reporting will be available here.")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                            .multilineTextAlignment(.center)
-                        
-                        // Quick actions
-                        VStack(spacing: 12) {
-                            Button("Export Project Summary") {
-                                // TODO: Implement export functionality
-                            }
-                            .font(.subheadline)
-                            .foregroundColor(.blue)
-                            .padding(.vertical, 8)
-                            .padding(.horizontal, 16)
-                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.blue))
-                            
-                            Button("View Spending Trends") {
-                                // TODO: Navigate to trends view
-                            }
-                            .font(.subheadline)
-                            .foregroundColor(.blue)
-                            .padding(.vertical, 8)
-                            .padding(.horizontal, 16)
-                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.blue))
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Project Report")
+                                .font(.title2)
+                                .fontWeight(.bold)
+                            Text(project.name)
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
                         }
+                    }
+
+                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                        reportMetric(
+                            title: "Task Progress",
+                            value: "\(completedTaskCount)/\(project.tasks.count)",
+                            icon: "checkmark.circle.fill",
+                            color: .green
+                        )
+                        reportMetric(
+                            title: "Open Tasks",
+                            value: "\(openTaskCount)",
+                            icon: "clock.fill",
+                            color: .blue
+                        )
+                        reportMetric(
+                            title: "Overdue",
+                            value: "\(overdueTaskCount)",
+                            icon: "exclamationmark.triangle.fill",
+                            color: .orange
+                        )
+                        reportMetric(
+                            title: "Photo Proof",
+                            value: "\(beforePhotoCount)/\(afterPhotoCount)",
+                            icon: "photo.stack.fill",
+                            color: .purple
+                        )
+                    }
+                    .accessibilityIdentifier("project-report-task-summary")
+
+                    if !project.tasks.isEmpty {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Tasks")
+                                .font(.headline)
+
+                            ForEach(Array(visibleReportTasks.enumerated()), id: \.element.id) { index, task in
+                                HStack(alignment: .top, spacing: 12) {
+                                    Image(systemName: task.isCompleted ? "checkmark.circle.fill" : "circle")
+                                        .foregroundColor(task.isCompleted ? .green : .secondary)
+                                        .padding(.top, 2)
+
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(task.title)
+                                            .font(.subheadline)
+                                            .fontWeight(.medium)
+                                        Text(taskReportDetail(for: task))
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                            .fixedSize(horizontal: false, vertical: true)
+                                    }
+
+                                    Spacer()
+                                }
+                                .padding(.vertical, 8)
+
+                                if index < visibleReportTasks.count - 1 {
+                                    Divider()
+                                }
+                            }
+                        }
+                        .padding()
+                        .background(Color(.systemGray6))
+                        .cornerRadius(12)
+                    }
+
+                    VStack(spacing: 12) {
+                        Button("Export Project Summary") {
+                            // TODO: Implement export functionality
+                        }
+                        .font(.subheadline)
+                        .foregroundColor(.blue)
+                        .padding(.vertical, 8)
+                        .padding(.horizontal, 16)
+                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.blue))
+
+                        Button("View Spending Trends") {
+                            // TODO: Navigate to trends view
+                        }
+                        .font(.subheadline)
+                        .foregroundColor(.blue)
+                        .padding(.vertical, 8)
+                        .padding(.horizontal, 16)
+                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.blue))
                     }
                 }
                 .padding()
@@ -1478,6 +1539,76 @@ struct ProjectReportsView: View {
                 }
             }
         }
+    }
+
+    private var completedTaskCount: Int {
+        project.tasks.filter(\.isCompleted).count
+    }
+
+    private var openTaskCount: Int {
+        project.tasks.count - completedTaskCount
+    }
+
+    private var overdueTaskCount: Int {
+        project.tasks.filter { $0.isOverdue }.count
+    }
+
+    private var beforePhotoCount: Int {
+        project.tasks.reduce(0) { $0 + $1.photoIDs.count }
+    }
+
+    private var afterPhotoCount: Int {
+        project.tasks.reduce(0) { $0 + $1.completionPhotoIDs.count }
+    }
+
+    private var visibleReportTasks: [ProjectTask] {
+        Array(project.tasks.sorted(by: reportTaskSort).prefix(8))
+    }
+
+    private func reportMetric(title: String, value: String, icon: String, color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Image(systemName: icon)
+                .font(.title3)
+                .foregroundColor(color)
+            Text(value)
+                .font(.title3)
+                .fontWeight(.bold)
+            Text(title)
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding()
+        .background(Color(.systemGray6))
+        .cornerRadius(12)
+    }
+
+    private func reportTaskSort(_ lhs: ProjectTask, _ rhs: ProjectTask) -> Bool {
+        if lhs.isCompleted != rhs.isCompleted {
+            return !lhs.isCompleted
+        }
+
+        switch (lhs.dueDate, rhs.dueDate) {
+        case let (left?, right?):
+            return left < right
+        case (_?, nil):
+            return true
+        case (nil, _?):
+            return false
+        case (nil, nil):
+            return lhs.updatedAt > rhs.updatedAt
+        }
+    }
+
+    private func taskReportDetail(for task: ProjectTask) -> String {
+        var parts: [String] = [task.isCompleted ? "Completed" : "Open", task.priority.displayName]
+        if let dueDate = task.dueDate {
+            parts.append("Due \(dueDate.formatted(date: .abbreviated, time: .omitted))")
+        }
+        if task.photoCount > 0 {
+            parts.append("\(task.photoIDs.count) before / \(task.completionPhotoIDs.count) after photos")
+        }
+        return parts.joined(separator: " | ")
     }
 }
 

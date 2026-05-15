@@ -519,6 +519,11 @@ final class RHEIRUITests: XCTestCase {
         overdueTask.tap()
 
         XCTAssertTrue(app.navigationBars["Task Details"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["task-detail-mark-complete-button"].exists)
+        let bottomActionAttachment = XCTAttachment(screenshot: app.screenshot())
+        bottomActionAttachment.name = "Task detail bottom completion action"
+        bottomActionAttachment.lifetime = .keepAlways
+        add(bottomActionAttachment)
         app.buttons["task-detail-menu"].tap()
         app.buttons["Edit Task"].tap()
         XCTAssertTrue(app.navigationBars["Edit Task"].waitForExistence(timeout: 5))
@@ -532,8 +537,8 @@ final class RHEIRUITests: XCTestCase {
 
         XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Mia Lopez")).firstMatch.waitForExistence(timeout: 5))
 
-        app.buttons["task-detail-menu"].tap()
-        app.buttons["Mark Complete"].tap()
+        XCTAssertTrue(app.buttons["task-detail-mark-complete-button"].waitForExistence(timeout: 5))
+        app.buttons["task-detail-mark-complete-button"].tap()
         XCTAssertTrue(app.navigationBars["Complete Task"].waitForExistence(timeout: 5))
         let notesField = app.textFields["Completion notes"]
         XCTAssertTrue(notesField.waitForExistence(timeout: 5))
@@ -616,8 +621,8 @@ final class RHEIRUITests: XCTestCase {
 
         let overdueTask = app.buttons["task-row-A11B1F20-08A0-4B3B-9A52-9A687EE92001"]
         overdueTask.tap()
-        app.buttons["task-detail-menu"].tap()
-        app.buttons["Mark Complete"].tap()
+        XCTAssertTrue(app.buttons["task-detail-mark-complete-button"].waitForExistence(timeout: 5))
+        app.buttons["task-detail-mark-complete-button"].tap()
         let notesField = app.textFields["Completion notes"]
         XCTAssertTrue(notesField.waitForExistence(timeout: 5))
         notesField.tap()

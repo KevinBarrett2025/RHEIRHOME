@@ -5,10 +5,12 @@ import UIKit
 /// enabling pinch-to-zoom and panning with a dismiss button.
 struct ZoomableImageView: UIViewRepresentable {
     let image: UIImage
+    let showsDismissButton: Bool
     let onDismiss: () -> Void
     
-    init(image: UIImage, onDismiss: @escaping () -> Void = {}) {
+    init(image: UIImage, showsDismissButton: Bool = true, onDismiss: @escaping () -> Void = {}) {
         self.image = image
+        self.showsDismissButton = showsDismissButton
         self.onDismiss = onDismiss
     }
     
@@ -34,18 +36,7 @@ struct ZoomableImageView: UIViewRepresentable {
         scrollView.addSubview(imageView)
         context.coordinator.imageView = imageView
         
-        // 3. Close button
-        let closeButton = UIButton(type: .system)
-        closeButton.setImage(UIImage(systemName: "xmark.circle.fill"), for: .normal)
-        closeButton.backgroundColor = .black.withAlphaComponent(0.6)
-        closeButton.tintColor = .white
-        closeButton.layer.cornerRadius = 20
-        closeButton.translatesAutoresizingMaskIntoConstraints = false
-        closeButton.accessibilityIdentifier = "zoomable-image-close"
-        closeButton.addTarget(context.coordinator, action: #selector(Coordinator.dismissTapped), for: .touchUpInside)
-
         containerView.addSubview(scrollView)
-        containerView.addSubview(closeButton)
         
         context.coordinator.onDismiss = onDismiss
 
@@ -63,14 +54,29 @@ struct ZoomableImageView: UIViewRepresentable {
             imageView.topAnchor.constraint(equalTo: scrollView.contentLayoutGuide.topAnchor),
             imageView.bottomAnchor.constraint(equalTo: scrollView.contentLayoutGuide.bottomAnchor),
             imageView.widthAnchor.constraint(equalTo: scrollView.frameLayoutGuide.widthAnchor),
-            imageView.heightAnchor.constraint(equalTo: scrollView.frameLayoutGuide.heightAnchor),
-            
-            // Close button constraints
-            closeButton.topAnchor.constraint(equalTo: containerView.safeAreaLayoutGuide.topAnchor, constant: 16),
-            closeButton.trailingAnchor.constraint(equalTo: containerView.trailingAnchor, constant: -16),
-            closeButton.widthAnchor.constraint(equalToConstant: 40),
-            closeButton.heightAnchor.constraint(equalToConstant: 40)
+            imageView.heightAnchor.constraint(equalTo: scrollView.frameLayoutGuide.heightAnchor)
         ])
+
+        if showsDismissButton {
+            // 3. Close button
+            let closeButton = UIButton(type: .system)
+            closeButton.setImage(UIImage(systemName: "xmark.circle.fill"), for: .normal)
+            closeButton.backgroundColor = .black.withAlphaComponent(0.6)
+            closeButton.tintColor = .white
+            closeButton.layer.cornerRadius = 20
+            closeButton.translatesAutoresizingMaskIntoConstraints = false
+            closeButton.accessibilityIdentifier = "zoomable-image-close"
+            closeButton.addTarget(context.coordinator, action: #selector(Coordinator.dismissTapped), for: .touchUpInside)
+
+            containerView.addSubview(closeButton)
+
+            NSLayoutConstraint.activate([
+                closeButton.topAnchor.constraint(equalTo: containerView.safeAreaLayoutGuide.topAnchor, constant: 16),
+                closeButton.trailingAnchor.constraint(equalTo: containerView.trailingAnchor, constant: -16),
+                closeButton.widthAnchor.constraint(equalToConstant: 40),
+                closeButton.heightAnchor.constraint(equalToConstant: 40)
+            ])
+        }
 
         return containerView
     }

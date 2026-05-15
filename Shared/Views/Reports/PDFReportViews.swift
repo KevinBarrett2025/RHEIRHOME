@@ -60,6 +60,9 @@ struct ProjectReportView: View {
             
             // Team Members
             teamMembersSection
+
+            // Tasks
+            taskSummarySection
             
             // Recent Activity
             recentActivitySection
@@ -103,6 +106,80 @@ struct ProjectReportView: View {
             Divider()
         }
         .padding()
+    }
+
+    @ViewBuilder
+    private var taskSummarySection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("TASK SUMMARY")
+                .font(.headline)
+                .fontWeight(.bold)
+
+            let tasks = data.project.tasks
+            let completed = tasks.filter { $0.isCompleted }.count
+            let open = tasks.count - completed
+            let overdue = tasks.filter { $0.isOverdue }.count
+            let beforePhotos = tasks.reduce(0) { $0 + $1.photoIDs.count }
+            let afterPhotos = tasks.reduce(0) { $0 + $1.completionPhotoIDs.count }
+
+            Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 6) {
+                GridRow {
+                    Text("Total Tasks:")
+                        .fontWeight(.medium)
+                    Text("\(tasks.count)")
+                    Text("Completed:")
+                        .fontWeight(.medium)
+                    Text("\(completed)")
+                }
+
+                GridRow {
+                    Text("Open Tasks:")
+                        .fontWeight(.medium)
+                    Text("\(open)")
+                    Text("Overdue:")
+                        .fontWeight(.medium)
+                    Text("\(overdue)")
+                        .foregroundColor(overdue > 0 ? .orange : .primary)
+                }
+
+                GridRow {
+                    Text("Before Photos:")
+                        .fontWeight(.medium)
+                    Text("\(beforePhotos)")
+                    Text("After Photos:")
+                        .fontWeight(.medium)
+                    Text("\(afterPhotos)")
+                }
+            }
+            .font(.caption)
+
+            if !tasks.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(Array(tasks.sorted(by: reportTaskSort).prefix(5))) { task in
+                        HStack(alignment: .top) {
+                            Text(task.isCompleted ? "Done" : "Open")
+                                .font(.caption2)
+                                .fontWeight(.semibold)
+                                .foregroundColor(task.isCompleted ? .green : .secondary)
+                                .frame(width: 42, alignment: .leading)
+
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(task.title)
+                                    .font(.caption)
+                                    .fontWeight(.medium)
+                                Text(taskReportDetail(for: task))
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                            }
+
+                            Spacer()
+                        }
+                    }
+                }
+            }
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 8)
     }
     
     @ViewBuilder
@@ -322,6 +399,34 @@ struct ProjectReportView: View {
             }
             .padding()
         }
+    }
+
+    private func reportTaskSort(_ lhs: ProjectTask, _ rhs: ProjectTask) -> Bool {
+        if lhs.isCompleted != rhs.isCompleted {
+            return !lhs.isCompleted
+        }
+
+        switch (lhs.dueDate, rhs.dueDate) {
+        case let (left?, right?):
+            return left < right
+        case (_?, nil):
+            return true
+        case (nil, _?):
+            return false
+        case (nil, nil):
+            return lhs.updatedAt > rhs.updatedAt
+        }
+    }
+
+    private func taskReportDetail(for task: ProjectTask) -> String {
+        var parts: [String] = [task.priority.displayName]
+        if let dueDate = task.dueDate {
+            parts.append("Due \(dueDate.formatted(date: .abbreviated, time: .omitted))")
+        }
+        if task.photoCount > 0 {
+            parts.append("\(task.photoIDs.count) before / \(task.completionPhotoIDs.count) after photos")
+        }
+        return parts.joined(separator: " | ")
     }
 }
 

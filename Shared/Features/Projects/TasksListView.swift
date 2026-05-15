@@ -3,11 +3,30 @@ import UIKit
 import PhotosUI
 import OSLog
 
-private struct TaskPhotoSelectionID: Identifiable {
-    let id: UUID
+private struct TaskPhotoIndexSelection: Identifiable {
+    let id = UUID()
+    let index: Int
+}
 
-    init(_ id: UUID) {
-        self.id = id
+private struct TaskPhotoGallerySelection: Identifiable {
+    let id = UUID()
+    let title: String
+    let taskID: UUID
+    let photoIDs: [UUID]
+    let initialIndex: Int
+}
+
+private enum TaskPhotoGroup {
+    case before
+    case after
+
+    var deleteAccessibilityPrefix: String {
+        switch self {
+        case .before:
+            return "task-before-photo-delete"
+        case .after:
+            return "task-after-photo-delete"
+        }
     }
 }
 
@@ -208,6 +227,17 @@ struct TasksListView: View {
     
     private func tasksListView(for project: Project) -> some View {
         List {
+            if !tasks.isEmpty {
+                Section("Summary") {
+                    TaskSummaryView(
+                        totalTasks: tasks.count,
+                        completedTasks: completedTasks.count,
+                        overdueTasks: overdueTasks.count
+                    )
+                    .accessibilityIdentifier("tasks-summary-card")
+                }
+            }
+
             if !overdueTasks.isEmpty && selectedFilter == .all {
                 Section("⚠️ Overdue Tasks (\(overdueTasks.count))") {
                     ForEach(overdueTasks) { task in
@@ -266,17 +296,6 @@ struct TasksListView: View {
                 }
             } else if tasks.isEmpty {
                 emptyTasksView
-            }
-            
-            // Task summary section
-            if !tasks.isEmpty {
-                Section("Summary") {
-                    TaskSummaryView(
-                        totalTasks: tasks.count,
-                        completedTasks: completedTasks.count,
-                        overdueTasks: overdueTasks.count
-                    )
-                }
             }
         }
     }
@@ -541,6 +560,7 @@ struct TaskCreateEditView: View {
     @State private var selectedEmployeeIDs: Set<UUID> = []
     @State private var selectedBeforeImages: [UIImage] = []
     @State private var selectedBeforePhotoItems: [PhotosPickerItem] = []
+    @State private var selectedBeforeImageGallery: TaskPhotoIndexSelection?
     @State private var cameraImage: UIImage?
     @State private var showingCamera = false
     @State private var isUploadingPhotos = false
@@ -670,6 +690,15 @@ struct TaskCreateEditView: View {
             selectedBeforeImages.append(image)
             cameraImage = nil
         }
+        .fullScreenCover(item: $selectedBeforeImageGallery) { selection in
+            TaskLocalPhotoGalleryView(
+                title: "Before Photos",
+                images: selectedBeforeImages,
+                initialIndex: selection.index
+            ) {
+                selectedBeforeImageGallery = nil
+            }
+        }
     }
 
     private var beforePhotosSection: some View {
@@ -687,13 +716,18 @@ struct TaskCreateEditView: View {
             if !selectedBeforeImages.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 10) {
-                        ForEach(Array(selectedBeforeImages.enumerated()), id: \.offset) { _, image in
-                            Image(uiImage: image)
-                                .resizable()
-                                .scaledToFill()
-                                .frame(width: 88, height: 88)
-                                .clipped()
-                                .cornerRadius(8)
+                        ForEach(Array(selectedBeforeImages.enumerated()), id: \.offset) { index, image in
+                            TaskLocalPhotoThumbnail(
+                                image: image,
+                                openAccessibilityIdentifier: "task-before-photo-thumbnail-\(index)",
+                                deleteAccessibilityIdentifier: "task-before-photo-delete-\(index)",
+                                onOpen: {
+                                    selectedBeforeImageGallery = TaskPhotoIndexSelection(index: index)
+                                },
+                                onDelete: {
+                                    selectedBeforeImages.remove(at: index)
+                                }
+                            )
                         }
                     }
                     .padding(.vertical, 4)
@@ -834,7 +868,8 @@ struct TaskDetailView: View {
     @EnvironmentObject var projectVM: ProjectViewModel
     @State private var showingEditTask = false
     @State private var showingCompletionSheet = false
-    @State private var selectedPhotoID: TaskPhotoSelectionID?
+    @State private var selectedPhotoGallery: TaskPhotoGallerySelection?
+    @StateObject private var photoService = CloudKitPhotoService()
 
     private var liveTask: ProjectTask {
         projectVM.selectedProject?.tasks.first(where: { $0.id == task.id }) ?? task
@@ -904,7 +939,18 @@ struct TaskDetailView: View {
                             subtitle: "Work-scope reference",
                             photoIDs: liveTask.photoIDs,
                             taskID: liveTask.id,
-                            selectedPhotoID: $selectedPhotoID
+                            deleteAccessibilityPrefix: TaskPhotoGroup.before.deleteAccessibilityPrefix,
+                            onOpenPhoto: { index in
+                                selectedPhotoGallery = TaskPhotoGallerySelection(
+                                    title: "Before Photos",
+                                    taskID: liveTask.id,
+                                    photoIDs: liveTask.photoIDs,
+                                    initialIndex: index
+                                )
+                            },
+                            onDeletePhoto: { photoID in
+                                deleteSavedPhoto(photoID, from: .before)
+                            }
                         )
                     }
 
@@ -914,7 +960,18 @@ struct TaskDetailView: View {
                             subtitle: "Completion proof",
                             photoIDs: liveTask.completionPhotoIDs,
                             taskID: liveTask.id,
-                            selectedPhotoID: $selectedPhotoID
+                            deleteAccessibilityPrefix: TaskPhotoGroup.after.deleteAccessibilityPrefix,
+                            onOpenPhoto: { index in
+                                selectedPhotoGallery = TaskPhotoGallerySelection(
+                                    title: "After Photos",
+                                    taskID: liveTask.id,
+                                    photoIDs: liveTask.completionPhotoIDs,
+                                    initialIndex: index
+                                )
+                            },
+                            onDeletePhoto: { photoID in
+                                deleteSavedPhoto(photoID, from: .after)
+                            }
                         )
                     }
                     
@@ -960,6 +1017,11 @@ struct TaskDetailView: View {
                 }
             }
         }
+        .safeAreaInset(edge: .bottom) {
+            if !liveTask.isCompleted {
+                markCompleteBar
+            }
+        }
         .sheet(isPresented: $showingEditTask) {
             if let project = projectVM.selectedProject {
                 TaskCreateEditView(project: project, task: liveTask) { updatedTask in
@@ -982,10 +1044,35 @@ struct TaskDetailView: View {
             }
             .environmentObject(projectVM)
         }
-        .fullScreenCover(item: $selectedPhotoID) { identifiablePhotoID in
-            TaskAsyncPhotoDetailView(photoID: identifiablePhotoID.id, taskID: liveTask.id) {
-                selectedPhotoID = nil
+        .fullScreenCover(item: $selectedPhotoGallery) { selection in
+            TaskRemotePhotoGalleryView(
+                title: selection.title,
+                photoIDs: selection.photoIDs,
+                initialIndex: selection.initialIndex
+            ) {
+                selectedPhotoGallery = nil
             }
+        }
+    }
+
+    private var markCompleteBar: some View {
+        VStack(spacing: 0) {
+            Divider()
+            Button {
+                showingCompletionSheet = true
+            } label: {
+                Label("Mark Complete", systemImage: "checkmark.circle.fill")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.green)
+            .controlSize(.large)
+            .accessibilityIdentifier("task-detail-mark-complete-button")
+            .padding(.horizontal)
+            .padding(.vertical, 10)
+            .background(.regularMaterial)
         }
     }
     
@@ -1013,6 +1100,29 @@ struct TaskDetailView: View {
         }
         dismiss()
     }
+
+    private func deleteSavedPhoto(_ photoID: UUID, from group: TaskPhotoGroup) {
+        guard let project = projectVM.selectedProject else { return }
+
+        var updatedTask = liveTask
+        switch group {
+        case .before:
+            updatedTask.removePhoto(photoID)
+        case .after:
+            updatedTask.removeCompletionPhoto(photoID)
+        }
+
+        Task {
+            await projectVM.updateTask(updatedTask, in: project.id)
+            do {
+                try await photoService.deleteTaskPhotos(photoIDs: [photoID])
+            } catch {
+                Logger.cloudKitPhoto.error(
+                    "Failed to delete task photo asset [task=\(updatedTask.id.uuidString, privacy: .private(mask: .hash)) photo=\(photoID.uuidString, privacy: .private(mask: .hash)) error=\(error.localizedDescription, privacy: .public)]"
+                )
+            }
+        }
+    }
     
     private var assigneeSummary: String {
         let names = liveTask.assignedEmployeeIDs.compactMap { projectVM.getTeamMember(by: $0)?.name }
@@ -1036,6 +1146,7 @@ private struct TaskCompletionEditor: View {
     @State private var completedAt: Date
     @State private var selectedProofImages: [UIImage] = []
     @State private var selectedProofPhotoItems: [PhotosPickerItem] = []
+    @State private var selectedProofImageGallery: TaskPhotoIndexSelection?
     @State private var cameraImage: UIImage?
     @State private var showingCamera = false
     @State private var isUploadingPhoto = false
@@ -1108,13 +1219,18 @@ private struct TaskCompletionEditor: View {
                     if !selectedProofImages.isEmpty {
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 10) {
-                                ForEach(Array(selectedProofImages.enumerated()), id: \.offset) { _, image in
-                                    Image(uiImage: image)
-                                        .resizable()
-                                        .scaledToFill()
-                                        .frame(width: 88, height: 88)
-                                        .clipped()
-                                        .cornerRadius(8)
+                                ForEach(Array(selectedProofImages.enumerated()), id: \.offset) { index, image in
+                                    TaskLocalPhotoThumbnail(
+                                        image: image,
+                                        openAccessibilityIdentifier: "task-proof-photo-thumbnail-\(index)",
+                                        deleteAccessibilityIdentifier: "task-proof-photo-delete-\(index)",
+                                        onOpen: {
+                                            selectedProofImageGallery = TaskPhotoIndexSelection(index: index)
+                                        },
+                                        onDelete: {
+                                            selectedProofImages.remove(at: index)
+                                        }
+                                    )
                                 }
                             }
                             .padding(.vertical, 4)
@@ -1179,6 +1295,15 @@ private struct TaskCompletionEditor: View {
             guard let image else { return }
             selectedProofImages.append(image)
             cameraImage = nil
+        }
+        .fullScreenCover(item: $selectedProofImageGallery) { selection in
+            TaskLocalPhotoGalleryView(
+                title: "After Photos",
+                images: selectedProofImages,
+                initialIndex: selection.index
+            ) {
+                selectedProofImageGallery = nil
+            }
         }
     }
 
@@ -1277,7 +1402,9 @@ private struct TaskPhotoGridSection: View {
     let subtitle: String
     let photoIDs: [UUID]
     let taskID: UUID
-    @Binding var selectedPhotoID: TaskPhotoSelectionID?
+    let deleteAccessibilityPrefix: String
+    let onOpenPhoto: (Int) -> Void
+    let onDeletePhoto: (UUID) -> Void
 
     private let columns = [
         GridItem(.flexible(), spacing: 8),
@@ -1303,36 +1430,89 @@ private struct TaskPhotoGridSection: View {
             }
 
             LazyVGrid(columns: columns, spacing: 8) {
-                ForEach(photoIDs, id: \.self) { photoID in
-                    Button {
-                        selectedPhotoID = TaskPhotoSelectionID(photoID)
-                    } label: {
-                        TaskAsyncPhoto(photoID: photoID, taskID: taskID) { image in
-                            image
-                                .resizable()
-                                .scaledToFill()
-                                .frame(height: 92)
-                                .frame(maxWidth: .infinity)
-                                .clipped()
-                                .cornerRadius(8)
-                        } placeholder: {
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(Color(.systemGray5))
-                                .frame(height: 92)
-                                .overlay {
-                                    ProgressView()
-                                        .scaleEffect(0.7)
-                                }
+                ForEach(Array(photoIDs.enumerated()), id: \.element) { index, photoID in
+                    ZStack(alignment: .topTrailing) {
+                        Button {
+                            onOpenPhoto(index)
+                        } label: {
+                            TaskAsyncPhoto(photoID: photoID, taskID: taskID) { image in
+                                image
+                                    .resizable()
+                                    .scaledToFill()
+                                    .frame(height: 92)
+                                    .frame(maxWidth: .infinity)
+                                    .clipped()
+                                    .cornerRadius(8)
+                            } placeholder: {
+                                RoundedRectangle(cornerRadius: 8)
+                                    .fill(Color(.systemGray5))
+                                    .frame(height: 92)
+                                    .overlay {
+                                        ProgressView()
+                                            .scaleEffect(0.7)
+                                    }
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("task-photo-\(photoID.uuidString)")
+
+                        TaskPhotoDeleteButton(accessibilityIdentifier: "\(deleteAccessibilityPrefix)-\(index)") {
+                            onDeletePhoto(photoID)
                         }
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("task-photo-\(photoID.uuidString)")
                 }
             }
         }
         .padding()
         .background(Color(.systemGray6))
         .cornerRadius(12)
+    }
+}
+
+private struct TaskLocalPhotoThumbnail: View {
+    let image: UIImage
+    let openAccessibilityIdentifier: String
+    let deleteAccessibilityIdentifier: String
+    let onOpen: () -> Void
+    let onDelete: () -> Void
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            Button(action: onOpen) {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 88, height: 88)
+                    .clipped()
+                    .cornerRadius(8)
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier(openAccessibilityIdentifier)
+
+            TaskPhotoDeleteButton(accessibilityIdentifier: deleteAccessibilityIdentifier, action: onDelete)
+        }
+        .frame(width: 88, height: 88)
+    }
+}
+
+private struct TaskPhotoDeleteButton: View {
+    let accessibilityIdentifier: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "xmark.circle.fill")
+                .font(.system(size: 22, weight: .semibold))
+                .symbolRenderingMode(.palette)
+                .foregroundStyle(.white, Color.red)
+                .shadow(color: .black.opacity(0.25), radius: 3, x: 0, y: 1)
+                .padding(4)
+                .background(Circle().fill(Color(.systemBackground).opacity(0.85)))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Delete photo")
+        .accessibilityIdentifier(accessibilityIdentifier)
+        .offset(x: 7, y: -7)
     }
 }
 
@@ -1360,11 +1540,7 @@ private struct TaskAsyncPhoto<Content: View, Placeholder: View>: View {
 
     private func loadPhoto() async {
         do {
-            let taskPhotos = try await photoService.fetchTaskPhotos(taskID: taskID)
-            guard let taskPhoto = taskPhotos.first(where: { $0.id == photoID }),
-                  let assetURL = taskPhoto.ckAssetURL else { return }
-            let imageData = try await photoService.downloadPhotoData(from: assetURL)
-            guard let image = UIImage(data: imageData) else { return }
+            guard let image = try await photoService.downloadTaskPhoto(photoID: photoID) else { return }
             await MainActor.run {
                 loadedImage = image
             }
@@ -1376,68 +1552,218 @@ private struct TaskAsyncPhoto<Content: View, Placeholder: View>: View {
     }
 }
 
-private struct TaskAsyncPhotoDetailView: View {
-    let photoID: UUID
-    let taskID: UUID
+private struct TaskLocalPhotoGalleryView: View {
+    let title: String
+    let images: [UIImage]
+    let initialIndex: Int
     let onDismiss: () -> Void
 
-    @State private var loadedImage: UIImage?
-    @State private var isLoading = true
-    @StateObject private var photoService = CloudKitPhotoService()
+    @State private var selectedIndex: Int
+
+    init(title: String, images: [UIImage], initialIndex: Int, onDismiss: @escaping () -> Void) {
+        self.title = title
+        self.images = images
+        self.initialIndex = initialIndex
+        self.onDismiss = onDismiss
+        _selectedIndex = State(initialValue: TaskLocalPhotoGalleryView.clampedIndex(initialIndex, count: images.count))
+    }
 
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
 
-            if let loadedImage {
-                ZoomableImageView(image: loadedImage, onDismiss: onDismiss)
-            } else if isLoading {
-                ProgressView("Loading photo...")
-                    .foregroundColor(.white)
+            if images.isEmpty {
+                TaskPhotoGalleryUnavailableView(onDismiss: onDismiss)
             } else {
-                VStack(spacing: 16) {
-                    Image(systemName: "photo")
-                        .font(.system(size: 56))
-                        .foregroundColor(.gray)
-                    Text("Photo could not be loaded")
-                        .foregroundColor(.gray)
-                    Button("Close") {
-                        onDismiss()
+                TabView(selection: $selectedIndex) {
+                    ForEach(Array(images.enumerated()), id: \.offset) { index, image in
+                        ZoomableImageView(image: image, showsDismissButton: false)
+                            .tag(index)
+                            .ignoresSafeArea()
                     }
-                    .foregroundColor(.white)
                 }
+                .tabViewStyle(.page(indexDisplayMode: images.count > 1 ? .automatic : .never))
             }
-        }
-        .task {
-            await loadPhoto()
+
+            TaskPhotoGalleryChrome(
+                title: title,
+                selectedIndex: selectedIndex,
+                count: images.count,
+                onDismiss: onDismiss
+            )
         }
     }
 
-    private func loadPhoto() async {
-        isLoading = true
+    private static func clampedIndex(_ index: Int, count: Int) -> Int {
+        guard count > 0 else { return 0 }
+        return min(max(index, 0), count - 1)
+    }
+}
+
+private struct TaskRemotePhotoGalleryView: View {
+    let title: String
+    let photoIDs: [UUID]
+    let initialIndex: Int
+    let onDismiss: () -> Void
+
+    @State private var selectedIndex: Int
+    @State private var loadedImages: [UUID: UIImage] = [:]
+    @State private var failedPhotoIDs: Set<UUID> = []
+    @StateObject private var photoService = CloudKitPhotoService()
+
+    init(title: String, photoIDs: [UUID], initialIndex: Int, onDismiss: @escaping () -> Void) {
+        self.title = title
+        self.photoIDs = photoIDs
+        self.initialIndex = initialIndex
+        self.onDismiss = onDismiss
+        _selectedIndex = State(initialValue: TaskRemotePhotoGalleryView.clampedIndex(initialIndex, count: photoIDs.count))
+    }
+
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+
+            if photoIDs.isEmpty {
+                TaskPhotoGalleryUnavailableView(onDismiss: onDismiss)
+            } else {
+                TabView(selection: $selectedIndex) {
+                    ForEach(Array(photoIDs.enumerated()), id: \.element) { index, photoID in
+                        TaskPhotoGalleryPage(
+                            image: loadedImages[photoID],
+                            didFail: failedPhotoIDs.contains(photoID),
+                            onDismiss: onDismiss
+                        )
+                        .tag(index)
+                        .task {
+                            await loadPhoto(photoID)
+                        }
+                    }
+                }
+                .tabViewStyle(.page(indexDisplayMode: photoIDs.count > 1 ? .automatic : .never))
+            }
+
+            TaskPhotoGalleryChrome(
+                title: title,
+                selectedIndex: selectedIndex,
+                count: photoIDs.count,
+                onDismiss: onDismiss
+            )
+        }
+    }
+
+    private static func clampedIndex(_ index: Int, count: Int) -> Int {
+        guard count > 0 else { return 0 }
+        return min(max(index, 0), count - 1)
+    }
+
+    private func loadPhoto(_ photoID: UUID) async {
+        guard loadedImages[photoID] == nil, !failedPhotoIDs.contains(photoID) else { return }
+
         do {
-            let taskPhotos = try await photoService.fetchTaskPhotos(taskID: taskID)
-            guard let taskPhoto = taskPhotos.first(where: { $0.id == photoID }),
-                  let assetURL = taskPhoto.ckAssetURL else {
-                await MainActor.run { isLoading = false }
+            guard let image = try await photoService.downloadTaskPhoto(photoID: photoID) else {
+                await MainActor.run {
+                    _ = failedPhotoIDs.insert(photoID)
+                }
                 return
             }
-            let imageData = try await photoService.downloadPhotoData(from: assetURL)
-            guard let image = UIImage(data: imageData) else {
-                await MainActor.run { isLoading = false }
-                return
-            }
+
             await MainActor.run {
-                loadedImage = image
-                isLoading = false
+                loadedImages[photoID] = image
             }
         } catch {
             Logger.cloudKitPhoto.error(
-                "Failed to load task photo detail [task=\(taskID.uuidString, privacy: .private(mask: .hash)) photo=\(photoID.uuidString, privacy: .private(mask: .hash)) error=\(error.localizedDescription, privacy: .public)]"
+                "Failed to load task gallery photo [photo=\(photoID.uuidString, privacy: .private(mask: .hash)) error=\(error.localizedDescription, privacy: .public)]"
             )
             await MainActor.run {
-                isLoading = false
+                _ = failedPhotoIDs.insert(photoID)
             }
+        }
+    }
+}
+
+private struct TaskPhotoGalleryPage: View {
+    let image: UIImage?
+    let didFail: Bool
+    let onDismiss: () -> Void
+
+    var body: some View {
+        Group {
+            if let image {
+                ZoomableImageView(image: image, showsDismissButton: false)
+                    .ignoresSafeArea()
+            } else if didFail {
+                TaskPhotoGalleryUnavailableView(onDismiss: onDismiss)
+            } else {
+                ProgressView("Loading photo...")
+                    .tint(.white)
+                    .foregroundColor(.white)
+            }
+        }
+    }
+}
+
+private struct TaskPhotoGalleryUnavailableView: View {
+    let onDismiss: () -> Void
+
+    var body: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "photo")
+                .font(.system(size: 56))
+                .foregroundColor(.gray)
+            Text("Photo could not be loaded")
+                .foregroundColor(.gray)
+            Button("Close") {
+                onDismiss()
+            }
+            .foregroundColor(.white)
+        }
+    }
+}
+
+private struct TaskPhotoGalleryChrome: View {
+    let title: String
+    let selectedIndex: Int
+    let count: Int
+    let onDismiss: () -> Void
+
+    var body: some View {
+        VStack {
+            HStack(alignment: .center, spacing: 12) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.headline)
+                        .foregroundColor(.white)
+                    if count > 0 {
+                        Text("\(selectedIndex + 1) of \(count)")
+                            .font(.caption)
+                            .foregroundColor(.white.opacity(0.72))
+                    }
+                }
+
+                Spacer()
+
+                Button(action: onDismiss) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 34, weight: .semibold))
+                        .foregroundColor(.white)
+                        .shadow(color: .black.opacity(0.35), radius: 4, x: 0, y: 2)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("zoomable-image-close")
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 14)
+            .padding(.bottom, 18)
+            .background(
+                LinearGradient(
+                    colors: [.black.opacity(0.78), .black.opacity(0.0)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .ignoresSafeArea(edges: .top)
+            )
+
+            Spacer()
         }
     }
 }

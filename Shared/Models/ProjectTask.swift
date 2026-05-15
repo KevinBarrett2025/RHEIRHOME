@@ -110,6 +110,11 @@ public struct ProjectTask: Identifiable, Codable, Sendable {
         photoIDs.removeAll { $0 == photoID }
         updatedAt = Date()
     }
+
+    public mutating func removeCompletionPhoto(_ photoID: UUID) {
+        completionPhotoIDs.removeAll { $0 == photoID }
+        updatedAt = Date()
+    }
     
     public var hasPhotos: Bool {
         !photoIDs.isEmpty || !completionPhotoIDs.isEmpty
