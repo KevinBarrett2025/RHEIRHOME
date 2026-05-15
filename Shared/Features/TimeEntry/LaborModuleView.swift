@@ -7,7 +7,7 @@ struct LaborModuleView: View {
     @Binding var selectedTab: Tab
     @State private var showingLogHours = false
     @State private var selectedTeamMember: TeamMember?
-    @State private var showingPaymentView = false
+    @State private var showingWorkerManagement = false
     
     // CRITICAL FIX: Use project-based team member discovery like BudgetBreakdownView
     private var workingTeamMembers: [TeamMember] {
@@ -34,11 +34,12 @@ struct LaborModuleView: View {
         let workingMemberIDs = Set(receiptMemberIDs + progressMemberIDs + loggedHoursMemberIDs)
         let allRelevantMemberIDs = assignedMemberIDs.union(workingMemberIDs)
         
-        // Get team members from organization first
+        // Get team members from the reusable business resource directory first.
         var discoveredMembers = projectVM.teamMembers.filter { member in
             allRelevantMemberIDs.contains(member.id) || 
             assignedMemberIDs.contains(member.id) ||
-            hasWorkedOnProject(member, project)
+            hasWorkedOnProject(member, project) ||
+            member.employmentStatus.canBeAssignedToProjects
         }
         
         // FALLBACK: If no organization team members found, create virtual members from work hours
@@ -66,9 +67,16 @@ struct LaborModuleView: View {
         
         return discoveredMembers.filter { member in
             // Only show active members or those who have actually worked
-            member.employmentStatus == .active ||
+            member.employmentStatus.canBeAssignedToProjects ||
             assignedMemberIDs.contains(member.id) ||
             hasWorkedOnProject(member, project)
+        }
+        .sorted { lhs, rhs in
+            if hasWorkedOnProject(lhs, project) != hasWorkedOnProject(rhs, project) {
+                return hasWorkedOnProject(lhs, project)
+            }
+
+            return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
         }
     }
     
@@ -96,17 +104,20 @@ struct LaborModuleView: View {
                     .environmentObject(authVM)
                     .environmentObject(projectVM)
                 
-                VStack(spacing: 16) {
-                    if let project = projectVM.selectedProject {
-                        laborSummarySection(project)
-                        
-                        // CRITICAL FIX: Use workingTeamMembers instead of projectVM.teamMembers
-                        teamMembersList
-                    } else {
-                        noProjectSelectedView
+                ScrollView {
+                    VStack(spacing: 16) {
+                        if let project = projectVM.selectedProject {
+                            laborSummarySection(project)
+
+                            // CRITICAL FIX: Use workingTeamMembers instead of projectVM.teamMembers
+                            teamMembersList
+                        } else {
+                            noProjectSelectedView
+                        }
                     }
+                    .frame(maxWidth: .infinity, alignment: .top)
+                    .padding()
                 }
-                .padding()
             }
             .navigationTitle("")
             .navigationBarHidden(true)
@@ -115,6 +126,9 @@ struct LaborModuleView: View {
                     Menu {
                         Button("Log Hours") {
                             showingLogHours = true
+                        }
+                        Button("Manage Workers") {
+                            showingWorkerManagement = true
                         }
                         Button("Live Tracking") {
                             // Show live tracking
@@ -129,8 +143,14 @@ struct LaborModuleView: View {
                     .environmentObject(projectVM)
             }
             .sheet(item: $selectedTeamMember) { member in
-                TeamMemberLaborDetailView(teamMember: member)
+                LaborPaymentView(teamMember: member)
                     .environmentObject(projectVM)
+            }
+            .sheet(isPresented: $showingWorkerManagement) {
+                NavigationStack {
+                    BusinessWorkersResourceView()
+                        .environmentObject(projectVM)
+                }
             }
         }
     }
@@ -146,6 +166,13 @@ struct LaborModuleView: View {
                     showingLogHours = true
                 }
                 .buttonStyle(.bordered)
+                .accessibilityIdentifier("labor-log-hours-button")
+
+                Button("Workers") {
+                    showingWorkerManagement = true
+                }
+                .buttonStyle(.bordered)
+                .accessibilityIdentifier("labor-manage-workers-button")
             }
             
             HStack {
@@ -180,11 +207,10 @@ struct LaborModuleView: View {
                 Text("Team Members")
                     .font(.headline)
                 
-                // DIAGNOSTIC: Show count from different sources
-                if workingTeamMembers.count != projectVM.teamMembers.count {
-                    Text("(\(workingTeamMembers.count) working, \(projectVM.teamMembers.count) org)")
+                if !workingTeamMembers.isEmpty {
+                    Text("\(workingTeamMembers.count) workers")
                         .font(.caption)
-                        .foregroundColor(.orange)
+                        .foregroundColor(.secondary)
                 }
                 
                 Spacer()
@@ -201,6 +227,7 @@ struct LaborModuleView: View {
                 }
             }
         }
+        .accessibilityIdentifier("labor-team-members-section")
     }
     
     @ViewBuilder
@@ -208,10 +235,10 @@ struct LaborModuleView: View {
         WorkflowEmptyStateCard(
             icon: "person.2.circle",
             title: "No Labor Logged Yet",
-            message: "Log the first hours for this project to start tracking labor cost and crew activity.",
-            primaryActionTitle: "Log Hours",
+            message: "Add a worker or choose an existing business resource before logging project labor.",
+            primaryActionTitle: "Manage Workers",
             primaryAction: {
-                showingLogHours = true
+                showingWorkerManagement = true
             }
         )
     }
@@ -245,6 +272,11 @@ struct TeamMemberLaborRowView: View {
     private var paidAmount: Double {
         projectVM.getPaidAmount(for: member.name)
     }
+
+    private var defaultRateLabel: String {
+        guard let rate = member.defaultRate else { return "No default rate" }
+        return "\(rate.rate.formatAsCurrency())/hr \(rate.taskType)"
+    }
     
     var body: some View {
         Button(action: onTap) {
@@ -265,11 +297,16 @@ struct TeamMemberLaborRowView: View {
                         .font(.subheadline)
                         .fontWeight(.medium)
                         .foregroundColor(.primary)
+                        .accessibilityIdentifier("labor-member-name-\(member.id.uuidString)")
                     
                     HStack {
                         Text(String(format: "%.1f hrs", memberHours))
                             .font(.caption)
                             .foregroundColor(.blue)
+
+                        Text("• \(defaultRateLabel)")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
                         
                         if unpaidAmount > 0 {
                             Text("• \(unpaidAmount.formatAsCurrency()) unpaid")
@@ -283,19 +320,21 @@ struct TeamMemberLaborRowView: View {
                 
                 VStack(alignment: .trailing, spacing: 2) {
                     if unpaidAmount > 0 {
-                        Button("Pay") {
-                            onTap()
-                        }
+                        Text("Pay")
                         .font(.caption)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
                         .background(Color.green)
                         .foregroundColor(.white)
                         .cornerRadius(6)
-                    } else {
+                    } else if paidAmount > 0 {
                         Text("Paid")
                             .font(.caption)
                             .foregroundColor(.green)
+                    } else {
+                        Text("Ready")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
                     }
                     
                     Image(systemName: "chevron.right")
@@ -308,6 +347,7 @@ struct TeamMemberLaborRowView: View {
             .cornerRadius(10)
         }
         .buttonStyle(PlainButtonStyle())
+        .accessibilityIdentifier("labor-member-row-\(member.id.uuidString)")
     }
 }
 

@@ -930,7 +930,7 @@ struct BusinessResourcesView: View {
     }
 }
 
-private struct BusinessWorkersResourceView: View {
+struct BusinessWorkersResourceView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var projectVM: ProjectViewModel
     @State private var editorState: BusinessWorkerEditorState?

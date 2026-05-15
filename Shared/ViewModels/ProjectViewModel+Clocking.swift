@@ -166,12 +166,8 @@ final class LaborStore {
 
             memberHours[memberKey, default: []].append(workHour)
 
-            let hourValue = workHour.hours * workHour.rate
-            if workHour.isPaid {
-                memberTotals[memberKey, default: LaborMemberTotals(unpaid: 0.0, paid: 0.0)].paid += hourValue
-            } else {
-                memberTotals[memberKey, default: LaborMemberTotals(unpaid: 0.0, paid: 0.0)].unpaid += hourValue
-            }
+            memberTotals[memberKey, default: LaborMemberTotals(unpaid: 0.0, paid: 0.0)].paid += workHour.effectivePaidAmount
+            memberTotals[memberKey, default: LaborMemberTotals(unpaid: 0.0, paid: 0.0)].unpaid += workHour.effectiveUnpaidAmount
         }
 
         return LaborComputation(groupedHoursByMember: memberHours, totalsByMember: memberTotals)
@@ -187,7 +183,10 @@ final class LaborStore {
     }
 
     func projectUnpaidHours(groupedHoursByMember: [String: [WorkHour]]) -> Double {
-        groupedHoursByMember.values.flatMap { $0 }.filter { !$0.isPaid }.reduce(0) { $0 + $1.hours }
+        groupedHoursByMember.values
+            .flatMap { $0 }
+            .filter { $0.effectiveUnpaidAmount > 0 }
+            .reduce(0) { $0 + $1.hours }
     }
 
     func projectUnpaidAmount(totalsByMember: [String: (unpaid: Double, paid: Double)]) -> Double {
@@ -223,7 +222,7 @@ final class LaborStore {
             }
         }
 
-        let directTotal = project.loggedHours.filter { !$0.isPaid }.reduce(0) { $0 + ($1.hours * $1.rate) }
+        let directTotal = project.loggedHours.reduce(0) { $0 + $1.effectiveUnpaidAmount }
         if abs(calculatedUnpaidAmount - directTotal) > 0.01 {
             issues.append("Calculation mismatch: Cached total $\(calculatedUnpaidAmount) vs Direct total $\(directTotal)")
         }

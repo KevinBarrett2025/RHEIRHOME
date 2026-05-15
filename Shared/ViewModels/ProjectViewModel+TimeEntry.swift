@@ -323,20 +323,83 @@ extension ProjectViewModel {
     /// Mark an entry as paid.
     func markHoursAsPaid(_ entry: WorkHour, method: String, note: String) {
         var updated = entry
-        updated.isPaid = true
-        updated.paymentMethod = method
-        updated.paymentNote = note
-        updated.paymentTimestamp = Date()
+        updated.recordPayment(
+            amount: updated.effectiveUnpaidAmount,
+            method: method,
+            note: note
+        )
         updateHours(updated)
     }
 
     /// Unmark an entry as paid.
     func unmarkHoursAsPaid(_ entry: WorkHour) {
         var updated = entry
-        updated.isPaid = false
-        updated.paymentMethod = nil
-        updated.paymentNote = nil
-        updated.paymentTimestamp = nil
+        updated.reversePayments(note: "Payment reversed")
+        updateHours(updated)
+    }
+
+    func recordLaborPayment(
+        for entries: [WorkHour],
+        amount: Double,
+        method: String,
+        reference: String,
+        note: String
+    ) {
+        guard amount > 0,
+              let sel = selectedProject,
+              let idx = organizationProjects.firstIndex(where: { $0.id == sel.id })
+        else {
+            Logger.labor.error("Failed to record labor payment because the request was invalid.")
+            return
+        }
+
+        var remainingAmount = amount
+        var updatedProject = organizationProjects[idx]
+        var paidEntryCount = 0
+        let entryIDs = entries
+            .sorted { $0.date < $1.date }
+            .map(\.id)
+
+        for workHourID in entryIDs {
+            guard remainingAmount > 0,
+                  let hourIndex = updatedProject.loggedHours.firstIndex(where: { $0.id == workHourID })
+            else { continue }
+
+            var workHour = updatedProject.loggedHours[hourIndex]
+            let appliedAmount = min(workHour.effectiveUnpaidAmount, remainingAmount)
+            guard appliedAmount > 0 else { continue }
+
+            workHour.recordPayment(
+                amount: appliedAmount,
+                method: method,
+                reference: reference,
+                note: note
+            )
+            updatedProject.loggedHours[hourIndex] = workHour
+            remainingAmount -= appliedAmount
+            paidEntryCount += 1
+        }
+
+        guard paidEntryCount > 0 else {
+            Logger.labor.warning("Ignored labor payment because no unpaid amount could be applied.")
+            return
+        }
+
+        applyProjectMutationLocally(
+            updatedProject,
+            reason: "record labor payment",
+            selectProject: true,
+            scheduleCloudSync: true
+        )
+
+        Logger.labor.notice(
+            "Recorded labor payment [entries=\(paidEntryCount, privacy: .public) requestedAmount=\(amount, privacy: .public) unapplied=\(remainingAmount, privacy: .public) method=\(method, privacy: .public)]"
+        )
+    }
+
+    func reverseLaborPayments(for entry: WorkHour, note: String = "Payment reversed for correction or reissue") {
+        var updated = entry
+        updated.reversePayments(note: note)
         updateHours(updated)
     }
 

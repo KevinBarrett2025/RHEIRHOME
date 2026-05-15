@@ -38,6 +38,12 @@ Exit criteria: a single user can move through the core contractor workflows pred
   - vendors
   - payment methods/cards
   - current baseline: Projects and active-project analytics expose a Business Resources hub with real worker/rate, vendor, and payment-method management surfaces; focused UI parity and Gate A prove the hub and Workers & Rates surface open without Company/Organization admin copy
+- Harden Labor into a shippable contractor workflow:
+  - reusable workers/rates available from the Labor surface
+  - top-aligned Labor UI with consistent fast-ship shell treatment
+  - log hours against worker/rate metadata
+  - payment ledger supports partial/split payments, method/reference metadata, paid/unpaid balances, and unpay/reissue reversal
+  - current baseline: `WorkHour` persists `LaborPaymentEntry` records, `ProjectViewModel+TimeEntry` records/reverses payments through the shared mutation seam, `LaborPaymentView` is compiled into the app target, and focused unit/UI parity plus Gate A are green
 - Make contractor job-costing accurate:
   - itemized receipt categories drive category totals and budget actuals
   - labor logs drive project cost and payroll summaries
@@ -99,7 +105,7 @@ Exit criteria: release candidate is validated on real hardware and ready for sub
 - Freeze scope and submit.
 
 ## Immediate Next Steps
-1. Commit the Business Resources hub slice with Gate A plus focused parity evidence.
-2. Rework Labor next, using the restored workers/rates resource seam for hour logging, payment status, split/partial payments, edit payment, and unpay/reissue.
+1. Commit the Labor payment hardening slice with Gate A plus focused parity evidence.
+2. Run the next device Labor/Resources acceptance pass: add/edit worker, log hours, record partial/split payments, capture check/reference details, unpay/reissue, relaunch, and verify totals.
 3. Rework Tasks to shippable contractor workflows with focused unit/UI parity.
 4. Finish Reports and device acceptance after the underlying data flows refresh immediately and persist across relaunch.

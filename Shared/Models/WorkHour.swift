@@ -1,6 +1,38 @@
 import Foundation
 import CoreLocation
 
+public struct LaborPaymentEntry: Identifiable, Codable, Hashable, Sendable {
+    public let id: UUID
+    public var amount: Double
+    public var method: String
+    public var reference: String
+    public var note: String
+    public var paidAt: Date
+    public var isReversal: Bool
+
+    public init(
+        id: UUID = UUID(),
+        amount: Double,
+        method: String,
+        reference: String = "",
+        note: String = "",
+        paidAt: Date = Date(),
+        isReversal: Bool = false
+    ) {
+        self.id = id
+        self.amount = max(0, amount)
+        self.method = method
+        self.reference = reference
+        self.note = note
+        self.paidAt = paidAt
+        self.isReversal = isReversal
+    }
+
+    public var signedAmount: Double {
+        isReversal ? -amount : amount
+    }
+}
+
 /// A single block of time logged by an employee.
 public struct WorkHour: Identifiable, Codable, Hashable, Sendable {
     public let id: UUID
@@ -23,6 +55,7 @@ public struct WorkHour: Identifiable, Codable, Hashable, Sendable {
     public var paymentMethod: String?
     public var paymentNote: String?
     public var paymentTimestamp: Date?
+    public var paymentEntries: [LaborPaymentEntry]
     
     // Location tracking for verification (stored as simple coordinates)
     private var clockInLatitude: Double?
@@ -124,6 +157,31 @@ public struct WorkHour: Identifiable, Codable, Hashable, Sendable {
         return regularPay + overtimePay
     }
 
+    public var straightTimePay: Double {
+        hours * rate
+    }
+
+    public var effectivePaidAmount: Double {
+        if paymentEntries.isEmpty {
+            return isPaid ? straightTimePay : 0
+        }
+
+        let paid = paymentEntries.reduce(0) { $0 + $1.signedAmount }
+        return min(max(0, paid), straightTimePay)
+    }
+
+    public var effectiveUnpaidAmount: Double {
+        max(0, straightTimePay - effectivePaidAmount)
+    }
+
+    public var hasAnyPayment: Bool {
+        effectivePaidAmount > 0
+    }
+
+    public var isFullyPaid: Bool {
+        effectiveUnpaidAmount <= 0.005
+    }
+
     // Manual decode to handle backward compatibility and optional fields
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -141,6 +199,7 @@ public struct WorkHour: Identifiable, Codable, Hashable, Sendable {
         paymentMethod    = try c.decodeIfPresent(String.self, forKey: .paymentMethod)
         paymentNote      = try c.decodeIfPresent(String.self, forKey: .paymentNote)
         paymentTimestamp = try c.decodeIfPresent(Date.self,   forKey: .paymentTimestamp)
+        paymentEntries   = try c.decodeIfPresent([LaborPaymentEntry].self, forKey: .paymentEntries) ?? []
         
         // Location data as simple coordinates
         clockInLatitude = try c.decodeIfPresent(Double.self, forKey: .clockInLatitude)
@@ -173,6 +232,7 @@ public struct WorkHour: Identifiable, Codable, Hashable, Sendable {
         paymentMethod: String?,
         paymentNote: String?,
         paymentTimestamp: Date?,
+        paymentEntries: [LaborPaymentEntry] = [],
         clockInLocation: CLLocation? = nil,
         clockOutLocation: CLLocation? = nil
     ) {
@@ -190,6 +250,7 @@ public struct WorkHour: Identifiable, Codable, Hashable, Sendable {
         self.paymentMethod = paymentMethod
         self.paymentNote = paymentNote
         self.paymentTimestamp = paymentTimestamp
+        self.paymentEntries = paymentEntries
         self.isApproved = false
         self.approvedBy = nil
         self.approvedAt = nil
@@ -239,6 +300,7 @@ public struct WorkHour: Identifiable, Codable, Hashable, Sendable {
         self.paymentMethod = nil
         self.paymentNote = nil
         self.paymentTimestamp = nil
+        self.paymentEntries = []
         self.isApproved = false
         self.approvedBy = nil
         self.approvedAt = nil
@@ -344,12 +406,54 @@ public struct WorkHour: Identifiable, Codable, Hashable, Sendable {
         approvedAt = Date()
         validationNotes = reason
     }
+
+    public mutating func recordPayment(
+        amount: Double,
+        method: String,
+        reference: String = "",
+        note: String = "",
+        paidAt: Date = Date()
+    ) {
+        let amountToApply = min(max(0, amount), effectiveUnpaidAmount)
+        guard amountToApply > 0 else { return }
+
+        let entry = LaborPaymentEntry(
+            amount: amountToApply,
+            method: method,
+            reference: reference,
+            note: note,
+            paidAt: paidAt
+        )
+        paymentEntries.append(entry)
+        paymentMethod = method
+        paymentNote = note
+        paymentTimestamp = paidAt
+        isPaid = isFullyPaid
+    }
+
+    public mutating func reversePayments(note: String = "", reversedAt: Date = Date()) {
+        guard effectivePaidAmount > 0 else { return }
+
+        let reversal = LaborPaymentEntry(
+            amount: effectivePaidAmount,
+            method: paymentMethod ?? "Reversal",
+            reference: "",
+            note: note,
+            paidAt: reversedAt,
+            isReversal: true
+        )
+        paymentEntries.append(reversal)
+        isPaid = false
+        paymentMethod = nil
+        paymentNote = note
+        paymentTimestamp = reversedAt
+    }
     
     // MARK: - Coding Keys
     private enum CodingKeys: String, CodingKey {
         case id, date, startTime, endTime, lunchStart, lunchEnd
         case employee, employeeID, rate, category
-        case isPaid, paymentMethod, paymentNote, paymentTimestamp
+        case isPaid, paymentMethod, paymentNote, paymentTimestamp, paymentEntries
         case clockInLatitude, clockInLongitude, clockInTimestamp
         case clockOutLatitude, clockOutLongitude, clockOutTimestamp
         case isApproved, approvedBy, approvedAt, validationNotes

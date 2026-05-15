@@ -21,6 +21,7 @@ final class RHEIRUITests: XCTestCase {
         case selectingOrganization = "selecting_organization"
         case projectSelection = "project_selection"
         case selectedProject = "selected_project"
+        case laborManagement = "labor_management"
         case estimatorMapping = "estimator_mapping"
         case scannedReceiptReview = "scanned_receipt_review"
         case mixedCategoryReceipt = "mixed_category_receipt"
@@ -339,6 +340,63 @@ final class RHEIRUITests: XCTestCase {
         XCTAssertFalse(
             selectedProjectApp.staticTexts["Choose a project before viewing or logging labor hours."].exists,
             "Expected the labor project-selection gate to disappear when project context is already seeded."
+        )
+    }
+
+    @MainActor
+    func testLaborManagementOpensWorkerPaymentLedger() throws {
+        let app = makeApp(mode: .laborManagement)
+        app.launch()
+
+        app.tabBars.buttons["Labor"].tap()
+
+        XCTAssertTrue(
+            app.staticTexts["Labor Summary"].waitForExistence(timeout: 5),
+            "Expected labor-management mode to open the selected-project labor surface."
+        )
+        XCTAssertTrue(app.buttons["labor-manage-workers-button"].exists)
+        app.swipeUp()
+
+        let leadWorkerRow = app.buttons["labor-member-row-AA8E5BDE-0B7E-4632-B2D4-DF74D104F0E1"]
+        let leadWorkerName = app.staticTexts["labor-member-name-AA8E5BDE-0B7E-4632-B2D4-DF74D104F0E1"]
+        XCTAssertTrue(
+            leadWorkerName.waitForExistence(timeout: 5) || leadWorkerRow.waitForExistence(timeout: 5),
+            "Expected reusable worker resources to appear inside the selected project labor list."
+        )
+        XCTAssertTrue(app.staticTexts["Sam Carter"].exists)
+        XCTAssertTrue(app.staticTexts["4.0 hrs"].exists)
+        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "$52.00/hr Framing")).firstMatch.exists)
+        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "$128.00 unpaid")).firstMatch.exists)
+
+        if leadWorkerRow.exists {
+            leadWorkerRow.tap()
+        } else {
+            tapElement(leadWorkerName)
+        }
+
+        XCTAssertTrue(
+            app.navigationBars["Labor Payment"].waitForExistence(timeout: 5),
+            "Expected tapping a worker to open the real labor payment ledger."
+        )
+        XCTAssertTrue(app.buttons["labor-payment-tab-unpaid"].exists)
+        XCTAssertTrue(app.buttons["labor-payment-tab-paid"].exists)
+        XCTAssertTrue(app.buttons["labor-unpaid-hour-DA7A5D5E-9150-43EE-B0E4-B9CE93457D15"].exists)
+
+        app.buttons["labor-payment-tab-paid"].tap()
+        app.swipeUp()
+
+        let reversiblePaymentButton = app.buttons["labor-payment-unpay-DA7A5D5E-9150-43EE-B0E4-B9CE93457D15"]
+        let reversiblePaymentLabel = app.staticTexts["labor-payment-unpay-label-DA7A5D5E-9150-43EE-B0E4-B9CE93457D15"]
+        let genericUnpayButton = app.buttons["Unpay"]
+        XCTAssertTrue(
+            genericUnpayButton.waitForExistence(timeout: 5) ||
+            reversiblePaymentButton.waitForExistence(timeout: 5) ||
+            reversiblePaymentLabel.waitForExistence(timeout: 5),
+            "Expected partially paid labor to expose a reversible payment action."
+        )
+        XCTAssertTrue(
+            app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Reference: PARTIAL-01")).firstMatch.exists,
+            "Expected labor payments to preserve reference or check details for correction/reissue."
         )
     }
 

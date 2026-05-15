@@ -1686,6 +1686,176 @@ struct LaborStoreTests {
     }
 }
 
+@MainActor
+struct LaborPaymentLedgerTests {
+
+    @Test
+    func recordsPartialPaymentsAndReversalsOnWorkHour() throws {
+        let start = Date(timeIntervalSince1970: 1_736_208_000)
+        var workHour = WorkHour(
+            id: UUID(uuidString: "E88D1D1D-D3A3-49D2-A504-4FF915CD97F8")!,
+            date: start,
+            startTime: start,
+            endTime: start.addingTimeInterval(14_400),
+            lunchStart: nil,
+            lunchEnd: nil,
+            employee: "Sam Carter",
+            employeeID: nil,
+            rate: 50,
+            category: "Framing",
+            isPaid: false,
+            paymentMethod: nil,
+            paymentNote: nil,
+            paymentTimestamp: nil
+        )
+
+        workHour.recordPayment(
+            amount: 50,
+            method: "Cash",
+            reference: "CASH-01",
+            note: "Advance",
+            paidAt: start.addingTimeInterval(60)
+        )
+        workHour.recordPayment(
+            amount: 75,
+            method: "Check",
+            reference: "1042",
+            note: "Progress payment",
+            paidAt: start.addingTimeInterval(120)
+        )
+
+        #expect(workHour.straightTimePay == 200)
+        #expect(workHour.effectivePaidAmount == 125)
+        #expect(workHour.effectiveUnpaidAmount == 75)
+        #expect(workHour.isPaid == false)
+        #expect(workHour.hasAnyPayment == true)
+        #expect(workHour.paymentEntries.count == 2)
+
+        let encoded = try JSONEncoder().encode(workHour)
+        let decoded = try JSONDecoder().decode(WorkHour.self, from: encoded)
+        #expect(decoded.paymentEntries.map(\.reference) == ["CASH-01", "1042"])
+        #expect(decoded.effectivePaidAmount == 125)
+
+        workHour.recordPayment(amount: 200, method: "Check", reference: "1043", note: "Final payment")
+        #expect(workHour.effectivePaidAmount == 200)
+        #expect(workHour.effectiveUnpaidAmount == 0)
+        #expect(workHour.isFullyPaid == true)
+        #expect(workHour.isPaid == true)
+
+        workHour.reversePayments(note: "Lost check; reissue needed", reversedAt: start.addingTimeInterval(180))
+        #expect(workHour.effectivePaidAmount == 0)
+        #expect(workHour.effectiveUnpaidAmount == 200)
+        #expect(workHour.isPaid == false)
+        #expect(workHour.paymentEntries.last?.isReversal == true)
+    }
+
+    @Test
+    func projectViewModelDistributesAndReversesLaborPaymentsThroughMutationSeam() {
+        let suiteName = "LaborPaymentLedgerTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let orgID = UUID().uuidString
+        let projectStore = ProjectStore(userDefaults: defaults)
+        let viewModel = ProjectViewModel(
+            offlineDataManager: OfflineDataManager(),
+            projectStore: projectStore,
+            projectRepository: RecordingProjectRepository()
+        )
+        viewModel.setCurrentOrganization(
+            Organization(id: orgID, name: "Personal Workspace"),
+            role: .admin
+        )
+
+        let worker = TeamMember(
+            name: "Sam Carter",
+            email: "sam@example.com",
+            jobTitle: "Lead Carpenter",
+            organizationID: orgID
+        )
+        viewModel.teamMembers = [worker]
+
+        var project = Project(
+            name: "Labor Ledger Project",
+            client: "Client A",
+            totalBudget: 100000,
+            startDate: .now,
+            endDate: .now.addingTimeInterval(86400),
+            organizationID: orgID
+        )
+        let start = Date(timeIntervalSince1970: 1_736_208_000)
+        let framingHour = WorkHour(
+            id: UUID(uuidString: "9C5D6B31-C7D5-4215-9B21-C84F6CF519D7")!,
+            date: start,
+            startTime: start,
+            endTime: start.addingTimeInterval(7_200),
+            lunchStart: nil,
+            lunchEnd: nil,
+            employee: worker.name,
+            employeeID: worker.id,
+            rate: 50,
+            category: "Framing",
+            isPaid: false,
+            paymentMethod: nil,
+            paymentNote: nil,
+            paymentTimestamp: nil
+        )
+        let cleanupHour = WorkHour(
+            id: UUID(uuidString: "2A557953-0F3C-43FC-902D-8C41597D6D41")!,
+            date: start.addingTimeInterval(86_400),
+            startTime: start.addingTimeInterval(86_400),
+            endTime: start.addingTimeInterval(91_800),
+            lunchStart: nil,
+            lunchEnd: nil,
+            employee: worker.name,
+            employeeID: worker.id,
+            rate: 40,
+            category: "Cleanup",
+            isPaid: false,
+            paymentMethod: nil,
+            paymentNote: nil,
+            paymentTimestamp: nil
+        )
+        project.loggedHours = [cleanupHour, framingHour]
+
+        viewModel.projects = [project]
+        viewModel.organizationProjects = [project]
+        viewModel.accessibleProjects = [project]
+        viewModel.selectProject(project)
+
+        viewModel.recordLaborPayment(
+            for: project.loggedHours,
+            amount: 125,
+            method: "Check",
+            reference: "2001",
+            note: "Weekly payroll"
+        )
+
+        let paidFramingHour = viewModel.selectedProject?.loggedHours.first { $0.id == framingHour.id }
+        let partiallyPaidCleanupHour = viewModel.selectedProject?.loggedHours.first { $0.id == cleanupHour.id }
+
+        #expect(paidFramingHour?.effectivePaidAmount == 100)
+        #expect(paidFramingHour?.isPaid == true)
+        #expect(partiallyPaidCleanupHour?.effectivePaidAmount == 25)
+        #expect(partiallyPaidCleanupHour?.effectiveUnpaidAmount == 35)
+        #expect(viewModel.projectTotalLaborCost == 160)
+        #expect(viewModel.projectUnpaidAmount == 35)
+        #expect(projectStore.loadProjects(for: orgID).first?.loggedHours.count == 2)
+
+        if let partiallyPaidCleanupHour {
+            viewModel.reverseLaborPayments(for: partiallyPaidCleanupHour)
+        }
+
+        let reversedCleanupHour = viewModel.selectedProject?.loggedHours.first { $0.id == cleanupHour.id }
+        #expect(reversedCleanupHour?.effectivePaidAmount == 0)
+        #expect(reversedCleanupHour?.effectiveUnpaidAmount == 60)
+        #expect(viewModel.projectUnpaidAmount == 60)
+    }
+}
+
 struct CompanyStoreTests {
 
     @Test

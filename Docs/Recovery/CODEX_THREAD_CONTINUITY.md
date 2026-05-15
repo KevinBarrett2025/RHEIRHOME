@@ -3,14 +3,15 @@
 ## Repo Truth
 - Repo Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Active Branch: `gm/rheir-hardening-phase1`
-- Thread Start SHA: `4d8a9dcef233a6795ea23b75f82af7de038958c3`
-- Last Commit At Thread Start: `4d8a9dc Phase 2: reopen completed projects`
+- Thread Start SHA: `2d40ca55d66b89578482f2bc558cd712aa84b1eb`
+- Last Commit At Thread Start: `2d40ca5 Phase 2: restore business resources hub`
 
 ## Current Objective
 - Keep RHEIR locked into the fast-ship v1 release profile so the visible app ships as a single-user contractor tool with the core shell only: `Projects`, `Receipts`, `Labor`, `Tasks`, plus budget `Breakdown` / `Estimator`.
 - Preserve and implement `RHEIR_FAST_SHIP_HYBRID_WORKING_APP_PLAN.md`, shifting the active release objective from only hiding collaboration to shipping a contractor-ready working app across Projects, Receipts, Labor, Tasks, Budget, Resources, and Reports.
 - Business Resources is now the simulator-proven release-hardening baseline: the v1-safe contractor setup surface restores workers/team members, job titles/rates, vendors, and payment methods without exposing legacy Company/Organization admin onboarding.
-- Labor is the next active blocker: rework worker selection, hour logging, payment state, partial/split payments, edit payment, and unpay/reissue without bypassing the shared project mutation seam.
+- Labor payment hardening is now simulator-proven for the first shippable seam: worker/rate access from Business Resources, top-aligned Labor UI, worker payment ledger entry, partial/split payment amounts, payment method/reference metadata, reversible/unpay handling, and shared project mutation propagation.
+- Tasks are the next active blocker after this Labor checkpoint: rework multi-task CRUD, assignment, due/overdue state, completion proof/photos, and immediate project/report refresh without bypassing the shared project mutation seam.
 - Treat contractor job-costing validation as a release requirement: itemized materials, labor/payroll, tasks/progress, payment status, profitability, and closeout reports must answer real contractor operating questions.
 - Preserve the simplified visible session flow `launch -> sign in -> ready`, with invite, org-selection, company/admin, and legacy AI-key surfaces still hidden unless the app is explicitly forced back into the legacy/full profile.
 - Keep the selected-project receipt seam green end-to-end: saved scanned receipt itemized lines now persist into receipt detail and into the ellipsis-menu edit sheet with a dedicated line-item editor, mixed-category receipt category summaries/drilldown cards now honor per-item categories instead of treating the whole receipt total as one category, and the Receipts list quick-view now opens the real receipt image viewer.
@@ -40,6 +41,14 @@
 - Latest Business Resources focused parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_business_resources_parity_dd -resultBundlePath /tmp/rheir_business_resources_parity.xcresult test -only-testing:RHEIRUITests/RHEIRUITests/testBusinessResourcesEntryOpensReusableResourceHub` -> PASS (`/tmp/rheir_business_resources_parity.xcresult`, `1 UI test`).
 - Latest Business Resources Gate A: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_business_resources_dd -resultBundlePath /tmp/rheir_gateA_business_resources.xcresult clean build` -> PASS (`/tmp/rheir_gateA_business_resources.xcresult`).
 - Latest Business Resources visual evidence: Projects home entry (`/var/folders/jw/s9ytdthj0nj1jwccblxc1jmh0000gn/T/screenshot_optimized_4b1b8a6d-d7a7-410f-9dbf-88bc359593bf.jpg`) and Business Resources hub (`/var/folders/jw/s9ytdthj0nj1jwccblxc1jmh0000gn/T/screenshot_optimized_f8dc70de-9299-42ec-819d-9529c9c9771c.jpg`).
+- `Shared/Models/WorkHour.swift` now persists `LaborPaymentEntry` records and derives straight-time, paid, and unpaid balances from the payment ledger instead of a single boolean paid flag.
+- `Shared/ViewModels/ProjectViewModel+TimeEntry.swift` now records and reverses labor payments through the shared project mutation seam, distributing partial payments across selected hours and preserving method/reference/note metadata.
+- `Shared/Features/TimeEntry/LaborModuleView.swift` now top-aligns the Labor surface, opens worker management from the Labor header, shows reusable worker/rate metadata, and routes worker rows into the real payment ledger.
+- `Shared/Features/Labor/LaborPaymentView.swift` is now part of the app target and supports unpaid/paid/summary tabs, partial payment amounts, payment method and reference capture, paid-balance display, and unpay/reissue reversal actions.
+- `App/RheirApp.swift`, `RHEIRTests/RHEIRTests.swift`, and `RHEIRUITests/RHEIRUITests.swift` now seed and prove a deterministic labor-management path with partial payment state, paid entries, reference metadata, and reversible payment behavior.
+- Latest Labor payment focused parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,name=STS iPhone 17 Phase017,OS=26.2' -derivedDataPath /tmp/rheir_labor_payment_parity_dd -resultBundlePath /tmp/rheir_labor_payment_parity_final_rerun.xcresult -only-testing:RHEIRTests/LaborPaymentLedgerTests -only-testing:RHEIRUITests/RHEIRUITests/testLaborManagementOpensWorkerPaymentLedger test` -> PASS (`/tmp/rheir_labor_payment_parity_final_rerun.xcresult`, `2 unit tests plus 1 UI test`).
+- Latest Labor payment Gate A: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_labor_payment_dd -resultBundlePath /tmp/rheir_gateA_labor_payment_rerun.xcresult clean build` -> PASS (`/tmp/rheir_gateA_labor_payment_rerun.xcresult`).
+- `RHEIR.xcodeproj/project.pbxproj` drift is intentional in this Labor slice: the existing `Shared/Features/Labor/LaborPaymentView.swift` file is now included in the compiled app target so worker rows can open the real payment ledger.
 - `Shared/Models/Receipt.swift` now persists a trimmed optional top-level `subcategory`, closing the gap where scan-review subcategory input was accepted by the initializer but silently discarded before persistence.
 - `Shared/Features/Receipts/ScannedReceiptEntryView.swift` now persists `analysisResult.items` into the saved `Receipt.items` payload, stores the top-level subcategory, and drops the unusable segmented category picker treatment so the scan-review taxonomy stays legible with the full case set.
 - `Shared/Features/Receipts/ReceiptDetailView.swift` now keeps the ellipsis menu as the single receipt-detail edit/delete action surface, exposes item/subcategory accessibility hooks, and shows saved scanned items once they persist into the live receipt model.
@@ -282,7 +291,7 @@
 - This repo follows a repo-local STS equivalent defined in the root governance docs because the original STS spine docs were not present here.
 
 ## Next Required Action
-1. Commit only the Business Resources hub slice after Gate A and focused parity evidence, preserving the user-owned local files (`Shared/Views/Auth/LoginView.swift`, `rheir_knowledge_database.json`, `RHEIRmemories.csv`, `RheirLogo 1024x1024.png`) outside the staged set.
-2. Rework Labor as the next release blocker using the restored worker/rate resource seam: worker selection, hour logging, payment state, partial/split payments, edit payment, and unpay/reissue.
-3. Rework Tasks after Labor with focused parity for multi-task CRUD, assignment, due/overdue state, completion proof, and immediate refresh.
+1. Run the next real-device Labor acceptance pass: add/edit a worker, log hours, record a partial payment with method/reference, add a second payment, reverse/unpay, relaunch, and confirm Labor totals remain correct.
+2. Rework Tasks as the next release blocker with focused parity for multi-task CRUD, assignment, due/overdue state, completion proof/photos, and immediate refresh.
+3. Finish Reports after Labor/Tasks data flows are stable, starting with labor payroll and project closeout summaries.
 4. Continue device acceptance after each slice, with same-user iCloud restore treated as optional until release-candidate validation proves it stable.

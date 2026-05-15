@@ -12,6 +12,7 @@ private enum UITestLaunchMode: String {
     case selectingOrganization = "selecting_organization"
     case projectSelection = "project_selection"
     case selectedProject = "selected_project"
+    case laborManagement = "labor_management"
     case estimatorMapping = "estimator_mapping"
     case scannedReceiptReview = "scanned_receipt_review"
     case mixedCategoryReceipt = "mixed_category_receipt"
@@ -102,7 +103,7 @@ private struct AppLaunchConfiguration {
             )
             authViewModel.currentOrg = nil
 
-        case .projectSelection, .selectedProject, .estimatorMapping, .scannedReceiptReview, .mixedCategoryReceipt:
+        case .projectSelection, .selectedProject, .laborManagement, .estimatorMapping, .scannedReceiptReview, .mixedCategoryReceipt:
             let user = User(id: "ui-test-project-user", email: "project-ui-test@rheirhome.com")
             let organization = Organization(
                 id: "ui-test-project-org",
@@ -118,6 +119,8 @@ private struct AppLaunchConfiguration {
             )
             let kitchenProject: Project
             switch uiTestMode {
+            case .laborManagement:
+                kitchenProject = makeUITestLaborManagementProject(from: kitchenProjectSeed).project
             case .estimatorMapping:
                 kitchenProject = makeUITestEstimatorMappingProject(from: kitchenProjectSeed)
             case .mixedCategoryReceipt:
@@ -164,7 +167,17 @@ private struct AppLaunchConfiguration {
             projectViewModel.projects = [kitchenProject, bathProject, completedProject]
             projectViewModel.organizationProjects = [kitchenProject, bathProject, completedProject]
             projectViewModel.accessibleProjects = [kitchenProject, bathProject, completedProject]
-            if uiTestMode == .selectedProject || uiTestMode == .estimatorMapping || uiTestMode == .scannedReceiptReview || uiTestMode == .mixedCategoryReceipt {
+            if uiTestMode == .laborManagement {
+                let seed = makeUITestLaborManagementProject(from: kitchenProjectSeed)
+                projectViewModel.projects = [seed.project, bathProject, completedProject]
+                projectViewModel.organizationProjects = [seed.project, bathProject, completedProject]
+                projectViewModel.accessibleProjects = [seed.project, bathProject, completedProject]
+                seed.teamMembers.forEach { member in
+                    projectViewModel.addTeamMemberToOrganization(member)
+                }
+                projectViewModel.selectProject(seed.project)
+                projectViewModel.recomputeLaborData()
+            } else if uiTestMode == .selectedProject || uiTestMode == .estimatorMapping || uiTestMode == .scannedReceiptReview || uiTestMode == .mixedCategoryReceipt {
                 projectViewModel.selectProject(kitchenProject)
             } else {
                 projectViewModel.deselectProject()
@@ -305,6 +318,81 @@ private struct AppLaunchConfiguration {
         seededProject.workHours = [workHour]
         seededProject.tasks = [task]
         return seededProject
+    }
+
+    private func makeUITestLaborManagementProject(from project: Project) -> (project: Project, teamMembers: [TeamMember]) {
+        let leadID = UUID(uuidString: "AA8E5BDE-0B7E-4632-B2D4-DF74D104F0E1")!
+        let helperID = UUID(uuidString: "BC02E8DE-0E43-4B8A-BA12-4B8E99730BE7")!
+        let lead = TeamMember(
+            id: leadID,
+            name: "Sam Carter",
+            email: "sam@example.com",
+            phone: "555-0100",
+            jobTitle: "Lead Carpenter",
+            rates: [EmployeeRate(taskType: "Framing", rate: 52, isDefault: true)],
+            organizationID: project.organizationID
+        )
+        let helper = TeamMember(
+            id: helperID,
+            name: "Mia Lopez",
+            email: "mia@example.com",
+            phone: "555-0101",
+            jobTitle: "Helper",
+            rates: [EmployeeRate(taskType: "Labor", rate: 34, isDefault: true)],
+            organizationID: project.organizationID
+        )
+
+        var unpaidHour = WorkHour(
+            id: UUID(uuidString: "DA7A5D5E-9150-43EE-B0E4-B9CE93457D15")!,
+            date: Date(timeIntervalSince1970: 1_736_208_000),
+            startTime: Date(timeIntervalSince1970: 1_736_208_000),
+            endTime: Date(timeIntervalSince1970: 1_736_222_400),
+            lunchStart: nil,
+            lunchEnd: nil,
+            employee: lead.name,
+            employeeID: lead.id,
+            rate: 52,
+            category: "Framing",
+            isPaid: false,
+            paymentMethod: nil,
+            paymentNote: nil,
+            paymentTimestamp: nil
+        )
+        unpaidHour.recordPayment(
+            amount: 80,
+            method: "Cash",
+            reference: "PARTIAL-01",
+            note: "Partial advance"
+        )
+
+        var paidHour = WorkHour(
+            id: UUID(uuidString: "B0F08852-83BF-460C-8D9B-7A5E7C0F5B20")!,
+            date: Date(timeIntervalSince1970: 1_736_294_400),
+            startTime: Date(timeIntervalSince1970: 1_736_294_400),
+            endTime: Date(timeIntervalSince1970: 1_736_305_200),
+            lunchStart: nil,
+            lunchEnd: nil,
+            employee: helper.name,
+            employeeID: helper.id,
+            rate: 34,
+            category: "Cleanup",
+            isPaid: false,
+            paymentMethod: nil,
+            paymentNote: nil,
+            paymentTimestamp: nil
+        )
+        paidHour.recordPayment(
+            amount: paidHour.effectiveUnpaidAmount,
+            method: "Check",
+            reference: "1021",
+            note: "Weekly payroll"
+        )
+
+        var seededProject = project
+        seededProject.loggedHours = [unpaidHour, paidHour]
+        seededProject.assignTeamMember(lead.id.uuidString)
+        seededProject.assignTeamMember(helper.id.uuidString)
+        return (seededProject, [lead, helper])
     }
 
     private func makeUITestMixedCategoryProject(from project: Project) -> Project {
@@ -453,6 +541,8 @@ struct RheirApp: App {
         case .projectSelection:
             authService = SignedOutUITestAuthService()
         case .selectedProject:
+            authService = SignedOutUITestAuthService()
+        case .laborManagement:
             authService = SignedOutUITestAuthService()
         case .estimatorMapping:
             authService = SignedOutUITestAuthService()

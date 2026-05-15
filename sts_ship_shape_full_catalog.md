@@ -185,6 +185,12 @@
 - `BudgetBreakdownView` active-project Business Resources access card
 - `BusinessResourcesView` reusable worker/rate, vendor, and payment-method hub
 - `BusinessWorkersResourceView` worker and default-rate management surface
+- `LaborModuleView` top-aligned worker/rate and payment-ledger entry surface
+- `WorkHour` `LaborPaymentEntry` ledger model with derived paid/unpaid balances
+- `ProjectViewModel+TimeEntry` labor payment recording and reversal mutation seam
+- `LaborPaymentView` unpaid/paid/summary tabs, partial payment entry, method/reference capture, and unpay/reissue reversal
+- `RHEIRTests` Labor payment ledger coverage
+- `RHEIRUITests` Labor payment ledger smoke coverage
 - `RHEIRUITests` project-context shell smoke coverage for hidden tabs before selection and visible work tabs after selection
 - `RHEIRUITests` Business Resources hub smoke coverage
 - `RHEIRTests` duplicate receipt normalization and CloudKit upsert coverage
@@ -196,6 +202,9 @@
 - `SignInWithAppleCoordinator` structured logging
 
 ## Current Validation Baseline
+- Latest Labor payment focused parity result: `PASS` (`/tmp/rheir_labor_payment_parity_final_rerun.xcresult`, `2 unit tests plus 1 UI test`)
+- Latest Labor payment Gate A result: `PASS` (`/tmp/rheir_gateA_labor_payment_rerun.xcresult`)
+- Latest Labor payment pbxproj drift: `INTENTIONAL` (`Shared/Features/Labor/LaborPaymentView.swift` added to the compiled app target)
 - Latest completed-project archive/reopen focused parity result: `PASS` (`/tmp/rheir_reopen_completed_project_parity_rerun4.xcresult`, `4 unit tests plus 3 UI tests`)
 - Latest completed-project archive/reopen Gate A result: `PASS` (`/tmp/rheir_gateA_reopen_completed_project.xcresult`)
 - Latest Business Resources focused parity result: `PASS` (`/tmp/rheir_business_resources_parity.xcresult`, `1 UI test`)

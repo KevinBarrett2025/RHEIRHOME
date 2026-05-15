@@ -19,6 +19,7 @@
 		D4427A5A2DE090C600E70B1E /* ButtonStyles.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4427A392DE090C600E70B1E /* ButtonStyles.swift */; };
 		D4427A5B2DE090C600E70B1E /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4427A452DE090C600E70B1E /* RootView.swift */; };
 		D4427A5C2DE090C600E70B1E /* LaborModuleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4427A252DE090C600E70B1E /* LaborModuleView.swift */; };
+		D4AC0010DE14000100ABC001 /* LaborPaymentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4AC0010DE14000100ABC002 /* LaborPaymentView.swift */; };
 		D4427A5D2DE090C600E70B1E /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4427A462DE090C600E70B1E /* SidebarView.swift */; };
 		D4427A5E2DE090C600E70B1E /* FloatingActionButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4427A3F2DE090C600E70B1E /* FloatingActionButton.swift */; };
 		D4427A5F2DE090C600E70B1E /* ClientView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D44279FC2DE090C600E70B1E /* ClientView.swift */; };
@@ -174,6 +175,7 @@
 		D4427A232DE090C600E70B1E /* EmployeeHoursList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmployeeHoursList.swift; sourceTree = "<group>"; };
 		D4427A242DE090C600E70B1E /* LaborEditView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaborEditView.swift; sourceTree = "<group>"; };
 		D4427A252DE090C600E70B1E /* LaborModuleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaborModuleView.swift; sourceTree = "<group>"; };
+		D4AC0010DE14000100ABC002 /* LaborPaymentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaborPaymentView.swift; sourceTree = "<group>"; };
 		D4427A262DE090C600E70B1E /* LogHoursView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogHoursView.swift; sourceTree = "<group>"; };
 		D4427A272DE090C600E70B1E /* PaymentDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaymentDetailView.swift; sourceTree = "<group>"; };
 		D4427A282DE090C600E70B1E /* QuickClockView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickClockView.swift; sourceTree = "<group>"; };
@@ -426,6 +428,14 @@
 			path = TimeEntry;
 			sourceTree = "<group>";
 		};
+		D4AC0010DE14000100ABC003 /* Labor */ = {
+			isa = PBXGroup;
+			children = (
+				D4AC0010DE14000100ABC002 /* LaborPaymentView.swift */,
+			);
+			path = Labor;
+			sourceTree = "<group>";
+		};
 		D4427A2A2DE090C600E70B1E /* Features */ = {
 			isa = PBXGroup;
 			children = (
@@ -433,6 +443,7 @@
 				D44279FD2DE090C600E70B1E /* Clients */,
 				D4427A002DE090C600E70B1E /* CompletedProjects */,
 				D4427A032DE090C600E70B1E /* Dashboard */,
+				D4AC0010DE14000100ABC003 /* Labor */,
 				D4427A0B2DE090C600E70B1E /* Progress */,
 				D4427A152DE090C600E70B1E /* Projects */,
 				D4427A202DE090C600E70B1E /* Receipts */,
@@ -717,6 +728,7 @@
 				D4427A5A2DE090C600E70B1E /* ButtonStyles.swift in Sources */,
 				D4427A5B2DE090C600E70B1E /* RootView.swift in Sources */,
 				D4427A5C2DE090C600E70B1E /* LaborModuleView.swift in Sources */,
+				D4AC0010DE14000100ABC001 /* LaborPaymentView.swift in Sources */,
 				D4427A5D2DE090C600E70B1E /* SidebarView.swift in Sources */,
 				D4427A5E2DE090C600E70B1E /* FloatingActionButton.swift in Sources */,
 				D4427A5F2DE090C600E70B1E /* ClientView.swift in Sources */,
