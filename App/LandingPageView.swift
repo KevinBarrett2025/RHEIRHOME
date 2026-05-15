@@ -60,6 +60,7 @@ struct LandingPageView: View {
                 VStack {
                     if releaseProfile.shouldHideCollaborationSurface {
                         fastShipHeaderSection
+                        businessResourcesEntrySection
                     } else {
                         // Use UniversalHeaderView instead of custom header to get tier switcher
                         UniversalHeaderView(
@@ -260,6 +261,51 @@ struct LandingPageView: View {
         }
         .padding(.horizontal)
         .padding(.top, 8)
+        .padding(.bottom, 8)
+    }
+
+    private var businessResourcesEntrySection: some View {
+        NavigationLink {
+            BusinessResourcesView()
+                .environmentObject(viewModel)
+                .environmentObject(authVM)
+        } label: {
+            HStack(spacing: 14) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(Color.blue.opacity(0.16))
+                    Image(systemName: "person.crop.rectangle.stack.fill")
+                        .font(.title3)
+                        .foregroundColor(.blue)
+                }
+                .frame(width: 48, height: 48)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Business Resources")
+                        .font(.headline)
+                        .foregroundColor(.primary)
+                    Text("Workers, vendors, and payment methods used across projects.")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .lineLimit(2)
+                }
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundColor(.secondary)
+            }
+            .padding(14)
+            .background(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(Color(.secondarySystemBackground))
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("business-resources-entry")
+        .padding(.horizontal)
         .padding(.bottom, 8)
     }
 
@@ -735,6 +781,401 @@ struct LandingPageView: View {
             statusMessage = message
             showingStatusAlert = true
         }
+    }
+}
+
+// MARK: - Fast-Ship Business Resources
+
+struct BusinessResourcesView: View {
+    @EnvironmentObject private var projectVM: ProjectViewModel
+    @EnvironmentObject private var authVM: AuthViewModel
+    @State private var activeSheet: BusinessResourceSheet?
+
+    private enum BusinessResourceSheet: Identifiable {
+        case workers
+        case vendors
+        case paymentMethods
+
+        var id: String {
+            switch self {
+            case .workers: return "workers"
+            case .vendors: return "vendors"
+            case .paymentMethods: return "paymentMethods"
+            }
+        }
+    }
+
+    private var activeWorkers: [TeamMember] {
+        projectVM.teamMembers.filter { member in
+            guard !member.isArchived, member.isActive else { return false }
+            guard let organizationID = projectVM.currentOrganizationID else { return true }
+            return member.organizationID == organizationID
+        }
+    }
+
+    private var activeVendorsCount: Int {
+        projectVM.vendorService.vendors.filter(\.isActive).count
+    }
+
+    private var activePaymentMethodCount: Int {
+        projectVM.paymentMethodService.paymentMethods.filter(\.isActive).count
+    }
+
+    var body: some View {
+        List {
+            Section {
+                VStack(alignment: .leading, spacing: 10) {
+                    Label("Reusable Project Setup", systemImage: "wrench.and.screwdriver.fill")
+                        .font(.headline)
+                    Text("Manage the people, vendors, and cards/checking methods you use across jobs. These resources stay available without exposing company or organization admin screens.")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.vertical, 6)
+            }
+
+            Section("Directories") {
+                resourceButton(
+                    title: "Workers & Rates",
+                    subtitle: "\(activeWorkers.count) active",
+                    icon: "person.2.fill",
+                    color: .blue,
+                    identifier: "business-resources-workers-link"
+                ) {
+                    activeSheet = .workers
+                }
+
+                resourceButton(
+                    title: "Vendors",
+                    subtitle: "\(activeVendorsCount) active",
+                    icon: "building.2.fill",
+                    color: .orange,
+                    identifier: "business-resources-vendors-link"
+                ) {
+                    activeSheet = .vendors
+                }
+
+                resourceButton(
+                    title: "Payment Methods",
+                    subtitle: "\(activePaymentMethodCount) active",
+                    icon: "creditcard.fill",
+                    color: .green,
+                    identifier: "business-resources-payment-methods-link"
+                ) {
+                    activeSheet = .paymentMethods
+                }
+            }
+        }
+        .navigationTitle("Business Resources")
+        .navigationBarTitleDisplayMode(.large)
+        .accessibilityIdentifier("business-resources-hub")
+        .sheet(item: $activeSheet) { sheet in
+            switch sheet {
+            case .workers:
+                NavigationStack {
+                    BusinessWorkersResourceView()
+                        .environmentObject(projectVM)
+                }
+            case .vendors:
+                VendorManagementView()
+                    .environmentObject(projectVM)
+                    .environmentObject(authVM)
+            case .paymentMethods:
+                PaymentMethodManagementView()
+                    .environmentObject(projectVM)
+                    .environmentObject(authVM)
+            }
+        }
+    }
+
+    private func resourceButton(
+        title: String,
+        subtitle: String,
+        icon: String,
+        color: Color,
+        identifier: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 14) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(color.opacity(0.16))
+                    Image(systemName: icon)
+                        .foregroundColor(color)
+                }
+                .frame(width: 42, height: 42)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.headline)
+                        .foregroundColor(.primary)
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(.secondary)
+            }
+            .padding(.vertical, 4)
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier(identifier)
+    }
+}
+
+private struct BusinessWorkersResourceView: View {
+    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var projectVM: ProjectViewModel
+    @State private var editorState: BusinessWorkerEditorState?
+
+    private var workers: [TeamMember] {
+        projectVM.teamMembers
+            .filter { member in
+                guard !member.isArchived, member.isActive else { return false }
+                guard let organizationID = projectVM.currentOrganizationID else { return true }
+                return member.organizationID == organizationID
+            }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
+    var body: some View {
+        List {
+            Section {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Workers & Rates")
+                        .font(.title2.weight(.bold))
+                    Text("Set default job titles and hourly rates so labor logs, payroll review, and project actuals use consistent data.")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.vertical, 4)
+            }
+
+            Section("Active Workers") {
+                if workers.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("No workers yet")
+                            .font(.headline)
+                        Text("Add your first worker to make labor logging faster and more accurate.")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                        Button("Add Worker") {
+                            editorState = .add
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .accessibilityIdentifier("business-workers-empty-add-button")
+                    }
+                    .padding(.vertical, 8)
+                } else {
+                    ForEach(workers) { worker in
+                        workerRow(worker)
+                    }
+                }
+            }
+        }
+        .navigationTitle("Workers & Rates")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Done") { dismiss() }
+            }
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    editorState = .add
+                } label: {
+                    Label("Add Worker", systemImage: "plus")
+                }
+                .accessibilityIdentifier("business-workers-add-button")
+            }
+        }
+        .sheet(item: $editorState) { state in
+            BusinessWorkerEditorView(worker: state.worker)
+                .environmentObject(projectVM)
+        }
+    }
+
+    private func workerRow(_ worker: TeamMember) -> some View {
+        HStack(spacing: 12) {
+            Circle()
+                .fill(Color.blue.opacity(0.16))
+                .frame(width: 42, height: 42)
+                .overlay(
+                    Text(initials(for: worker.name))
+                        .font(.subheadline.weight(.bold))
+                        .foregroundColor(.blue)
+                )
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(worker.name)
+                    .font(.headline)
+                Text(worker.jobTitle.isEmpty ? "Worker" : worker.jobTitle)
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                Text(defaultRateSummary(for: worker))
+                    .font(.caption)
+                    .foregroundColor(.green)
+            }
+
+            Spacer()
+
+            Button("Edit") {
+                editorState = .edit(worker)
+            }
+            .buttonStyle(.bordered)
+            .accessibilityIdentifier("business-worker-edit-\(worker.id.uuidString)")
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func initials(for name: String) -> String {
+        let parts = name.split(separator: " ")
+        let initials = parts.prefix(2).compactMap(\.first)
+        return initials.isEmpty ? "?" : String(initials).uppercased()
+    }
+
+    private func defaultRateSummary(for worker: TeamMember) -> String {
+        guard let rate = worker.defaultRate else { return "No rate set" }
+        return "\(rate.taskType): \(rate.rate.formatAsCurrency())/hr"
+    }
+}
+
+private struct BusinessWorkerEditorState: Identifiable {
+    let id = UUID()
+    let worker: TeamMember?
+
+    static var add: BusinessWorkerEditorState {
+        BusinessWorkerEditorState(worker: nil)
+    }
+
+    static func edit(_ worker: TeamMember) -> BusinessWorkerEditorState {
+        BusinessWorkerEditorState(worker: worker)
+    }
+}
+
+private struct BusinessWorkerEditorView: View {
+    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var projectVM: ProjectViewModel
+
+    let worker: TeamMember?
+
+    @State private var name: String
+    @State private var email: String
+    @State private var phone: String
+    @State private var jobTitle: String
+    @State private var rateType: String
+    @State private var hourlyRate: String
+
+    init(worker: TeamMember?) {
+        self.worker = worker
+        _name = State(initialValue: worker?.name ?? "")
+        _email = State(initialValue: worker?.email ?? "")
+        _phone = State(initialValue: worker?.phone ?? "")
+        _jobTitle = State(initialValue: worker?.jobTitle ?? "")
+        _rateType = State(initialValue: worker?.defaultRate?.taskType ?? "General Labor")
+        _hourlyRate = State(initialValue: worker?.defaultRate.map { String(format: "%.2f", $0.rate) } ?? "")
+    }
+
+    private var isEditing: Bool {
+        worker != nil
+    }
+
+    private var parsedRate: Double? {
+        Double(hourlyRate.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+
+    private var canSave: Bool {
+        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        !(parsedRate ?? 0).isZero &&
+        (parsedRate ?? 0) > 0
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Worker") {
+                    TextField("Full name", text: $name)
+                        .textContentType(.name)
+                    TextField("Job title", text: $jobTitle)
+                    TextField("Email", text: $email)
+                        .textContentType(.emailAddress)
+                        .keyboardType(.emailAddress)
+                        .textInputAutocapitalization(.never)
+                    TextField("Phone", text: $phone)
+                        .textContentType(.telephoneNumber)
+                        .keyboardType(.phonePad)
+                }
+
+                Section("Default Rate") {
+                    TextField("Rate type", text: $rateType)
+                    HStack {
+                        Text("$")
+                            .foregroundColor(.secondary)
+                        TextField("Hourly rate", text: $hourlyRate)
+                            .keyboardType(.decimalPad)
+                    }
+                }
+
+                Section {
+                    Text("Additional rate types and payroll rules will stay in Labor, but this keeps the reusable worker directory accurate for v1.")
+                        .font(.footnote)
+                        .foregroundColor(.secondary)
+                }
+            }
+            .navigationTitle(isEditing ? "Edit Worker" : "Add Worker")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        saveWorker()
+                    }
+                    .disabled(!canSave)
+                }
+            }
+        }
+    }
+
+    private func saveWorker() {
+        guard let rate = parsedRate else { return }
+
+        let trimmedRateType = rateType.trimmingCharacters(in: .whitespacesAndNewlines)
+        let defaultRate = EmployeeRate(
+            taskType: trimmedRateType.isEmpty ? "General Labor" : trimmedRateType,
+            rate: rate,
+            isDefault: true
+        )
+
+        if var existing = worker {
+            existing.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            existing.email = email.trimmingCharacters(in: .whitespacesAndNewlines)
+            existing.phone = phone.trimmingCharacters(in: .whitespacesAndNewlines)
+            existing.jobTitle = jobTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+            existing.rates = [defaultRate]
+            projectVM.updateTeamMember(existing)
+        } else {
+            let newWorker = TeamMember(
+                name: name.trimmingCharacters(in: .whitespacesAndNewlines),
+                email: email.trimmingCharacters(in: .whitespacesAndNewlines),
+                phone: phone.trimmingCharacters(in: .whitespacesAndNewlines),
+                jobTitle: jobTitle.trimmingCharacters(in: .whitespacesAndNewlines),
+                rates: [defaultRate],
+                organizationID: projectVM.currentOrganizationID ?? "RHEIR-LLC-MAIN-ORG",
+                role: .member
+            )
+            projectVM.addTeamMember(newWorker)
+        }
+
+        dismiss()
     }
 }
 

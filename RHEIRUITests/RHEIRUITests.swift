@@ -168,6 +168,43 @@ final class RHEIRUITests: XCTestCase {
     }
 
     @MainActor
+    func testBusinessResourcesEntryOpensReusableResourceHub() throws {
+        let app = makeApp(mode: .projectSelection)
+        app.launch()
+
+        XCTAssertTrue(
+            app.staticTexts["Projects"].waitForExistence(timeout: 5),
+            "Expected deterministic project-selection mode to show the Projects home."
+        )
+
+        let resourcesEntry = app.buttons["business-resources-entry"]
+        XCTAssertTrue(
+            resourcesEntry.waitForExistence(timeout: 5),
+            "Expected fast-ship Projects to expose Business Resources without legacy company/admin UI."
+        )
+        resourcesEntry.tap()
+
+        XCTAssertTrue(
+            app.navigationBars["Business Resources"].waitForExistence(timeout: 5),
+            "Expected Business Resources to open as a dedicated contractor setup hub."
+        )
+        XCTAssertTrue(app.buttons["business-resources-workers-link"].exists)
+        XCTAssertTrue(app.buttons["business-resources-vendors-link"].exists)
+        XCTAssertTrue(app.buttons["business-resources-payment-methods-link"].exists)
+        XCTAssertFalse(
+            app.staticTexts["Company"].exists,
+            "Expected the v1 resources hub to avoid re-exposing legacy Company workspace copy."
+        )
+
+        app.buttons["business-resources-workers-link"].tap()
+        XCTAssertTrue(
+            app.navigationBars["Workers & Rates"].waitForExistence(timeout: 5),
+            "Expected the Workers resource to be backed by a real add/edit surface."
+        )
+        XCTAssertTrue(app.buttons["business-workers-add-button"].exists)
+    }
+
+    @MainActor
     func testProjectSelectionShowsCompletedProjectArchive() throws {
         let app = makeApp(mode: .projectSelection)
         app.launch()

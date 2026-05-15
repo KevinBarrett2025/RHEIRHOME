@@ -181,7 +181,12 @@
 - `RHEIRUITests` no-organization fast-ship personal-workspace smoke coverage
 - `MainTabView` fast-ship pre-workspace project-selection shell
 - `LandingPageView` simplified fast-ship Projects home without workspace/org copy or technical sync indicators
+- `LandingPageView` fast-ship Business Resources hub entry
+- `BudgetBreakdownView` active-project Business Resources access card
+- `BusinessResourcesView` reusable worker/rate, vendor, and payment-method hub
+- `BusinessWorkersResourceView` worker and default-rate management surface
 - `RHEIRUITests` project-context shell smoke coverage for hidden tabs before selection and visible work tabs after selection
+- `RHEIRUITests` Business Resources hub smoke coverage
 - `RHEIRTests` duplicate receipt normalization and CloudKit upsert coverage
 - `VendorKnowledgeService` structured logging
 - `PaymentMethodKnowledgeService` structured logging
@@ -193,6 +198,9 @@
 ## Current Validation Baseline
 - Latest completed-project archive/reopen focused parity result: `PASS` (`/tmp/rheir_reopen_completed_project_parity_rerun4.xcresult`, `4 unit tests plus 3 UI tests`)
 - Latest completed-project archive/reopen Gate A result: `PASS` (`/tmp/rheir_gateA_reopen_completed_project.xcresult`)
+- Latest Business Resources focused parity result: `PASS` (`/tmp/rheir_business_resources_parity.xcresult`, `1 UI test`)
+- Latest Business Resources Gate A result: `PASS` (`/tmp/rheir_gateA_business_resources.xcresult`)
+- Latest Business Resources visual evidence: Projects home entry (`/var/folders/jw/s9ytdthj0nj1jwccblxc1jmh0000gn/T/screenshot_optimized_4b1b8a6d-d7a7-410f-9dbf-88bc359593bf.jpg`) and hub (`/var/folders/jw/s9ytdthj0nj1jwccblxc1jmh0000gn/T/screenshot_optimized_f8dc70de-9299-42ec-819d-9529c9c9771c.jpg`)
 - Latest completed-project archive focused parity result: `PASS` (`/tmp/rheir_completed_projects_parity.xcresult`, `3 unit tests plus 2 UI tests`)
 - Latest project mutation contract Gate A result: `PASS` (`/tmp/rheir_gateA_mutation_contract.xcresult`)
 - Latest project mutation contract focused parity result: `PASS` (`/tmp/rheir_mutation_access_parity.xcresult`, `5 tests across 2 suites`)

@@ -37,6 +37,7 @@ Exit criteria: a single user can move through the core contractor workflows pred
   - job titles and labor rates
   - vendors
   - payment methods/cards
+  - current baseline: Projects and active-project analytics expose a Business Resources hub with real worker/rate, vendor, and payment-method management surfaces; focused UI parity and Gate A prove the hub and Workers & Rates surface open without Company/Organization admin copy
 - Make contractor job-costing accurate:
   - itemized receipt categories drive category totals and budget actuals
   - labor logs drive project cost and payroll summaries
@@ -98,7 +99,7 @@ Exit criteria: release candidate is validated on real hardware and ready for sub
 - Freeze scope and submit.
 
 ## Immediate Next Steps
-1. Commit the completed-project archive/reopen slice with Gate A plus focused parity evidence.
-2. Restore Business Resources before expanding Labor and Tasks, because those flows depend on reusable workers, rates, vendors, and payment methods.
-3. Rework Labor and Tasks to shippable contractor workflows with focused unit/UI parity for each slice.
+1. Commit the Business Resources hub slice with Gate A plus focused parity evidence.
+2. Rework Labor next, using the restored workers/rates resource seam for hour logging, payment status, split/partial payments, edit payment, and unpay/reissue.
+3. Rework Tasks to shippable contractor workflows with focused unit/UI parity.
 4. Finish Reports and device acceptance after the underlying data flows refresh immediately and persist across relaunch.

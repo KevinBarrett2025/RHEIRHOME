@@ -3,7 +3,7 @@
 ## Repo
 - Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Branch: `gm/rheir-hardening-phase1`
-- HEAD: `c5ed7f3fb55dc021d5986e5543272832bcab5d2a`
+- HEAD: `4d8a9dcef233a6795ea23b75f82af7de038958c3`
 
 ## Active Initiative
 - RHEIR release hardening, Fast-Ship Hybrid contractor workflow hardening.
@@ -26,6 +26,9 @@
 - Added deterministic estimator actual-cost mapping parity by seeding receipts, work hours, and tasks in a dedicated UI launch mode, exposing stable mapping-queue and variance-summary hooks in `BudgetBreakdownView.swift`, and asserting that mapped actuals clear the unmatched queue and move committed/actual variance off zero on the real budget surface.
 - Added fast-ship sign-out/org-clear hardening by cancelling in-flight auth-side organization-switch tasks and invalidating stale `organizationDidChange(_:)` results when the active organization changes or clears.
 - Added focused session-support regression coverage proving an interrupted organization sync cannot restore projects, access, or selection after `setCurrentOrganization(nil)` fires during the sync.
+- Added a fast-ship Business Resources hub in Projects and active-project analytics, restoring reusable worker/rate, vendor, and payment-method management without exposing legacy Company/Organization admin onboarding.
+- Added focused Business Resources UI smoke coverage proving the hub opens from Projects, includes workers/vendors/payment methods, and opens the real Workers & Rates surface without Company copy.
+- Completed Gate A for the Business Resources hub slice, establishing it as the simulator-proven setup seam before Labor hardening.
 - Added nil-organization sign-out hardening so `notifyProjectViewModelOrganizationChange(nil)` clears `ProjectViewModel` state before async refresh, and `organizationDidChange(nil)` now treats the nil org as an authoritative clear instead of reusing the last organization id.
 - Added focused session-support regression coverage proving the sign-out path delivers the active org first and the nil clear second to the project-view-model seam before any async refresh runs.
 - Confirmed on real device that fast-ship sign-out now clears organization-scoped workspace state without replaying stale zone setup, snapshot load, or project refresh before the next sign-in begins.
@@ -170,7 +173,8 @@
 
 ## In Progress
 - Lock the shipping app into the Fast-Ship Hybrid release profile so the visible shell stays single-user focused while hidden CloudKit/personal-workspace infrastructure remains available.
-- Implement the remaining Working-App release blockers in this order: Business Resources, Labor, Tasks, Reports, UI cleanup, and device acceptance.
+- Implement the remaining Working-App release blockers in this order: Labor, Tasks, Reports, UI cleanup, and device acceptance.
+- Business Resources is simulator-proven for hub entry and worker/rate access; verify add/edit workers, vendors, and payment methods on device while hardening Labor.
 - Continue broader selected-project estimator variance/runtime QA on top of the approved-baseline mapping seam inside the simplified v1 shell.
 - Continue broader selected-project receipt runtime QA in parallel, with same-device/device validation now the active release seam after manual-receipt relaunch, scanned-receipt return/reopen, and launch-time receipt hydration parity are green in simulator.
 - Continue shrinking the remaining oversized active state owners around the new sync and access store boundaries.
@@ -184,6 +188,9 @@
 ## Latest Evidence
 - Completed-project archive/reopen focused parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_reopen_completed_project_parity_rerun4_dd -resultBundlePath /tmp/rheir_reopen_completed_project_parity_rerun4.xcresult test -only-testing:RHEIRTests/ProjectMutationPropagationTests -only-testing:RHEIRUITests/RHEIRUITests/testProjectSelectionShowsCompletedProjectArchive -only-testing:RHEIRUITests/RHEIRUITests/testCompletedProjectCanBeReopenedIntoActiveWorkContext -only-testing:RHEIRUITests/RHEIRUITests/testProjectSelectionModeRequiresAndAppliesProjectContext` -> PASS (`/tmp/rheir_reopen_completed_project_parity_rerun4.xcresult`, `4 unit tests plus 3 UI tests`)
 - Completed-project archive/reopen Gate A: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_reopen_completed_project_dd -resultBundlePath /tmp/rheir_gateA_reopen_completed_project.xcresult clean build` -> PASS (`/tmp/rheir_gateA_reopen_completed_project.xcresult`)
+- Business Resources focused parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_business_resources_parity_dd -resultBundlePath /tmp/rheir_business_resources_parity.xcresult test -only-testing:RHEIRUITests/RHEIRUITests/testBusinessResourcesEntryOpensReusableResourceHub` -> PASS (`/tmp/rheir_business_resources_parity.xcresult`, `1 UI test`)
+- Business Resources Gate A: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_business_resources_dd -resultBundlePath /tmp/rheir_gateA_business_resources.xcresult clean build` -> PASS (`/tmp/rheir_gateA_business_resources.xcresult`)
+- Business Resources visual evidence: Projects home entry (`/var/folders/jw/s9ytdthj0nj1jwccblxc1jmh0000gn/T/screenshot_optimized_4b1b8a6d-d7a7-410f-9dbf-88bc359593bf.jpg`) and Business Resources hub (`/var/folders/jw/s9ytdthj0nj1jwccblxc1jmh0000gn/T/screenshot_optimized_f8dc70de-9299-42ec-819d-9529c9c9771c.jpg`)
 - Completed-project archive focused parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_completed_projects_parity_dd -resultBundlePath /tmp/rheir_completed_projects_parity.xcresult test -only-testing:RHEIRTests/ProjectMutationPropagationTests -only-testing:RHEIRUITests/RHEIRUITests/testProjectSelectionShowsCompletedProjectArchive -only-testing:RHEIRUITests/RHEIRUITests/testProjectSelectionModeRequiresAndAppliesProjectContext` -> PASS (`/tmp/rheir_completed_projects_parity.xcresult`, `3 unit tests plus 2 UI tests`)
 - Project mutation contract Gate A: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_mutation_contract_dd -resultBundlePath /tmp/rheir_gateA_mutation_contract.xcresult clean build` -> PASS (`/tmp/rheir_gateA_mutation_contract.xcresult`)
 - Project mutation contract focused parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_mutation_access_parity_dd -resultBundlePath /tmp/rheir_mutation_access_parity.xcresult test -only-testing:RHEIRTests/ProjectMutationPropagationTests -only-testing:RHEIRTests/ProjectAccessStoreTests` -> PASS (`/tmp/rheir_mutation_access_parity.xcresult`, `5 tests across 2 suites`)

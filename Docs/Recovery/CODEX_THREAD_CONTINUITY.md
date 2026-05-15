@@ -3,13 +3,14 @@
 ## Repo Truth
 - Repo Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Active Branch: `gm/rheir-hardening-phase1`
-- Thread Start SHA: `c5ed7f3fb55dc021d5986e5543272832bcab5d2a`
-- Last Commit At Thread Start: `c5ed7f3 Phase 2: restore completed project archive`
+- Thread Start SHA: `4d8a9dcef233a6795ea23b75f82af7de038958c3`
+- Last Commit At Thread Start: `4d8a9dc Phase 2: reopen completed projects`
 
 ## Current Objective
 - Keep RHEIR locked into the fast-ship v1 release profile so the visible app ships as a single-user contractor tool with the core shell only: `Projects`, `Receipts`, `Labor`, `Tasks`, plus budget `Breakdown` / `Estimator`.
 - Preserve and implement `RHEIR_FAST_SHIP_HYBRID_WORKING_APP_PLAN.md`, shifting the active release objective from only hiding collaboration to shipping a contractor-ready working app across Projects, Receipts, Labor, Tasks, Budget, Resources, and Reports.
-- Completed/past project recovery now includes a safe reopen path so accidentally closed jobs can return to Active for missing receipts, labor, tasks, and year-end cleanup before moving to Business Resources.
+- Business Resources is now the simulator-proven release-hardening baseline: the v1-safe contractor setup surface restores workers/team members, job titles/rates, vendors, and payment methods without exposing legacy Company/Organization admin onboarding.
+- Labor is the next active blocker: rework worker selection, hour logging, payment state, partial/split payments, edit payment, and unpay/reissue without bypassing the shared project mutation seam.
 - Treat contractor job-costing validation as a release requirement: itemized materials, labor/payroll, tasks/progress, payment status, profitability, and closeout reports must answer real contractor operating questions.
 - Preserve the simplified visible session flow `launch -> sign in -> ready`, with invite, org-selection, company/admin, and legacy AI-key surfaces still hidden unless the app is explicitly forced back into the legacy/full profile.
 - Keep the selected-project receipt seam green end-to-end: saved scanned receipt itemized lines now persist into receipt detail and into the ellipsis-menu edit sheet with a dedicated line-item editor, mixed-category receipt category summaries/drilldown cards now honor per-item categories instead of treating the whole receipt total as one category, and the Receipts list quick-view now opens the real receipt image viewer.
@@ -33,6 +34,12 @@
 - `App/RheirApp.swift` and `Shared/Services/OfflineDataManager.swift` now clear UI-test offline artifacts before non-preserved deterministic launches, preventing stale simulator document-storage projects from contaminating archive/reopen smokes.
 - Latest completed-project archive/reopen focused parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_reopen_completed_project_parity_rerun4_dd -resultBundlePath /tmp/rheir_reopen_completed_project_parity_rerun4.xcresult test -only-testing:RHEIRTests/ProjectMutationPropagationTests -only-testing:RHEIRUITests/RHEIRUITests/testProjectSelectionShowsCompletedProjectArchive -only-testing:RHEIRUITests/RHEIRUITests/testCompletedProjectCanBeReopenedIntoActiveWorkContext -only-testing:RHEIRUITests/RHEIRUITests/testProjectSelectionModeRequiresAndAppliesProjectContext` -> PASS (`/tmp/rheir_reopen_completed_project_parity_rerun4.xcresult`, `4 unit tests plus 3 UI tests`).
 - Latest completed-project archive/reopen Gate A: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_reopen_completed_project_dd -resultBundlePath /tmp/rheir_gateA_reopen_completed_project.xcresult clean build` -> PASS (`/tmp/rheir_gateA_reopen_completed_project.xcresult`).
+- `App/LandingPageView.swift` now exposes a fast-ship Business Resources hub from Projects without reintroducing Company/Organization admin UI, and the hub opens real worker/rate, vendor, and payment-method management surfaces.
+- `Shared/Features/Budget/BudgetBreakdownView.swift` now exposes the same Business Resources hub from the active project analytics area so reusable workers, vendors, and payment methods are reachable during project management.
+- `RHEIRUITests/RHEIRUITests.swift` now proves the Business Resources entry opens the reusable resource hub and the Workers & Rates surface without exposing legacy Company copy.
+- Latest Business Resources focused parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_business_resources_parity_dd -resultBundlePath /tmp/rheir_business_resources_parity.xcresult test -only-testing:RHEIRUITests/RHEIRUITests/testBusinessResourcesEntryOpensReusableResourceHub` -> PASS (`/tmp/rheir_business_resources_parity.xcresult`, `1 UI test`).
+- Latest Business Resources Gate A: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_business_resources_dd -resultBundlePath /tmp/rheir_gateA_business_resources.xcresult clean build` -> PASS (`/tmp/rheir_gateA_business_resources.xcresult`).
+- Latest Business Resources visual evidence: Projects home entry (`/var/folders/jw/s9ytdthj0nj1jwccblxc1jmh0000gn/T/screenshot_optimized_4b1b8a6d-d7a7-410f-9dbf-88bc359593bf.jpg`) and Business Resources hub (`/var/folders/jw/s9ytdthj0nj1jwccblxc1jmh0000gn/T/screenshot_optimized_f8dc70de-9299-42ec-819d-9529c9c9771c.jpg`).
 - `Shared/Models/Receipt.swift` now persists a trimmed optional top-level `subcategory`, closing the gap where scan-review subcategory input was accepted by the initializer but silently discarded before persistence.
 - `Shared/Features/Receipts/ScannedReceiptEntryView.swift` now persists `analysisResult.items` into the saved `Receipt.items` payload, stores the top-level subcategory, and drops the unusable segmented category picker treatment so the scan-review taxonomy stays legible with the full case set.
 - `Shared/Features/Receipts/ReceiptDetailView.swift` now keeps the ellipsis menu as the single receipt-detail edit/delete action surface, exposes item/subcategory accessibility hooks, and shows saved scanned items once they persist into the live receipt model.
@@ -275,7 +282,7 @@
 - This repo follows a repo-local STS equivalent defined in the root governance docs because the original STS spine docs were not present here.
 
 ## Next Required Action
-1. Commit only the completed-project archive slice after Gate A passes, preserving the user-owned local files (`Shared/Views/Auth/LoginView.swift`, `rheir_knowledge_database.json`, `RHEIRmemories.csv`, `RheirLogo 1024x1024.png`) outside the staged set.
-2. Reintroduce Business Resources before expanding Labor and Tasks, because those flows depend on reusable workers, rates, vendors, and payment methods.
-3. Rework Labor and Tasks as release blockers with focused parity per module, then wire Reports to the same mutation/refresh contract.
+1. Commit only the Business Resources hub slice after Gate A and focused parity evidence, preserving the user-owned local files (`Shared/Views/Auth/LoginView.swift`, `rheir_knowledge_database.json`, `RHEIRmemories.csv`, `RheirLogo 1024x1024.png`) outside the staged set.
+2. Rework Labor as the next release blocker using the restored worker/rate resource seam: worker selection, hour logging, payment state, partial/split payments, edit payment, and unpay/reissue.
+3. Rework Tasks after Labor with focused parity for multi-task CRUD, assignment, due/overdue state, completion proof, and immediate refresh.
 4. Continue device acceptance after each slice, with same-user iCloud restore treated as optional until release-candidate validation proves it stable.

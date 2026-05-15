@@ -160,6 +160,7 @@ struct BudgetBreakdownContentView: View {
     @State private var showCloseAlert = false
     @State private var showingEditProject = false
     @State private var showingReports = false
+    @State private var showingBusinessResources = false
 
     var body: some View {
         if let project = projectVM.selectedProject {
@@ -183,6 +184,13 @@ struct BudgetBreakdownContentView: View {
             ProjectReportsView(project: project)
                 .environmentObject(projectVM)
                 .environmentObject(authVM)
+        }
+        .sheet(isPresented: $showingBusinessResources) {
+            NavigationStack {
+                BusinessResourcesView()
+                    .environmentObject(projectVM)
+                    .environmentObject(authVM)
+            }
         }
     }
     
@@ -244,6 +252,8 @@ struct BudgetBreakdownContentView: View {
                     .padding(.horizontal)
                     
                     quickStatsSection(for: project)
+
+                    businessResourcesAccessCard
                     
                     // Reports Access Card
                     reportsAccessCard
@@ -381,6 +391,55 @@ struct BudgetBreakdownContentView: View {
                 color: .purple
             )
         }
+        .padding(.horizontal)
+    }
+
+    @ViewBuilder
+    private var businessResourcesAccessCard: some View {
+        Button {
+            showingBusinessResources = true
+        } label: {
+            HStack(spacing: 16) {
+                VStack(spacing: 8) {
+                    Image(systemName: "person.crop.rectangle.stack.fill")
+                        .font(.title2)
+                        .foregroundColor(.white)
+                }
+                .frame(width: 50, height: 50)
+                .background(
+                    LinearGradient(
+                        gradient: Gradient(colors: [.green, .blue]),
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .cornerRadius(12)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Business Resources")
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.primary)
+
+                    Text("Manage reusable workers, vendors, and payment methods for this project.")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .lineLimit(2)
+                }
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.title3)
+                    .foregroundColor(.secondary)
+            }
+            .padding()
+            .background(Color(.systemGray6))
+            .cornerRadius(12)
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("project-business-resources-entry")
         .padding(.horizontal)
     }
     
