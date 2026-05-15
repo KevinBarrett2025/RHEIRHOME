@@ -403,6 +403,47 @@ extension ProjectViewModel {
         updateHours(updated)
     }
 
+    func replaceLaborPayment(
+        for entry: WorkHour,
+        amount: Double,
+        method: String,
+        reference: String,
+        note: String
+    ) {
+        guard amount > 0,
+              let sel = selectedProject,
+              let idx = organizationProjects.firstIndex(where: { $0.id == sel.id }),
+              let hourIndex = organizationProjects[idx].loggedHours.firstIndex(where: { $0.id == entry.id })
+        else {
+            Logger.labor.error("Failed to replace labor payment because the request was invalid.")
+            return
+        }
+
+        var updatedProject = organizationProjects[idx]
+        var workHour = updatedProject.loggedHours[hourIndex]
+        let requestedAmount = min(amount, workHour.straightTimePay)
+
+        workHour.reversePayments(note: "Payment corrected")
+        workHour.recordPayment(
+            amount: requestedAmount,
+            method: method,
+            reference: reference,
+            note: note
+        )
+        updatedProject.loggedHours[hourIndex] = workHour
+
+        applyProjectMutationLocally(
+            updatedProject,
+            reason: "correct labor payment",
+            selectProject: true,
+            scheduleCloudSync: true
+        )
+
+        Logger.labor.notice(
+            "Corrected labor payment [amount=\(requestedAmount, privacy: .public) method=\(method, privacy: .public)]"
+        )
+    }
+
     /// Delete entries matching paid/unpaid status.
     func deleteHours(at offsets: IndexSet, paid: Bool) {
         guard let sel = selectedProject,

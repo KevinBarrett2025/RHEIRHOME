@@ -15,6 +15,8 @@ struct LaborPaymentView: View {
     @State private var paymentNotes = ""
     @State private var paymentReference = ""
     @State private var bulkPaymentAmount: Double = 0
+    @State private var editingHour: WorkHour?
+    @State private var correctingPaymentHour: WorkHour?
     
     enum PaymentTab: String, CaseIterable {
         case unpaid = "Unpaid"
@@ -123,6 +125,14 @@ struct LaborPaymentView: View {
                 }
             )
         }
+        .sheet(item: $editingHour) { hour in
+            LaborHourEditorView(teamMember: teamMember, hour: hour)
+                .environmentObject(projectVM)
+        }
+        .sheet(item: $correctingPaymentHour) { hour in
+            LaborPaymentCorrectionView(teamMember: teamMember, hour: hour)
+                .environmentObject(projectVM)
+        }
         .accessibilityIdentifier("labor-payment-view")
     }
     
@@ -218,46 +228,47 @@ struct LaborPaymentView: View {
     
     @ViewBuilder
     private var tabSelector: some View {
-        HStack {
-            ForEach(PaymentTab.allCases, id: \.rawValue) { tab in
-                Button {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        selectedTab = tab
-                        selectedHours.removeAll() // Clear selection when switching tabs
-                    }
-                } label: {
-                    HStack {
-                        Image(systemName: tab.icon)
-                        Text(tab.rawValue)
-                        
-                        // Show counts
-                        if tab == .unpaid {
-                            Text("(\(memberUnpaidHours.count))")
-                                .foregroundColor(.secondary)
-                        } else if tab == .paid {
-                            Text("(\(memberPaidHours.count))")
-                                .foregroundColor(.secondary)
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(PaymentTab.allCases, id: \.rawValue) { tab in
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            selectedTab = tab
+                            selectedHours.removeAll()
                         }
+                    } label: {
+                        HStack(spacing: 5) {
+                            Image(systemName: tab.icon)
+                                .imageScale(.small)
+                            Text(tab.rawValue)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.78)
+                            
+                            if tab == .unpaid {
+                                Text("(\(memberUnpaidHours.count))")
+                                    .foregroundColor(.secondary)
+                            } else if tab == .paid {
+                                Text("(\(memberPaidHours.count))")
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                        .font(.caption.weight(selectedTab == tab ? .semibold : .regular))
+                        .foregroundColor(selectedTab == tab ? tab.color : .secondary)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 8)
+                        .background(
+                            RoundedRectangle(cornerRadius: 18)
+                                .fill(selectedTab == tab ? tab.color.opacity(0.1) : Color.clear)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 18)
+                                .stroke(selectedTab == tab ? tab.color : Color.clear, lineWidth: 1)
+                        )
                     }
-                    .font(.subheadline)
-                    .fontWeight(selectedTab == tab ? .semibold : .regular)
-                    .foregroundColor(selectedTab == tab ? tab.color : .secondary)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .background(
-                        RoundedRectangle(cornerRadius: 20)
-                            .fill(selectedTab == tab ? tab.color.opacity(0.1) : Color.clear)
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 20)
-                            .stroke(selectedTab == tab ? tab.color : Color.clear, lineWidth: 1)
-                    )
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("labor-payment-tab-\(tab.rawValue.lowercased())")
                 }
-                .buttonStyle(PlainButtonStyle())
-                .accessibilityIdentifier("labor-payment-tab-\(tab.rawValue.lowercased())")
             }
-            
-            Spacer()
         }
         .padding(.horizontal)
         .padding(.vertical, 8)
@@ -304,6 +315,9 @@ struct LaborPaymentView: View {
                                 isSelected: selectedHours.contains(hour),
                                 onToggle: {
                                     toggleHourSelection(hour)
+                                },
+                                onEdit: {
+                                    editingHour = currentHour(for: hour) ?? hour
                                 }
                             )
                         }
@@ -323,9 +337,18 @@ struct LaborPaymentView: View {
                 ScrollView {
                     LazyVStack(spacing: 8) {
                         ForEach(memberPaidHours, id: \.id) { hour in
-                            PaidWorkHourRowView(hour: hour) {
-                                projectVM.reverseLaborPayments(for: hour)
-                            }
+                            PaidWorkHourRowView(
+                                hour: hour,
+                                onEditHour: {
+                                    editingHour = currentHour(for: hour) ?? hour
+                                },
+                                onCorrectPayment: {
+                                    correctingPaymentHour = currentHour(for: hour) ?? hour
+                                },
+                                onUnpay: {
+                                    projectVM.reverseLaborPayments(for: hour)
+                                }
+                            )
                         }
                     }
                     .padding(.horizontal)
@@ -418,6 +441,10 @@ struct LaborPaymentView: View {
             selectedHours.insert(hour)
         }
     }
+
+    private func currentHour(for hour: WorkHour) -> WorkHour? {
+        projectVM.selectedProject?.loggedHours.first { $0.id == hour.id }
+    }
     
     private func processPayment(amount: Double, method: String, reference: String, notes: String) {
         let processedCount = selectedHours.count
@@ -484,75 +511,84 @@ struct WorkHourRowView: View {
     let hour: WorkHour
     let isSelected: Bool
     let onToggle: () -> Void
+    let onEdit: () -> Void
     
     var body: some View {
-        Button(action: onToggle) {
-            HStack {
-                // Selection indicator
+        HStack(alignment: .top, spacing: 10) {
+            Button(action: onToggle) {
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.title3)
                     .foregroundColor(isSelected ? .green : .secondary)
+                    .frame(width: 30, height: 30)
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("labor-unpaid-hour-\(hour.id.uuidString)")
                 
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Text(hour.date.formatted(date: .abbreviated, time: .omitted))
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                        
-                        Spacer()
-                        
-                        Text("\(hour.hours, specifier: "%.1f") hrs")
-                            .font(.subheadline)
-                            .fontWeight(.bold)
-                            .foregroundColor(.blue)
-                    }
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text(hour.date.formatted(date: .abbreviated, time: .omitted))
+                        .font(.subheadline)
+                        .fontWeight(.medium)
                     
-                    HStack {
-                        Text("\(hour.startTime.formatted(date: .omitted, time: .shortened)) - \(hour.endTime?.formatted(date: .omitted, time: .shortened) ?? "Active")")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        
-                        Spacer()
-                        
-                        Text("@ \(hour.rate.formatAsCurrency())/hr")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
+                    Spacer()
                     
-                    HStack {
-                        Text(hour.category)
-                            .font(.caption2)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Color.blue.opacity(0.2))
-                            .foregroundColor(.blue)
-                            .cornerRadius(4)
-                        
-                        Spacer()
-                        
-                        Text(hour.effectiveUnpaidAmount.formatAsCurrency())
-                            .font(.subheadline)
-                            .fontWeight(.bold)
-                            .foregroundColor(.green)
-                    }
+                    Text("\(hour.hours, specifier: "%.1f") hrs")
+                        .font(.subheadline)
+                        .fontWeight(.bold)
+                        .foregroundColor(.blue)
+                }
+                
+                HStack {
+                    Text("\(hour.startTime.formatted(date: .omitted, time: .shortened)) - \(hour.endTime?.formatted(date: .omitted, time: .shortened) ?? "Active")")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    Spacer()
+                    
+                    Text("@ \(hour.rate.formatAsCurrency())/hr")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                
+                HStack {
+                    Text(hour.category)
+                        .font(.caption2)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.blue.opacity(0.2))
+                        .foregroundColor(.blue)
+                        .cornerRadius(4)
+                    
+                    Spacer()
+                    
+                    Text(hour.effectiveUnpaidAmount.formatAsCurrency())
+                        .font(.subheadline)
+                        .fontWeight(.bold)
+                        .foregroundColor(.green)
                 }
             }
-            .padding()
-            .background(
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(isSelected ? Color.green.opacity(0.1) : Color(.systemGray6))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 10)
-                    .stroke(isSelected ? Color.green : Color.clear, lineWidth: 2)
-            )
+
+            Button("Edit", action: onEdit)
+                .font(.caption)
+                .buttonStyle(.bordered)
+                .accessibilityIdentifier("labor-hour-edit-\(hour.id.uuidString)")
         }
-        .buttonStyle(PlainButtonStyle())
-        .accessibilityIdentifier("labor-unpaid-hour-\(hour.id.uuidString)")
+        .padding()
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(isSelected ? Color.green.opacity(0.1) : Color(.systemGray6))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(isSelected ? Color.green : Color.clear, lineWidth: 2)
+        )
     }
 }
 
 struct PaidWorkHourRowView: View {
     let hour: WorkHour
+    var onEditHour: (() -> Void)? = nil
+    var onCorrectPayment: (() -> Void)? = nil
     var onUnpay: (() -> Void)? = nil
 
     private var latestPayment: LaborPaymentEntry? {
@@ -606,6 +642,20 @@ struct PaidWorkHourRowView: View {
                             .foregroundColor(.secondary)
                     }
 
+                    if let onEditHour {
+                        Button("Edit Hours", action: onEditHour)
+                            .font(.caption)
+                            .buttonStyle(.bordered)
+                            .accessibilityIdentifier("labor-hour-edit-\(hour.id.uuidString)")
+                    }
+
+                    if let onCorrectPayment {
+                        Button("Edit Payment", action: onCorrectPayment)
+                            .font(.caption)
+                            .buttonStyle(.bordered)
+                            .accessibilityIdentifier("labor-payment-edit-\(hour.id.uuidString)")
+                    }
+
                     if let onUnpay {
                         Button {
                             onUnpay()
@@ -632,6 +682,281 @@ struct PaidWorkHourRowView: View {
         .background(Color(.systemGray6))
         .cornerRadius(10)
         .accessibilityIdentifier("labor-paid-hour-\(hour.id.uuidString)")
+    }
+}
+
+// MARK: - Labor Edit Views
+
+struct LaborHourEditorView: View {
+    @EnvironmentObject private var projectVM: ProjectViewModel
+    @Environment(\.dismiss) private var dismiss
+
+    let teamMember: TeamMember
+    let hour: WorkHour
+
+    @State private var workDate: Date
+    @State private var startTime: Date
+    @State private var endTime: Date
+    @State private var lunchHours: String
+    @State private var selectedRateID: UUID?
+    @State private var customRateText: String
+    @State private var category: String
+
+    init(teamMember: TeamMember, hour: WorkHour) {
+        self.teamMember = teamMember
+        self.hour = hour
+        _workDate = State(initialValue: hour.date)
+        _startTime = State(initialValue: hour.startTime)
+        _endTime = State(initialValue: hour.endTime ?? hour.startTime.addingTimeInterval(3600))
+        _lunchHours = State(initialValue: hour.lunchBreakDuration.map { String(format: "%.2f", $0) } ?? "")
+        _selectedRateID = State(initialValue: teamMember.rates.first { $0.taskType == hour.category && abs($0.rate - hour.rate) < 0.005 }?.id)
+        _customRateText = State(initialValue: String(format: "%.2f", hour.rate))
+        _category = State(initialValue: hour.category)
+    }
+
+    private var selectedRate: EmployeeRate? {
+        guard let selectedRateID else { return nil }
+        return teamMember.rates.first { $0.id == selectedRateID }
+    }
+
+    private var resolvedRate: Double {
+        selectedRate?.rate ?? Double(customRateText) ?? hour.rate
+    }
+
+    private var resolvedCategory: String {
+        selectedRate?.taskType ?? category.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var canSave: Bool {
+        endDateTime > startDateTime &&
+        resolvedRate > 0 &&
+        !resolvedCategory.isEmpty
+    }
+
+    private var startDateTime: Date {
+        combine(date: workDate, time: startTime)
+    }
+
+    private var endDateTime: Date {
+        combine(date: workDate, time: endTime)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("When") {
+                    DatePicker("Date", selection: $workDate, displayedComponents: .date)
+                    DatePicker("Start", selection: $startTime, displayedComponents: .hourAndMinute)
+                    DatePicker("End", selection: $endTime, displayedComponents: .hourAndMinute)
+                    TextField("Lunch hours", text: $lunchHours)
+                        .keyboardType(.decimalPad)
+                        .accessibilityIdentifier("labor-hour-lunch-field")
+                }
+
+                Section("Work Type") {
+                    if !teamMember.rates.isEmpty {
+                        Picker("Rate", selection: $selectedRateID) {
+                            Text("Custom").tag(Optional<UUID>.none)
+                            ForEach(teamMember.rates) { rate in
+                                Text("\(rate.taskType) - \(rate.rate.formatAsCurrency())/hr")
+                                    .tag(Optional(rate.id))
+                            }
+                        }
+                    }
+
+                    if selectedRate == nil {
+                        TextField("Work type", text: $category)
+                            .accessibilityIdentifier("labor-hour-category-field")
+                        HStack {
+                            Text("$")
+                                .foregroundColor(.secondary)
+                            TextField("Hourly rate", text: $customRateText)
+                                .keyboardType(.decimalPad)
+                                .accessibilityIdentifier("labor-hour-rate-field")
+                        }
+                    }
+                }
+
+                Section("Updated Total") {
+                    HStack {
+                        Text("Hours")
+                        Spacer()
+                        Text(String(format: "%.2f", max(0, editedHours)))
+                            .foregroundColor(.secondary)
+                    }
+                    HStack {
+                        Text("Gross")
+                        Spacer()
+                        Text((max(0, editedHours) * resolvedRate).formatAsCurrency())
+                            .fontWeight(.semibold)
+                    }
+                    if hour.effectivePaidAmount > 0 {
+                        Text("Existing payment entries remain attached. Paid and unpaid totals will recalculate from the edited hours and rate.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+            .navigationTitle("Edit Hours")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        save()
+                    }
+                    .disabled(!canSave)
+                    .accessibilityIdentifier("labor-hour-save-button")
+                }
+            }
+        }
+    }
+
+    private var editedHours: Double {
+        let totalHours = endDateTime.timeIntervalSince(startDateTime) / 3600
+        return totalHours - (Double(lunchHours) ?? 0)
+    }
+
+    private func combine(date: Date, time: Date) -> Date {
+        let calendar = Calendar.current
+        let dateParts = calendar.dateComponents([.year, .month, .day], from: date)
+        let timeParts = calendar.dateComponents([.hour, .minute, .second], from: time)
+        var components = DateComponents()
+        components.year = dateParts.year
+        components.month = dateParts.month
+        components.day = dateParts.day
+        components.hour = timeParts.hour
+        components.minute = timeParts.minute
+        components.second = timeParts.second
+        return calendar.date(from: components) ?? date
+    }
+
+    private func save() {
+        let lunchDuration = max(0, Double(lunchHours) ?? 0)
+        var lunchStart: Date?
+        var lunchEnd: Date?
+        if lunchDuration > 0 {
+            let shiftSeconds = endDateTime.timeIntervalSince(startDateTime)
+            let beforeLunch = max(0, (shiftSeconds - lunchDuration * 3600) / 2)
+            lunchStart = startDateTime.addingTimeInterval(beforeLunch)
+            lunchEnd = lunchStart?.addingTimeInterval(lunchDuration * 3600)
+        }
+
+        var updated = WorkHour(
+            id: hour.id,
+            date: workDate,
+            startTime: startDateTime,
+            endTime: endDateTime,
+            lunchStart: lunchStart,
+            lunchEnd: lunchEnd,
+            employee: teamMember.name,
+            employeeID: teamMember.id,
+            rate: resolvedRate,
+            category: resolvedCategory,
+            isPaid: hour.isPaid,
+            paymentMethod: hour.paymentMethod,
+            paymentNote: hour.paymentNote,
+            paymentTimestamp: hour.paymentTimestamp,
+            paymentEntries: hour.paymentEntries,
+            clockInLocation: hour.clockInLocation,
+            clockOutLocation: hour.clockOutLocation
+        )
+        updated.isApproved = hour.isApproved
+        updated.approvedBy = hour.approvedBy
+        updated.approvedAt = hour.approvedAt
+        updated.validationNotes = hour.validationNotes
+
+        projectVM.updateHours(updated)
+        dismiss()
+    }
+}
+
+struct LaborPaymentCorrectionView: View {
+    @EnvironmentObject private var projectVM: ProjectViewModel
+    @Environment(\.dismiss) private var dismiss
+
+    let teamMember: TeamMember
+    let hour: WorkHour
+
+    @State private var amountText: String
+    @State private var method: String
+    @State private var reference: String
+    @State private var note: String
+
+    private let paymentMethods = ["Cash", "Check", "Bank Transfer", "Venmo", "PayPal", "Zelle", "Other"]
+
+    init(teamMember: TeamMember, hour: WorkHour) {
+        self.teamMember = teamMember
+        self.hour = hour
+        let latestPayment = hour.paymentEntries.last(where: { !$0.isReversal })
+        _amountText = State(initialValue: String(format: "%.2f", hour.effectivePaidAmount))
+        _method = State(initialValue: latestPayment?.method ?? hour.paymentMethod ?? "Cash")
+        _reference = State(initialValue: latestPayment?.reference ?? "")
+        _note = State(initialValue: latestPayment?.note ?? hour.paymentNote ?? "")
+    }
+
+    private var resolvedAmount: Double {
+        min(max(0, Double(amountText) ?? 0), hour.straightTimePay)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Payment") {
+                    HStack {
+                        Text("Worker")
+                        Spacer()
+                        Text(teamMember.name)
+                            .foregroundColor(.secondary)
+                    }
+                    TextField("Amount", text: $amountText)
+                        .keyboardType(.decimalPad)
+                        .accessibilityIdentifier("labor-payment-edit-amount")
+                    Picker("Method", selection: $method) {
+                        ForEach(paymentMethods, id: \.self) { method in
+                            Text(method).tag(method)
+                        }
+                    }
+                    TextField("Reference", text: $reference)
+                        .textInputAutocapitalization(.words)
+                        .accessibilityIdentifier("labor-payment-edit-reference")
+                }
+
+                Section("Note") {
+                    TextField("Correction note", text: $note, axis: .vertical)
+                        .lineLimit(2...4)
+                }
+
+                Section {
+                    Text("Saving reverses the current paid balance and records the corrected payment so the audit trail remains intact.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            .navigationTitle("Edit Payment")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        projectVM.replaceLaborPayment(
+                            for: hour,
+                            amount: resolvedAmount,
+                            method: method,
+                            reference: reference,
+                            note: note
+                        )
+                        dismiss()
+                    }
+                    .disabled(resolvedAmount <= 0)
+                    .accessibilityIdentifier("labor-payment-edit-save-button")
+                }
+            }
+        }
     }
 }
 

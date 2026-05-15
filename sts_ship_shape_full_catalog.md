@@ -185,11 +185,15 @@
 - `BudgetBreakdownView` active-project Business Resources access card
 - `BusinessResourcesView` reusable worker/rate, vendor, and payment-method hub
 - `BusinessWorkersResourceView` worker and default-rate management surface
+- `BusinessWorkersResourceView` multi-rate add/edit routing through enhanced team-member management
 - `LaborModuleView` top-aligned worker/rate and payment-ledger entry surface
 - `WorkHour` `LaborPaymentEntry` ledger model with derived paid/unpaid balances
 - `ProjectViewModel+TimeEntry` labor payment recording and reversal mutation seam
+- `ProjectViewModel+TimeEntry` labor payment correction mutation seam
 - `LaborPaymentView` unpaid/paid/summary tabs, partial payment entry, method/reference capture, and unpay/reissue reversal
+- `LaborPaymentView` logged-hour editing, payment correction, and compact tab selector
 - `RHEIRTests` Labor payment ledger coverage
+- `RHEIRTests` Labor editability and partial-payment persistence coverage
 - `RHEIRUITests` Labor payment ledger smoke coverage
 - `RHEIRUITests` project-context shell smoke coverage for hidden tabs before selection and visible work tabs after selection
 - `RHEIRUITests` Business Resources hub smoke coverage
@@ -202,6 +206,9 @@
 - `SignInWithAppleCoordinator` structured logging
 
 ## Current Validation Baseline
+- Latest Labor editability full unit parity result: `PASS` (`/tmp/rheir_labor_business_editability_unit.xcresult`, `68 tests in 20 suites`)
+- Latest Labor editability Gate A result: `PASS` (`/tmp/rheir_gateA_labor_editability.xcresult`)
+- Latest Labor editability pbxproj drift: `NONE`
 - Latest Labor payment focused parity result: `PASS` (`/tmp/rheir_labor_payment_parity_final_rerun.xcresult`, `2 unit tests plus 1 UI test`)
 - Latest Labor payment Gate A result: `PASS` (`/tmp/rheir_gateA_labor_payment_rerun.xcresult`)
 - Latest Labor payment pbxproj drift: `INTENTIONAL` (`Shared/Features/Labor/LaborPaymentView.swift` added to the compiled app target)

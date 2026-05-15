@@ -997,8 +997,13 @@ struct BusinessWorkersResourceView: View {
             }
         }
         .sheet(item: $editorState) { state in
-            BusinessWorkerEditorView(worker: state.worker)
-                .environmentObject(projectVM)
+            if let worker = state.worker {
+                EnhancedEditTeamMemberView(member: worker)
+                    .environmentObject(projectVM)
+            } else {
+                EnhancedAddTeamMemberView()
+                    .environmentObject(projectVM)
+            }
         }
     }
 
@@ -1057,125 +1062,6 @@ private struct BusinessWorkerEditorState: Identifiable {
 
     static func edit(_ worker: TeamMember) -> BusinessWorkerEditorState {
         BusinessWorkerEditorState(worker: worker)
-    }
-}
-
-private struct BusinessWorkerEditorView: View {
-    @Environment(\.dismiss) private var dismiss
-    @EnvironmentObject private var projectVM: ProjectViewModel
-
-    let worker: TeamMember?
-
-    @State private var name: String
-    @State private var email: String
-    @State private var phone: String
-    @State private var jobTitle: String
-    @State private var rateType: String
-    @State private var hourlyRate: String
-
-    init(worker: TeamMember?) {
-        self.worker = worker
-        _name = State(initialValue: worker?.name ?? "")
-        _email = State(initialValue: worker?.email ?? "")
-        _phone = State(initialValue: worker?.phone ?? "")
-        _jobTitle = State(initialValue: worker?.jobTitle ?? "")
-        _rateType = State(initialValue: worker?.defaultRate?.taskType ?? "General Labor")
-        _hourlyRate = State(initialValue: worker?.defaultRate.map { String(format: "%.2f", $0.rate) } ?? "")
-    }
-
-    private var isEditing: Bool {
-        worker != nil
-    }
-
-    private var parsedRate: Double? {
-        Double(hourlyRate.trimmingCharacters(in: .whitespacesAndNewlines))
-    }
-
-    private var canSave: Bool {
-        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-        !(parsedRate ?? 0).isZero &&
-        (parsedRate ?? 0) > 0
-    }
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                Section("Worker") {
-                    TextField("Full name", text: $name)
-                        .textContentType(.name)
-                    TextField("Job title", text: $jobTitle)
-                    TextField("Email", text: $email)
-                        .textContentType(.emailAddress)
-                        .keyboardType(.emailAddress)
-                        .textInputAutocapitalization(.never)
-                    TextField("Phone", text: $phone)
-                        .textContentType(.telephoneNumber)
-                        .keyboardType(.phonePad)
-                }
-
-                Section("Default Rate") {
-                    TextField("Rate type", text: $rateType)
-                    HStack {
-                        Text("$")
-                            .foregroundColor(.secondary)
-                        TextField("Hourly rate", text: $hourlyRate)
-                            .keyboardType(.decimalPad)
-                    }
-                }
-
-                Section {
-                    Text("Additional rate types and payroll rules will stay in Labor, but this keeps the reusable worker directory accurate for v1.")
-                        .font(.footnote)
-                        .foregroundColor(.secondary)
-                }
-            }
-            .navigationTitle(isEditing ? "Edit Worker" : "Add Worker")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
-                        saveWorker()
-                    }
-                    .disabled(!canSave)
-                }
-            }
-        }
-    }
-
-    private func saveWorker() {
-        guard let rate = parsedRate else { return }
-
-        let trimmedRateType = rateType.trimmingCharacters(in: .whitespacesAndNewlines)
-        let defaultRate = EmployeeRate(
-            taskType: trimmedRateType.isEmpty ? "General Labor" : trimmedRateType,
-            rate: rate,
-            isDefault: true
-        )
-
-        if var existing = worker {
-            existing.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
-            existing.email = email.trimmingCharacters(in: .whitespacesAndNewlines)
-            existing.phone = phone.trimmingCharacters(in: .whitespacesAndNewlines)
-            existing.jobTitle = jobTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-            existing.rates = [defaultRate]
-            projectVM.updateTeamMember(existing)
-        } else {
-            let newWorker = TeamMember(
-                name: name.trimmingCharacters(in: .whitespacesAndNewlines),
-                email: email.trimmingCharacters(in: .whitespacesAndNewlines),
-                phone: phone.trimmingCharacters(in: .whitespacesAndNewlines),
-                jobTitle: jobTitle.trimmingCharacters(in: .whitespacesAndNewlines),
-                rates: [defaultRate],
-                organizationID: projectVM.currentOrganizationID ?? "RHEIR-LLC-MAIN-ORG",
-                role: .member
-            )
-            projectVM.addTeamMember(newWorker)
-        }
-
-        dismiss()
     }
 }
 
