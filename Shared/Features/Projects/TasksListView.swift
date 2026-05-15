@@ -109,15 +109,14 @@ struct TasksListView: View {
                 UniversalHeaderView()
                     .environmentObject(authVM)
                     .environmentObject(projectVM)
+
+                taskControlBar
                 
                 mainContent
             }
             .navigationTitle("")
             .navigationBarHidden(true)
             .searchable(text: $searchText, prompt: "Search tasks...")
-            .toolbar {
-                toolbarContent
-            }
             .sheet(isPresented: $showingNewTask) {
                 newTaskSheet
             }
@@ -147,9 +146,8 @@ struct TasksListView: View {
         }
     }
     
-    @ToolbarContentBuilder
-    private var toolbarContent: some ToolbarContent {
-        ToolbarItemGroup(placement: .navigationBarTrailing) {
+    private var taskControlBar: some View {
+        HStack {
             Menu {
                 ForEach(TaskFilter.allCases, id: \.rawValue) { filter in
                     Button {
@@ -166,15 +164,22 @@ struct TasksListView: View {
                     }
                 }
             } label: {
-                Image(systemName: "line.3.horizontal.decrease.circle")
+                Label(selectedFilter.rawValue, systemImage: "line.3.horizontal.decrease.circle")
             }
+            .buttonStyle(.bordered)
             
+            Spacer()
+
             Button(action: { showingNewTask = true }) {
-                Image(systemName: "plus")
+                Label("Add Task", systemImage: "plus")
             }
             .accessibilityIdentifier("tasks-add-button")
+            .buttonStyle(.borderedProminent)
             .disabled(projectVM.selectedProject == nil)
         }
+        .padding(.horizontal)
+        .padding(.vertical, 10)
+        .background(Color(.systemBackground))
     }
     
     @ViewBuilder
@@ -541,8 +546,10 @@ struct TaskCreateEditView: View {
             Form {
                 Section("Task Details") {
                     TextField("Task Title", text: $title)
+                        .accessibilityIdentifier("task-title-field")
                     TextField("Description", text: $description, axis: .vertical)
                         .lineLimit(3...6)
+                        .accessibilityIdentifier("task-description-field")
                 }
                 
                 Section("Settings") {
@@ -661,6 +668,10 @@ struct TaskDetailView: View {
     @EnvironmentObject var projectVM: ProjectViewModel
     @State private var showingEditTask = false
     @State private var showingCompletionSheet = false
+
+    private var liveTask: ProjectTask {
+        projectVM.selectedProject?.tasks.first(where: { $0.id == task.id }) ?? task
+    }
     
     var body: some View {
         NavigationStack {
@@ -669,21 +680,21 @@ struct TaskDetailView: View {
                     // Task Header
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
-                            Text(task.title)
+                            Text(liveTask.title)
                                 .font(.title2)
                                 .fontWeight(.bold)
                             
                             Spacer()
                             
-                            if task.isCompleted {
+                            if liveTask.isCompleted {
                                 Image(systemName: "checkmark.circle.fill")
                                     .font(.title2)
                                     .foregroundColor(.green)
                             }
                         }
                         
-                        if !task.description.isEmpty {
-                            Text(task.description)
+                        if !liveTask.description.isEmpty {
+                            Text(liveTask.description)
                                 .font(.body)
                                 .foregroundColor(.secondary)
                         }
@@ -691,29 +702,29 @@ struct TaskDetailView: View {
                     
                     // Task Details
                     VStack(alignment: .leading, spacing: 12) {
-                        DetailRow(title: "Category", value: task.category.displayName, icon: task.category.icon)
-                        DetailRow(title: "Priority", value: task.priority.displayName, icon: "exclamationmark.triangle.fill")
+                        DetailRow(title: "Category", value: liveTask.category.displayName, icon: liveTask.category.icon)
+                        DetailRow(title: "Priority", value: liveTask.priority.displayName, icon: "exclamationmark.triangle.fill")
                         
-                        if let dueDate = task.dueDate {
+                        if let dueDate = liveTask.dueDate {
                             DetailRow(title: "Due Date", value: dueDate.formatted(date: .abbreviated, time: .omitted), icon: "calendar")
                         }
                         
-                        DetailRow(title: "Estimated Hours", value: "\(String(format: "%.1f", task.estimatedHours)) hours", icon: "clock")
+                        DetailRow(title: "Estimated Hours", value: "\(String(format: "%.1f", liveTask.estimatedHours)) hours", icon: "clock")
 
-                        if !task.assignedEmployeeIDs.isEmpty {
+                        if !liveTask.assignedEmployeeIDs.isEmpty {
                             DetailRow(title: "Assigned", value: assigneeSummary, icon: "person.2.fill")
                         }
                         
-                        if task.isCompleted, let completedDate = task.completedDate {
+                        if liveTask.isCompleted, let completedDate = liveTask.completedDate {
                             DetailRow(title: "Completed", value: completedDate.formatted(date: .abbreviated, time: .shortened), icon: "checkmark.circle.fill")
                         }
 
-                        if task.isCompleted, !task.completedByEmployeeIDs.isEmpty {
+                        if liveTask.isCompleted, !liveTask.completedByEmployeeIDs.isEmpty {
                             DetailRow(title: "Completed By", value: completedBySummary, icon: "person.crop.circle.badge.checkmark")
                         }
 
-                        if !task.completionNotes.isEmpty {
-                            DetailRow(title: "Proof Notes", value: task.completionNotes, icon: "note.text")
+                        if !liveTask.completionNotes.isEmpty {
+                            DetailRow(title: "Proof Notes", value: liveTask.completionNotes, icon: "note.text")
                         }
                     }
                     .padding()
@@ -735,7 +746,7 @@ struct TaskDetailView: View {
                 
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Menu {
-                        if !task.isCompleted {
+                        if !liveTask.isCompleted {
                             Button("Mark Complete") {
                                 showingCompletionSheet = true
                             }
@@ -743,15 +754,18 @@ struct TaskDetailView: View {
                             Button("Reopen Task") {
                                 reopenTask()
                             }
+                            .accessibilityIdentifier("task-reopen-button")
                         }
                         
                         Button("Edit Task") {
                             showingEditTask = true
                         }
+                        .accessibilityIdentifier("task-edit-button")
                         
                         Button("Delete Task", role: .destructive) {
                             deleteTask()
                         }
+                        .accessibilityIdentifier("task-delete-button")
                     } label: {
                         Image(systemName: "ellipsis.circle")
                     }
@@ -761,7 +775,7 @@ struct TaskDetailView: View {
         }
         .sheet(isPresented: $showingEditTask) {
             if let project = projectVM.selectedProject {
-                TaskCreateEditView(project: project, task: task) { updatedTask in
+                TaskCreateEditView(project: project, task: liveTask) { updatedTask in
                     Task {
                         await projectVM.updateTask(updatedTask, in: project.id)
                     }
@@ -771,7 +785,7 @@ struct TaskDetailView: View {
             }
         }
         .sheet(isPresented: $showingCompletionSheet) {
-            TaskCompletionEditor(task: task) { completedTask in
+            TaskCompletionEditor(task: liveTask) { completedTask in
                 guard let project = projectVM.selectedProject else { return }
                 Task {
                     await projectVM.updateTask(completedTask, in: project.id)
@@ -786,7 +800,7 @@ struct TaskDetailView: View {
     private func reopenTask() {
         guard let project = projectVM.selectedProject else { return }
         
-        var reopenedTask = task
+        var reopenedTask = liveTask
         reopenedTask.isCompleted = false
         reopenedTask.completedDate = nil
         reopenedTask.completedByEmployeeIDs = []
@@ -803,18 +817,18 @@ struct TaskDetailView: View {
         guard let project = projectVM.selectedProject else { return }
         
         Task {
-            await projectVM.deleteTask(task, from: project.id)
+            await projectVM.deleteTask(liveTask, from: project.id)
         }
         dismiss()
     }
     
     private var assigneeSummary: String {
-        let names = task.assignedEmployeeIDs.compactMap { projectVM.getTeamMember(by: $0)?.name }
+        let names = liveTask.assignedEmployeeIDs.compactMap { projectVM.getTeamMember(by: $0)?.name }
         return names.isEmpty ? "Unavailable" : names.joined(separator: ", ")
     }
 
     private var completedBySummary: String {
-        let names = task.completedByEmployeeIDs.compactMap { projectVM.getTeamMember(by: $0)?.name }
+        let names = liveTask.completedByEmployeeIDs.compactMap { projectVM.getTeamMember(by: $0)?.name }
         return names.isEmpty ? "Unavailable" : names.joined(separator: ", ")
     }
 }

@@ -556,6 +556,69 @@ final class RHEIRUITests: XCTestCase {
     }
 
     @MainActor
+    func testTaskManagementSupportsCreateEditReopenAndDelete() throws {
+        let app = makeApp(mode: .taskManagement)
+        app.launch()
+        app.tabBars.buttons["Tasks"].tap()
+
+        let taskListScreenshot = XCTAttachment(screenshot: app.screenshot())
+        taskListScreenshot.name = "Tasks CRUD control bar"
+        taskListScreenshot.lifetime = .keepAlways
+        add(taskListScreenshot)
+
+        app.buttons["tasks-add-button"].tap()
+        XCTAssertTrue(app.navigationBars["New Task"].waitForExistence(timeout: 5))
+        let titleField = app.textFields["task-title-field"]
+        XCTAssertTrue(titleField.waitForExistence(timeout: 5))
+        titleField.tap()
+        titleField.typeText("Stage backsplash tile")
+        app.buttons["task-save-button"].tap()
+
+        let newTask = app.staticTexts["Stage backsplash tile"]
+        XCTAssertTrue(newTask.waitForExistence(timeout: 5))
+        newTask.tap()
+        XCTAssertTrue(app.navigationBars["Task Details"].waitForExistence(timeout: 5))
+
+        app.buttons["task-detail-menu"].tap()
+        app.buttons["task-edit-button"].tap()
+        XCTAssertTrue(app.navigationBars["Edit Task"].waitForExistence(timeout: 5))
+        let editedTitleField = app.textFields["task-title-field"]
+        replaceText(in: editedTitleField, with: "Stage tile materials")
+        app.buttons["task-save-button"].tap()
+        XCTAssertTrue(
+            app.staticTexts["Stage tile materials"].waitForExistence(timeout: 5),
+            "Expected detail content to refresh from the live edited task."
+        )
+
+        app.buttons["task-detail-menu"].tap()
+        app.buttons["task-delete-button"].tap()
+        XCTAssertTrue(
+            app.staticTexts["All Other Tasks (1)"].waitForExistence(timeout: 5),
+            "Expected deleting the newly created task to refresh the live list."
+        )
+
+        let overdueTask = app.buttons["task-row-A11B1F20-08A0-4B3B-9A52-9A687EE92001"]
+        overdueTask.tap()
+        app.buttons["task-detail-menu"].tap()
+        app.buttons["Mark Complete"].tap()
+        let notesField = app.textFields["Completion notes"]
+        XCTAssertTrue(notesField.waitForExistence(timeout: 5))
+        notesField.tap()
+        notesField.typeText("Ready for next trade.")
+        app.buttons["Complete"].tap()
+
+        let completedTask = app.buttons["task-row-A11B1F20-08A0-4B3B-9A52-9A687EE92001"]
+        XCTAssertTrue(completedTask.waitForExistence(timeout: 5))
+        completedTask.tap()
+        app.buttons["task-detail-menu"].tap()
+        app.buttons["task-reopen-button"].tap()
+        XCTAssertTrue(
+            app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Overdue Tasks (1)")).firstMatch.waitForExistence(timeout: 5),
+            "Expected reopening a task to restore overdue state immediately."
+        )
+    }
+
+    @MainActor
     func testBudgetSurfaceShowsOnlyFastShipV1Tabs() throws {
         let app = makeApp(mode: .selectedProject)
         app.launch()
@@ -2177,6 +2240,15 @@ final class RHEIRUITests: XCTestCase {
         }
 
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1)).tap()
+    }
+
+    private func replaceText(in field: XCUIElement, with value: String) {
+        field.tap()
+        let currentValue = field.value as? String ?? ""
+        if !currentValue.isEmpty {
+            field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: currentValue.count))
+        }
+        field.typeText(value)
     }
 
 }
