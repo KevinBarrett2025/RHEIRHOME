@@ -33,6 +33,10 @@
 - `LaborPaymentView` now exposes logged-hour editing, paid-entry hour editing, payment correction, and a compact tab selector so Unpaid/Paid/Summary remains legible on device.
 - `ProjectViewModel+TimeEntry` now supports payment correction through the shared mutation seam, preserving a reversal audit trail before recording the corrected payment.
 - `RHEIRTests` now expands the Labor/Business Resources acceptance path across multi-rate worker persistence, edited hours, corrected partial payments, split payment, unpay/reissue, and reload persistence.
+- `WorkHour` now separates actual paid cash from earned/applied labor so editing paid hours downward preserves the historical payment ledger and surfaces an explicit overpayment instead of rewriting the payment total to the edited earned amount.
+- `ProjectViewModel+Clocking` now carries earned, unpaid, paid-cash, and overpaid labor totals separately so job cost and payroll balances can reconcile from the same persisted payment ledger without inflating earned labor.
+- `BusinessWorkersResourceView` now removes workers by deactivating/end-of-contracting them, preserving historical labor and payroll records while keeping inactive workers out of the active roster.
+- `LaborPaymentView` now renders paid entries as bordered professional accounting cards with earned, paid, balance/overpayment, method, reference, and action rows instead of loose floating content.
 - Canonical tree cleanup completed in the working branch.
 - Session flow consolidated around `AppSessionSupport.swift`.
 - `Project.swift` now carries the first compiled estimator domain with intake, draft, versioned baseline, variance, source-evidence, and proposal-view models plus bridge helpers back into `Project` budget summary fields.
@@ -182,6 +186,11 @@
   - Labor editability full unit parity: PASS (`xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -only-testing:RHEIRTests -skip-testing:RHEIRUITests -resultBundlePath /tmp/rheir_labor_business_editability_unit.xcresult test`, `/tmp/rheir_labor_business_editability_unit.xcresult`, `68 tests in 20 suites`)
   - Labor editability Gate A: PASS (`xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -resultBundlePath /tmp/rheir_gateA_labor_editability.xcresult clean build`, `/tmp/rheir_gateA_labor_editability.xcresult`)
   - Labor editability pbxproj drift: NONE
+  - Labor accounting hardening ledger parity: PASS (`/tmp/rheir_labor_accounting_overpayment_final.xcresult`, `/tmp/rheir_labor_accounting_acceptance_final.xcresult`, `/tmp/rheir_labor_accounting_existing_ledger_final.xcresult`, `4 focused tests across 3 result bundles`)
+  - Labor accounting hardening UI smoke: PASS (`xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -only-testing:RHEIRUITests/RHEIRUITests/testLaborManagementOpensWorkerPaymentLedger -resultBundlePath /tmp/rheir_labor_accounting_ui_final.xcresult test`, `/tmp/rheir_labor_accounting_ui_final.xcresult`, `1 UI test`)
+  - Labor accounting hardening visual evidence: `/tmp/rheir_labor_accounting_ui_final_attachments/C1B62C59-44D4-4B22-9FDC-2E3756510199.png`
+  - Labor accounting hardening Gate A: PASS (`xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -resultBundlePath /tmp/rheir_gateA_labor_accounting_hardening_final.xcresult clean build`, `/tmp/rheir_gateA_labor_accounting_hardening_final.xcresult`)
+  - Labor accounting hardening pbxproj drift: NONE
   - Device build/install verification: PASS (`xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'id=00008140-0011492622E8801C' -derivedDataPath /tmp/rheir_phase2_device_verify_v2_dd -resultBundlePath /tmp/rheir_phase2_device_verify_v2_build.xcresult build`, `/tmp/rheir_phase2_device_verify_v2_build.xcresult`) with copied device payloads showing `projects.json` shrunk to `2947` bytes and `offline_projects.json` to `3437` bytes without inline image blobs
 
 ## Open Work
@@ -189,6 +198,7 @@
 - Completed-project archive/reopen is simulator-proven; verify the reopen action on device during the next project lifecycle acceptance pass.
 - Business Resources hub entry is simulator-proven; verify add/edit workers, vendors, and payment methods on device during the next Labor/Resources acceptance pass.
 - Labor payment hardening is simulator-proven for multi-rate worker/rate management, editable logged hours, partial/split payments, payment correction, check/reference metadata, and unpay/reissue; complete device acceptance before marking Labor release-accepted.
+- Labor accounting and UI professionalism are explicit release criteria before Tasks: paid history must survive later edits, over/under balances must be visible, totals must reconcile from persistence, and compact device sheets/rows must remain bounded and untruncated.
 - Rework Tasks into a shippable contractor workflow with multi-task CRUD, assignment, due/overdue state, completion proof, photos, and immediate project/report refresh.
 - Finish Reports around contractor outputs: project summary, category/cost-code spend, vendor spend, payment-method spend, labor payroll, profit/loss, and closeout/export summaries.
 - Remove placeholder/dead/redundant UI across active v1 flows before promo candidacy.

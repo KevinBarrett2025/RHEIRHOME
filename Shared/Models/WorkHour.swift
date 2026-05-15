@@ -161,21 +161,29 @@ public struct WorkHour: Identifiable, Codable, Hashable, Sendable {
         hours * rate
     }
 
-    public var effectivePaidAmount: Double {
+    public var totalPaidAmount: Double {
         if paymentEntries.isEmpty {
             return isPaid ? straightTimePay : 0
         }
 
         let paid = paymentEntries.reduce(0) { $0 + $1.signedAmount }
-        return min(max(0, paid), straightTimePay)
+        return max(0, paid)
+    }
+
+    public var effectivePaidAmount: Double {
+        min(totalPaidAmount, straightTimePay)
     }
 
     public var effectiveUnpaidAmount: Double {
         max(0, straightTimePay - effectivePaidAmount)
     }
 
+    public var overpaidAmount: Double {
+        max(0, totalPaidAmount - straightTimePay)
+    }
+
     public var hasAnyPayment: Bool {
-        effectivePaidAmount > 0
+        totalPaidAmount > 0
     }
 
     public var isFullyPaid: Bool {
@@ -412,9 +420,10 @@ public struct WorkHour: Identifiable, Codable, Hashable, Sendable {
         method: String,
         reference: String = "",
         note: String = "",
-        paidAt: Date = Date()
+        paidAt: Date = Date(),
+        allowOverpayment: Bool = false
     ) {
-        let amountToApply = min(max(0, amount), effectiveUnpaidAmount)
+        let amountToApply = allowOverpayment ? max(0, amount) : min(max(0, amount), effectiveUnpaidAmount)
         guard amountToApply > 0 else { return }
 
         let entry = LaborPaymentEntry(
@@ -432,10 +441,10 @@ public struct WorkHour: Identifiable, Codable, Hashable, Sendable {
     }
 
     public mutating func reversePayments(note: String = "", reversedAt: Date = Date()) {
-        guard effectivePaidAmount > 0 else { return }
+        guard totalPaidAmount > 0 else { return }
 
         let reversal = LaborPaymentEntry(
-            amount: effectivePaidAmount,
+            amount: totalPaidAmount,
             method: paymentMethod ?? "Reversal",
             reference: "",
             note: note,

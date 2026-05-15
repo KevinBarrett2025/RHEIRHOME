@@ -346,6 +346,10 @@ extension ProjectViewModel {
     }
     
     var laborTotalsByEmployee: [String: (unpaid: Double, paid: Double)] {
-        get { laborTotalsByTeamMember }
+        get {
+            laborTotalsByTeamMember.mapValues { totals in
+                (unpaid: totals.unpaid, paid: totals.paid)
+            }
+        }
     }
 }

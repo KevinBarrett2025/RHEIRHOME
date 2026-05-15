@@ -1750,6 +1750,50 @@ struct LaborPaymentLedgerTests {
     }
 
     @Test
+    func paidCashSurvivesHourReductionAsOverpayment() {
+        let start = Date(timeIntervalSince1970: 1_747_268_820)
+        var workHour = WorkHour(
+            id: UUID(uuidString: "C6F8E5C1-60D5-4C7C-8AF4-0B80E8E5A8DA")!,
+            date: start,
+            startTime: start,
+            endTime: start.addingTimeInterval(3_600),
+            lunchStart: nil,
+            lunchEnd: nil,
+            employee: "Kevin Barrett",
+            employeeID: nil,
+            rate: 45,
+            category: "Admin",
+            isPaid: false,
+            paymentMethod: nil,
+            paymentNote: nil,
+            paymentTimestamp: nil
+        )
+
+        workHour.recordPayment(amount: 25, method: "Cash", note: "First partial", paidAt: start.addingTimeInterval(60))
+        workHour.recordPayment(amount: 20, method: "Cash", note: "Second partial", paidAt: start.addingTimeInterval(120))
+
+        #expect(workHour.straightTimePay == 45)
+        #expect(workHour.totalPaidAmount == 45)
+        #expect(workHour.effectivePaidAmount == 45)
+        #expect(workHour.overpaidAmount == 0)
+
+        workHour.endTime = start.addingTimeInterval(1_056.8)
+
+        #expect(abs(workHour.straightTimePay - 13.21) < 0.01)
+        #expect(workHour.totalPaidAmount == 45)
+        #expect(abs(workHour.effectivePaidAmount - 13.21) < 0.01)
+        #expect(abs(workHour.overpaidAmount - 31.79) < 0.01)
+        #expect(workHour.effectiveUnpaidAmount == 0)
+        #expect(workHour.isFullyPaid == true)
+
+        workHour.reversePayments(note: "Refund or correction needed", reversedAt: start.addingTimeInterval(180))
+        #expect(workHour.totalPaidAmount == 0)
+        #expect(workHour.effectivePaidAmount == 0)
+        #expect(abs(workHour.effectiveUnpaidAmount - 13.21) < 0.01)
+        #expect(workHour.paymentEntries.last?.isReversal == true)
+    }
+
+    @Test
     func projectViewModelDistributesAndReversesLaborPaymentsThroughMutationSeam() {
         let suiteName = "LaborPaymentLedgerTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
@@ -2025,6 +2069,16 @@ struct LaborPaymentLedgerTests {
         #expect(restoredHour?.effectivePaidAmount == 126)
         #expect(restoredHour?.effectiveUnpaidAmount == 0)
         #expect(restoredHour?.paymentEntries.last?.reference == "REISSUE-2003")
+
+        var inactiveWorker = worker
+        inactiveWorker.terminate(reason: "Removed from active worker list", type: .endOfContract, date: shiftStart.addingTimeInterval(900))
+        viewModel.updateTeamMember(inactiveWorker)
+
+        let restoredInactiveWorker = projectStore.loadTeamMembers(for: orgID).first { $0.id == worker.id }
+        #expect(restoredInactiveWorker?.isActive == false)
+        #expect(restoredInactiveWorker?.employmentStatus == .terminated)
+        #expect(restoredInactiveWorker?.terminationType == .endOfContract)
+        #expect(projectStore.loadProjects(for: orgID).first { $0.id == project.id }?.loggedHours.contains { $0.employeeID == worker.id } == true)
     }
 }
 

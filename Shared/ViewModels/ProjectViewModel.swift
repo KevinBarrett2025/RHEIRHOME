@@ -91,7 +91,7 @@ class ProjectViewModel: ObservableObject {
     private var receiptPaymentMethodCache: [String: PaymentMethod] = [:]
     
     // PHASE 2A: Add missing properties for compatibility
-    @Published var laborTotalsByTeamMember: [String: (unpaid: Double, paid: Double)] = [:]
+    @Published var laborTotalsByTeamMember: [String: LaborMemberTotals] = [:]
     @Published var groupedHoursByTeamMember: [String: [WorkHour]] = [:]
     @Published var isMigratingPhotos: Bool = false
     @Published var isOnline: Bool = true // Stub: assume online for Phase 1

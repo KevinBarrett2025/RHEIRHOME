@@ -3,7 +3,7 @@
 ## Repo
 - Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Branch: `gm/rheir-hardening-phase1`
-- HEAD: `cd7e4ab9160c1bc7c9bc9867b1eb1bdf09ae5c9c`
+- HEAD: `95865672604ca2ec8e65dbb15c06630d417f0e8d`
 
 ## Active Initiative
 - RHEIR release hardening, Fast-Ship Hybrid contractor workflow hardening.
@@ -37,6 +37,9 @@
 - Added Labor Payment editability for logged hours and payment correction/reissue, while keeping partial/split payments on the shared project mutation seam and preserving the payment audit trail.
 - Tightened the Labor Payment tab selector so Unpaid/Paid/Summary remains accessible on narrow device widths instead of truncating the row.
 - Expanded Labor acceptance parity to prove multi-rate workers, edited logged hours, corrected partial payments, final split payments, unpay/reissue, and ProjectStore reload persistence.
+- Hardened Labor accounting after device feedback so paid cash is tracked separately from earned/applied labor, edited paid hours can produce an explicit overpayment instead of erasing payment history, and payment reversals reverse the full cash ledger amount.
+- Added a Business Resources worker removal path that deactivates/end-of-contracts workers while preserving historical logged hours, rates, and payment records.
+- Reworked the Labor Payment paid ledger row into a bordered professional accounting card with earned, paid, balance/overpayment, method, reference, and action rows, and added visual UI smoke evidence for the layout.
 - Added nil-organization sign-out hardening so `notifyProjectViewModelOrganizationChange(nil)` clears `ProjectViewModel` state before async refresh, and `organizationDidChange(nil)` now treats the nil org as an authoritative clear instead of reusing the last organization id.
 - Added focused session-support regression coverage proving the sign-out path delivers the active org first and the nil clear second to the project-view-model seam before any async refresh runs.
 - Confirmed on real device that fast-ship sign-out now clears organization-scoped workspace state without replaying stale zone setup, snapshot load, or project refresh before the next sign-in begins.
@@ -182,9 +185,10 @@
 ## In Progress
 - Lock the shipping app into the Fast-Ship Hybrid release profile so the visible shell stays single-user focused while hidden CloudKit/personal-workspace infrastructure remains available.
 - Implement the remaining Working-App release blockers in this order: Tasks, Reports, UI cleanup, and device acceptance.
-- Labor payment hardening is simulator-proven for multi-rate worker editing, editable logged hours, partial/split payments, payment correction, unpay/reissue, and local reload persistence; verify the same flow on device before treating Labor as release-accepted.
+- Labor payment hardening is simulator-proven for multi-rate worker editing, editable logged hours, partial/split payments, payment correction, cash-preserving overpayment math after edited paid hours, worker deactivation, unpay/reissue, professional paid-ledger row layout, and local reload persistence; verify the same flow on device before treating Labor as release-accepted.
 - Business Resources is simulator-proven for hub entry and worker/rate access; verify add/edit workers, vendors, and payment methods on device alongside the Labor acceptance pass.
-- Latest simulator acceptance rerun is green for the combined Labor payment ledger, Business Resources entry, Labor/Business Resources state-seam acceptance path, and expanded Labor editability/partial-payment persistence path; remaining Labor acceptance risk is physical-device/manual UX confirmation of the same flow.
+- Latest simulator acceptance rerun is green for the combined Labor payment ledger, Business Resources entry, Labor/Business Resources state-seam acceptance path, expanded Labor editability/partial-payment persistence path, cash-overpayment accounting regression, worker deactivation persistence, and professional paid-ledger UI smoke; remaining Labor acceptance risk is physical-device/manual UX confirmation of the same flow.
+- Treat accounting math and professional UI/UX as release blockers for every remaining Fast-Ship surface: totals must reconcile from persisted records, payment history must not be rewritten by later edits, over/under balances must be explicit, and compact-device rows/sheets must be visually bounded with no truncation before moving a seam to release-accepted.
 - Continue broader selected-project estimator variance/runtime QA on top of the approved-baseline mapping seam inside the simplified v1 shell.
 - Continue broader selected-project receipt runtime QA in parallel, with same-device/device validation now the active release seam after manual-receipt relaunch, scanned-receipt return/reopen, and launch-time receipt hydration parity are green in simulator.
 - Continue shrinking the remaining oversized active state owners around the new sync and access store boundaries.
@@ -196,6 +200,11 @@
 - Raw in-sandbox `xcodebuild` commands are still less reliable than elevated CLI or `xcodebuildmcp` paths in this environment because CoreSimulator and DerivedData access remain sandbox-sensitive.
 
 ## Latest Evidence
+- Labor accounting hardening focused ledger parity: overpayment regression, Labor/Business Resources acceptance, and existing partial-payment ledger tests each passed in focused runs (`/tmp/rheir_labor_accounting_overpayment_final.xcresult`, `/tmp/rheir_labor_accounting_acceptance_final.xcresult`, `/tmp/rheir_labor_accounting_existing_ledger_final.xcresult`; `4 focused tests across 3 result bundles`)
+- Labor accounting hardening UI smoke with screenshot: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -only-testing:RHEIRUITests/RHEIRUITests/testLaborManagementOpensWorkerPaymentLedger -resultBundlePath /tmp/rheir_labor_accounting_ui_final.xcresult test` -> PASS (`/tmp/rheir_labor_accounting_ui_final.xcresult`, `1 UI test`)
+- Labor accounting hardening visual evidence: `/tmp/rheir_labor_accounting_ui_final_attachments/C1B62C59-44D4-4B22-9FDC-2E3756510199.png`
+- Labor accounting hardening Gate A: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -resultBundlePath /tmp/rheir_gateA_labor_accounting_hardening_final.xcresult clean build` -> PASS (`/tmp/rheir_gateA_labor_accounting_hardening_final.xcresult`)
+- Labor accounting hardening pbxproj drift: NONE
 - Labor editability/full unit parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -only-testing:RHEIRTests -skip-testing:RHEIRUITests -resultBundlePath /tmp/rheir_labor_business_editability_unit.xcresult test` -> PASS (`/tmp/rheir_labor_business_editability_unit.xcresult`, `68 tests`, including expanded Labor acceptance and partial-payment persistence)
 - Labor editability Gate A: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -resultBundlePath /tmp/rheir_gateA_labor_editability.xcresult clean build` -> PASS (`/tmp/rheir_gateA_labor_editability.xcresult`)
 - Labor + Business Resources simulator acceptance parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_labor_business_acceptance_dd -resultBundlePath /tmp/rheir_labor_business_acceptance.xcresult test -only-testing:RHEIRTests/LaborPaymentLedgerTests -only-testing:RHEIRUITests/RHEIRUITests/testBusinessResourcesEntryOpensReusableResourceHub -only-testing:RHEIRUITests/RHEIRUITests/testLaborManagementOpensWorkerPaymentLedger` -> PASS (`/tmp/rheir_labor_business_acceptance.xcresult`, `2 unit tests plus 2 UI tests`)

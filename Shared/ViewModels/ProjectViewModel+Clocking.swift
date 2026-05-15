@@ -71,9 +71,7 @@ extension ProjectViewModel {
 
         let computation = laborStore.recompute(project: project, teamMembers: teamMembers)
         groupedHoursByTeamMember = computation.groupedHoursByMember
-        laborTotalsByTeamMember = computation.totalsByMember.mapValues { totals in
-            (unpaid: totals.unpaid, paid: totals.paid)
-        }
+        laborTotalsByTeamMember = computation.totalsByMember
 
         updateTeamMemberCaches()
 
@@ -138,8 +136,17 @@ extension ProjectViewModel {
 }
 
 struct LaborMemberTotals: Codable, Equatable {
+    var earned: Double
     var unpaid: Double
     var paid: Double
+    var overpaid: Double
+
+    init(earned: Double = 0.0, unpaid: Double = 0.0, paid: Double = 0.0, overpaid: Double = 0.0) {
+        self.earned = earned
+        self.unpaid = unpaid
+        self.paid = paid
+        self.overpaid = overpaid
+    }
 }
 
 struct LaborComputation: Equatable {
@@ -161,13 +168,15 @@ final class LaborStore {
 
             if memberHours[memberKey] == nil {
                 memberHours[memberKey] = []
-                memberTotals[memberKey] = LaborMemberTotals(unpaid: 0.0, paid: 0.0)
+                memberTotals[memberKey] = LaborMemberTotals()
             }
 
             memberHours[memberKey, default: []].append(workHour)
 
-            memberTotals[memberKey, default: LaborMemberTotals(unpaid: 0.0, paid: 0.0)].paid += workHour.effectivePaidAmount
-            memberTotals[memberKey, default: LaborMemberTotals(unpaid: 0.0, paid: 0.0)].unpaid += workHour.effectiveUnpaidAmount
+            memberTotals[memberKey, default: LaborMemberTotals()].earned += workHour.straightTimePay
+            memberTotals[memberKey, default: LaborMemberTotals()].paid += workHour.totalPaidAmount
+            memberTotals[memberKey, default: LaborMemberTotals()].unpaid += workHour.effectiveUnpaidAmount
+            memberTotals[memberKey, default: LaborMemberTotals()].overpaid += workHour.overpaidAmount
         }
 
         return LaborComputation(groupedHoursByMember: memberHours, totalsByMember: memberTotals)
@@ -182,6 +191,10 @@ final class LaborStore {
         return totals.unpaid + totals.paid
     }
 
+    func totalAmount(for memberName: String, totalsByMember: [String: LaborMemberTotals]) -> Double {
+        totalsByMember[memberName]?.earned ?? 0.0
+    }
+
     func projectUnpaidHours(groupedHoursByMember: [String: [WorkHour]]) -> Double {
         groupedHoursByMember.values
             .flatMap { $0 }
@@ -193,12 +206,20 @@ final class LaborStore {
         totalsByMember.values.reduce(0) { $0 + $1.unpaid }
     }
 
+    func projectUnpaidAmount(totalsByMember: [String: LaborMemberTotals]) -> Double {
+        totalsByMember.values.reduce(0) { $0 + $1.unpaid }
+    }
+
     func projectTotalHours(groupedHoursByMember: [String: [WorkHour]]) -> Double {
         groupedHoursByMember.values.flatMap { $0 }.reduce(0) { $0 + $1.hours }
     }
 
     func projectTotalLaborCost(totalsByMember: [String: (unpaid: Double, paid: Double)]) -> Double {
         totalsByMember.values.reduce(0) { $0 + $1.unpaid + $1.paid }
+    }
+
+    func projectTotalLaborCost(totalsByMember: [String: LaborMemberTotals]) -> Double {
+        totalsByMember.values.reduce(0) { $0 + $1.earned }
     }
 
     func validate(

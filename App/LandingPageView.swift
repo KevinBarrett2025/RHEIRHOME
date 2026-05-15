@@ -934,6 +934,7 @@ struct BusinessWorkersResourceView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var projectVM: ProjectViewModel
     @State private var editorState: BusinessWorkerEditorState?
+    @State private var removingWorker: TeamMember?
 
     private var workers: [TeamMember] {
         projectVM.teamMembers
@@ -1005,6 +1006,23 @@ struct BusinessWorkersResourceView: View {
                     .environmentObject(projectVM)
             }
         }
+        .alert(
+            "Remove Worker?",
+            isPresented: Binding(
+                get: { removingWorker != nil },
+                set: { if !$0 { removingWorker = nil } }
+            )
+        ) {
+            Button("Cancel", role: .cancel) {}
+            Button("Remove from Active Workers", role: .destructive) {
+                if let removingWorker {
+                    removeFromActiveWorkers(removingWorker)
+                    self.removingWorker = nil
+                }
+            }
+        } message: {
+            Text("\(removingWorker?.name ?? "This worker") will no longer appear in active worker lists. Existing hours, rates, and payment history stay in project records.")
+        }
     }
 
     private func workerRow(_ worker: TeamMember) -> some View {
@@ -1036,8 +1054,30 @@ struct BusinessWorkersResourceView: View {
             }
             .buttonStyle(.bordered)
             .accessibilityIdentifier("business-worker-edit-\(worker.id.uuidString)")
+
+            Button(role: .destructive) {
+                removingWorker = worker
+            } label: {
+                Image(systemName: "person.crop.circle.badge.minus")
+            }
+            .buttonStyle(.bordered)
+            .accessibilityLabel("Remove \(worker.name)")
+            .accessibilityIdentifier("business-worker-remove-\(worker.id.uuidString)")
         }
         .padding(.vertical, 4)
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            Button(role: .destructive) {
+                removingWorker = worker
+            } label: {
+                Label("Remove", systemImage: "person.crop.circle.badge.minus")
+            }
+        }
+    }
+
+    private func removeFromActiveWorkers(_ worker: TeamMember) {
+        var updatedWorker = worker
+        updatedWorker.terminate(reason: "Removed from active worker list", type: .endOfContract)
+        projectVM.updateTeamMember(updatedWorker)
     }
 
     private func initials(for name: String) -> String {

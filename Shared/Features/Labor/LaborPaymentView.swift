@@ -66,6 +66,10 @@ struct LaborPaymentView: View {
     private var totalUnpaidAmount: Double {
         memberUnpaidHours.reduce(0) { $0 + $1.effectiveUnpaidAmount }
     }
+
+    private var totalOverpaidAmount: Double {
+        allMemberHours.reduce(0) { $0 + $1.overpaidAmount }
+    }
     
     private var totalUnpaidHours: Double {
         memberUnpaidHours.reduce(0) { $0 + $1.hours }
@@ -200,7 +204,9 @@ struct LaborPaymentView: View {
             HStack {
                 statBox("Unpaid Amount", totalUnpaidAmount.formatAsCurrency(), .orange)
                 statBox("Paid This Month", calculatePaidThisMonth().formatAsCurrency(), .green)
-                statBox("Total Earned", calculateTotalEarned().formatAsCurrency(), .blue)
+                statBox(totalOverpaidAmount > 0 ? "Overpaid" : "Total Earned",
+                        (totalOverpaidAmount > 0 ? totalOverpaidAmount : calculateTotalEarned()).formatAsCurrency(),
+                        totalOverpaidAmount > 0 ? .red : .blue)
             }
         }
         .padding()
@@ -371,6 +377,9 @@ struct LaborPaymentView: View {
                         summaryRow("Total Amount Earned", calculateTotalEarned().formatAsCurrency())
                         summaryRow("Amount Paid", calculateTotalPaid().formatAsCurrency())
                         summaryRow("Amount Outstanding", totalUnpaidAmount.formatAsCurrency())
+                        if totalOverpaidAmount > 0 {
+                            summaryRow("Overpaid Balance", totalOverpaidAmount.formatAsCurrency())
+                        }
                         
                         Divider()
                         
@@ -473,7 +482,7 @@ struct LaborPaymentView: View {
     }
     
     private func calculateTotalPaid() -> Double {
-        return memberPaidHours.reduce(0) { $0 + $1.effectivePaidAmount }
+        return memberPaidHours.reduce(0) { $0 + $1.totalPaidAmount }
     }
     
     private func calculateAverageRate() -> Double {
@@ -492,7 +501,7 @@ struct LaborPaymentView: View {
         return memberPaidHours.filter { hour in
             guard let paymentDate = hour.paymentTimestamp else { return false }
             return calendar.isDate(paymentDate, equalTo: now, toGranularity: .month)
-        }.reduce(0) { $0 + $1.effectivePaidAmount }
+        }.reduce(0) { $0 + $1.totalPaidAmount }
     }
     
     private func calculateHoursThisMonth() -> Double {
@@ -576,11 +585,11 @@ struct WorkHourRowView: View {
         .padding()
         .background(
             RoundedRectangle(cornerRadius: 10)
-                .fill(isSelected ? Color.green.opacity(0.1) : Color(.systemGray6))
+                .fill(isSelected ? Color.green.opacity(0.12) : Color(.secondarySystemGroupedBackground))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 10)
-                .stroke(isSelected ? Color.green : Color.clear, lineWidth: 2)
+                .stroke(isSelected ? Color.green : Color(.separator).opacity(0.7), lineWidth: isSelected ? 2 : 1)
         )
     }
 }
@@ -596,14 +605,22 @@ struct PaidWorkHourRowView: View {
     }
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 10) {
                 Image(systemName: "checkmark.circle.fill")
+                    .font(.title3)
                     .foregroundColor(.green)
-                
-                Text(hour.date.formatted(date: .abbreviated, time: .omitted))
-                    .font(.subheadline)
-                    .fontWeight(.medium)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(hour.date.formatted(date: .abbreviated, time: .omitted))
+                        .font(.subheadline.weight(.semibold))
+
+                    if let paymentDate = hour.paymentTimestamp {
+                        Text("Paid \(paymentDate.formatted(date: .abbreviated, time: .omitted))")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
                 
                 Spacer()
                 
@@ -613,62 +630,46 @@ struct PaidWorkHourRowView: View {
                     .foregroundColor(.blue)
             }
             
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Paid: \(hour.effectivePaidAmount.formatAsCurrency())")
-                        .font(.caption)
-                        .fontWeight(.medium)
-                        .foregroundColor(.green)
-                    
-                    if let method = hour.paymentMethod {
-                        Text("Method: \(method)")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-
-                    if let reference = latestPayment?.reference, !reference.isEmpty {
-                        Text("Reference: \(reference)")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
+            VStack(spacing: 8) {
+                paymentDetailRow("Earned", hour.straightTimePay.formatAsCurrency(), .primary)
+                paymentDetailRow("Paid", hour.totalPaidAmount.formatAsCurrency(), .green)
+                if hour.overpaidAmount > 0 {
+                    paymentDetailRow("Overpaid", hour.overpaidAmount.formatAsCurrency(), .red)
+                } else if hour.effectiveUnpaidAmount > 0 {
+                    paymentDetailRow("Balance", hour.effectiveUnpaidAmount.formatAsCurrency(), .orange)
                 }
-                
-                Spacer()
-                
-                VStack(alignment: .trailing, spacing: 6) {
-                    if let paymentDate = hour.paymentTimestamp {
-                        Text("Paid \(paymentDate.formatted(date: .abbreviated, time: .omitted))")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
+                if let method = hour.paymentMethod {
+                    paymentDetailRow("Method", method, .secondary)
+                }
+                if let reference = latestPayment?.reference, !reference.isEmpty {
+                    paymentDetailRow("Reference", reference, .secondary)
+                }
+            }
 
+            if onEditHour != nil || onCorrectPayment != nil || onUnpay != nil {
+                Divider()
+
+                HStack(spacing: 8) {
                     if let onEditHour {
                         Button("Edit Hours", action: onEditHour)
-                            .font(.caption)
                             .buttonStyle(.bordered)
                             .accessibilityIdentifier("labor-hour-edit-\(hour.id.uuidString)")
                     }
 
                     if let onCorrectPayment {
                         Button("Edit Payment", action: onCorrectPayment)
-                            .font(.caption)
                             .buttonStyle(.bordered)
                             .accessibilityIdentifier("labor-payment-edit-\(hour.id.uuidString)")
                     }
 
                     if let onUnpay {
-                        Button {
-                            onUnpay()
-                        } label: {
-                            Text("Unpay")
-                                .accessibilityIdentifier("labor-payment-unpay-label-\(hour.id.uuidString)")
-                        }
-                        .font(.caption)
-                        .buttonStyle(.bordered)
-                        .tint(.orange)
-                        .accessibilityIdentifier("labor-payment-unpay-\(hour.id.uuidString)")
+                        Button("Unpay", action: onUnpay)
+                            .buttonStyle(.bordered)
+                            .tint(.orange)
+                            .accessibilityIdentifier("labor-payment-unpay-\(hour.id.uuidString)")
                     }
                 }
+                .font(.caption.weight(.semibold))
             }
             
             if let notes = hour.paymentNote, !notes.isEmpty {
@@ -679,9 +680,29 @@ struct PaidWorkHourRowView: View {
             }
         }
         .padding()
-        .background(Color(.systemGray6))
-        .cornerRadius(10)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(Color(.secondarySystemGroupedBackground))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(Color(.separator).opacity(0.7), lineWidth: 1)
+        )
         .accessibilityIdentifier("labor-paid-hour-\(hour.id.uuidString)")
+    }
+
+    @ViewBuilder
+    private func paymentDetailRow(_ label: String, _ value: String, _ color: Color) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(label)
+                .font(.caption)
+                .foregroundColor(.secondary)
+            Spacer(minLength: 12)
+            Text(value)
+                .font(.caption.weight(.semibold))
+                .foregroundColor(color)
+                .multilineTextAlignment(.trailing)
+        }
     }
 }
 
@@ -790,8 +811,8 @@ struct LaborHourEditorView: View {
                         Text((max(0, editedHours) * resolvedRate).formatAsCurrency())
                             .fontWeight(.semibold)
                     }
-                    if hour.effectivePaidAmount > 0 {
-                        Text("Existing payment entries remain attached. Paid and unpaid totals will recalculate from the edited hours and rate.")
+                    if hour.totalPaidAmount > 0 {
+                        Text("Existing payment entries remain attached. Paid cash stays unchanged; unpaid or overpaid balances recalculate from the edited hours and rate.")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
@@ -891,14 +912,14 @@ struct LaborPaymentCorrectionView: View {
         self.teamMember = teamMember
         self.hour = hour
         let latestPayment = hour.paymentEntries.last(where: { !$0.isReversal })
-        _amountText = State(initialValue: String(format: "%.2f", hour.effectivePaidAmount))
+        _amountText = State(initialValue: String(format: "%.2f", hour.totalPaidAmount))
         _method = State(initialValue: latestPayment?.method ?? hour.paymentMethod ?? "Cash")
         _reference = State(initialValue: latestPayment?.reference ?? "")
         _note = State(initialValue: latestPayment?.note ?? hour.paymentNote ?? "")
     }
 
     private var resolvedAmount: Double {
-        min(max(0, Double(amountText) ?? 0), hour.straightTimePay)
+        max(0, Double(amountText) ?? 0)
     }
 
     var body: some View {

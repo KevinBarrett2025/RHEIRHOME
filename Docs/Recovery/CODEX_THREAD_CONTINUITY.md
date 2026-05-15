@@ -3,14 +3,15 @@
 ## Repo Truth
 - Repo Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Active Branch: `gm/rheir-hardening-phase1`
-- Thread Start SHA: `cd7e4ab9160c1bc7c9bc9867b1eb1bdf09ae5c9c`
-- Last Commit At Thread Start: `cd7e4ab Phase 2: prove Labor Business Resources acceptance`
+- Thread Start SHA: `95865672604ca2ec8e65dbb15c06630d417f0e8d`
+- Last Commit At Thread Start: `9586567 Phase 2: harden Labor editability`
 
 ## Current Objective
 - Keep RHEIR locked into the fast-ship v1 release profile so the visible app ships as a single-user contractor tool with the core shell only: `Projects`, `Receipts`, `Labor`, `Tasks`, plus budget `Breakdown` / `Estimator`.
 - Preserve and implement `RHEIR_FAST_SHIP_HYBRID_WORKING_APP_PLAN.md`, shifting the active release objective from only hiding collaboration to shipping a contractor-ready working app across Projects, Receipts, Labor, Tasks, Budget, Resources, and Reports.
 - Business Resources is now the simulator-proven release-hardening baseline: the v1-safe contractor setup surface restores workers/team members, job titles/rates, vendors, and payment methods without exposing legacy Company/Organization admin onboarding.
-- Labor payment hardening is now simulator-proven for worker/rate access from Business Resources, top-aligned Labor UI, worker payment ledger entry, partial/split payment amounts, payment method/reference metadata, editable logged hours, payment correction/reissue, reversible/unpay handling, and shared project mutation propagation.
+- Labor payment hardening is now the active checkpoint after device feedback: paid cash is separated from earned/applied labor so edited paid hours can show an explicit overpayment, worker removal is an inactive/end-of-contract path that preserves history, and the Labor Payment paid ledger uses professional bounded accounting rows with no truncation.
+- Carry this standard into every remaining seam: contractor accounting math must reconcile from persisted records, payment history must never be silently rewritten by later edits, over/under balances must be explicit, and compact-device UI must look professionally bounded before a flow is treated as release-accepted.
 - Tasks are the next active blocker after this Labor checkpoint: rework multi-task CRUD, assignment, due/overdue state, completion proof/photos, and immediate project/report refresh without bypassing the shared project mutation seam.
 - Treat contractor job-costing validation as a release requirement: itemized materials, labor/payroll, tasks/progress, payment status, profitability, and closeout reports must answer real contractor operating questions.
 - Preserve the simplified visible session flow `launch -> sign in -> ready`, with invite, org-selection, company/admin, and legacy AI-key surfaces still hidden unless the app is explicitly forced back into the legacy/full profile.
@@ -58,6 +59,15 @@
 - `Shared/Features/Labor/LaborPaymentView.swift` now exposes logged-hour editing from unpaid and paid rows, payment correction from paid rows, and a compact horizontally resilient Unpaid/Paid/Summary tab selector for narrow device widths.
 - `Shared/ViewModels/ProjectViewModel+TimeEntry.swift` now supports correcting labor payments by reversing the current paid balance and recording the replacement payment through the shared project mutation seam, preserving the audit trail.
 - `RHEIRTests/RHEIRTests.swift` now expands Labor + Business Resources acceptance to prove multi-rate workers, edited logged hours, corrected partial payments, final split payments, unpay/reissue, and ProjectStore reload persistence.
+- `Shared/Models/WorkHour.swift` now tracks paid cash separately from earned/applied labor, exposes overpayment balances when edited paid hours fall below historical payments, and reverses the full cash ledger rather than the capped earned amount.
+- `Shared/ViewModels/ProjectViewModel+Clocking.swift` now separates earned, unpaid, paid-cash, and overpaid member totals so job-cost and payroll balances remain defensible after edits.
+- `App/LandingPageView.swift` now removes workers by deactivating/end-of-contracting them from the active roster while preserving historical logged hours, rates, and payment records.
+- `Shared/Features/Labor/LaborPaymentView.swift` now renders paid entries as professional bordered accounting cards with earned, paid, balance/overpayment, method, reference, and action rows.
+- Latest Labor accounting hardening focused ledger parity: overpayment regression, Labor/Business Resources acceptance, and existing partial-payment ledger tests each passed in focused runs (`/tmp/rheir_labor_accounting_overpayment_final.xcresult`, `/tmp/rheir_labor_accounting_acceptance_final.xcresult`, `/tmp/rheir_labor_accounting_existing_ledger_final.xcresult`; `4 focused tests across 3 result bundles`).
+- Latest Labor accounting hardening UI smoke with screenshot: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -only-testing:RHEIRUITests/RHEIRUITests/testLaborManagementOpensWorkerPaymentLedger -resultBundlePath /tmp/rheir_labor_accounting_ui_final.xcresult test` -> PASS (`/tmp/rheir_labor_accounting_ui_final.xcresult`, `1 UI test`).
+- Latest Labor accounting hardening visual evidence: `/tmp/rheir_labor_accounting_ui_final_attachments/C1B62C59-44D4-4B22-9FDC-2E3756510199.png`.
+- Latest Labor accounting hardening Gate A: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -resultBundlePath /tmp/rheir_gateA_labor_accounting_hardening_final.xcresult clean build` -> PASS (`/tmp/rheir_gateA_labor_accounting_hardening_final.xcresult`).
+- Latest Labor accounting hardening pbxproj drift: NONE.
 - Latest Labor editability/full unit parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -only-testing:RHEIRTests -skip-testing:RHEIRUITests -resultBundlePath /tmp/rheir_labor_business_editability_unit.xcresult test` -> PASS (`/tmp/rheir_labor_business_editability_unit.xcresult`, `68 tests`, including expanded Labor acceptance and partial-payment persistence).
 - Latest Labor editability Gate A: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -resultBundlePath /tmp/rheir_gateA_labor_editability.xcresult clean build` -> PASS (`/tmp/rheir_gateA_labor_editability.xcresult`).
 - Remaining Labor/Business Resources acceptance risk is physical-device/manual UX confirmation for the same multi-rate add/edit worker, edited labor hours, partial/split payment, payment correction, unpay/reissue, and relaunch persistence flow; deterministic state seams are green.

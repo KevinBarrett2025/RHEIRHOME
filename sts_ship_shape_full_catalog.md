@@ -21,6 +21,8 @@
 - Completed-project reopen recovery for accidental closeout, missing job-cost entries, and year-end corrections
 - Business Resources surface for workers, rates, vendors, and payment methods
 - Labor payments with split/partial/edit/unpay semantics
+- Labor accounting invariants for paid-cash history, earned/applied labor, unpaid balances, overpayment balances, and full-ledger reversal behavior
+- Labor and Business Resources UI professionalism/no-truncation checks for compact device sheets and accounting rows
 - Task assignment, due/overdue, completion proof, and photo semantics
 - Contractor reports for category spend, vendor spend, payment-method spend, payroll, profit/loss, and closeout
 - `LocalCacheStore`
@@ -186,15 +188,21 @@
 - `BusinessResourcesView` reusable worker/rate, vendor, and payment-method hub
 - `BusinessWorkersResourceView` worker and default-rate management surface
 - `BusinessWorkersResourceView` multi-rate add/edit routing through enhanced team-member management
+- `BusinessWorkersResourceView` worker deactivation/removal preserving historical labor/payroll records
 - `LaborModuleView` top-aligned worker/rate and payment-ledger entry surface
 - `WorkHour` `LaborPaymentEntry` ledger model with derived paid/unpaid balances
+- `WorkHour` paid-cash versus earned/applied labor separation with explicit overpayment support
 - `ProjectViewModel+TimeEntry` labor payment recording and reversal mutation seam
 - `ProjectViewModel+TimeEntry` labor payment correction mutation seam
+- `ProjectViewModel+Clocking` separate earned, unpaid, paid-cash, and overpaid labor totals
 - `LaborPaymentView` unpaid/paid/summary tabs, partial payment entry, method/reference capture, and unpay/reissue reversal
 - `LaborPaymentView` logged-hour editing, payment correction, and compact tab selector
+- `LaborPaymentView` professional bordered paid-ledger card layout with earned, paid, balance/overpayment, method, and reference rows
 - `RHEIRTests` Labor payment ledger coverage
 - `RHEIRTests` Labor editability and partial-payment persistence coverage
+- `RHEIRTests` Labor overpayment-after-edited-hours regression coverage
 - `RHEIRUITests` Labor payment ledger smoke coverage
+- `RHEIRUITests` Labor payment paid-ledger visual smoke attachment coverage
 - `RHEIRUITests` project-context shell smoke coverage for hidden tabs before selection and visible work tabs after selection
 - `RHEIRUITests` Business Resources hub smoke coverage
 - `RHEIRTests` duplicate receipt normalization and CloudKit upsert coverage
@@ -206,6 +214,11 @@
 - `SignInWithAppleCoordinator` structured logging
 
 ## Current Validation Baseline
+- Latest Labor accounting hardening ledger parity result: `PASS` (`/tmp/rheir_labor_accounting_overpayment_final.xcresult, /tmp/rheir_labor_accounting_acceptance_final.xcresult, /tmp/rheir_labor_accounting_existing_ledger_final.xcresult`, `4 focused tests across 3 result bundles`)
+- Latest Labor accounting hardening UI smoke result: `PASS` (`/tmp/rheir_labor_accounting_ui_final.xcresult`, `1 UI test`)
+- Latest Labor accounting hardening visual evidence: `/tmp/rheir_labor_accounting_ui_final_attachments/C1B62C59-44D4-4B22-9FDC-2E3756510199.png`
+- Latest Labor accounting hardening Gate A result: `PASS` (`/tmp/rheir_gateA_labor_accounting_hardening_final.xcresult`)
+- Latest Labor accounting hardening pbxproj drift: `NONE`
 - Latest Labor editability full unit parity result: `PASS` (`/tmp/rheir_labor_business_editability_unit.xcresult`, `68 tests in 20 suites`)
 - Latest Labor editability Gate A result: `PASS` (`/tmp/rheir_gateA_labor_editability.xcresult`)
 - Latest Labor editability pbxproj drift: `NONE`

@@ -421,14 +421,15 @@ extension ProjectViewModel {
 
         var updatedProject = organizationProjects[idx]
         var workHour = updatedProject.loggedHours[hourIndex]
-        let requestedAmount = min(amount, workHour.straightTimePay)
+        let requestedAmount = max(0, amount)
 
         workHour.reversePayments(note: "Payment corrected")
         workHour.recordPayment(
             amount: requestedAmount,
             method: method,
             reference: reference,
-            note: note
+            note: note,
+            allowOverpayment: true
         )
         updatedProject.loggedHours[hourIndex] = workHour
 

@@ -395,9 +395,15 @@ final class RHEIRUITests: XCTestCase {
             "Expected partially paid labor to expose a reversible payment action."
         )
         XCTAssertTrue(
-            app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Reference: PARTIAL-01")).firstMatch.exists,
+            app.staticTexts["PARTIAL-01"].exists ||
+            app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "PARTIAL-01")).firstMatch.exists,
             "Expected labor payments to preserve reference or check details for correction/reissue."
         )
+
+        let paymentLedgerScreenshot = XCTAttachment(screenshot: app.screenshot())
+        paymentLedgerScreenshot.name = "Labor payment paid ledger professional row layout"
+        paymentLedgerScreenshot.lifetime = .keepAlways
+        add(paymentLedgerScreenshot)
     }
 
     @MainActor
