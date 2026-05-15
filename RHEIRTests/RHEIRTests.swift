@@ -1,6 +1,7 @@
 import Foundation
 import CloudKit
 import Combine
+import PDFKit
 import Testing
 @testable import RHEIR
 
@@ -1920,7 +1921,7 @@ struct LaborPaymentLedgerTests {
             role: .admin
         )
 
-        var project = Project(
+        let project = Project(
             name: "Device Acceptance Kitchen",
             client: "Avery Homes",
             totalBudget: 100000,
@@ -2191,6 +2192,210 @@ struct CompanyStoreTests {
         #expect(summary.currentProjects == 2)
         #expect(summary.currentTeamMembers == 2)
         #expect(availableProjects.map(\.name) == ["Active Project"])
+    }
+}
+
+@MainActor
+struct ReportingServiceTests {
+
+    @Test
+    func projectPDFReportGeneratesReadableDocument() async throws {
+        let service = ReportingService()
+        var project = Project(
+            name: "Field Report Project",
+            client: "Client A",
+            totalBudget: 50000,
+            startDate: Date(timeIntervalSince1970: 1_747_260_000),
+            endDate: Date(timeIntervalSince1970: 1_747_346_400),
+            organizationID: "org-reporting"
+        )
+        project.receipts = [
+            Receipt(
+                vendor: "Supply House",
+                date: Date(timeIntervalSince1970: 1_747_268_820),
+                amount: 128.45,
+                category: .material,
+                paymentMethod: "Visa"
+            )
+        ]
+        project.tasks = [
+            ProjectTask(
+                title: "Replace rusted copper joint",
+                description: "Left sink supply line",
+                dueDate: Date(timeIntervalSince1970: 1_747_270_000),
+                projectID: project.id,
+                photoIDs: [UUID()],
+                completionPhotoIDs: [UUID()]
+            )
+        ]
+
+        let data = try #require(
+            await service.generateProjectReport(
+                project: project,
+                teamMembers: [],
+                organization: Organization(id: "org-reporting", name: "Avery Contracting")
+            )
+        )
+        let document = try #require(PDFDocument(data: data))
+
+        #expect(document.pageCount == 1)
+        #expect(data.count > 1_000)
+    }
+
+    @Test
+    func receiptsCSVExportsLineItemsForBookkeeping() throws {
+        let service = ReportingService()
+        var project = Project(
+            name: "Reporting Project",
+            client: "Client A",
+            totalBudget: 50000,
+            startDate: Date(timeIntervalSince1970: 1_747_260_000),
+            endDate: Date(timeIntervalSince1970: 1_747_346_400),
+            organizationID: "org-reporting"
+        )
+
+        var receipt = Receipt(
+            vendor: "North Shore Supply",
+            date: Date(timeIntervalSince1970: 1_747_268_820),
+            amount: 36.29,
+            notes: "Kitchen rough-in",
+            category: .material,
+            subcategory: "Rough-In",
+            paymentMethod: "Visa",
+            taxAmount: 2.40,
+            discountAmount: 1.00,
+            receiptNumber: "R-1001"
+        )
+        receipt.items = [
+            ReceiptItem(
+                name: "Copper Tee",
+                quantity: 1,
+                unitPrice: 12.34,
+                totalPrice: 12.34,
+                category: .plumbing,
+                subcategory: "Copper"
+            ),
+            ReceiptItem(
+                name: "2x4 Stud",
+                quantity: 2,
+                unitPrice: 11.98,
+                totalPrice: 23.96,
+                category: .framing,
+                subcategory: "Lumber"
+            )
+        ]
+        project.receipts = [receipt]
+
+        let data = try #require(service.generateReceiptsCSV(project: project))
+        let csv = try #require(String(data: data, encoding: .utf8))
+
+        #expect(csv.contains("Line Item"))
+        #expect(csv.contains("Copper Tee"))
+        #expect(csv.contains("Plumbing"))
+        #expect(csv.contains("2x4 Stud"))
+        #expect(csv.contains("Framing"))
+        #expect(csv.contains("R-1001"))
+    }
+
+    @Test
+    func laborAndTaskExportsPreserveAccountingContext() throws {
+        let service = ReportingService()
+        let workerID = UUID(uuidString: "2F7BA1F4-B7E8-4A1F-9D10-1D5E7646F1E1")!
+        let start = Date(timeIntervalSince1970: 1_747_268_820)
+
+        let worker = TeamMember(
+            id: workerID,
+            name: "Sam Carter",
+            email: "sam@example.com",
+            jobTitle: "Lead Carpenter",
+            organizationID: "org-reporting"
+        )
+
+        var workHour = WorkHour(
+            id: UUID(uuidString: "C6F8E5C1-60D5-4C7C-8AF4-0B80E8E5A8DA")!,
+            date: start,
+            startTime: start,
+            endTime: start.addingTimeInterval(3_600),
+            lunchStart: nil,
+            lunchEnd: nil,
+            employee: worker.name,
+            employeeID: worker.id,
+            rate: 45,
+            category: "Framing",
+            isPaid: false,
+            paymentMethod: nil,
+            paymentNote: nil,
+            paymentTimestamp: nil
+        )
+        workHour.recordPayment(
+            amount: 25,
+            method: "Cash",
+            reference: "PARTIAL-01",
+            note: "Advance",
+            paidAt: start.addingTimeInterval(60)
+        )
+        workHour.recordPayment(
+            amount: 20,
+            method: "Check",
+            reference: "CHK-1002",
+            note: "Balance",
+            paidAt: start.addingTimeInterval(120)
+        )
+        workHour.endTime = start.addingTimeInterval(1_056.8)
+
+        var project = Project(
+            name: "Reporting Project",
+            client: "Client A",
+            totalBudget: 50000,
+            startDate: start,
+            endDate: start.addingTimeInterval(86_400),
+            organizationID: "org-reporting"
+        )
+        project.loggedHours = [workHour]
+        project.tasks = [
+            ProjectTask(
+                title: "Replace rusted copper joint",
+                description: "Left sink supply line",
+                dueDate: start.addingTimeInterval(3_600),
+                isCompleted: true,
+                completedDate: start.addingTimeInterval(7_200),
+                priority: .high,
+                category: .plumbing,
+                estimatedHours: 2,
+                actualHours: 1.5,
+                projectID: project.id,
+                photoIDs: [UUID()],
+                completionPhotoIDs: [UUID(), UUID()],
+                assignedEmployeeIDs: [worker.id],
+                completedByEmployeeIDs: [worker.id],
+                completionNotes: "Joint replaced and leak tested."
+            )
+        ]
+
+        let paymentData = try #require(service.generateLaborPaymentsCSV(project: project))
+        let paymentCSV = try #require(String(data: paymentData, encoding: .utf8))
+        #expect(paymentCSV.contains("PARTIAL-01"))
+        #expect(paymentCSV.contains("CHK-1002"))
+        #expect(paymentCSV.contains("31.79"))
+
+        let timesheetData = try #require(
+            service.generateTimesheetCSV(
+                project: project,
+                startDate: start.addingTimeInterval(-60),
+                endDate: start.addingTimeInterval(7_200)
+            )
+        )
+        let timesheetCSV = try #require(String(data: timesheetData, encoding: .utf8))
+        #expect(timesheetCSV.contains("Paid Cash"))
+        #expect(timesheetCSV.contains("Overpaid Balance"))
+        #expect(timesheetCSV.contains("31.79"))
+
+        let taskData = try #require(service.generateTasksCSV(project: project, teamMembers: [worker]))
+        let taskCSV = try #require(String(data: taskData, encoding: .utf8))
+        #expect(taskCSV.contains("Replace rusted copper joint"))
+        #expect(taskCSV.contains("Sam Carter"))
+        #expect(taskCSV.contains(",1,2,"))
+        #expect(taskCSV.contains("Joint replaced and leak tested."))
     }
 }
 

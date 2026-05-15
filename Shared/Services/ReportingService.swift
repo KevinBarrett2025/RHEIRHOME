@@ -1,6 +1,7 @@
 import Foundation
 import PDFKit
 import SwiftUI
+import UIKit
 
 @MainActor
 public class ReportingService: ObservableObject {
@@ -79,26 +80,38 @@ public class ReportingService: ObservableObject {
     
     // MARK: - CSV Export Generation
     
-    /// Export receipts as CSV for accounting
+    /// Export receipts as line-item CSV for accounting and bookkeeping.
     public func generateReceiptsCSV(project: Project) -> Data? {
-        var csvContent = "Date,Vendor,Category,Amount,Tax,Payment Method,Receipt Number,Notes,Is Return\n"
-        
+        var csvContent = "Date,Vendor,Receipt Number,Payment Method,Receipt Total,Receipt Tax,Receipt Discount,Top-Level Category,Receipt Subcategory,Line Item,Quantity,Unit Price,Line Amount,Line Category,Line Subcategory,Notes,Is Return\n"
+
         for receipt in project.receipts.sorted(by: { $0.date < $1.date }) {
-            let row = [
-                receipt.date.formatted(date: .numeric, time: .omitted),
-                escapeCSV(receipt.vendor),
-                receipt.category.rawValue,
-                String(format: "%.2f", receipt.amount),
-                String(format: "%.2f", receipt.taxAmount),
-                escapeCSV(receipt.paymentMethod),
-                escapeCSV(receipt.receiptNumber),
-                escapeCSV(receipt.notes),
-                receipt.isReturn ? "Yes" : "No"
-            ].joined(separator: ",")
-            
-            csvContent += row + "\n"
+            let sign = receipt.isReturn ? -1.0 : 1.0
+
+            if receipt.items.isEmpty {
+                csvContent += receiptCSVRow(
+                    receipt: receipt,
+                    lineItemName: "",
+                    quantity: "",
+                    unitPrice: "",
+                    lineAmount: String(format: "%.2f", sign * receipt.amount),
+                    lineCategory: receipt.category.rawValue,
+                    lineSubcategory: receipt.subcategory ?? ""
+                ) + "\n"
+            } else {
+                for item in receipt.items {
+                    csvContent += receiptCSVRow(
+                        receipt: receipt,
+                        lineItemName: item.name,
+                        quantity: String(format: "%.2f", item.quantity),
+                        unitPrice: String(format: "%.2f", item.unitPrice),
+                        lineAmount: String(format: "%.2f", sign * item.totalPrice),
+                        lineCategory: item.category.rawValue,
+                        lineSubcategory: item.subcategory
+                    ) + "\n"
+                }
+            }
         }
-        
+
         return csvContent.data(using: .utf8)
     }
     
@@ -108,7 +121,7 @@ public class ReportingService: ObservableObject {
         startDate: Date,
         endDate: Date
     ) -> Data? {
-        var csvContent = "Date,Employee,Start Time,End Time,Regular Hours,Overtime Hours,Rate,Regular Pay,Overtime Pay,Total Pay,Category,Approved\n"
+        var csvContent = "Date,Employee,Start Time,End Time,Regular Hours,Overtime Hours,Rate,Regular Pay,Overtime Pay,Earned Pay,Paid Cash,Unpaid Balance,Overpaid Balance,Category,Approved\n"
         
         let filteredHours = project.loggedHours.filter { hour in
             hour.startTime >= startDate && hour.startTime <= endDate && hour.endTime != nil
@@ -126,6 +139,9 @@ public class ReportingService: ObservableObject {
                 String(format: "%.2f", hour.regularPay),
                 String(format: "%.2f", hour.overtimePay),
                 String(format: "%.2f", hour.totalPay),
+                String(format: "%.2f", hour.totalPaidAmount),
+                String(format: "%.2f", hour.effectiveUnpaidAmount),
+                String(format: "%.2f", hour.overpaidAmount),
                 escapeCSV(hour.category),
                 hour.isApproved ? "Yes" : "No"
             ].joined(separator: ",")
@@ -133,6 +149,125 @@ public class ReportingService: ObservableObject {
             csvContent += row + "\n"
         }
         
+        return csvContent.data(using: .utf8)
+    }
+
+    /// Export the cash payment ledger separately from earned labor so partial payments and reversals remain auditable.
+    public func generateLaborPaymentsCSV(project: Project) -> Data? {
+        var csvContent = "Payment Date,Employee,Work Date,Hours,Rate,Earned Amount,Payment Amount,Payment Method,Reference,Note,Entry Type,Remaining Unpaid,Overpaid Balance\n"
+
+        for hour in project.loggedHours.sorted(by: { $0.startTime < $1.startTime }) {
+            for payment in hour.paymentEntries.sorted(by: { $0.paidAt < $1.paidAt }) {
+                let row = [
+                    payment.paidAt.formatted(date: .numeric, time: .shortened),
+                    escapeCSV(hour.employee),
+                    hour.date.formatted(date: .numeric, time: .omitted),
+                    String(format: "%.2f", hour.hours),
+                    String(format: "%.2f", hour.rate),
+                    String(format: "%.2f", hour.straightTimePay),
+                    String(format: "%.2f", payment.signedAmount),
+                    escapeCSV(payment.method),
+                    escapeCSV(payment.reference),
+                    escapeCSV(payment.note),
+                    payment.isReversal ? "Reversal" : "Payment",
+                    String(format: "%.2f", hour.effectiveUnpaidAmount),
+                    String(format: "%.2f", hour.overpaidAmount)
+                ].joined(separator: ",")
+
+                csvContent += row + "\n"
+            }
+        }
+
+        return csvContent.data(using: .utf8)
+    }
+
+    /// Export task status, assignment, and proof counts for operations and closeout review.
+    public func generateTasksCSV(project: Project, teamMembers: [TeamMember]) -> Data? {
+        let memberNamesByID = Dictionary(uniqueKeysWithValues: teamMembers.map { ($0.id, $0.name) })
+        var csvContent = "Task,Description,Category,Priority,Status,Assigned Workers,Completed By,Due Date,Completed Date,Estimated Hours,Actual Hours,Before Photo Count,After Photo Count,Completion Notes\n"
+
+        for task in project.tasks.sorted(by: reportTaskSort) {
+            let assignedNames = task.assignedEmployeeIDs.compactMap { memberNamesByID[$0] }.joined(separator: "; ")
+            let completedNames = task.completedByEmployeeIDs.compactMap { memberNamesByID[$0] }.joined(separator: "; ")
+            let row = [
+                escapeCSV(task.title),
+                escapeCSV(task.description),
+                task.category.displayName,
+                task.priority.displayName,
+                task.isCompleted ? "Completed" : task.isOverdue ? "Overdue" : "Open",
+                escapeCSV(assignedNames),
+                escapeCSV(completedNames),
+                task.dueDate?.formatted(date: .numeric, time: .omitted) ?? "",
+                task.completedDate?.formatted(date: .numeric, time: .omitted) ?? "",
+                String(format: "%.2f", task.estimatedHours),
+                String(format: "%.2f", task.actualHours),
+                String(task.photoIDs.count),
+                String(task.completionPhotoIDs.count),
+                escapeCSV(task.completionNotes)
+            ].joined(separator: ",")
+
+            csvContent += row + "\n"
+        }
+
+        return csvContent.data(using: .utf8)
+    }
+
+    /// Export detailed actual job cost rows across receipts and earned labor.
+    public func generateJobCostCSV(project: Project) -> Data? {
+        var csvContent = "Date,Source,Source ID,Payee,Category,Description,Quantity,Amount,Payment Status,Payment Method,Reference\n"
+
+        for receipt in project.receipts.sorted(by: { $0.date < $1.date }) {
+            let sign = receipt.isReturn ? -1.0 : 1.0
+
+            if receipt.items.isEmpty {
+                csvContent += jobCostCSVRow(
+                    date: receipt.date,
+                    source: "Receipt",
+                    sourceID: receipt.id,
+                    payee: receipt.vendor,
+                    category: receipt.category.rawValue,
+                    description: receipt.notes.isEmpty ? "Receipt total" : receipt.notes,
+                    quantity: "",
+                    amount: sign * receipt.amount,
+                    paymentStatus: receipt.isReturn ? "Return" : "Paid",
+                    paymentMethod: receipt.paymentMethod,
+                    reference: receipt.receiptNumber
+                ) + "\n"
+            } else {
+                for item in receipt.items {
+                    csvContent += jobCostCSVRow(
+                        date: receipt.date,
+                        source: "Receipt",
+                        sourceID: receipt.id,
+                        payee: receipt.vendor,
+                        category: item.category.rawValue,
+                        description: item.name,
+                        quantity: String(format: "%.2f", item.quantity),
+                        amount: sign * item.totalPrice,
+                        paymentStatus: receipt.isReturn ? "Return" : "Paid",
+                        paymentMethod: receipt.paymentMethod,
+                        reference: receipt.receiptNumber
+                    ) + "\n"
+                }
+            }
+        }
+
+        for hour in project.loggedHours.sorted(by: { $0.startTime < $1.startTime }) {
+            csvContent += jobCostCSVRow(
+                date: hour.date,
+                source: "Labor",
+                sourceID: hour.id.uuidString,
+                payee: hour.employee,
+                category: hour.category,
+                description: "Logged labor",
+                quantity: String(format: "%.2f hrs", hour.hours),
+                amount: hour.straightTimePay,
+                paymentStatus: laborPaymentStatus(for: hour),
+                paymentMethod: hour.paymentMethod ?? "",
+                reference: hour.paymentEntries.last?.reference ?? ""
+            ) + "\n"
+        }
+
         return csvContent.data(using: .utf8)
     }
     
@@ -218,14 +353,14 @@ public class ReportingService: ObservableObject {
         }
         
         for contractor in contractors {
-            let totalPayments = projects.flatMap { $0.loggedHours }
-                .filter { hour in
-                    hour.employeeID == contractor.id &&
-                    hour.startTime >= startOfYear &&
-                    hour.startTime <= endOfYear &&
-                    hour.isPaid
-                }
-                .reduce(0) { $0 + $1.totalPay }
+            let allHours = projects.flatMap(\.loggedHours)
+            let paidHours = allHours.filter { hour in
+                hour.employeeID == contractor.id &&
+                hour.startTime >= startOfYear &&
+                hour.startTime <= endOfYear &&
+                hour.isPaid
+            }
+            let totalPayments = paidHours.reduce(0) { $0 + $1.totalPay }
             
             if totalPayments >= 600 { // IRS threshold for 1099
                 let row = [
@@ -288,6 +423,94 @@ public class ReportingService: ObservableObject {
         }
         return string
     }
+
+    private func receiptCSVRow(
+        receipt: Receipt,
+        lineItemName: String,
+        quantity: String,
+        unitPrice: String,
+        lineAmount: String,
+        lineCategory: String,
+        lineSubcategory: String
+    ) -> String {
+        [
+            receipt.date.formatted(date: .numeric, time: .omitted),
+            escapeCSV(receipt.vendor),
+            escapeCSV(receipt.receiptNumber),
+            escapeCSV(receipt.paymentMethod),
+            String(format: "%.2f", receipt.isReturn ? -receipt.amount : receipt.amount),
+            String(format: "%.2f", receipt.taxAmount),
+            String(format: "%.2f", receipt.discountAmount),
+            receipt.category.rawValue,
+            escapeCSV(receipt.subcategory ?? ""),
+            escapeCSV(lineItemName),
+            quantity,
+            unitPrice,
+            lineAmount,
+            lineCategory,
+            escapeCSV(lineSubcategory),
+            escapeCSV(receipt.notes),
+            receipt.isReturn ? "Yes" : "No"
+        ].joined(separator: ",")
+    }
+
+    private func jobCostCSVRow(
+        date: Date,
+        source: String,
+        sourceID: String,
+        payee: String,
+        category: String,
+        description: String,
+        quantity: String,
+        amount: Double,
+        paymentStatus: String,
+        paymentMethod: String,
+        reference: String
+    ) -> String {
+        [
+            date.formatted(date: .numeric, time: .omitted),
+            source,
+            escapeCSV(sourceID),
+            escapeCSV(payee),
+            escapeCSV(category),
+            escapeCSV(description),
+            escapeCSV(quantity),
+            String(format: "%.2f", amount),
+            paymentStatus,
+            escapeCSV(paymentMethod),
+            escapeCSV(reference)
+        ].joined(separator: ",")
+    }
+
+    private func laborPaymentStatus(for hour: WorkHour) -> String {
+        if hour.overpaidAmount > 0.005 {
+            return "Overpaid"
+        }
+        if hour.isFullyPaid {
+            return "Paid"
+        }
+        if hour.hasAnyPayment {
+            return "Partially Paid"
+        }
+        return "Unpaid"
+    }
+
+    private func reportTaskSort(_ lhs: ProjectTask, _ rhs: ProjectTask) -> Bool {
+        if lhs.isCompleted != rhs.isCompleted {
+            return !lhs.isCompleted
+        }
+
+        switch (lhs.dueDate, rhs.dueDate) {
+        case let (left?, right?):
+            return left < right
+        case (_?, nil):
+            return true
+        case (nil, _?):
+            return false
+        case (nil, nil):
+            return lhs.updatedAt > rhs.updatedAt
+        }
+    }
     
     private func calculateTotalSpent(for project: Project) -> Double {
         let receiptTotal = project.receipts.reduce(0) { $0 + ($1.isReturn ? -$1.amount : $1.amount) }
@@ -330,17 +553,22 @@ public class ReportingService: ObservableObject {
     // MARK: - PDF Generation
     
     private func generatePDF(from view: some View) async -> Data? {
-        await withCheckedContinuation { continuation in
-            DispatchQueue.main.async {
-                let renderer = ImageRenderer(content: view.frame(width: 612, height: 792)) // 8.5" x 11" at 72 DPI
-                renderer.scale = 2.0
-                
-                if let pdfData = renderer.pdf {
-                    continuation.resume(returning: pdfData)
-                } else {
-                    continuation.resume(returning: nil)
-                }
-            }
+        let pageRect = CGRect(x: 0, y: 0, width: 612, height: 792)
+        let imageRenderer = ImageRenderer(
+            content: view
+                .frame(width: pageRect.width, height: pageRect.height)
+                .background(Color.white)
+        )
+        imageRenderer.scale = 2.0
+
+        guard let image = imageRenderer.uiImage else {
+            return nil
+        }
+
+        let pdfRenderer = UIGraphicsPDFRenderer(bounds: pageRect)
+        return pdfRenderer.pdfData { context in
+            context.beginPage()
+            image.draw(in: pageRect)
         }
     }
 }

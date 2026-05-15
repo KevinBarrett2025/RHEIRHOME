@@ -26,6 +26,10 @@
 - Log Hours actual-rate-only selection with in-flow add-rate editing from the project labor entry path
 - Task assignment, due/overdue, completion proof, and photo semantics
 - Contractor reports for category spend, vendor spend, payment-method spend, payroll, profit/loss, and closeout
+- Live Reports & Exports project sheet with project PDF, job-cost CSV, receipt line-item CSV, labor payment ledger CSV, labor timesheet CSV, and task closeout CSV artifacts
+- Image-backed swipeable/pinch-to-zoom report PDF preview
+- Inspectable CSV report preview before export
+- `ReportingService` real PDF/CSV generator
 - `LocalCacheStore`
 - `ProjectStore`
 - `ProjectRepository`
@@ -222,6 +226,10 @@
 - `SignInWithAppleCoordinator` structured logging
 
 ## Current Validation Baseline
+- Latest Reports Gate A result: `PASS` (`/tmp/rheir_gateA_reports.xcresult`)
+- Latest Reports focused parity result: `PASS` (`/tmp/rheir_reports_parity_final5.xcresult`, `3 report service tests plus 1 UI preview/export test`)
+- Latest Reports visual evidence: kept xcresult attachment `Project PDF preview`
+- Latest Reports pbxproj drift: `INTENTIONAL` (`Shared/Services/ReportingService.swift` added to the compiled app target)
 - Latest Tasks before/after photo-proof Gate A result: `PASS` (`/tmp/rheir_gateA_tasks_before_after_photos_final2.xcresult`)
 - Latest Tasks before/after photo-proof focused parity result: `PASS` (`/tmp/rheir_tasks_before_after_photos_parity_final2.xcresult`, `2 UI tests plus 4 mutation tests`)
 - Latest Tasks before/after photo-proof visual evidence: kept xcresult attachments `Task before photo controls` and `Task completion photo proof sheet`
@@ -318,6 +326,7 @@
 - The no-organization fast-ship path is simulator-proven, but the device path that previously showed `Create Your Organization` still needs a hardware rerun before treating the personal-workspace fallback as release-accepted.
 - The fast-ship project-selection shell is simulator-proven, but device QA still needs to confirm the pre-selection tab bar is gone and selecting a project reveals the work tabs without navigation churn.
 - The next device acceptance pass must still confirm the new scanned-item persistence/edit patch on hardware: saved scanned receipts should reopen with itemized lines intact, those lines should appear inside the saved edit sheet, edited mixed-category items should drive category summaries, selected-category headers, and drilldown totals by itemized spend, the list quick-view should open the real receipt image, the scan-review category control should remain legible, and the ellipsis menu should fully cover edit/delete after the duplicate bottom buttons were removed.
+- Reports live preview/export is simulator-proven, but device QA still needs to open the PDF preview, swipe/pinch pages, inspect CSV previews, share/export each artifact, and compare exported rows against persisted receipt, labor, job-cost, and task truth.
 - The latest launch-polish slice removed the last two recurring active-path warnings by aligning receipt-level legacy bridge totals with detailed receipt categories and replacing string asset-name status colors with semantic SwiftUI tint colors.
 - `RHEIRUITests` is now deterministic for signed-out, ready-state, fast-ship organization auto-resolution, project-selection, receipts gate/entry, labor gate/empty state, tasks gate/empty state, manual-entry vendor-picker, manual-entry add-vendor, manual-entry payment-method-picker, manual-entry add-payment-method, manual-entry submission, manual-receipt relaunch persistence, scanned-receipt return/reopen, saved receipt detail, receipt-detail action, persisted receipt-edit mutation, saved-receipt search/browse, category/filter drilldown, `By Vendor` grouped-summary/expansion coverage, and selected-project AI Project Calculator build/approve plus actual-cost mapping coverage; the next hardening slice is same-device and device QA on this simplified shell rather than more surface reshaping or managed-backend expansion.
 - `ProjectViewModel` is still oversized even after the extracted stores, though organization/project synchronization is now isolated behind `OrganizationProjectSyncStore`.

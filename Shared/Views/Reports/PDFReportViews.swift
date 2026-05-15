@@ -1,48 +1,5 @@
 import SwiftUI
 
-// MARK: - Temporary Stub Types (to be moved to proper location)
-struct ProjectReportData {
-    let project: Project
-    let teamMembers: [TeamMember]
-    let organization: Organization
-    let generatedAt: Date
-}
-
-struct TimesheetReportData {
-    let project: Project
-    let teamMember: TeamMember
-    let startDate: Date
-    let endDate: Date
-    let organization: Organization
-    let workHours: [WorkHour]
-}
-
-struct BudgetReportData {
-    let project: Project
-    let organization: Organization
-    let spendingBreakdown: SpendingBreakdown
-    let generatedAt: Date
-}
-
-struct ClientReportData {
-    let project: Project
-    let organization: Organization
-    let includeFinancials: Bool
-    let progressReports: [ProgressLog]
-    let generatedAt: Date
-}
-
-struct SpendingBreakdown {
-    let materialCosts: Double
-    let laborCosts: Double
-    let generalConditions: Double
-    let contingency: Double
-    
-    var total: Double {
-        return materialCosts + laborCosts + generalConditions + contingency
-    }
-}
-
 // MARK: - Project Report PDF Template
 struct ProjectReportView: View {
     let data: ProjectReportData

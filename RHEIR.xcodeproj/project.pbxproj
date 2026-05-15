@@ -20,6 +20,7 @@
 		D4427A5B2DE090C600E70B1E /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4427A452DE090C600E70B1E /* RootView.swift */; };
 		D4427A5C2DE090C600E70B1E /* LaborModuleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4427A252DE090C600E70B1E /* LaborModuleView.swift */; };
 		D4AC0010DE14000100ABC001 /* LaborPaymentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4AC0010DE14000100ABC002 /* LaborPaymentView.swift */; };
+		D4AC0020DE15000100ABC001 /* ReportingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4AC0020DE15000100ABC002 /* ReportingService.swift */; };
 		D4427A5D2DE090C600E70B1E /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4427A462DE090C600E70B1E /* SidebarView.swift */; };
 		D4427A5E2DE090C600E70B1E /* FloatingActionButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4427A3F2DE090C600E70B1E /* FloatingActionButton.swift */; };
 		D4427A5F2DE090C600E70B1E /* ClientView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D44279FC2DE090C600E70B1E /* ClientView.swift */; };
@@ -176,6 +177,7 @@
 		D4427A242DE090C600E70B1E /* LaborEditView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaborEditView.swift; sourceTree = "<group>"; };
 		D4427A252DE090C600E70B1E /* LaborModuleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaborModuleView.swift; sourceTree = "<group>"; };
 		D4AC0010DE14000100ABC002 /* LaborPaymentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaborPaymentView.swift; sourceTree = "<group>"; };
+		D4AC0020DE15000100ABC002 /* ReportingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReportingService.swift; sourceTree = "<group>"; };
 		D4427A262DE090C600E70B1E /* LogHoursView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogHoursView.swift; sourceTree = "<group>"; };
 		D4427A272DE090C600E70B1E /* PaymentDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaymentDetailView.swift; sourceTree = "<group>"; };
 		D4427A282DE090C600E70B1E /* QuickClockView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickClockView.swift; sourceTree = "<group>"; };
@@ -497,6 +499,7 @@
 				D4D087998CBC43C585EE6395 /* VendorManagementService.swift */,
 				614DE1CD44BF4DFA96D40947 /* PaymentMethodManagementService.swift */,
 				D442C31F915A5121 /* CloudKitPhotoService.swift */,
+				D4AC0020DE15000100ABC002 /* ReportingService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -729,6 +732,7 @@
 				D4427A5B2DE090C600E70B1E /* RootView.swift in Sources */,
 				D4427A5C2DE090C600E70B1E /* LaborModuleView.swift in Sources */,
 				D4AC0010DE14000100ABC001 /* LaborPaymentView.swift in Sources */,
+				D4AC0020DE15000100ABC001 /* ReportingService.swift in Sources */,
 				D4427A5D2DE090C600E70B1E /* SidebarView.swift in Sources */,
 				D4427A5E2DE090C600E70B1E /* FloatingActionButton.swift in Sources */,
 				D4427A5F2DE090C600E70B1E /* ClientView.swift in Sources */,

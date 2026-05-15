@@ -1,43 +1,6 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-// MARK: - Temporary Stub ReportingService
-@MainActor
-class ReportingService: ObservableObject {
-    func generateProjectReport(project: Project, teamMembers: [TeamMember], organization: Organization) async -> Data? {
-        // Stub implementation
-        return "Project Report Stub".data(using: .utf8)
-    }
-    
-    func generateTimesheetReport(project: Project, teamMember: TeamMember, startDate: Date, endDate: Date, organization: Organization) async -> Data? {
-        return "Timesheet Report Stub".data(using: .utf8)
-    }
-    
-    func generateBudgetReport(project: Project, organization: Organization) async -> Data? {
-        return "Budget Report Stub".data(using: .utf8)
-    }
-    
-    func generateClientReport(project: Project, organization: Organization, includeFinancials: Bool) async -> Data? {
-        return "Client Report Stub".data(using: .utf8)
-    }
-    
-    func generateReceiptsCSV(project: Project) -> Data? {
-        return "Receipts CSV Stub".data(using: .utf8)
-    }
-    
-    func generateTimesheetCSV(project: Project, startDate: Date, endDate: Date) -> Data? {
-        return "Timesheet CSV Stub".data(using: .utf8)
-    }
-    
-    func generateTeamMemberSummaryCSV(teamMembers: [TeamMember], projects: [Project]) -> Data? {
-        return "Team Summary CSV Stub".data(using: .utf8)
-    }
-    
-    func generate1099PreparationData(teamMembers: [TeamMember], projects: [Project], taxYear: Int) -> Data? {
-        return "1099 Data Stub".data(using: .utf8)
-    }
-}
-
 struct ReportsMainView: View {
     @EnvironmentObject private var projectVM: ProjectViewModel
     @EnvironmentObject private var authVM: AuthViewModel

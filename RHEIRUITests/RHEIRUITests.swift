@@ -668,6 +668,96 @@ final class RHEIRUITests: XCTestCase {
     }
 
     @MainActor
+    func testProjectReportsPreviewSurfaceExposesPDFAndCSVExports() throws {
+        let app = makeApp(mode: .selectedProject)
+        app.launch()
+
+        app.tabBars.buttons["Projects"].tap()
+
+        let projectCard = app.buttons[Self.selectedProjectCardIdentifier]
+        XCTAssertTrue(
+            projectCard.waitForExistence(timeout: 5),
+            "Expected the seeded project card before opening project reports."
+        )
+        projectCard.tap()
+
+        let reportsEntry = revealButton(identifier: "project-reports-entry", in: app, maxSwipes: 6)
+        XCTAssertTrue(
+            reportsEntry.exists,
+            "Expected the budget breakdown to expose the live reports entry."
+        )
+        reportsEntry.tap()
+
+        XCTAssertTrue(
+            app.navigationBars["Project Reports"].waitForExistence(timeout: 5),
+            "Expected project reports to open as a live sheet."
+        )
+
+        let pdfPreviewButton = revealElement(
+            identifier: "Preview Project Report",
+            in: app,
+            maxSwipes: 6,
+            query: { $0.buttons["Preview Project Report"] }
+        )
+        XCTAssertTrue(pdfPreviewButton.exists)
+        XCTAssertTrue(
+            revealElement(
+                identifier: "Export Receipt Line Items",
+                in: app,
+                maxSwipes: 6,
+                query: { $0.buttons["Export Receipt Line Items"] }
+            ).exists
+        )
+        XCTAssertTrue(
+            revealElement(
+                identifier: "Export Labor Payment Ledger",
+                in: app,
+                maxSwipes: 6,
+                query: { $0.buttons["Export Labor Payment Ledger"] }
+            ).exists
+        )
+        XCTAssertTrue(
+            revealElement(
+                identifier: "Preview Task Closeout",
+                in: app,
+                maxSwipes: 6,
+                query: { $0.buttons["Preview Task Closeout"] }
+            ).exists
+        )
+        pdfPreviewButton.tap()
+
+        let pdfPreview = app.descendants(matching: .any)["project-report-pdf-preview"]
+        XCTAssertTrue(
+            pdfPreview.waitForExistence(timeout: 8),
+            "Expected the field report to render a preview before export."
+        )
+        XCTAssertTrue(app.buttons["project-report-preview-export"].exists)
+
+        let pdfPreviewAttachment = XCTAttachment(screenshot: app.screenshot())
+        pdfPreviewAttachment.name = "Project PDF preview"
+        pdfPreviewAttachment.lifetime = .keepAlways
+        add(pdfPreviewAttachment)
+
+        app.buttons["project-report-preview-done"].tap()
+
+        let tasksPreviewButton = revealElement(
+            identifier: "Preview Task Closeout",
+            in: app,
+            maxSwipes: 6,
+            query: { $0.buttons["Preview Task Closeout"] }
+        )
+        XCTAssertTrue(tasksPreviewButton.exists)
+        tasksPreviewButton.tap()
+
+        let csvPreview = app.descendants(matching: .any)["project-report-csv-preview"]
+        XCTAssertTrue(
+            csvPreview.waitForExistence(timeout: 5),
+            "Expected structured CSV exports to render a readable preview before export."
+        )
+        XCTAssertTrue(app.buttons["project-report-preview-export"].exists)
+    }
+
+    @MainActor
     func testReceiptsModeShowsEntryActionsAndManualEntrySheet() throws {
         let app = makeApp(mode: .selectedProject)
         app.launch()

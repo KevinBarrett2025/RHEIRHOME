@@ -1,5 +1,7 @@
 import SwiftUI
 import MessageUI
+import PDFKit
+import UIKit
 
 // MARK: - Supporting Data Structures 
 
@@ -465,12 +467,12 @@ struct BudgetBreakdownContentView: View {
                 .cornerRadius(12)
                 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("View Detailed Reports")
+                    Text("Reports & Exports")
                         .font(.headline)
                         .fontWeight(.semibold)
                         .foregroundColor(.primary)
                     
-                    Text("Access comprehensive project analytics, spending trends, and export options")
+                    Text("Preview project reports and export accounting-ready files")
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                         .lineLimit(2)
@@ -487,6 +489,7 @@ struct BudgetBreakdownContentView: View {
             .cornerRadius(12)
         }
         .buttonStyle(PlainButtonStyle())
+        .accessibilityIdentifier("project-reports-entry")
         .padding(.horizontal)
     }
     
@@ -1418,15 +1421,20 @@ struct QuickStatCard: View {
     }
 }
 
-// MARK: - Project Reports View (Placeholder)
+// MARK: - Project Reports View
 struct ProjectReportsView: View {
     let project: Project
     @EnvironmentObject private var projectVM: ProjectViewModel
     @EnvironmentObject private var authVM: AuthViewModel
     @Environment(\.dismiss) private var dismiss
-    
+    @StateObject private var reportingService = ReportingService()
+    @State private var previewArtifact: ProjectReportArtifact?
+    @State private var sharePayload: ProjectReportSharePayload?
+    @State private var preparingKind: ProjectReportExportKind?
+    @State private var errorMessage: String?
+
     var body: some View {
-        NavigationView {
+        NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     HStack(spacing: 12) {
@@ -1472,6 +1480,8 @@ struct ProjectReportsView: View {
                     }
                     .accessibilityIdentifier("project-report-task-summary")
 
+                    reportsSection
+
                     if !project.tasks.isEmpty {
                         VStack(alignment: .leading, spacing: 12) {
                             Text("Tasks")
@@ -1506,29 +1516,10 @@ struct ProjectReportsView: View {
                         .background(Color(.systemGray6))
                         .cornerRadius(12)
                     }
-
-                    VStack(spacing: 12) {
-                        Button("Export Project Summary") {
-                            // TODO: Implement export functionality
-                        }
-                        .font(.subheadline)
-                        .foregroundColor(.blue)
-                        .padding(.vertical, 8)
-                        .padding(.horizontal, 16)
-                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.blue))
-
-                        Button("View Spending Trends") {
-                            // TODO: Navigate to trends view
-                        }
-                        .font(.subheadline)
-                        .foregroundColor(.blue)
-                        .padding(.vertical, 8)
-                        .padding(.horizontal, 16)
-                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.blue))
-                    }
                 }
                 .padding()
             }
+            .accessibilityIdentifier("project-reports-sheet")
             .navigationTitle("Project Reports")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -1536,9 +1527,113 @@ struct ProjectReportsView: View {
                     Button("Done") {
                         dismiss()
                     }
+                    .accessibilityIdentifier("project-reports-done")
                 }
             }
         }
+        .sheet(item: $previewArtifact) { artifact in
+            ProjectReportPreviewView(
+                artifact: artifact,
+                onShare: {
+                    share(artifact)
+                }
+            )
+        }
+        .sheet(item: $sharePayload) { payload in
+            ShareSheet(activityItems: [payload.url])
+        }
+        .alert("Report Export Failed", isPresented: reportErrorBinding) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(errorMessage ?? "Unable to generate this report.")
+        }
+    }
+
+    private var reportsSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Reports & Exports")
+                .font(.headline)
+
+            Text("Preview each file before sharing it. PDFs are for field review; CSV files are structured for bookkeeping, payroll, and closeout work.")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+
+            ForEach(ProjectReportExportGroup.allCases) { group in
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(group.title)
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.secondary)
+
+                    ForEach(ProjectReportExportKind.allCases.filter { $0.group == group }) { kind in
+                        reportExportRow(for: kind)
+                    }
+                }
+            }
+        }
+    }
+
+    private func reportExportRow(for kind: ProjectReportExportKind) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: kind.icon)
+                    .font(.title3)
+                    .foregroundColor(kind.tint)
+                    .frame(width: 32, height: 32)
+                    .background(kind.tint.opacity(0.14))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(kind.title)
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+
+                    Text(kind.description)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 8)
+
+                Text(kind.fileExtension.uppercased())
+                    .font(.caption2)
+                    .fontWeight(.bold)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color(.systemGray5))
+                    .clipShape(Capsule())
+            }
+
+            HStack(spacing: 10) {
+                Button {
+                    prepare(kind, action: .preview)
+                } label: {
+                    Label("Preview", systemImage: "doc.text.magnifyingglass")
+                }
+                .accessibilityLabel("Preview \(kind.title)")
+                .accessibilityIdentifier("project-report-preview-\(kind.rawValue)")
+
+                Button {
+                    prepare(kind, action: .share)
+                } label: {
+                    Label("Export", systemImage: "square.and.arrow.up")
+                }
+                .accessibilityLabel("Export \(kind.title)")
+                .accessibilityIdentifier("project-report-export-\(kind.rawValue)")
+
+                if preparingKind == kind {
+                    ProgressView()
+                        .controlSize(.small)
+                }
+            }
+            .font(.caption)
+            .buttonStyle(.bordered)
+        }
+        .padding()
+        .background(Color(.systemGray6))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .accessibilityIdentifier("project-report-card-\(kind.rawValue)")
     }
 
     private var completedTaskCount: Int {
@@ -1609,6 +1704,442 @@ struct ProjectReportsView: View {
             parts.append("\(task.photoIDs.count) before / \(task.completionPhotoIDs.count) after photos")
         }
         return parts.joined(separator: " | ")
+    }
+
+    private var reportErrorBinding: Binding<Bool> {
+        Binding(
+            get: { errorMessage != nil },
+            set: { isPresented in
+                if !isPresented {
+                    errorMessage = nil
+                }
+            }
+        )
+    }
+
+    private var reportOrganization: Organization {
+        authVM.currentOrg ?? projectVM.currentOrganization ?? Organization(name: "Personal Workspace")
+    }
+
+    private var timesheetBounds: (start: Date, end: Date) {
+        let loggedDates = project.loggedHours.map(\.startTime)
+        return (
+            loggedDates.min() ?? project.startDate,
+            loggedDates.max() ?? max(project.endDate, Date())
+        )
+    }
+
+    private func prepare(_ kind: ProjectReportExportKind, action: ProjectReportArtifactAction) {
+        preparingKind = kind
+
+        Task { @MainActor in
+            defer { preparingKind = nil }
+
+            guard let artifact = await makeArtifact(for: kind) else {
+                errorMessage = "Unable to generate \(kind.title)."
+                return
+            }
+
+            switch action {
+            case .preview:
+                previewArtifact = artifact
+            case .share:
+                share(artifact)
+            }
+        }
+    }
+
+    private func makeArtifact(for kind: ProjectReportExportKind) async -> ProjectReportArtifact? {
+        let data: Data?
+
+        switch kind {
+        case .projectPDF:
+            data = await reportingService.generateProjectReport(
+                project: project,
+                teamMembers: projectVM.teamMembers,
+                organization: reportOrganization
+            )
+        case .jobCostCSV:
+            data = reportingService.generateJobCostCSV(project: project)
+        case .receiptsCSV:
+            data = reportingService.generateReceiptsCSV(project: project)
+        case .laborTimesheetCSV:
+            data = reportingService.generateTimesheetCSV(
+                project: project,
+                startDate: timesheetBounds.start,
+                endDate: timesheetBounds.end
+            )
+        case .laborPaymentsCSV:
+            data = reportingService.generateLaborPaymentsCSV(project: project)
+        case .tasksCSV:
+            data = reportingService.generateTasksCSV(
+                project: project,
+                teamMembers: projectVM.teamMembers
+            )
+        }
+
+        guard let data else { return nil }
+        return ProjectReportArtifact(kind: kind, data: data)
+    }
+
+    private func share(_ artifact: ProjectReportArtifact) {
+        do {
+            let url = try artifact.writeTemporaryFile(projectName: project.name)
+            sharePayload = ProjectReportSharePayload(url: url)
+        } catch {
+            errorMessage = "Unable to prepare \(artifact.kind.title) for export."
+        }
+    }
+}
+
+private enum ProjectReportExportGroup: String, CaseIterable, Identifiable {
+    case field
+    case accounting
+    case operations
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .field: return "Field & Client"
+        case .accounting: return "Accounting"
+        case .operations: return "Operations"
+        }
+    }
+}
+
+private enum ProjectReportExportKind: String, CaseIterable, Identifiable {
+    case projectPDF = "project-pdf"
+    case jobCostCSV = "job-cost-csv"
+    case receiptsCSV = "receipts-csv"
+    case laborPaymentsCSV = "labor-payments-csv"
+    case laborTimesheetCSV = "labor-timesheet-csv"
+    case tasksCSV = "tasks-csv"
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .projectPDF: return "Project Report"
+        case .jobCostCSV: return "Job Cost Detail"
+        case .receiptsCSV: return "Receipt Line Items"
+        case .laborPaymentsCSV: return "Labor Payment Ledger"
+        case .laborTimesheetCSV: return "Labor Timesheet"
+        case .tasksCSV: return "Task Closeout"
+        }
+    }
+
+    var description: String {
+        switch self {
+        case .projectPDF:
+            return "Readable project summary with budget, labor, tasks, and recent activity."
+        case .jobCostCSV:
+            return "Combined receipt and earned-labor actuals for job-cost review."
+        case .receiptsCSV:
+            return "Receipt-level and itemized purchase detail for bookkeeping."
+        case .laborPaymentsCSV:
+            return "Cash payment ledger with partial payments, reversals, and references."
+        case .laborTimesheetCSV:
+            return "Logged hours, rates, earned pay, and unpaid/overpaid balances."
+        case .tasksCSV:
+            return "Assignment, completion, proof-photo counts, and closeout notes."
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .projectPDF: return "doc.richtext"
+        case .jobCostCSV: return "chart.line.text.clipboard"
+        case .receiptsCSV: return "receipt"
+        case .laborPaymentsCSV: return "banknote"
+        case .laborTimesheetCSV: return "clock"
+        case .tasksCSV: return "checklist"
+        }
+    }
+
+    var tint: Color {
+        switch self {
+        case .projectPDF: return .blue
+        case .jobCostCSV: return .indigo
+        case .receiptsCSV: return .orange
+        case .laborPaymentsCSV: return .green
+        case .laborTimesheetCSV: return .teal
+        case .tasksCSV: return .purple
+        }
+    }
+
+    var fileExtension: String {
+        switch self {
+        case .projectPDF: return "pdf"
+        case .jobCostCSV, .receiptsCSV, .laborPaymentsCSV, .laborTimesheetCSV, .tasksCSV:
+            return "csv"
+        }
+    }
+
+    var group: ProjectReportExportGroup {
+        switch self {
+        case .projectPDF:
+            return .field
+        case .jobCostCSV, .receiptsCSV, .laborPaymentsCSV:
+            return .accounting
+        case .laborTimesheetCSV, .tasksCSV:
+            return .operations
+        }
+    }
+
+    var isPDF: Bool {
+        self == .projectPDF
+    }
+}
+
+private enum ProjectReportArtifactAction {
+    case preview
+    case share
+}
+
+private struct ProjectReportArtifact: Identifiable {
+    let kind: ProjectReportExportKind
+    let data: Data
+
+    var id: String { kind.rawValue }
+
+    func writeTemporaryFile(projectName: String) throws -> URL {
+        let sanitizedProjectName = projectName
+            .replacingOccurrences(of: " ", with: "_")
+            .components(separatedBy: CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "_-")).inverted)
+            .joined()
+        let safeProjectName = sanitizedProjectName.isEmpty ? "Project" : sanitizedProjectName
+        let fileName = "\(safeProjectName)_\(kind.rawValue).\(kind.fileExtension)"
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(fileName)
+        try data.write(to: url, options: .atomic)
+        return url
+    }
+}
+
+private struct ProjectReportSharePayload: Identifiable {
+    let id = UUID()
+    let url: URL
+}
+
+private struct ProjectReportPreviewView: View {
+    let artifact: ProjectReportArtifact
+    let onShare: () -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if artifact.kind.isPDF {
+                    ProjectPDFPreview(data: artifact.data)
+                        .accessibilityIdentifier("project-report-pdf-preview")
+                } else {
+                    ProjectCSVPreview(data: artifact.data)
+                        .accessibilityIdentifier("project-report-csv-preview")
+                }
+            }
+            .navigationTitle(artifact.kind.title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                    .accessibilityIdentifier("project-report-preview-done")
+                }
+
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        onShare()
+                    } label: {
+                        Label("Export", systemImage: "square.and.arrow.up")
+                    }
+                    .accessibilityIdentifier("project-report-preview-export")
+                }
+            }
+        }
+        .accessibilityIdentifier("project-report-preview-screen-\(artifact.kind.rawValue)")
+    }
+}
+
+private struct ProjectPDFPreview: View {
+    let pageImages: [UIImage]
+
+    init(data: Data) {
+        self.pageImages = ProjectPDFPageRenderer.pageImages(from: data)
+    }
+
+    var body: some View {
+        Group {
+            if pageImages.isEmpty {
+                VStack(spacing: 10) {
+                    Image(systemName: "doc.text.magnifyingglass")
+                        .font(.largeTitle)
+                        .foregroundColor(.secondary)
+
+                    Text("Preview unavailable")
+                        .font(.headline)
+
+                    Text("The report file was generated, but the preview could not be rendered.")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .padding()
+            } else {
+                TabView {
+                    ForEach(Array(pageImages.enumerated()), id: \.offset) { index, image in
+                        ZoomableImageView(image: image, showsDismissButton: false)
+                            .overlay(alignment: .bottom) {
+                                if pageImages.count > 1 {
+                                    Text("Page \(index + 1) of \(pageImages.count)")
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundColor(.white)
+                                        .padding(.horizontal, 10)
+                                        .padding(.vertical, 6)
+                                        .background(.black.opacity(0.65))
+                                        .clipShape(Capsule())
+                                        .padding(.bottom, 12)
+                                }
+                            }
+                            .accessibilityIdentifier("project-report-pdf-page-\(index)")
+                    }
+                }
+                .tabViewStyle(.page(indexDisplayMode: pageImages.count > 1 ? .automatic : .never))
+                .background(Color.black)
+            }
+        }
+        .accessibilityIdentifier("project-report-pdf-preview")
+    }
+}
+
+private enum ProjectPDFPageRenderer {
+    static func pageImages(from data: Data) -> [UIImage] {
+        guard let document = PDFDocument(data: data) else { return [] }
+
+        return (0..<document.pageCount).compactMap { pageIndex in
+            guard let page = document.page(at: pageIndex) else { return nil }
+
+            let pageRect = page.bounds(for: .mediaBox)
+            let format = UIGraphicsImageRendererFormat()
+            format.scale = UIScreen.main.scale
+            format.opaque = true
+
+            let renderer = UIGraphicsImageRenderer(size: pageRect.size, format: format)
+            return renderer.image { context in
+                UIColor.white.set()
+                context.fill(CGRect(origin: .zero, size: pageRect.size))
+
+                context.cgContext.saveGState()
+                context.cgContext.translateBy(x: 0, y: pageRect.height)
+                context.cgContext.scaleBy(x: 1, y: -1)
+                context.cgContext.translateBy(x: -pageRect.origin.x, y: -pageRect.origin.y)
+                page.draw(with: .mediaBox, to: context.cgContext)
+                context.cgContext.restoreGState()
+            }
+        }
+    }
+}
+
+private struct ProjectCSVPreview: View {
+    let data: Data
+
+    private var rows: [[String]] {
+        CSVPreviewParser.rows(from: data, limit: 12)
+    }
+
+    var body: some View {
+        ScrollView([.horizontal, .vertical]) {
+            Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 10) {
+                ForEach(Array(rows.enumerated()), id: \.offset) { rowIndex, row in
+                    GridRow {
+                        ForEach(Array(row.enumerated()), id: \.offset) { _, cell in
+                            Text(cell.isEmpty ? " " : cell)
+                                .font(rowIndex == 0 ? .caption.weight(.semibold) : .caption)
+                                .foregroundColor(rowIndex == 0 ? .primary : .secondary)
+                                .fixedSize(horizontal: true, vertical: false)
+                        }
+                    }
+                }
+            }
+            .padding()
+        }
+        .background(Color(.systemBackground))
+    }
+}
+
+private enum CSVPreviewParser {
+    static func rows(from data: Data, limit: Int) -> [[String]] {
+        guard let text = String(data: data, encoding: .utf8), !text.isEmpty else { return [] }
+
+        var rows: [[String]] = []
+        var row: [String] = []
+        var field = ""
+        var isInsideQuotes = false
+        var iterator = text.makeIterator()
+
+        while let character = iterator.next() {
+            switch character {
+            case "\"":
+                if isInsideQuotes {
+                    if let next = iterator.next() {
+                        if next == "\"" {
+                            field.append("\"")
+                        } else {
+                            isInsideQuotes = false
+                            process(next, row: &row, field: &field, rows: &rows)
+                        }
+                    } else {
+                        isInsideQuotes = false
+                    }
+                } else {
+                    isInsideQuotes = true
+                }
+            case "," where !isInsideQuotes:
+                row.append(field)
+                field = ""
+            case "\n" where !isInsideQuotes:
+                row.append(field)
+                rows.append(row)
+                if rows.count >= limit {
+                    return rows
+                }
+                row = []
+                field = ""
+            case "\r" where !isInsideQuotes:
+                continue
+            default:
+                field.append(character)
+            }
+        }
+
+        if !field.isEmpty || !row.isEmpty {
+            row.append(field)
+            rows.append(row)
+        }
+
+        return rows
+    }
+
+    private static func process(
+        _ character: Character,
+        row: inout [String],
+        field: inout String,
+        rows: inout [[String]]
+    ) {
+        switch character {
+        case ",":
+            row.append(field)
+            field = ""
+        case "\n":
+            row.append(field)
+            rows.append(row)
+            row = []
+            field = ""
+        case "\r":
+            break
+        default:
+            field.append(character)
+        }
     }
 }
 

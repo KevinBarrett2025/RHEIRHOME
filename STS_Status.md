@@ -3,7 +3,7 @@
 ## Repo
 - Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Branch: `gm/rheir-hardening-phase1`
-- HEAD: `117d5755bf2449139366c4bdeda6f7ff7d9ea6ac`
+- HEAD: `aca25ff681f378ead18b399ffba0d9c4d48fe71a`
 
 ## Active Initiative
 - RHEIR release hardening, Fast-Ship Hybrid contractor workflow hardening.
@@ -187,7 +187,7 @@
 
 ## In Progress
 - Lock the shipping app into the Fast-Ship Hybrid release profile so the visible shell stays single-user focused while hidden CloudKit/personal-workspace infrastructure remains available.
-- Implement the remaining Working-App release blockers in this order: Tasks, Reports, UI cleanup, and device acceptance.
+- Implement the remaining Working-App release blockers in this order: Reports device/export validation, UI cleanup, and device acceptance.
 - Labor + Business Resources device acceptance is now PASS for multi-rate worker editing, actual-rate-only Log Hours entry with in-flow add-rate editing, editable logged hours, partial/split payments, payment correction, cash-preserving overpayment math after edited paid hours, worker deactivation, unpay/reissue, professional paid-ledger row layout, and persisted reload totals.
 - Tasks hardening is now active. The first shippable slice is simulator-proven for task assignment editing, due/overdue separation without duplicate same-screen rows, completion proof notes, and immediate selected-project refresh through the shared mutation seam.
 - Task completion proof now requires both a completing worker and non-empty proof notes, and completed task detail exposes the recorded `Completed By` attribution instead of leaving completion ownership implicit.
@@ -195,6 +195,10 @@
 - Task completion now supports optional real photo proof in the compiled completion editor. Selected proof images upload through `CloudKitPhotoService.uploadTaskPhoto` before completion, upload failure blocks completion with inline error messaging, and task detail shows persisted photo-proof count.
 - Task photos now follow before/after job-proof semantics: task creation/editing can attach before/scope photos from camera or multi-select Photos, completion can attach after/proof photos from camera or multi-select Photos, and task detail renders separate Before Photos and After Photos grids whose images open full screen with pinch-to-zoom.
 - Task photo gallery/report hardening is simulator-proven: before/after previews are swipeable from create/edit, active-detail, and completed-detail contexts; thumbnail delete badges support correction; Mark Complete is visible at the bottom of task detail; the task summary stays near the top; and task progress/photo proof flows into project report preview and generated PDF output.
+- Reports hardening is simulator-proven for live UI entry, PDF/CSV previews, export controls, accounting CSV generation, and task/labor/receipt data inclusion; remaining Reports risk is physical-device preview/export/share confirmation.
+- Reports now use the real compiled `ReportingService` from the active project UI instead of placeholder/stub report copy, with live previews and export actions for project PDF, receipt line-item CSV, labor payment ledger CSV, labor timesheet CSV, task closeout CSV, and job-cost CSV.
+- Project report PDF preview now renders as swipeable image-backed pages with pinch-to-zoom support, while CSV previews render tabular rows before export so contractors can inspect accounting data before sharing it.
+- Report exports now include contractor-useful accounting columns for receipt line items, paid/unpaid/overpaid labor balances, labor payment references, task before/after proof counts, and job-cost detail.
 - Log Hours in-flow rate selection is simulator-proven for actual-rate-only selection plus direct add-rate entry into worker editing; verify the same quick-add flow on device during the remaining Labor acceptance pass.
 - Business Resources is simulator-proven for hub entry and worker/rate access; verify add/edit workers, vendors, and payment methods on device alongside the Labor acceptance pass.
 - Worker removal is simulator-proven for stable active-roster presentation during refresh and CloudKit update/upsert semantics; verify the latest device run no longer shows the temporary all-workers-empty state or CloudKit duplicate-record error.
@@ -212,6 +216,10 @@
 - Raw in-sandbox `xcodebuild` commands are still less reliable than elevated CLI or `xcodebuildmcp` paths in this environment because CoreSimulator and DerivedData access remain sandbox-sensitive.
 
 ## Latest Evidence
+- Reports Gate A: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_reports_dd -resultBundlePath /tmp/rheir_gateA_reports.xcresult clean build` -> PASS (`/tmp/rheir_gateA_reports.xcresult`)
+- Reports focused parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_reports_parity_final5_dd -resultBundlePath /tmp/rheir_reports_parity_final5.xcresult test '-only-testing:RHEIRTests/ReportingServiceTests' '-only-testing:RHEIRUITests/RHEIRUITests/testProjectReportsPreviewSurfaceExposesPDFAndCSVExports()'` -> PASS (`/tmp/rheir_reports_parity_final5.xcresult`, `3 report service tests plus 1 UI preview/export test`)
+- Reports visual evidence: kept xcresult attachment named `Project PDF preview` in `/tmp/rheir_reports_parity_final5.xcresult`
+- Reports pbxproj drift: INTENTIONAL (`Shared/Services/ReportingService.swift` added to the compiled app target so the visible report UI can use the real PDF/CSV generator)
 - Tasks before/after photo-proof Gate A: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -resultBundlePath /tmp/rheir_gateA_tasks_before_after_photos_final2.xcresult clean build` -> PASS (`/tmp/rheir_gateA_tasks_before_after_photos_final2.xcresult`)
 - Tasks before/after photo-proof focused parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -resultBundlePath /tmp/rheir_tasks_before_after_photos_parity_final2.xcresult test '-only-testing:RHEIRUITests/RHEIRUITests/testTaskManagementSupportsAssignmentEditingCompletionProofAndRefresh()' '-only-testing:RHEIRUITests/RHEIRUITests/testTaskManagementSupportsCreateEditReopenAndDelete()' -only-testing:RHEIRTests/ProjectMutationPropagationTests` -> PASS (`/tmp/rheir_tasks_before_after_photos_parity_final2.xcresult`, `2 UI tests plus 4 mutation tests`)
 - Tasks before/after photo-proof visual evidence: kept xcresult attachments named `Task before photo controls` and `Task completion photo proof sheet`
