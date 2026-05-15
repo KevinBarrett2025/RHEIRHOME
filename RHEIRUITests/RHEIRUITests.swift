@@ -533,8 +533,13 @@ final class RHEIRUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Complete Task"].waitForExistence(timeout: 5))
         let notesField = app.textFields["Completion notes"]
         XCTAssertTrue(notesField.waitForExistence(timeout: 5))
+        XCTAssertFalse(
+            app.buttons["Complete"].isEnabled,
+            "Expected completion to require proof notes before saving."
+        )
         notesField.tap()
         notesField.typeText("Framing verified before inspection.")
+        XCTAssertTrue(app.buttons["Complete"].isEnabled)
         app.buttons["Complete"].tap()
 
         XCTAssertTrue(
@@ -542,6 +547,12 @@ final class RHEIRUITests: XCTestCase {
             "Expected task completion to refresh the live task list immediately."
         )
         XCTAssertFalse(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Overdue Tasks (1)")).firstMatch.exists)
+
+        let completedTask = app.buttons["task-row-A11B1F20-08A0-4B3B-9A52-9A687EE92001"]
+        XCTAssertTrue(completedTask.waitForExistence(timeout: 5))
+        completedTask.tap()
+        XCTAssertTrue(app.staticTexts["Completed By"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Sam Carter")).firstMatch.exists)
     }
 
     @MainActor

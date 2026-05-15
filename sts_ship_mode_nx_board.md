@@ -43,6 +43,7 @@
 - Labor + Business Resources physical-device acceptance is now PASS for multi-rate workers, editable hours, partial/split payments, payment correction, worker deactivation, add-rate-in-flow, unpay/reissue, and persisted totals.
 - `TasksListView` now uses the active compiled task editor/detail path for assignment editing, routes completion through proof capture instead of blind completion, separates overdue work from the general list without duplicating rows, and refreshes immediately through the shared mutation seam.
 - `RHEIRUITests.swift` now proves task assignment editing, due/overdue display, completion proof notes, and immediate overdue-section refresh on the live task surface.
+- `TaskCompletionEditor` now blocks completion until both a worker and proof notes are present, and completed task detail shows the recorded completer names for auditability.
 - Canonical tree cleanup completed in the working branch.
 - Session flow consolidated around `AppSessionSupport.swift`.
 - `Project.swift` now carries the first compiled estimator domain with intake, draft, versioned baseline, variance, source-evidence, and proposal-view models plus bridge helpers back into `Project` budget summary fields.

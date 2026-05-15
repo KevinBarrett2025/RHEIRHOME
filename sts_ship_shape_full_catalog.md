@@ -202,6 +202,7 @@
 - `LaborPaymentView` logged-hour editing, payment correction, and compact tab selector
 - `LaborPaymentView` professional bordered paid-ledger card layout with earned, paid, balance/overpayment, method, and reference rows
 - `TasksListView` active compiled task editor/detail hardening for assignment editing, due/overdue separation, proof-note completion, and immediate refresh
+- `TaskCompletionEditor` completion-proof enforcement and completed-by attribution in the active task detail path
 - `RHEIRTests` Labor payment ledger coverage
 - `RHEIRTests` Labor editability and partial-payment persistence coverage
 - `RHEIRTests` Labor overpayment-after-edited-hours regression coverage
@@ -218,6 +219,7 @@
 - `SignInWithAppleCoordinator` structured logging
 
 ## Current Validation Baseline
+- Latest Tasks completion-proof focused UI parity result: `PASS` (`/tmp/rheir_tasks_completion_proof_ui.xcresult`, `1 UI test`)
 - Latest Tasks first-slice Gate A result: `PASS` (`/tmp/rheir_gateA_tasks_first_slice_rerun2.xcresult`)
 - Latest Tasks first-slice focused UI parity result: `PASS` (`/tmp/rheir_tasks_first_slice_ui_rerun2.xcresult`, `1 UI test`)
 - Latest Tasks first-slice mutation parity result: `PASS` (`/tmp/rheir_tasks_first_slice_mutation_parity.xcresult`, `4 tests`)

@@ -708,6 +708,10 @@ struct TaskDetailView: View {
                             DetailRow(title: "Completed", value: completedDate.formatted(date: .abbreviated, time: .shortened), icon: "checkmark.circle.fill")
                         }
 
+                        if task.isCompleted, !task.completedByEmployeeIDs.isEmpty {
+                            DetailRow(title: "Completed By", value: completedBySummary, icon: "person.crop.circle.badge.checkmark")
+                        }
+
                         if !task.completionNotes.isEmpty {
                             DetailRow(title: "Proof Notes", value: task.completionNotes, icon: "note.text")
                         }
@@ -808,6 +812,11 @@ struct TaskDetailView: View {
         let names = task.assignedEmployeeIDs.compactMap { projectVM.getTeamMember(by: $0)?.name }
         return names.isEmpty ? "Unavailable" : names.joined(separator: ", ")
     }
+
+    private var completedBySummary: String {
+        let names = task.completedByEmployeeIDs.compactMap { projectVM.getTeamMember(by: $0)?.name }
+        return names.isEmpty ? "Unavailable" : names.joined(separator: ", ")
+    }
 }
 
 private struct TaskCompletionEditor: View {
@@ -876,6 +885,12 @@ private struct TaskCompletionEditor: View {
                     DatePicker("Completed At", selection: $completedAt, displayedComponents: [.date, .hourAndMinute])
                     TextField("Completion notes", text: $completionNotes, axis: .vertical)
                         .lineLimit(2...5)
+
+                    if trimmedCompletionNotes.isEmpty {
+                        Label("Add proof notes before completing this task.", systemImage: "exclamationmark.triangle.fill")
+                            .font(.caption)
+                            .foregroundColor(.orange)
+                    }
                 }
             }
             .navigationTitle("Complete Task")
@@ -892,16 +907,27 @@ private struct TaskCompletionEditor: View {
                         completeTask()
                     }
                     .fontWeight(.semibold)
+                    .disabled(!canCompleteTask)
                 }
             }
         }
     }
 
+    private var trimmedCompletionNotes: String {
+        completionNotes.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var canCompleteTask: Bool {
+        !selectedEmployeeIDs.isEmpty && !trimmedCompletionNotes.isEmpty
+    }
+
     private func completeTask() {
+        guard canCompleteTask else { return }
+
         var completedTask = task
         completedTask.markCompleted(
             by: Array(selectedEmployeeIDs),
-            notes: completionNotes.trimmingCharacters(in: .whitespacesAndNewlines)
+            notes: trimmedCompletionNotes
         )
         completedTask.completedDate = completedAt
         onComplete(completedTask)
