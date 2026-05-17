@@ -1047,6 +1047,10 @@ final class RHEIRUITests: XCTestCase {
             imagePreview.exists,
             "Expected the scanned-receipt review sheet to keep a visible preview of the source image before saving."
         )
+        let imagePreviewAttachment = XCTAttachment(screenshot: app.screenshot())
+        imagePreviewAttachment.name = "Scanned receipt review image preview"
+        imagePreviewAttachment.lifetime = .keepAlways
+        add(imagePreviewAttachment)
 
         let saveButton = app.buttons["receipt-scan-save"]
         XCTAssertTrue(
