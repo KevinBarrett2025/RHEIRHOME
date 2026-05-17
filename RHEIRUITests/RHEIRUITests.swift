@@ -1360,6 +1360,32 @@ final class RHEIRUITests: XCTestCase {
             "REFUNDED",
             "Expected the source item row to show that the item has been refunded."
         )
+        openReceiptActionsMenu(in: app)
+        let postRefundEditButton = receiptDetailMenuAction(
+            identifier: "receipt-detail-menu-edit",
+            fallbackTitle: "Edit Receipt",
+            in: app
+        )
+        XCTAssertTrue(
+            postRefundEditButton.waitForExistence(timeout: 5),
+            "Expected the source receipt to remain editable after recording a linked refund."
+        )
+        postRefundEditButton.tap()
+        let editRefundedItemStatus = revealElement(
+            identifier: "receipt-edit-item-refund-status-primer",
+            in: app,
+            query: { $0.staticTexts["receipt-edit-item-refund-status-primer"] }
+        )
+        XCTAssertEqual(
+            editRefundedItemStatus.label,
+            "REFUNDED",
+            "Expected the edit receipt itemized list to label already refunded items."
+        )
+        app.buttons["Cancel"].tap()
+        XCTAssertTrue(
+            app.navigationBars["Receipt Details"].waitForExistence(timeout: 5),
+            "Expected cancelling the receipt editor to return to source receipt detail."
+        )
 
         let summaryAttachment = XCTAttachment(screenshot: app.screenshot())
         summaryAttachment.name = "Receipt refund summary after save"
@@ -1387,9 +1413,20 @@ final class RHEIRUITests: XCTestCase {
             1,
             "Expected the linked refund to render under the original receipt instead of as a duplicate top-level receipt card."
         )
+        let restoredLinkedRefundToggle = restoredApp.buttons["receipt-card-linked-refunds-toggle-ui-test-scanned-vendor"]
         XCTAssertTrue(
-            restoredApp.buttons["receipt-card-linked-refund-ui-test-scanned-vendor-primer"].exists,
-            "Expected the linked refund to render as a child receipt below the original receipt after relaunch."
+            restoredLinkedRefundToggle.waitForExistence(timeout: 5),
+            "Expected linked refunds to be summarized in a collapsed child receipt disclosure after relaunch."
+        )
+        XCTAssertEqual(
+            restoredLinkedRefundToggle.value as? String,
+            "collapsed",
+            "Expected linked refund receipt rows to stay collapsed by default."
+        )
+        restoredLinkedRefundToggle.tap()
+        XCTAssertTrue(
+            restoredApp.buttons["receipt-card-linked-refund-ui-test-scanned-vendor-primer"].waitForExistence(timeout: 5),
+            "Expected expanding linked refunds to reveal the child refund receipt below the source receipt."
         )
         restoredSourceReceiptCard.tap()
 

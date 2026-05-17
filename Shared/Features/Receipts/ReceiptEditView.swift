@@ -180,19 +180,43 @@ struct ReceiptEditView: View {
                 if !items.isEmpty {
                     Section {
                         ForEach(items) { item in
+                            let refundStatus = refundStatus(for: item)
+
                             Button {
                                 guard !locksFinancialHistory else { return }
                                 editingItem = item
                             } label: {
                                 HStack(spacing: 12) {
                                     VStack(alignment: .leading, spacing: 4) {
-                                        Text(item.name)
-                                            .font(.headline)
-                                            .foregroundStyle(.primary)
+                                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                            Text(item.name)
+                                                .font(.headline)
+                                                .foregroundStyle(.primary)
+
+                                            if let refundStatus {
+                                                Text(refundStatus.label)
+                                                    .font(.caption2)
+                                                    .fontWeight(.bold)
+                                                    .foregroundColor(.white)
+                                                    .padding(.horizontal, 7)
+                                                    .padding(.vertical, 3)
+                                                    .background(refundStatus.color)
+                                                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                                                    .accessibilityIdentifier("receipt-edit-item-refund-status-\(receiptEditAccessibilitySlug(item.name))")
+                                            }
+                                        }
 
                                         Text("Qty: \(item.quantity, specifier: "%.1f")  Total: \(item.totalPrice.formatAsCurrency())")
                                             .font(.caption)
                                             .foregroundStyle(.secondary)
+
+                                        if let refundStatus {
+                                            Text(refundStatus.detail)
+                                                .font(.caption)
+                                                .fontWeight(.semibold)
+                                                .foregroundStyle(refundStatus.color)
+                                                .accessibilityIdentifier("receipt-edit-item-refunded-quantity-\(receiptEditAccessibilitySlug(item.name))")
+                                        }
 
                                         if !item.subcategory.isEmpty {
                                             Text(item.subcategory)
@@ -366,6 +390,23 @@ struct ReceiptEditView: View {
             && receipt.remainingRefundableQuantity(for: item, in: projectReceipts) > 0
     }
 
+    private func refundStatus(for item: ReceiptItem) -> ReceiptEditItemRefundStatus? {
+        let refundedQuantity = receipt.refundedQuantity(for: item.id, in: projectReceipts)
+        guard refundedQuantity > 0 else { return nil }
+
+        let remainingQuantity = receipt.remainingRefundableQuantity(for: item, in: projectReceipts)
+        let isFullyRefunded = remainingQuantity <= 0.000_001
+        let label = isFullyRefunded ? "REFUNDED" : "PARTIAL REFUND"
+        let refundedText = refundedQuantity.formatted(.number.precision(.fractionLength(0...2)))
+        let totalText = item.quantity.formatted(.number.precision(.fractionLength(0...2)))
+
+        return ReceiptEditItemRefundStatus(
+            label: label,
+            detail: "Returned \(refundedText) of \(totalText)",
+            color: isFullyRefunded ? .red : .orange
+        )
+    }
+
     private func prepareRefund(for item: ReceiptItem) {
         let remainingQuantity = receipt.remainingRefundableQuantity(for: item, in: projectReceipts)
         guard remainingQuantity > 0,
@@ -503,6 +544,12 @@ private struct ReceiptItemRefundPrompt: Identifiable {
 
         return parts.joined(separator: " ") + "."
     }
+}
+
+private struct ReceiptEditItemRefundStatus {
+    let label: String
+    let detail: String
+    let color: Color
 }
 
 private struct ReceiptLineItemEditView: View {

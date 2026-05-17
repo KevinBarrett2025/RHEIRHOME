@@ -837,6 +837,21 @@ struct ReceiptCardGroup: View {
     let onDelete: () -> Void
     let onRefundView: (Receipt) -> Void
 
+    @State private var isShowingLinkedRefunds = false
+
+    private var accessibilitySlug: String {
+        receiptsAccessibilitySlug(receipt.vendor)
+    }
+
+    private var linkedRefundTotal: Double {
+        linkedRefunds.reduce(0.0) { $0 + max(0, $1.amount) }
+    }
+
+    private var linkedRefundSummary: String {
+        let receiptLabel = linkedRefunds.count == 1 ? "receipt" : "receipts"
+        return "\(linkedRefunds.count) linked refund \(receiptLabel) • \(linkedRefundTotal.formatAsCurrency()) refunded"
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             EnhancedReceiptCard(
@@ -850,21 +865,43 @@ struct ReceiptCardGroup: View {
 
             if !linkedRefunds.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "arrow.turn.down.right")
-                            .font(.caption.weight(.semibold))
-                        Text("Refund receipts")
-                            .font(.caption)
-                            .fontWeight(.semibold)
-                    }
-                    .foregroundColor(.secondary)
-                    .padding(.leading, 18)
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            isShowingLinkedRefunds.toggle()
+                        }
+                    } label: {
+                        HStack(alignment: .center, spacing: 10) {
+                            Image(systemName: isShowingLinkedRefunds ? "chevron.down.circle.fill" : "chevron.right.circle.fill")
+                                .font(.caption.weight(.bold))
+                                .foregroundColor(.orange)
 
-                    ForEach(linkedRefunds) { refund in
-                        LinkedRefundReceiptCard(refund: refund) {
-                            onRefundView(refund)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Refund receipts")
+                                    .font(.caption)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.primary)
+
+                                Text(isShowingLinkedRefunds ? linkedRefundSummary : "\(linkedRefundSummary) • tap to view")
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                                    .lineLimit(2)
+                            }
+
+                            Spacer()
                         }
                         .padding(.leading, 18)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("receipt-card-linked-refunds-toggle-\(accessibilitySlug)")
+                    .accessibilityValue(isShowingLinkedRefunds ? "expanded" : "collapsed")
+
+                    if isShowingLinkedRefunds {
+                        ForEach(linkedRefunds) { refund in
+                            LinkedRefundReceiptCard(refund: refund) {
+                                onRefundView(refund)
+                            }
+                            .padding(.leading, 18)
+                        }
                     }
                 }
             }

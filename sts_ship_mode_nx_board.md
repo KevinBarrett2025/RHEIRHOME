@@ -10,7 +10,7 @@
 - `ReceiptsView.swift` now shows a selected-category drilldown header with category-scoped receipt count and total spend, and `Receipt.swift` / `ProjectViewModel+Filters.swift` now share an itemized budget rollup so Materials, General Conditions, and Contingency totals are not blocked by the mixed receipt's top-level category.
 - `Receipt.swift` now supports linked item-level partial refunds with original-line identity, remaining refundable quantity, proportional tax/discount allocation, final-residual reconciliation, and over-refund prevention so mixed supplier receipts can be partially returned without rewriting the source purchase.
 - `ReceiptEditView.swift` now exposes contractor-native row-swipe refund actions with tax-inclusive confirmation, locks linked financial history from silent rewrites, and `ReceiptDetailView.swift` keeps linked refund balances visible without forcing a separate receipt-level refund sheet.
-- `ReceiptsView.swift` and `ReceiptDetailView.swift` now present linked refund receipts as child rows under the source receipt, while refunded source line items carry visible refunded/partial-refunded badges instead of leaving contractors to infer returns from totals alone.
+- `ReceiptsView.swift` now keeps linked refund receipts collapsed behind a compact source-receipt disclosure until expanded, while `ReceiptDetailView.swift` and `ReceiptEditView.swift` show refunded/partial-refunded item state instead of leaving contractors to infer returns from totals alone.
 - `Receipt.swift`, scan parsing, manual entry, edit/detail screens, and `ReportingService.swift` now carry restaurant `Tip Amount` and gas `Price / Gallon` metadata end to end.
 - Scanned receipt review, manual receipt entry, and saved receipt detail now all show visible image previews, with saved receipts reloading local preview files after inline image data is compacted from persisted project payloads.
 - `RHEIRTests.swift` and `RHEIRUITests.swift` now prove partial-refund math, CSV linkage, visible preview persistence, and the live saved-scanned-receipt row-swipe refund flow.
@@ -263,6 +263,10 @@
 - Receipt linked-refund presentation focused parity: PASS (`/tmp/rheir_receipt_linked_refund_child_parity_20260517_3.xcresult`, `2 refund unit tests plus 1 linked-refund UI relaunch test`)
 - Receipt linked-refund presentation visual evidence: kept xcresult attachments `Receipt line-item refund confirmation`, `Receipt refund summary after save`, and `Receipt refund summary after relaunch`
 - Receipt linked-refund presentation pbxproj drift: NONE
+- Receipt refund disclosure/badge Gate A: PASS (`/tmp/rheir_gateA_receipt_refund_disclosure_badge_20260517_1.xcresult`)
+- Receipt refund disclosure/badge focused parity: PASS (`/tmp/rheir_receipt_refund_disclosure_badge_parity_20260517_1.xcresult`, `2 refund unit tests plus 1 disclosure/edit-badge UI relaunch test`)
+- Receipt refund disclosure/badge visual evidence: kept xcresult attachments `Receipt line-item refund confirmation`, `Receipt refund summary after save`, and `Receipt refund summary after relaunch`
+- Receipt refund disclosure/badge pbxproj drift: NONE
 - Receipt refund/metadata Gate A: PASS (`/tmp/rheir_gateA_receipt_refund_metadata_20260517.xcresult`)
 - Receipt refund/metadata focused parity: PASS (`/tmp/rheir_receipt_refund_metadata_parity_rerun_20260517.xcresult`, `14 focused unit tests plus 2 UI tests`)
 - Receipt refund visual evidence: kept xcresult attachments `Receipt line-item refund confirmation`, `Receipt refund summary after save`, and `Receipt refund summary after relaunch`

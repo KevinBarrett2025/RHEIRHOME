@@ -3,7 +3,7 @@
 ## Repo
 - Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Branch: `gm/rheir-hardening-phase1`
-- HEAD: `f7e80a8697abbdd84513f64db27e41f05193fc80`
+- HEAD: `75a4be38f79e203b97b3e71aa4eeac6367dcc6da`
 
 ## Active Initiative
 - RHEIR release hardening, Fast-Ship Hybrid contractor workflow hardening.
@@ -173,6 +173,7 @@
 - Added focused receipt-refund/image/unit/UI parity proving category-scoped returned lines, tax/discount residual reconciliation, export linkage, visible scan/detail previews, and the live row-swipe refund flow on saved scanned receipts.
 - Hardened the live partial-refund acceptance path so the source receipt exposes deterministic refunded/remaining totals, and the saved-scanned-receipt UI test now proves save plus terminate/relaunch persistence of the linked refund balance.
 - Refined linked partial-refund presentation so child refund receipts render under the source receipt instead of as duplicate top-level receipt rows, and source receipt line items now show refunded/partial-refunded status styling at a glance.
+- Polished linked refund presentation so child refund receipts are collapsed by default behind a summary disclosure, and `Edit Receipt` now labels already-refunded item rows with refunded/partial-refunded badges while preserving the existing no-repeat-refund guard.
 - Completed the broader simulator Receipts trust pass across scanned receipt save/reopen, persisted edits, manual-receipt relaunch, mixed-category drilldown math, linked partial refunds, and report export visibility.
 - Hardened selected-project restore reconciliation so a launch-restored project selection is rehydrated from the loaded organization project payload, making persisted receipts visible immediately instead of waiting for a scan/manual receipt mutation to refresh `selectedProject`.
 - Added startup legacy project-payload compaction in `Shared/Views/Auth/AppSessionSupport.swift` so `LocalCacheStore` rewrites stale `projects*` `UserDefaults` blobs through `Project.persistenceSafeCopy` before legacy session migration runs.
@@ -214,7 +215,7 @@
 - Treat accounting math and professional UI/UX as release blockers for every remaining Fast-Ship surface: totals must reconcile from persisted records, payment history must not be rewritten by later edits, over/under balances must be explicit, and compact-device rows/sheets must be visually bounded with no truncation before moving a seam to release-accepted.
 - Treat task photo UX and reporting fidelity as standing release criteria: before/after proof must stay separated, previewable, swipeable, correctable, and reflected in project reports before Tasks can be considered field-ready.
 - Continue broader selected-project estimator variance/runtime QA on top of the approved-baseline mapping seam inside the simplified v1 shell.
-- Continue broader selected-project receipt runtime QA in parallel, with same-device/device validation now the active release seam after scanned/manual preview visibility, line-item swipe refunds, child linked-refund presentation, source item refund badges, linked-refund relaunch, mixed-category drilldown math, gas/tip metadata, and export visibility are green in simulator.
+- Continue broader selected-project receipt runtime QA in parallel, with same-device/device validation now the active release seam after scanned/manual preview visibility, line-item swipe refunds, collapsed child linked-refund disclosure, edit-sheet source item refund badges, linked-refund relaunch, mixed-category drilldown math, gas/tip metadata, and export visibility are green in simulator.
 - Continue shrinking the remaining oversized active state owners around the new sync and access store boundaries.
 - Expand deterministic parity beyond the focused `RHEIRTests` suite.
 
@@ -224,6 +225,10 @@
 - Raw in-sandbox `xcodebuild` commands are still less reliable than elevated CLI or `xcodebuildmcp` paths in this environment because CoreSimulator and DerivedData access remain sandbox-sensitive.
 
 ## Latest Evidence
+- Receipt refund disclosure/badge Gate A: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_receipt_refund_disclosure_badge_dd -resultBundlePath /tmp/rheir_gateA_receipt_refund_disclosure_badge_20260517_1.xcresult clean build` -> PASS (`/tmp/rheir_gateA_receipt_refund_disclosure_badge_20260517_1.xcresult`)
+- Receipt refund disclosure/badge focused parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_receipt_refund_disclosure_badge_parity_dd -resultBundlePath /tmp/rheir_receipt_refund_disclosure_badge_parity_20260517_1.xcresult test '-only-testing:RHEIRUITests/RHEIRUITests/testSavedScannedReceiptOpensPartialRefundFlow()' '-only-testing:RHEIRTests/ReceiptPartialRefundTests'` -> PASS (`/tmp/rheir_receipt_refund_disclosure_badge_parity_20260517_1.xcresult`, `2 refund unit tests plus 1 disclosure/edit-badge UI relaunch test`)
+- Receipt refund disclosure/badge visual evidence: kept xcresult attachments `Receipt line-item refund confirmation`, `Receipt refund summary after save`, and `Receipt refund summary after relaunch`
+- Receipt refund disclosure/badge pbxproj drift: NONE
 - Receipt linked-refund presentation Gate A: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_receipt_linked_refund_child_dd -resultBundlePath /tmp/rheir_gateA_receipt_linked_refund_child_20260517_1.xcresult clean build` -> PASS (`/tmp/rheir_gateA_receipt_linked_refund_child_20260517_1.xcresult`)
 - Receipt linked-refund presentation focused parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_receipt_linked_refund_child_parity_dd -resultBundlePath /tmp/rheir_receipt_linked_refund_child_parity_20260517_3.xcresult test '-only-testing:RHEIRUITests/RHEIRUITests/testSavedScannedReceiptOpensPartialRefundFlow()' '-only-testing:RHEIRTests/ReceiptPartialRefundTests'` -> PASS (`/tmp/rheir_receipt_linked_refund_child_parity_20260517_3.xcresult`, `2 refund unit tests plus 1 linked-refund UI relaunch test`)
 - Receipt linked-refund presentation visual evidence: kept xcresult attachments `Receipt line-item refund confirmation`, `Receipt refund summary after save`, and `Receipt refund summary after relaunch`
