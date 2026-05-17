@@ -1341,6 +1341,25 @@ final class RHEIRUITests: XCTestCase {
             "$46.26",
             "Expected the source receipt detail to preserve the remaining refundable gross balance."
         )
+        let linkedRefundRow = revealElement(
+            identifier: "receipt-detail-linked-refund-primer",
+            in: app,
+            query: { $0.buttons["receipt-detail-linked-refund-primer"] }
+        )
+        XCTAssertTrue(
+            linkedRefundRow.exists,
+            "Expected the linked refund to render as a sub receipt on the source receipt detail."
+        )
+        let refundedItemStatus = revealElement(
+            identifier: "receipt-detail-item-refund-status-primer",
+            in: app,
+            query: { $0.staticTexts["receipt-detail-item-refund-status-primer"] }
+        )
+        XCTAssertEqual(
+            refundedItemStatus.label,
+            "REFUNDED",
+            "Expected the source item row to show that the item has been refunded."
+        )
 
         let summaryAttachment = XCTAttachment(screenshot: app.screenshot())
         summaryAttachment.name = "Receipt refund summary after save"
@@ -1358,11 +1377,19 @@ final class RHEIRUITests: XCTestCase {
         )
         restoredApp.tabBars.buttons["Receipts"].tap()
 
-        let restoredVendorCards = restoredApp.buttons.matching(identifier: "receipt-card-\(vendorName)")
-        let restoredSourceReceiptCard = restoredVendorCards.element(boundBy: 1)
+        let restoredSourceReceiptCard = restoredApp.buttons["receipt-card-\(vendorName)"]
         XCTAssertTrue(
             restoredSourceReceiptCard.waitForExistence(timeout: 8),
-            "Expected the original scanned receipt and linked refund to persist after relaunch."
+            "Expected the original scanned receipt to persist after relaunch."
+        )
+        XCTAssertEqual(
+            restoredApp.buttons.matching(identifier: "receipt-card-\(vendorName)").count,
+            1,
+            "Expected the linked refund to render under the original receipt instead of as a duplicate top-level receipt card."
+        )
+        XCTAssertTrue(
+            restoredApp.buttons["receipt-card-linked-refund-ui-test-scanned-vendor-primer"].exists,
+            "Expected the linked refund to render as a child receipt below the original receipt after relaunch."
         )
         restoredSourceReceiptCard.tap()
 

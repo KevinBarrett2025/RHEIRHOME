@@ -20,6 +20,34 @@ struct ReceiptCardScope {
     let items: [ReceiptItem]
 }
 
+private func visibleParentReceiptRows(from receipts: [Receipt]) -> [Receipt] {
+    let visibleReceiptIDs = Set(receipts.map(\.id))
+
+    return receipts.filter { receipt in
+        guard receipt.isPartialRefund,
+              let sourceReceiptID = receipt.sourceReceiptID
+        else {
+            return true
+        }
+
+        return !visibleReceiptIDs.contains(sourceReceiptID)
+    }
+}
+
+private func linkedRefundRows(
+    for receipt: Receipt,
+    in receipts: [Receipt],
+    category: ReceiptCategory? = nil
+) -> [Receipt] {
+    receipt
+        .linkedRefunds(in: receipts)
+        .filter { refund in
+            guard let category else { return true }
+            return refund.hasScopedCategory(category)
+        }
+        .sorted { $0.date > $1.date }
+}
+
 struct ReceiptsView: View {
     @EnvironmentObject var projectVM: ProjectViewModel
     @EnvironmentObject var authVM: AuthViewModel
@@ -93,6 +121,10 @@ struct ReceiptsView: View {
     
     private var receiptsByVendor: [String: [Receipt]] {
         Dictionary(grouping: receipts) { $0.vendor.lowercased() }
+    }
+
+    private var projectReceiptsForLinks: [Receipt] {
+        projectVM.selectedProject?.normalizedReceiptCopy.receipts ?? []
     }
     
     // Get categories that actually have receipts
@@ -361,10 +393,15 @@ struct ReceiptsView: View {
     
     @ViewBuilder
     private var allReceiptsContent: some View {
-        ForEach(receipts) { receipt in
-            EnhancedReceiptCard(
+        ForEach(visibleParentReceiptRows(from: receipts)) { receipt in
+            ReceiptCardGroup(
                 receipt: receipt,
                 scope: scope(for: receipt, category: selectedCategory),
+                linkedRefunds: linkedRefundRows(
+                    for: receipt,
+                    in: projectReceiptsForLinks,
+                    category: selectedCategory
+                ),
                 onView: {
                     receiptToView = receipt
                 },
@@ -374,6 +411,9 @@ struct ReceiptsView: View {
                 onDelete: {
                     receiptToDelete = receipt
                     showingDeleteAlert = true
+                },
+                onRefundView: { refund in
+                    receiptToView = refund
                 }
             )
         }
@@ -412,10 +452,15 @@ struct ReceiptsView: View {
                     totalSpent: totalSpent
                 )
 
-                ForEach(receipts) { receipt in
-                    EnhancedReceiptCard(
+                ForEach(visibleParentReceiptRows(from: receipts)) { receipt in
+                    ReceiptCardGroup(
                         receipt: receipt,
                         scope: scope(for: receipt, category: selectedCategory),
+                        linkedRefunds: linkedRefundRows(
+                            for: receipt,
+                            in: projectReceiptsForLinks,
+                            category: selectedCategory
+                        ),
                         onView: {
                             receiptToView = receipt
                         },
@@ -425,6 +470,9 @@ struct ReceiptsView: View {
                         onDelete: {
                             receiptToDelete = receipt
                             showingDeleteAlert = true
+                        },
+                        onRefundView: { refund in
+                            receiptToView = refund
                         }
                     )
                     .id("\(receipt.id)-\(receiptsAccessibilitySlug(selectedCategory.rawValue))")
@@ -780,9 +828,131 @@ struct ReceiptsView: View {
 
 // MARK: - Supporting View Components
 
+struct ReceiptCardGroup: View {
+    let receipt: Receipt
+    let scope: ReceiptCardScope?
+    let linkedRefunds: [Receipt]
+    let onView: () -> Void
+    let onEdit: () -> Void
+    let onDelete: () -> Void
+    let onRefundView: (Receipt) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            EnhancedReceiptCard(
+                receipt: receipt,
+                scope: scope,
+                linkedRefunds: linkedRefunds,
+                onView: onView,
+                onEdit: onEdit,
+                onDelete: onDelete
+            )
+
+            if !linkedRefunds.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "arrow.turn.down.right")
+                            .font(.caption.weight(.semibold))
+                        Text("Refund receipts")
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                    }
+                    .foregroundColor(.secondary)
+                    .padding(.leading, 18)
+
+                    ForEach(linkedRefunds) { refund in
+                        LinkedRefundReceiptCard(refund: refund) {
+                            onRefundView(refund)
+                        }
+                        .padding(.leading, 18)
+                    }
+                }
+            }
+        }
+    }
+}
+
+struct LinkedRefundReceiptCard: View {
+    let refund: Receipt
+    let onView: () -> Void
+
+    private var accessibilitySlug: String {
+        receiptsAccessibilitySlug(refund.vendor)
+    }
+
+    private var itemSlug: String {
+        receiptsAccessibilitySlug(refund.items.first?.name ?? refund.id)
+    }
+
+    private var itemSummary: String {
+        guard !refund.items.isEmpty else { return "Linked refund" }
+
+        let names = refund.items.prefix(2).map(\.name).joined(separator: ", ")
+        let remainder = refund.items.count > 2 ? " +\(refund.items.count - 2) more" : ""
+        return "\(names)\(remainder)"
+    }
+
+    var body: some View {
+        Button(action: onView) {
+            HStack(alignment: .top, spacing: 10) {
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(Color.red.opacity(0.8))
+                    .frame(width: 4)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 8) {
+                        Text("Refund")
+                            .font(.caption2)
+                            .fontWeight(.bold)
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(Color.red)
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
+
+                        Text(refund.date.formatted(date: .abbreviated, time: .omitted))
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+
+                        Spacer()
+
+                        Text(refund.signedAmount.formatAsCurrency())
+                            .font(.subheadline)
+                            .fontWeight(.bold)
+                            .foregroundColor(.red)
+                    }
+
+                    Text(itemSummary)
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundColor(.primary)
+                        .multilineTextAlignment(.leading)
+                        .lineLimit(2)
+
+                    if refund.taxAmount > 0 {
+                        Text("Includes \(refund.taxAmount.formatAsCurrency()) tax")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+            .padding(12)
+            .background(Color.red.opacity(0.08))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(Color.red.opacity(0.28), lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("receipt-card-linked-refund-\(accessibilitySlug)-\(itemSlug)")
+    }
+}
+
 struct EnhancedReceiptCard: View {
     let receipt: Receipt
     let scope: ReceiptCardScope?
+    let linkedRefunds: [Receipt]
     let onView: () -> Void
     let onEdit: () -> Void
     let onDelete: () -> Void
@@ -792,12 +962,14 @@ struct EnhancedReceiptCard: View {
     init(
         receipt: Receipt,
         scope: ReceiptCardScope? = nil,
+        linkedRefunds: [Receipt] = [],
         onView: @escaping () -> Void,
         onEdit: @escaping () -> Void,
         onDelete: @escaping () -> Void
     ) {
         self.receipt = receipt
         self.scope = scope
+        self.linkedRefunds = linkedRefunds
         self.onView = onView
         self.onEdit = onEdit
         self.onDelete = onDelete
@@ -834,6 +1006,15 @@ struct EnhancedReceiptCard: View {
 
         return "\(matchedItems.count) \(scope.category.rawValue.lowercased()) \(itemLabel): \(previewNames)\(remainderText)"
     }
+
+    private var linkedRefundTotal: Double {
+        linkedRefunds.reduce(0.0) { $0 + max(0, $1.amount) }
+    }
+
+    private var refundBadgeText: String? {
+        guard !receipt.isReturn, linkedRefundTotal > 0 else { return nil }
+        return linkedRefundTotal >= receipt.amount - 0.000_001 ? "REFUNDED" : "PARTIAL REFUND"
+    }
     
     var body: some View {
         Button(action: onView) {
@@ -856,6 +1037,15 @@ struct EnhancedReceiptCard: View {
                                     .padding(.horizontal, 8)
                                     .padding(.vertical, 3)
                                     .background(Color.red)
+                                    .cornerRadius(6)
+                            } else if let refundBadgeText {
+                                Text(refundBadgeText)
+                                    .font(.caption2)
+                                    .fontWeight(.bold)
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 3)
+                                    .background(linkedRefundTotal >= receipt.amount - 0.000_001 ? Color.red : Color.orange)
                                     .cornerRadius(6)
                             }
                         }
@@ -910,6 +1100,19 @@ struct EnhancedReceiptCard: View {
                             .foregroundColor(.secondary)
                             .multilineTextAlignment(.leading)
                             .lineLimit(2)
+                        Spacer()
+                    }
+                }
+
+                if linkedRefundTotal > 0, !receipt.isReturn {
+                    HStack(spacing: 6) {
+                        Image(systemName: "arrow.uturn.backward.circle.fill")
+                            .foregroundColor(.orange)
+                        Text("Refunded \(linkedRefundTotal.formatAsCurrency()) in \(linkedRefunds.count) linked refund\(linkedRefunds.count == 1 ? "" : "s")")
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.orange)
+                            .accessibilityIdentifier("receipt-card-refunded-total-\(accessibilitySlug)")
                         Spacer()
                     }
                 }
@@ -1469,13 +1672,15 @@ struct VendorGroupCard: View {
             // Expandable receipts list
             if isExpanded {
                 LazyVStack(spacing: 8) {
-                    ForEach(receipts.sorted { $0.date > $1.date }) { receipt in
-                        EnhancedReceiptCard(
+                    ForEach(visibleParentReceiptRows(from: receipts.sorted { $0.date > $1.date })) { receipt in
+                        ReceiptCardGroup(
                             receipt: receipt,
                             scope: nil,
+                            linkedRefunds: linkedRefundRows(for: receipt, in: receipts),
                             onView: { onReceiptView(receipt) },
                             onEdit: { onReceiptEdit(receipt) },
-                            onDelete: { onReceiptDelete(receipt) }
+                            onDelete: { onReceiptDelete(receipt) },
+                            onRefundView: { refund in onReceiptView(refund) }
                         )
                         .padding(.horizontal, 12)
                     }

@@ -25,7 +25,7 @@
 - Labor and Business Resources UI professionalism/no-truncation checks for compact device sheets and accounting rows
 - Log Hours actual-rate-only selection with in-flow add-rate editing from the project labor entry path
 - Task assignment, due/overdue, completion proof, and photo semantics
-- Linked item-level receipt partial refunds with source-receipt audit trail, quantity guards, proportional tax/discount allocation, and row-swipe refund entry
+- Linked item-level receipt partial refunds with source-receipt audit trail, quantity guards, proportional tax/discount allocation, row-swipe refund entry, child refund rows, and source item refund badges
 - Receipt-type metadata for restaurant tips and gas-station price-per-gallon values
 - Visible receipt-image previews across scanned review, manual entry, and saved receipt detail after persistence compaction
 - Contractor reports for category spend, vendor spend, payment-method spend, payroll, profit/loss, and closeout
@@ -171,6 +171,8 @@
 - `Receipt` partial-refund accounting helpers, source-receipt linkage, restaurant tip metadata, gas price-per-gallon metadata, and local image-file fallback
 - `ReceiptEditView` row-swipe line-item refund actions plus tax-inclusive confirmation
 - `ReceiptDetailView` deterministic linked-refund balance metrics, tip/gas metadata rendering, and restored saved-image preview
+- `ReceiptDetailView` source-receipt linked refund child rows and refunded/partial-refunded item-row styling
+- `ReceiptsView` parent-child linked refund card presentation that keeps source receipts as the top-level row
 - `ReceiptEditView` linked-refund financial-history locking
 - `ScannedReceiptEntryView` and `ManualReceiptEntryView` visible pre-save receipt-image previews
 - `ReportingService` receipt CSV source-receipt, tip, and price-per-gallon export linkage
@@ -236,6 +238,10 @@
 - `SignInWithAppleCoordinator` structured logging
 
 ## Current Validation Baseline
+- Latest receipt linked-refund presentation Gate A result: `PASS` (`/tmp/rheir_gateA_receipt_linked_refund_child_20260517_1.xcresult`)
+- Latest receipt linked-refund presentation focused parity result: `PASS` (`/tmp/rheir_receipt_linked_refund_child_parity_20260517_3.xcresult`, `2 refund unit tests plus 1 linked-refund UI relaunch test`)
+- Latest receipt linked-refund presentation visual evidence: kept xcresult attachments `Receipt line-item refund confirmation`, `Receipt refund summary after save`, and `Receipt refund summary after relaunch`
+- Latest receipt linked-refund presentation pbxproj drift: `NONE`
 - Latest receipt refund/metadata Gate A result: `PASS` (`/tmp/rheir_gateA_receipt_refund_metadata_20260517.xcresult`)
 - Latest receipt refund/metadata focused parity result: `PASS` (`/tmp/rheir_receipt_refund_metadata_parity_rerun_20260517.xcresult`, `14 focused unit tests plus 2 UI tests`)
 - Latest receipt refund visual evidence: kept xcresult attachments `Receipt line-item refund confirmation`, `Receipt refund summary after save`, and `Receipt refund summary after relaunch`

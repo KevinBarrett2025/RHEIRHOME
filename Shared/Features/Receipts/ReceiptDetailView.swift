@@ -14,6 +14,7 @@ struct ReceiptDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var editingReceipt: Receipt?
     @State private var refundingReceipt: Receipt?
+    @State private var linkedReceiptToView: Receipt?
     @State private var showingDeleteAlert = false
     @State private var showingImageViewer = false
 
@@ -106,6 +107,10 @@ struct ReceiptDetailView: View {
                 )
             )
             .environmentObject(projectVM)
+        }
+        .navigationDestination(item: $linkedReceiptToView) { linkedReceipt in
+            ReceiptDetailView(receipt: linkedReceipt)
+                .environmentObject(projectVM)
         }
         .alert("Delete Receipt", isPresented: $showingDeleteAlert) {
             Button("Cancel", role: .cancel) {}
@@ -322,6 +327,24 @@ struct ReceiptDetailView: View {
 
                 if !linkedRefunds.isEmpty {
                     detailRow("Partial Refunds", value: "\(linkedRefunds.count)")
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Linked Refund Receipts")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.secondary)
+
+                        ForEach(linkedRefunds.sorted { $0.date > $1.date }) { refund in
+                            Button {
+                                linkedReceiptToView = refund
+                            } label: {
+                                ReceiptLinkedRefundDetailRow(refund: refund)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityIdentifier("receipt-detail-linked-refund-\(receiptDetailAccessibilitySlug(refund.items.first?.name ?? refund.id))")
+                        }
+                    }
+                    .padding(.top, 4)
                 }
 
             }
@@ -432,31 +455,11 @@ struct ReceiptDetailView: View {
                 .accessibilityIdentifier("receipt-detail-items-header")
             
             ForEach(receipt.items) { item in
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(item.name)
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                            .accessibilityIdentifier("receipt-detail-item-\(receiptDetailAccessibilitySlug(item.name))")
-                        
-                        if !item.sku.isEmpty {
-                            Text("SKU: \(item.sku)")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                        
-                        Text("Qty: \(item.quantity, specifier: "%.1f") @ \(item.unitPrice.formatAsCurrency())")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                    
-                    Spacer()
-                    
-                    Text(item.totalPrice.formatAsCurrency())
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                }
-                .padding(.vertical, 8)
+                ReceiptDetailItemRow(
+                    receipt: receipt,
+                    item: item,
+                    projectReceipts: projectReceipts
+                )
                 
                 if item != receipt.items.last {
                     Divider()
@@ -491,6 +494,182 @@ struct ReceiptDetailView: View {
                 .foregroundColor(.secondary)
                 .accessibilityIdentifier(identifier)
         }
+    }
+}
+
+private struct ReceiptLinkedRefundDetailRow: View {
+    let refund: Receipt
+
+    private var itemSummary: String {
+        guard !refund.items.isEmpty else { return "Linked refund" }
+
+        let names = refund.items.prefix(2).map(\.name).joined(separator: ", ")
+        let remainder = refund.items.count > 2 ? " +\(refund.items.count - 2) more" : ""
+        return "\(names)\(remainder)"
+    }
+
+    private var accessibilitySlug: String {
+        receiptDetailAccessibilitySlug(refund.items.first?.name ?? refund.id)
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            RoundedRectangle(cornerRadius: 2)
+                .fill(Color.red.opacity(0.8))
+                .frame(width: 4)
+
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(spacing: 8) {
+                    Text("Refund")
+                        .font(.caption2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Color.red)
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+
+                    Text(refund.date.formatted(date: .abbreviated, time: .omitted))
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+
+                    Spacer()
+
+                    Text(refund.signedAmount.formatAsCurrency())
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.red)
+                }
+
+                Text(itemSummary)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .foregroundColor(.primary)
+                    .multilineTextAlignment(.leading)
+
+                if refund.taxAmount > 0 {
+                    Text("Includes \(refund.taxAmount.formatAsCurrency()) tax")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+        }
+        .padding(12)
+        .background(Color.red.opacity(0.08))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(Color.red.opacity(0.28), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .accessibilityIdentifier("receipt-detail-linked-refund-\(accessibilitySlug)")
+    }
+}
+
+private struct ReceiptDetailItemRow: View {
+    let receipt: Receipt
+    let item: ReceiptItem
+    let projectReceipts: [Receipt]
+
+    private var refundedQuantity: Double {
+        receipt.refundedQuantity(for: item.id, in: projectReceipts)
+    }
+
+    private var remainingQuantity: Double {
+        receipt.remainingRefundableQuantity(for: item, in: projectReceipts)
+    }
+
+    private var hasRefund: Bool {
+        refundedQuantity > 0
+    }
+
+    private var isFullyRefunded: Bool {
+        hasRefund && remainingQuantity <= 0.000_001
+    }
+
+    private var statusText: String {
+        isFullyRefunded ? "REFUNDED" : "PARTIAL REFUND"
+    }
+
+    private var statusColor: Color {
+        isFullyRefunded ? .red : .orange
+    }
+
+    private var accessibilitySlug: String {
+        receiptDetailAccessibilitySlug(item.name)
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            if hasRefund {
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(statusColor.opacity(0.85))
+                    .frame(width: 4)
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(item.name)
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .accessibilityIdentifier("receipt-detail-item-\(accessibilitySlug)")
+
+                    if hasRefund {
+                        Text(statusText)
+                            .font(.caption2)
+                            .fontWeight(.bold)
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .background(statusColor)
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                            .accessibilityIdentifier("receipt-detail-item-refund-status-\(accessibilitySlug)")
+                    }
+                }
+
+                if !item.sku.isEmpty {
+                    Text("SKU: \(item.sku)")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+
+                Text("Qty: \(item.quantity, specifier: "%.1f") @ \(item.unitPrice.formatAsCurrency())")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+
+                if hasRefund {
+                    Text("Returned \(refundedQuantity, specifier: "%.1f") of \(item.quantity, specifier: "%.1f")")
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .foregroundColor(statusColor)
+                        .accessibilityIdentifier("receipt-detail-item-refunded-quantity-\(accessibilitySlug)")
+                }
+            }
+
+            Spacer()
+
+            Text(item.totalPrice.formatAsCurrency())
+                .font(.subheadline)
+                .fontWeight(.semibold)
+                .foregroundColor(hasRefund ? statusColor : .primary)
+        }
+        .padding(.vertical, 8)
+        .padding(.horizontal, hasRefund ? 10 : 0)
+        .background(
+            Group {
+                if hasRefund {
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(statusColor.opacity(0.08))
+                }
+            }
+        )
+        .overlay(
+            Group {
+                if hasRefund {
+                    RoundedRectangle(cornerRadius: 10)
+                        .stroke(statusColor.opacity(0.28), lineWidth: 1)
+                }
+            }
+        )
     }
 }
 
