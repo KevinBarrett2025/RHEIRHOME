@@ -25,7 +25,7 @@
 - Labor and Business Resources UI professionalism/no-truncation checks for compact device sheets and accounting rows
 - Log Hours actual-rate-only selection with in-flow add-rate editing from the project labor entry path
 - Task assignment, due/overdue, completion proof, and photo semantics
-- Linked item-level receipt partial refunds with source-receipt audit trail, quantity guards, proportional tax/discount allocation, row-swipe refund entry, collapsed child refund rows, and source/edit item refund badges
+- Linked item-level receipt partial refunds with source-receipt audit trail, quantity guards, proportional tax/discount allocation, row-swipe refund entry, collapsed child refund rows, source/edit item refund badges, reversible linked refunds, and refund/payment-card filters
 - Receipt-type metadata for restaurant tips and gas-station price-per-gallon values
 - Visible receipt-image previews across scanned review, manual entry, and saved receipt detail after persistence compaction
 - Contractor reports for category spend, vendor spend, payment-method spend, payroll, profit/loss, and closeout
@@ -172,7 +172,9 @@
 - `ReceiptEditView` row-swipe line-item refund actions plus tax-inclusive confirmation
 - `ReceiptDetailView` deterministic linked-refund balance metrics, tip/gas metadata rendering, and restored saved-image preview
 - `ReceiptDetailView` source-receipt linked refund child rows and refunded/partial-refunded item-row styling
+- `ReceiptDetailView` confirmed linked-refund reversal for correcting mistaken returns without rewriting the source purchase
 - `ReceiptsView` collapsed parent-child linked refund card presentation that keeps source receipts as the top-level row
+- `ReceiptsView` refund-state and payment/card filters with visible purchase, refunded, and net summary totals
 - `ReceiptEditView` already-refunded and partial-refund line-item badges
 - `ReceiptEditView` linked-refund financial-history locking
 - `ScannedReceiptEntryView` and `ManualReceiptEntryView` visible pre-save receipt-image previews
@@ -239,6 +241,10 @@
 - `SignInWithAppleCoordinator` structured logging
 
 ## Current Validation Baseline
+- Latest receipt refund reversal/filter Gate A result: `PASS` (`/tmp/rheir_gateA_receipt_refund_reverse_filter_20260517_2.xcresult`; sandbox attempt `_1` failed on CoreSimulator asset-catalog runtime, escalated rerun passed)
+- Latest receipt refund reversal/filter focused parity result: `PASS` (`/tmp/rheir_receipt_refund_reverse_filter_parity_20260517_2.xcresult`, `2 refund unit tests plus 1 refund filter/reversal UI relaunch test`; sandbox attempt `_1` failed before build on CoreSimulator service loss)
+- Latest receipt refund reversal/filter visual evidence: kept xcresult attachment `Receipt refund filters and reversal after relaunch`
+- Latest receipt refund reversal/filter pbxproj drift: `NONE`
 - Latest receipt linked-refund presentation Gate A result: `PASS` (`/tmp/rheir_gateA_receipt_linked_refund_child_20260517_1.xcresult`)
 - Latest receipt linked-refund presentation focused parity result: `PASS` (`/tmp/rheir_receipt_linked_refund_child_parity_20260517_3.xcresult`, `2 refund unit tests plus 1 linked-refund UI relaunch test`)
 - Latest receipt linked-refund presentation visual evidence: kept xcresult attachments `Receipt line-item refund confirmation`, `Receipt refund summary after save`, and `Receipt refund summary after relaunch`

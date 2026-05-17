@@ -20,6 +20,105 @@ struct ReceiptCardScope {
     let items: [ReceiptItem]
 }
 
+private enum ReceiptRefundFilter: String, CaseIterable, Identifiable {
+    case all = "All"
+    case refundedPurchases = "Refunded"
+    case refundReceipts = "Refund Receipts"
+    case notRefunded = "No Refunds"
+
+    var id: Self { self }
+
+    var icon: String {
+        switch self {
+        case .all: return "tray.full"
+        case .refundedPurchases: return "arrow.uturn.backward.circle"
+        case .refundReceipts: return "minus.circle"
+        case .notRefunded: return "checkmark.circle"
+        }
+    }
+
+    var tint: Color {
+        switch self {
+        case .all: return .blue
+        case .refundedPurchases: return .orange
+        case .refundReceipts: return .red
+        case .notRefunded: return .green
+        }
+    }
+
+    var summaryTitle: String {
+        switch self {
+        case .all: return "All Receipts"
+        case .refundedPurchases: return "Refunded Purchases"
+        case .refundReceipts: return "Refund Receipts"
+        case .notRefunded: return "Receipts Without Refunds"
+        }
+    }
+
+    func includes(_ receipt: Receipt, in allReceipts: [Receipt]) -> Bool {
+        switch self {
+        case .all:
+            return true
+        case .refundedPurchases:
+            return !receipt.isReturn && receipt.refundedAmount(in: allReceipts) > 0
+        case .refundReceipts:
+            return receipt.isReturn
+        case .notRefunded:
+            return !receipt.isReturn && receipt.refundedAmount(in: allReceipts) <= 0
+        }
+    }
+}
+
+private struct ReceiptPaymentFilterOption: Identifiable {
+    let key: String
+    let title: String
+    let receiptCount: Int
+    let netTotal: Double
+
+    var id: String { key }
+}
+
+private struct ReceiptFilterSummary {
+    let title: String
+    let receiptCount: Int
+    let grossSpent: Double
+    let refundedAmount: Double
+    let netTotal: Double
+}
+
+private func receiptPaymentFilterKey(for receipt: Receipt) -> String {
+    if let paymentMethodID = receipt.paymentMethodID, !paymentMethodID.isEmpty {
+        return "id:\(paymentMethodID)"
+    }
+
+    if let details = receipt.paymentMethodDetails {
+        let brand = details.cardBrand?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+        let lastFour = details.lastFourDigits?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !brand.isEmpty || !lastFour.isEmpty {
+            return "card:\(brand):\(lastFour)"
+        }
+    }
+
+    let method = receipt.paymentMethod.trimmingCharacters(in: .whitespacesAndNewlines)
+    return method.isEmpty ? "method:unspecified" : "method:\(method.lowercased())"
+}
+
+private func receiptPaymentDisplayName(for receipt: Receipt) -> String {
+    if let details = receipt.paymentMethodDetails {
+        let brand = details.cardBrand?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let lastFour = details.lastFourDigits?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !brand.isEmpty, !lastFour.isEmpty {
+            return "\(brand) •••• \(lastFour)"
+        }
+        if !brand.isEmpty {
+            return brand
+        }
+    }
+
+    let method = receipt.paymentMethod.trimmingCharacters(in: .whitespacesAndNewlines)
+    return method.isEmpty ? "Unspecified" : method
+}
+
 private func visibleParentReceiptRows(from receipts: [Receipt]) -> [Receipt] {
     let visibleReceiptIDs = Set(receipts.map(\.id))
 
@@ -60,6 +159,8 @@ struct ReceiptsView: View {
     @State private var receiptToDelete: Receipt? = nil
     @State private var selectedViewMode: ReceiptViewMode = .all
     @State private var selectedCategory: ReceiptCategory? = nil
+    @State private var selectedRefundFilter: ReceiptRefundFilter = .all
+    @State private var selectedPaymentFilterKey: String?
     @State private var searchText = ""
     @State private var expandedVendorGroups: Set<String> = []
     @State private var didSeedUITestScannerReview = false
@@ -81,12 +182,14 @@ struct ReceiptsView: View {
         }
     }
     
-    private var baseReceipts: [Receipt] {
+    private var allProjectReceipts: [Receipt] {
         guard let project = projectVM.selectedProject else { return [] }
-        
-        var filteredReceipts = project.normalizedReceiptCopy.receipts
-        
-        // Apply search filter
+        return project.normalizedReceiptCopy.receipts
+    }
+
+    private var searchMatchedReceipts: [Receipt] {
+        var filteredReceipts = allProjectReceipts
+
         if !searchText.isEmpty {
             filteredReceipts = filteredReceipts.filter { receipt in
                 receipt.vendor.localizedCaseInsensitiveContains(searchText) ||
@@ -94,7 +197,25 @@ struct ReceiptsView: View {
                 receipt.items.contains { $0.name.localizedCaseInsensitiveContains(searchText) }
             }
         }
-        
+
+        return filteredReceipts
+    }
+
+    private var refundFilteredReceipts: [Receipt] {
+        searchMatchedReceipts.filter { receipt in
+            selectedRefundFilter.includes(receipt, in: allProjectReceipts)
+        }
+    }
+
+    private var baseReceipts: [Receipt] {
+        var filteredReceipts = refundFilteredReceipts
+
+        if let selectedPaymentFilterKey {
+            filteredReceipts = filteredReceipts.filter {
+                receiptPaymentFilterKey(for: $0) == selectedPaymentFilterKey
+            }
+        }
+
         return filteredReceipts.sorted { $0.date > $1.date }
     }
 
@@ -124,7 +245,68 @@ struct ReceiptsView: View {
     }
 
     private var projectReceiptsForLinks: [Receipt] {
-        projectVM.selectedProject?.normalizedReceiptCopy.receipts ?? []
+        allProjectReceipts
+    }
+
+    private var paymentFilterOptions: [ReceiptPaymentFilterOption] {
+        Dictionary(grouping: refundFilteredReceipts, by: receiptPaymentFilterKey(for:))
+            .map { key, receipts in
+                let title = receipts
+                    .map(receiptPaymentDisplayName(for:))
+                    .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+                    .first ?? "Unspecified"
+                let netTotal = receipts.reduce(0.0) { $0 + $1.signedAmount }
+                return ReceiptPaymentFilterOption(
+                    key: key,
+                    title: title,
+                    receiptCount: receipts.count,
+                    netTotal: netTotal
+                )
+            }
+            .sorted { lhs, rhs in
+                if lhs.netTotal == rhs.netTotal {
+                    return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
+                }
+                return lhs.netTotal > rhs.netTotal
+            }
+    }
+
+    private var selectedPaymentFilterOption: ReceiptPaymentFilterOption? {
+        guard let selectedPaymentFilterKey else { return nil }
+        return paymentFilterOptions.first { $0.key == selectedPaymentFilterKey }
+    }
+
+    private var activeReceiptFilterSummary: ReceiptFilterSummary? {
+        guard selectedRefundFilter != .all || selectedPaymentFilterKey != nil else { return nil }
+
+        let grossSpent = receipts
+            .filter { !$0.isReturn }
+            .reduce(0.0) { $0 + max(0, $1.amount) }
+        let directRefunds = receipts
+            .filter(\.isReturn)
+            .reduce(0.0) { $0 + max(0, $1.amount) }
+        let linkedRefundsForPurchases = receipts
+            .filter { !$0.isReturn }
+            .reduce(0.0) { $0 + $1.refundedAmount(in: allProjectReceipts) }
+        let refundedAmount = max(directRefunds, linkedRefundsForPurchases)
+        let netTotal = receipts.reduce(0.0) { $0 + $1.signedAmount }
+        let title: String
+
+        if let paymentOption = selectedPaymentFilterOption, selectedRefundFilter != .all {
+            title = "\(selectedRefundFilter.summaryTitle) · \(paymentOption.title)"
+        } else if let paymentOption = selectedPaymentFilterOption {
+            title = paymentOption.title
+        } else {
+            title = selectedRefundFilter.summaryTitle
+        }
+
+        return ReceiptFilterSummary(
+            title: title,
+            receiptCount: visibleParentReceiptRows(from: receipts).count,
+            grossSpent: grossSpent,
+            refundedAmount: refundedAmount,
+            netTotal: netTotal
+        )
     }
     
     // Get categories that actually have receipts
@@ -161,6 +343,10 @@ struct ReceiptsView: View {
                     
                     // Search bar
                     searchBar
+
+                    if !allProjectReceipts.isEmpty {
+                        filterChipsBar
+                    }
                     
                     // Category filter (when categories mode is selected)
                     if selectedViewMode == .categories {
@@ -299,6 +485,118 @@ struct ReceiptsView: View {
         .padding(.horizontal)
         .padding(.bottom, 8)
     }
+
+    @ViewBuilder
+    private var filterChipsBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 10) {
+                ForEach(ReceiptRefundFilter.allCases) { filter in
+                    filterChip(
+                        title: filter.rawValue,
+                        subtitle: refundFilterSubtitle(for: filter),
+                        icon: filter.icon,
+                        isSelected: selectedRefundFilter == filter,
+                        tint: filter.tint
+                    ) {
+                        selectedRefundFilter = filter
+                    }
+                    .accessibilityIdentifier("receipts-refund-filter-\(receiptsAccessibilitySlug(filter.rawValue))")
+                    .accessibilityValue(selectedRefundFilter == filter ? "selected" : "not selected")
+                }
+
+                if !paymentFilterOptions.isEmpty {
+                    Divider()
+                        .frame(height: 28)
+
+                    filterChip(
+                        title: "All Payments",
+                        subtitle: "\(refundFilteredReceipts.count)",
+                        icon: "creditcard",
+                        isSelected: selectedPaymentFilterKey == nil,
+                        tint: .blue
+                    ) {
+                        selectedPaymentFilterKey = nil
+                    }
+                    .accessibilityIdentifier("receipts-payment-filter-all")
+                    .accessibilityValue(selectedPaymentFilterKey == nil ? "selected" : "not selected")
+
+                    ForEach(paymentFilterOptions) { option in
+                        filterChip(
+                            title: option.title,
+                            subtitle: option.netTotal.formatAsCurrency(),
+                            icon: "creditcard.fill",
+                            isSelected: selectedPaymentFilterKey == option.key,
+                            tint: .purple
+                        ) {
+                            selectedPaymentFilterKey = option.key
+                        }
+                        .accessibilityIdentifier("receipts-payment-filter-\(receiptsAccessibilitySlug(option.title))")
+                        .accessibilityValue(selectedPaymentFilterKey == option.key ? "selected" : "not selected")
+                    }
+                }
+            }
+            .padding(.horizontal)
+        }
+        .accessibilityIdentifier("receipts-filter-chips")
+        .padding(.bottom, 8)
+    }
+
+    private func filterChip(
+        title: String,
+        subtitle: String?,
+        icon: String,
+        isSelected: Bool,
+        tint: Color,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 7) {
+                Image(systemName: icon)
+                    .font(.caption.weight(.semibold))
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(title)
+                        .font(.caption.weight(.semibold))
+                        .lineLimit(1)
+
+                    if let subtitle, !subtitle.isEmpty {
+                        Text(subtitle)
+                            .font(.caption2.monospacedDigit())
+                            .lineLimit(1)
+                    }
+                }
+            }
+            .padding(.horizontal, 11)
+            .padding(.vertical, 7)
+            .background(
+                RoundedRectangle(cornerRadius: 14)
+                    .fill(isSelected ? tint : Color(.systemGray5))
+            )
+            .foregroundColor(isSelected ? .white : .primary)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func refundFilterSubtitle(for filter: ReceiptRefundFilter) -> String {
+        let matchingReceipts = searchMatchedReceipts.filter {
+            filter.includes($0, in: allProjectReceipts)
+        }
+
+        switch filter {
+        case .all:
+            return "\(searchMatchedReceipts.count)"
+        case .refundedPurchases:
+            let refundedTotal = matchingReceipts.reduce(0.0) {
+                $0 + $1.refundedAmount(in: allProjectReceipts)
+            }
+            return refundedTotal.formatAsCurrency()
+        case .refundReceipts:
+            let refundTotal = matchingReceipts.reduce(0.0) { $0 + max(0, $1.amount) }
+            return refundTotal.formatAsCurrency()
+        case .notRefunded:
+            return "\(matchingReceipts.count)"
+        }
+    }
     
     @ViewBuilder
     private var categoryFilterBar: some View {
@@ -377,6 +675,10 @@ struct ReceiptsView: View {
     private var contentForSelectedMode: some View {
         ScrollView {
             LazyVStack(spacing: 16) {
+                if let activeReceiptFilterSummary {
+                    ReceiptFilterSummaryCard(summary: activeReceiptFilterSummary)
+                }
+
                 switch selectedViewMode {
                 case .all, .recent:
                     allReceiptsContent
@@ -1646,6 +1948,71 @@ struct ScopedReceiptCard: View {
                 }
             }
         }
+    }
+}
+
+private struct ReceiptFilterSummaryCard: View {
+    let summary: ReceiptFilterSummary
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(summary.title)
+                        .font(.headline.weight(.semibold))
+                        .foregroundColor(.primary)
+
+                    Text("\(summary.receiptCount) visible receipt\(summary.receiptCount == 1 ? "" : "s")")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .accessibilityIdentifier("receipts-filter-summary-count")
+                }
+
+                Spacer()
+
+                Text(summary.netTotal.formatAsCurrency())
+                    .font(.title3.weight(.bold))
+                    .foregroundColor(summary.netTotal < 0 ? .red : .primary)
+                    .accessibilityIdentifier("receipts-filter-summary-net")
+            }
+
+            HStack(spacing: 12) {
+                filterMetric(
+                    title: "Purchases",
+                    value: summary.grossSpent.formatAsCurrency(),
+                    color: .primary,
+                    identifier: "receipts-filter-summary-purchases"
+                )
+
+                filterMetric(
+                    title: "Refunded",
+                    value: summary.refundedAmount.formatAsCurrency(),
+                    color: .red,
+                    identifier: "receipts-filter-summary-refunded"
+                )
+            }
+        }
+        .padding()
+        .background(Color(.systemBackground))
+        .cornerRadius(12)
+        .shadow(color: Color.black.opacity(0.1), radius: 2, x: 0, y: 1)
+    }
+
+    private func filterMetric(title: String, value: String, color: Color, identifier: String) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title)
+                .font(.caption)
+                .foregroundColor(.secondary)
+
+            Text(value)
+                .font(.subheadline.weight(.semibold))
+                .foregroundColor(color)
+                .accessibilityIdentifier(identifier)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(10)
+        .background(Color(.systemGray6))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 }
 

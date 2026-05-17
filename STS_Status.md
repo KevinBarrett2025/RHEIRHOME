@@ -3,7 +3,7 @@
 ## Repo
 - Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Branch: `gm/rheir-hardening-phase1`
-- HEAD: `75a4be38f79e203b97b3e71aa4eeac6367dcc6da`
+- HEAD: `060d5f77113b7cc7e24a4d27aa9d7708f14df1fb`
 
 ## Active Initiative
 - RHEIR release hardening, Fast-Ship Hybrid contractor workflow hardening.
@@ -46,6 +46,8 @@
 - Added nil-organization sign-out hardening so `notifyProjectViewModelOrganizationChange(nil)` clears `ProjectViewModel` state before async refresh, and `organizationDidChange(nil)` now treats the nil org as an authoritative clear instead of reusing the last organization id.
 - Added focused session-support regression coverage proving the sign-out path delivers the active org first and the nil clear second to the project-view-model seam before any async refresh runs.
 - Confirmed on real device that fast-ship sign-out now clears organization-scoped workspace state without replaying stale zone setup, snapshot load, or project refresh before the next sign-in begins.
+- Added reversible linked receipt refunds so a mistaken partial refund can be removed from the project ledger and the source receipt's refundable state is derived correctly again.
+- Added receipt refund-state and payment/card filters with visible purchase/refund/net summaries so contractors can inspect returned money and card spend without exporting first.
 - Aligned receipt-level legacy materials/general-conditions/contingency bridge totals with detailed receipt-category mapping in `ProjectViewModel+Filters.swift`, removing expected `Materials enhanced spending diverged from legacy...` noise from active fast-ship logs.
 - Replaced string asset-name status color lookups in client-card and change-order UI with semantic SwiftUI tint colors on `ProjectStatus` and `ChangeOrderStatus`, removing the active `No color named 'green' found in asset catalog...` warning.
 - Added focused budget-bridge regression coverage proving a detailed-category material receipt validates cleanly through the receipt-level legacy bridge.
@@ -215,7 +217,7 @@
 - Treat accounting math and professional UI/UX as release blockers for every remaining Fast-Ship surface: totals must reconcile from persisted records, payment history must not be rewritten by later edits, over/under balances must be explicit, and compact-device rows/sheets must be visually bounded with no truncation before moving a seam to release-accepted.
 - Treat task photo UX and reporting fidelity as standing release criteria: before/after proof must stay separated, previewable, swipeable, correctable, and reflected in project reports before Tasks can be considered field-ready.
 - Continue broader selected-project estimator variance/runtime QA on top of the approved-baseline mapping seam inside the simplified v1 shell.
-- Continue broader selected-project receipt runtime QA in parallel, with same-device/device validation now the active release seam after scanned/manual preview visibility, line-item swipe refunds, collapsed child linked-refund disclosure, edit-sheet source item refund badges, linked-refund relaunch, mixed-category drilldown math, gas/tip metadata, and export visibility are green in simulator.
+- Continue broader selected-project receipt runtime QA in parallel, with same-device/device validation now the active release seam after scanned/manual preview visibility, line-item swipe refunds, collapsed child linked-refund disclosure, edit-sheet source item refund badges, linked-refund relaunch, reverse-refund correction, refund/payment filters, mixed-category drilldown math, gas/tip metadata, and export visibility are green in simulator.
 - Continue shrinking the remaining oversized active state owners around the new sync and access store boundaries.
 - Expand deterministic parity beyond the focused `RHEIRTests` suite.
 
@@ -225,6 +227,10 @@
 - Raw in-sandbox `xcodebuild` commands are still less reliable than elevated CLI or `xcodebuildmcp` paths in this environment because CoreSimulator and DerivedData access remain sandbox-sensitive.
 
 ## Latest Evidence
+- Receipt refund reversal/filter Gate A: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_receipt_refund_reverse_filter_dd2 -resultBundlePath /tmp/rheir_gateA_receipt_refund_reverse_filter_20260517_2.xcresult clean build` -> PASS (`/tmp/rheir_gateA_receipt_refund_reverse_filter_20260517_2.xcresult`; sandbox attempt `_1` failed on CoreSimulator asset-catalog runtime, escalated rerun passed)
+- Receipt refund reversal/filter focused parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_receipt_refund_reverse_filter_parity_dd2 -resultBundlePath /tmp/rheir_receipt_refund_reverse_filter_parity_20260517_2.xcresult test '-only-testing:RHEIRUITests/RHEIRUITests/testSavedScannedReceiptOpensPartialRefundFlow()' '-only-testing:RHEIRTests/ReceiptPartialRefundTests'` -> PASS (`/tmp/rheir_receipt_refund_reverse_filter_parity_20260517_2.xcresult`, `2 refund unit tests plus 1 refund filter/reversal UI relaunch test`; sandbox attempt `_1` failed before build on CoreSimulator service loss)
+- Receipt refund reversal/filter visual evidence: kept xcresult attachment `Receipt refund filters and reversal after relaunch`
+- Receipt refund reversal/filter pbxproj drift: NONE
 - Receipt refund disclosure/badge Gate A: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_receipt_refund_disclosure_badge_dd -resultBundlePath /tmp/rheir_gateA_receipt_refund_disclosure_badge_20260517_1.xcresult clean build` -> PASS (`/tmp/rheir_gateA_receipt_refund_disclosure_badge_20260517_1.xcresult`)
 - Receipt refund disclosure/badge focused parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_receipt_refund_disclosure_badge_parity_dd -resultBundlePath /tmp/rheir_receipt_refund_disclosure_badge_parity_20260517_1.xcresult test '-only-testing:RHEIRUITests/RHEIRUITests/testSavedScannedReceiptOpensPartialRefundFlow()' '-only-testing:RHEIRTests/ReceiptPartialRefundTests'` -> PASS (`/tmp/rheir_receipt_refund_disclosure_badge_parity_20260517_1.xcresult`, `2 refund unit tests plus 1 disclosure/edit-badge UI relaunch test`)
 - Receipt refund disclosure/badge visual evidence: kept xcresult attachments `Receipt line-item refund confirmation`, `Receipt refund summary after save`, and `Receipt refund summary after relaunch`

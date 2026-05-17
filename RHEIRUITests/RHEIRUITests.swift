@@ -1423,35 +1423,121 @@ final class RHEIRUITests: XCTestCase {
             "collapsed",
             "Expected linked refund receipt rows to stay collapsed by default."
         )
-        restoredLinkedRefundToggle.tap()
+
+        let refundedFilter = restoredApp.buttons["receipts-refund-filter-refunded"]
         XCTAssertTrue(
-            restoredApp.buttons["receipt-card-linked-refund-ui-test-scanned-vendor-primer"].waitForExistence(timeout: 5),
+            refundedFilter.waitForExistence(timeout: 5),
+            "Expected the receipts screen to expose the refunded-purchase filter."
+        )
+        refundedFilter.tap()
+        XCTAssertEqual(
+            restoredApp.staticTexts["receipts-filter-summary-refunded"].label,
+            "$43.50",
+            "Expected the refunded filter summary to show the linked refund total."
+        )
+
+        let refundReceiptsFilter = restoredApp.buttons["receipts-refund-filter-refund-receipts"]
+        XCTAssertTrue(
+            refundReceiptsFilter.waitForExistence(timeout: 5),
+            "Expected the receipts screen to expose the refund-receipts filter."
+        )
+        refundReceiptsFilter.tap()
+        XCTAssertEqual(
+            restoredApp.staticTexts["receipts-filter-summary-net"].label,
+            "-$43.50",
+            "Expected the refund-receipts filter to summarize return receipts as negative cash flow."
+        )
+
+        let allRefundsFilter = restoredApp.buttons["receipts-refund-filter-all"]
+        allRefundsFilter.tap()
+        let filterChips = restoredApp.scrollViews["receipts-filter-chips"]
+        if filterChips.exists {
+            filterChips.swipeLeft()
+        }
+        let visaPaymentFilter = restoredApp.buttons["receipts-payment-filter-visa-4242"]
+        XCTAssertTrue(
+            visaPaymentFilter.waitForExistence(timeout: 5),
+            "Expected the receipts screen to expose a card/payment-method filter with card details."
+        )
+        visaPaymentFilter.tap()
+        XCTAssertEqual(
+            restoredApp.staticTexts["receipts-filter-summary-purchases"].label,
+            "$89.76",
+            "Expected the payment filter to preserve gross card spend."
+        )
+        XCTAssertEqual(
+            restoredApp.staticTexts["receipts-filter-summary-refunded"].label,
+            "$43.50",
+            "Expected the payment filter to expose card refunds."
+        )
+        XCTAssertEqual(
+            restoredApp.staticTexts["receipts-filter-summary-net"].label,
+            "$46.26",
+            "Expected the payment filter to show net card spend after refunds."
+        )
+        restoredApp.buttons["receipts-payment-filter-all"].tap()
+
+        let postFilterLinkedRefundToggle = restoredApp.buttons["receipt-card-linked-refunds-toggle-ui-test-scanned-vendor"]
+        XCTAssertTrue(
+            postFilterLinkedRefundToggle.waitForExistence(timeout: 5),
+            "Expected the linked refund disclosure to remain available after clearing payment filters."
+        )
+        postFilterLinkedRefundToggle.tap()
+        let restoredLinkedRefundRow = restoredApp.buttons["receipt-card-linked-refund-ui-test-scanned-vendor-primer"]
+        XCTAssertTrue(
+            restoredLinkedRefundRow.waitForExistence(timeout: 5),
             "Expected expanding linked refunds to reveal the child refund receipt below the source receipt."
         )
-        restoredSourceReceiptCard.tap()
+        restoredLinkedRefundRow.tap()
+
+        let reverseRefundButton = revealElement(
+            identifier: "receipt-detail-reverse-refund",
+            in: restoredApp,
+            query: { $0.buttons["receipt-detail-reverse-refund"] }
+        )
+        XCTAssertTrue(
+            reverseRefundButton.waitForExistence(timeout: 5),
+            "Expected a linked refund receipt detail to expose a visible reversal action."
+        )
+        reverseRefundButton.tap()
+
+        let reverseAlert = restoredApp.alerts["Reverse Refund?"]
+        XCTAssertTrue(
+            reverseAlert.waitForExistence(timeout: 5),
+            "Expected reversing a refund to require confirmation."
+        )
+        reverseAlert.buttons["Reverse Refund"].tap()
+
+        let reversedSourceReceiptCard = restoredApp.buttons["receipt-card-\(vendorName)"]
+        XCTAssertTrue(
+            reversedSourceReceiptCard.waitForExistence(timeout: 8),
+            "Expected reversing the linked refund to return to the receipts list with the source receipt still visible."
+        )
+        XCTAssertTrue(
+            waitForNonExistence(
+                of: restoredApp.buttons["receipt-card-linked-refunds-toggle-ui-test-scanned-vendor"],
+                timeout: 5
+            ),
+            "Expected reversing the refund to remove the linked refund disclosure from the source receipt."
+        )
+        reversedSourceReceiptCard.tap()
 
         XCTAssertTrue(
             restoredApp.navigationBars["Receipt Details"].waitForExistence(timeout: 5),
-            "Expected the relaunched source receipt to remain navigable after recording a linked refund."
+            "Expected the source receipt to remain navigable after reversing the linked refund."
         )
         XCTAssertEqual(
             restoredApp.staticTexts["receipt-detail-amount"].label,
             "$89.76",
-            "Expected relaunch coverage to reopen the original source receipt rather than the linked refund."
+            "Expected reversal coverage to reopen the original source receipt rather than a linked refund."
         )
-        XCTAssertEqual(
-            restoredApp.staticTexts["receipt-detail-refunded-total"].label,
-            "$43.50",
-            "Expected linked refund totals to persist after relaunch."
-        )
-        XCTAssertEqual(
-            restoredApp.staticTexts["receipt-detail-refundable-remaining"].label,
-            "$46.26",
-            "Expected the remaining refundable balance to persist after relaunch."
+        XCTAssertFalse(
+            restoredApp.staticTexts["receipt-detail-refunded-total"].exists,
+            "Expected reversing the refund to remove the source receipt refund summary."
         )
 
         let relaunchAttachment = XCTAttachment(screenshot: restoredApp.screenshot())
-        relaunchAttachment.name = "Receipt refund summary after relaunch"
+        relaunchAttachment.name = "Receipt refund filters and reversal after relaunch"
         relaunchAttachment.lifetime = .keepAlways
         add(relaunchAttachment)
     }

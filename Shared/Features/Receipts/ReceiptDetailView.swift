@@ -16,6 +16,7 @@ struct ReceiptDetailView: View {
     @State private var refundingReceipt: Receipt?
     @State private var linkedReceiptToView: Receipt?
     @State private var showingDeleteAlert = false
+    @State private var showingReverseRefundAlert = false
     @State private var showingImageViewer = false
 
     private var currentReceipt: Receipt {
@@ -68,10 +69,17 @@ struct ReceiptDetailView: View {
                     }
                     .accessibilityIdentifier("receipt-detail-menu-edit")
 
-                    Button("Delete Receipt", role: .destructive) {
-                        showingDeleteAlert = true
+                    if currentReceipt.isPartialRefund {
+                        Button("Reverse Refund", role: .destructive) {
+                            showingReverseRefundAlert = true
+                        }
+                        .accessibilityIdentifier("receipt-detail-menu-reverse-refund")
+                    } else {
+                        Button("Delete Receipt", role: .destructive) {
+                            showingDeleteAlert = true
+                        }
+                        .accessibilityIdentifier("receipt-detail-menu-delete")
                     }
-                    .accessibilityIdentifier("receipt-detail-menu-delete")
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }
@@ -120,11 +128,47 @@ struct ReceiptDetailView: View {
         } message: {
             Text("Are you sure you want to delete this receipt from \(currentReceipt.vendor) for \(currentReceipt.amount.formatAsCurrency())? This action cannot be undone.")
         }
+        .alert("Reverse Refund?", isPresented: $showingReverseRefundAlert) {
+            Button("Cancel", role: .cancel) {}
+            Button("Reverse Refund", role: .destructive) {
+                reverseRefund()
+            }
+        } message: {
+            Text("This removes the linked refund receipt and restores those items as refundable on the original receipt.")
+        }
         .sheet(isPresented: $showingImageViewer) {
             if let receiptImage = currentReceipt.receiptImage {
                 ZoomableImageView(image: receiptImage) {
                     showingImageViewer = false
                 }
+            }
+        }
+    }
+
+    private func reverseRefund() {
+        let refund = currentReceipt
+        guard refund.isPartialRefund,
+              let project = projectVM.selectedProject
+        else { return }
+
+        var updatedProject = project
+        updatedProject.receipts.removeAll { $0.id == refund.id }
+        updatedProject.lastModifiedDate = Date()
+
+        updateVendorSpending(for: refund, isRemoving: true)
+        updatePaymentMethodSpending(for: refund, isRemoving: true)
+
+        Task {
+            await projectVM.updateProject(updatedProject)
+            projectVM.saveOrganizationSpecificBackup()
+
+            await MainActor.run {
+                projectVM.recomputeFilteredReceipts()
+                dismiss()
+
+                Logger.receiptWorkflow.notice(
+                    "Receipt refund reversed [refund=\(refund.id, privacy: .private(mask: .hash)) source=\(refund.sourceReceiptID ?? "unknown", privacy: .private(mask: .hash)) amount=\(refund.amount, format: .fixed(precision: 2))]"
+                )
             }
         }
     }
@@ -313,6 +357,16 @@ struct ReceiptDetailView: View {
             if receipt.isPartialRefund {
                 detailRow("Original Receipt", value: sourceReceiptLabel(for: receipt))
                 detailRow("Refund Type", value: "Partial refund")
+
+                Button(role: .destructive) {
+                    showingReverseRefundAlert = true
+                } label: {
+                    Label("Reverse Refund", systemImage: "arrow.uturn.backward.circle")
+                        .font(.subheadline.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .accessibilityIdentifier("receipt-detail-reverse-refund")
             } else {
                 refundMetricRow(
                     title: "Refunded To Date",
