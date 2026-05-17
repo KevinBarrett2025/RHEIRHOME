@@ -31,7 +31,7 @@ struct ReceiptEditView: View {
     @State private var isReturn: Bool
     @State private var items: [ReceiptItem]
     @State private var editingItem: ReceiptItem?
-    @State private var pendingRefundPrompt: ReceiptItemRefundPrompt?
+    @State private var pendingRefundActionPrompt: ReceiptItemRefundActionPrompt?
     @State private var showingPaymentMethodPicker = false
     @State private var isSaving = false
     
@@ -250,6 +250,15 @@ struct ReceiptEditView: View {
                                     .tint(.orange)
                                     .accessibilityIdentifier("receipt-edit-item-refund-\(receiptEditAccessibilitySlug(item.name))")
                                 }
+
+                                if let refund = refundToRevert(for: item), canRevertRefund(for: item) {
+                                    Button(role: .destructive) {
+                                        prepareReverseRefund(for: item, refund: refund)
+                                    } label: {
+                                        Label("Revert", systemImage: "arrow.uturn.backward.circle")
+                                    }
+                                    .accessibilityIdentifier("receipt-edit-item-revert-\(receiptEditAccessibilitySlug(item.name))")
+                                }
                             }
                             .accessibilityIdentifier("receipt-edit-item-\(receiptEditAccessibilitySlug(item.name))")
                         }
@@ -259,7 +268,7 @@ struct ReceiptEditView: View {
                     } footer: {
                         Text(
                             locksFinancialHistory
-                                ? "Financial line items are locked because this receipt participates in partial-refund history. Swipe remaining refundable items to record another refund."
+                                ? "Financial line items are locked because this receipt participates in partial-refund history. Swipe item rows to refund remaining quantities or revert recorded refunds."
                                 : "Tap an item to review or edit the saved scan details. Swipe left on a refundable item to record a refund."
                         )
                     }
@@ -303,15 +312,27 @@ struct ReceiptEditView: View {
                     }
                 )
             }
-            .alert(item: $pendingRefundPrompt) { prompt in
-                Alert(
-                    title: Text("Refund \(prompt.item.name)?"),
-                    message: Text(prompt.message),
-                    primaryButton: .destructive(Text("Refund")) {
-                        recordRefund(prompt.refund)
-                    },
-                    secondaryButton: .cancel()
-                )
+            .alert(item: $pendingRefundActionPrompt) { prompt in
+                switch prompt {
+                case .refund(let prompt):
+                    Alert(
+                        title: Text("Refund \(prompt.item.name)?"),
+                        message: Text(prompt.message),
+                        primaryButton: .destructive(Text("Refund")) {
+                            recordRefund(prompt.refund)
+                        },
+                        secondaryButton: .cancel()
+                    )
+                case .reverse(let prompt):
+                    Alert(
+                        title: Text("Reverse Refund?"),
+                        message: Text(prompt.message),
+                        primaryButton: .destructive(Text("Reverse Refund")) {
+                            reverseRefund(prompt.refund)
+                        },
+                        secondaryButton: .cancel()
+                    )
+                }
             }
         }
     }
@@ -390,6 +411,13 @@ struct ReceiptEditView: View {
             && receipt.remainingRefundableQuantity(for: item, in: projectReceipts) > 0
     }
 
+    private func canRevertRefund(for item: ReceiptItem) -> Bool {
+        receipt.supportsPartialRefunds
+            && !receipt.isReturn
+            && !hasUnsavedFinancialChanges
+            && refundToRevert(for: item) != nil
+    }
+
     private func refundStatus(for item: ReceiptItem) -> ReceiptEditItemRefundStatus? {
         let refundedQuantity = receipt.refundedQuantity(for: item.id, in: projectReceipts)
         guard refundedQuantity > 0 else { return nil }
@@ -418,7 +446,25 @@ struct ReceiptEditView: View {
             return
         }
 
-        pendingRefundPrompt = ReceiptItemRefundPrompt(item: item, refund: refund)
+        pendingRefundActionPrompt = .refund(ReceiptItemRefundPrompt(item: item, refund: refund))
+    }
+
+    private func refundToRevert(for item: ReceiptItem) -> Receipt? {
+        linkedRefunds
+            .filter { refund in
+                refund.items.contains { $0.id == item.id }
+            }
+            .sorted { lhs, rhs in
+                if lhs.date == rhs.date {
+                    return lhs.id > rhs.id
+                }
+                return lhs.date > rhs.date
+            }
+            .first
+    }
+
+    private func prepareReverseRefund(for item: ReceiptItem, refund: Receipt) {
+        pendingRefundActionPrompt = .reverse(ReceiptItemReverseRefundPrompt(item: item, refund: refund))
     }
 
     private func recordRefund(_ refund: Receipt) {
@@ -438,8 +484,30 @@ struct ReceiptEditView: View {
         }
     }
 
-    private func updateDirectorySpending(for receipt: Receipt) {
-        let signedAmount = receipt.signedAmount
+    private func reverseRefund(_ refund: Receipt) {
+        guard refund.isPartialRefund,
+              let project = projectVM.selectedProject
+        else { return }
+
+        var updatedProject = project
+        updatedProject.receipts.removeAll { $0.id == refund.id }
+        updatedProject.lastModifiedDate = Date()
+
+        Task {
+            await projectVM.updateProject(updatedProject)
+            await MainActor.run {
+                updateDirectorySpending(for: refund, removing: true)
+                projectVM.recomputeFilteredReceipts()
+                projectVM.saveOrganizationSpecificBackup()
+                Logger.receiptWorkflow.notice(
+                    "Reversed line-item receipt refund [source=\(receipt.id, privacy: .private(mask: .hash)) amount=\(refund.amount, format: .fixed(precision: 2)) item=\(refund.items.first?.name ?? "unknown", privacy: .private(mask: .hash))]"
+                )
+            }
+        }
+    }
+
+    private func updateDirectorySpending(for receipt: Receipt, removing: Bool = false) {
+        let signedAmount = receipt.signedAmount * (removing ? -1 : 1)
 
         let vendor = projectVM.vendorService.findOrCreateVendor(
             name: receipt.vendor,
@@ -543,6 +611,30 @@ private struct ReceiptItemRefundPrompt: Identifiable {
         }
 
         return parts.joined(separator: " ") + "."
+    }
+}
+
+private enum ReceiptItemRefundActionPrompt: Identifiable {
+    case refund(ReceiptItemRefundPrompt)
+    case reverse(ReceiptItemReverseRefundPrompt)
+
+    var id: UUID {
+        switch self {
+        case .refund(let prompt):
+            return prompt.id
+        case .reverse(let prompt):
+            return prompt.id
+        }
+    }
+}
+
+private struct ReceiptItemReverseRefundPrompt: Identifiable {
+    let id = UUID()
+    let item: ReceiptItem
+    let refund: Receipt
+
+    var message: String {
+        "This removes the linked \(refund.amount.formatAsCurrency()) refund for \(item.name) and restores that line item as refundable on the original receipt."
     }
 }
 

@@ -1488,43 +1488,75 @@ final class RHEIRUITests: XCTestCase {
             restoredLinkedRefundRow.waitForExistence(timeout: 5),
             "Expected expanding linked refunds to reveal the child refund receipt below the source receipt."
         )
-        restoredLinkedRefundRow.tap()
 
-        let reverseRefundButton = revealElement(
-            identifier: "receipt-detail-reverse-refund",
-            in: restoredApp,
-            query: { $0.buttons["receipt-detail-reverse-refund"] }
+        restoredSourceReceiptCard.tap()
+        XCTAssertTrue(
+            restoredApp.navigationBars["Receipt Details"].waitForExistence(timeout: 5),
+            "Expected the source receipt detail to open before reversing a refund from the edit sheet."
+        )
+        openReceiptActionsMenu(in: restoredApp)
+        let restoredEditButton = receiptDetailMenuAction(
+            identifier: "receipt-detail-menu-edit",
+            fallbackTitle: "Edit Receipt",
+            in: restoredApp
         )
         XCTAssertTrue(
-            reverseRefundButton.waitForExistence(timeout: 5),
-            "Expected a linked refund receipt detail to expose a visible reversal action."
+            restoredEditButton.waitForExistence(timeout: 5),
+            "Expected the source receipt detail to expose Edit Receipt before reversing a refund."
         )
-        reverseRefundButton.tap()
+        restoredEditButton.tap()
+
+        let refundedEditItemRow = revealElement(
+            identifier: "receipt-edit-item-primer",
+            in: restoredApp,
+            query: { $0.buttons["receipt-edit-item-primer"] }
+        )
+        XCTAssertTrue(
+            refundedEditItemRow.waitForExistence(timeout: 5),
+            "Expected the refunded source item row to be visible in Edit Receipt."
+        )
+        refundedEditItemRow.swipeLeft()
+
+        let itemRevertButton = restoredApp.buttons["receipt-edit-item-revert-primer"]
+        XCTAssertTrue(
+            itemRevertButton.waitForExistence(timeout: 5),
+            "Expected swiping a refunded item in Edit Receipt to expose Revert."
+        )
+        itemRevertButton.tap()
 
         let reverseAlert = restoredApp.alerts["Reverse Refund?"]
         XCTAssertTrue(
             reverseAlert.waitForExistence(timeout: 5),
-            "Expected reversing a refund to require confirmation."
+            "Expected reverting a refunded edit row to require confirmation."
         )
         reverseAlert.buttons["Reverse Refund"].tap()
 
-        let reversedSourceReceiptCard = restoredApp.buttons["receipt-card-\(vendorName)"]
         XCTAssertTrue(
-            reversedSourceReceiptCard.waitForExistence(timeout: 8),
-            "Expected reversing the linked refund to return to the receipts list with the source receipt still visible."
+            restoredApp.navigationBars["Edit Receipt"].waitForExistence(timeout: 5),
+            "Expected reverting from the edit row to keep the user in Edit Receipt."
         )
         XCTAssertTrue(
             waitForNonExistence(
-                of: restoredApp.buttons["receipt-card-linked-refunds-toggle-ui-test-scanned-vendor"],
+                of: restoredApp.staticTexts["receipt-edit-item-refund-status-primer"],
                 timeout: 5
             ),
-            "Expected reversing the refund to remove the linked refund disclosure from the source receipt."
+            "Expected reverting the item-level refund to clear the edit-row refund badge."
         )
-        reversedSourceReceiptCard.tap()
 
+        let revertedEditItemRow = restoredApp.buttons["receipt-edit-item-primer"]
+        revertedEditItemRow.swipeLeft()
         XCTAssertTrue(
-            restoredApp.navigationBars["Receipt Details"].waitForExistence(timeout: 5),
-            "Expected the source receipt to remain navigable after reversing the linked refund."
+            restoredApp.buttons["receipt-edit-item-refund-primer"].waitForExistence(timeout: 5),
+            "Expected reverting the refund to restore the edit-row Refund action."
+        )
+
+        restoredApp.buttons["Cancel"].tap()
+        XCTAssertTrue(
+            waitForNonExistence(
+                of: restoredApp.staticTexts["receipt-detail-refunded-total"],
+                timeout: 5
+            ),
+            "Expected reverting the item-level refund to remove the source receipt refund summary."
         )
         XCTAssertEqual(
             restoredApp.staticTexts["receipt-detail-amount"].label,
@@ -1532,8 +1564,8 @@ final class RHEIRUITests: XCTestCase {
             "Expected reversal coverage to reopen the original source receipt rather than a linked refund."
         )
         XCTAssertFalse(
-            restoredApp.staticTexts["receipt-detail-refunded-total"].exists,
-            "Expected reversing the refund to remove the source receipt refund summary."
+            restoredApp.staticTexts["receipt-detail-item-refund-status-primer"].exists,
+            "Expected reverting the item-level refund to clear the source-detail badge."
         )
 
         let relaunchAttachment = XCTAttachment(screenshot: restoredApp.screenshot())

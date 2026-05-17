@@ -170,6 +170,7 @@
 - `Receipt` itemized budget-scoped rollup helper for Materials / General Conditions / Contingency
 - `Receipt` partial-refund accounting helpers, source-receipt linkage, restaurant tip metadata, gas price-per-gallon metadata, and local image-file fallback
 - `ReceiptEditView` row-swipe line-item refund actions plus tax-inclusive confirmation
+- `ReceiptEditView` refunded line-item row-swipe reversal in the same edit workflow
 - `ReceiptDetailView` deterministic linked-refund balance metrics, tip/gas metadata rendering, and restored saved-image preview
 - `ReceiptDetailView` source-receipt linked refund child rows and refunded/partial-refunded item-row styling
 - `ReceiptDetailView` confirmed linked-refund reversal for correcting mistaken returns without rewriting the source purchase
@@ -241,6 +242,10 @@
 - `SignInWithAppleCoordinator` structured logging
 
 ## Current Validation Baseline
+- Latest receipt edit-item revert Gate A result: `PASS` (`/tmp/rheir_gateA_receipt_edit_item_revert_20260517_2.xcresult`; sandbox attempt `_1` failed on CoreSimulator asset-catalog runtime, escalated rerun passed)
+- Latest receipt edit-item revert focused parity result: `PASS` (`/tmp/rheir_receipt_edit_item_revert_parity_20260517_3.xcresult`, `2 refund unit tests plus 1 edit-sheet refund/revert UI relaunch test`; sandbox attempt `_2` failed before test execution on CoreSimulator service loss)
+- Latest receipt edit-item revert visual evidence: kept xcresult attachment `Receipt refund filters and reversal after relaunch`
+- Latest receipt edit-item revert pbxproj drift: `NONE`
 - Latest receipt refund reversal/filter Gate A result: `PASS` (`/tmp/rheir_gateA_receipt_refund_reverse_filter_20260517_2.xcresult`; sandbox attempt `_1` failed on CoreSimulator asset-catalog runtime, escalated rerun passed)
 - Latest receipt refund reversal/filter focused parity result: `PASS` (`/tmp/rheir_receipt_refund_reverse_filter_parity_20260517_2.xcresult`, `2 refund unit tests plus 1 refund filter/reversal UI relaunch test`; sandbox attempt `_1` failed before build on CoreSimulator service loss)
 - Latest receipt refund reversal/filter visual evidence: kept xcresult attachment `Receipt refund filters and reversal after relaunch`
