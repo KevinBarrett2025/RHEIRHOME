@@ -168,9 +168,10 @@
 - `Receipt` itemized budget-scoped rollup helper for Materials / General Conditions / Contingency
 - `Receipt` partial-refund accounting helpers and source-receipt linkage
 - `ReceiptDetailView` visible partial-refund flow and refund-summary card
+- `ReceiptDetailView` deterministic linked-refund balance metrics and independently addressable partial-refund quantity controls
 - `ReceiptEditView` linked-refund financial-history locking
 - `ReportingService` receipt CSV source-receipt export linkage
-- `RHEIRUITests` saved scanned receipt partial-refund sheet coverage
+- `RHEIRUITests` saved scanned receipt partial-refund sheet, save, and relaunch-persistence coverage
 - `ScannedReceiptEntryView` scanned-item persistence and non-segmented category review control
 - `ReceiptDetailView` menu-only receipt actions plus persisted item/subcategory rendering
 - `ReceiptEditView` saved scanned-item breakdown rendering and line-item editor
@@ -232,6 +233,11 @@
 - `SignInWithAppleCoordinator` structured logging
 
 ## Current Validation Baseline
+- Latest Receipts trust-pass Gate A result: `PASS` (`/tmp/rheir_gateA_receipts_trust_pass_20260517.xcresult`)
+- Latest Receipts trust-pass focused parity result: `PASS` (`/tmp/rheir_receipts_trust_pass_20260517.xcresult`, `6 unit/report tests plus 7 UI tests`)
+- Latest Receipts partial-refund acceptance result: `PASS` (`/tmp/rheir_receipt_partial_refund_acceptance_20260517_rerun8.xcresult`, `1 UI test`)
+- Latest Receipts partial-refund visual evidence: kept xcresult attachments `Receipt partial refund sheet`, `Receipt refund summary after save`, and `Receipt refund summary after relaunch`
+- Latest Receipts trust-pass pbxproj drift: `NONE`
 - Latest Reports Gate A result: `PASS` (`/tmp/rheir_gateA_reports.xcresult`)
 - Latest Reports focused parity result: `PASS` (`/tmp/rheir_reports_parity_final5.xcresult`, `3 report service tests plus 1 UI preview/export test`)
 - Latest Reports visual evidence: kept xcresult attachment `Project PDF preview`

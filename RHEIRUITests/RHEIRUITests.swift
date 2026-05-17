@@ -1279,10 +1279,103 @@ final class RHEIRUITests: XCTestCase {
             "Expected the visible receipt action to open the partial refund sheet."
         )
 
-        let attachment = XCTAttachment(screenshot: app.screenshot())
-        attachment.name = "Receipt partial refund sheet"
-        attachment.lifetime = .keepAlways
-        add(attachment)
+        let primerRefundIncrementButton = revealElement(
+            identifier: "receipt-refund-increment-primer",
+            in: app,
+            query: { $0.buttons["receipt-refund-increment-primer"] }
+        )
+        XCTAssertTrue(
+            primerRefundIncrementButton.waitForExistence(timeout: 5),
+            "Expected the partial refund sheet to expose a quantity control for the refundable Primer line."
+        )
+        primerRefundIncrementButton.tap()
+
+        let refundPreviewTotal = revealElement(
+            identifier: "receipt-refund-preview-total",
+            in: app,
+            query: { $0.staticTexts["receipt-refund-preview-total"] }
+        )
+        XCTAssertEqual(
+            refundPreviewTotal.label,
+            "$21.75",
+            "Expected the partial refund preview to allocate the matching tax share onto one returned Primer unit."
+        )
+
+        let previewAttachment = XCTAttachment(screenshot: app.screenshot())
+        previewAttachment.name = "Receipt partial refund sheet"
+        previewAttachment.lifetime = .keepAlways
+        add(previewAttachment)
+
+        let saveRefundButton = app.buttons["Save Refund"]
+        XCTAssertTrue(
+            waitForEnabled(saveRefundButton, timeout: 5),
+            "Expected a selected partial refund line to enable Save Refund."
+        )
+        saveRefundButton.tap()
+
+        XCTAssertTrue(
+            app.navigationBars["Receipt Details"].waitForExistence(timeout: 5),
+            "Expected saving a partial refund to return to the source receipt detail."
+        )
+        XCTAssertEqual(
+            app.staticTexts["receipt-detail-refunded-total"].label,
+            "$21.75",
+            "Expected the source receipt detail to show the linked refund total immediately after save."
+        )
+        XCTAssertEqual(
+            app.staticTexts["receipt-detail-refundable-remaining"].label,
+            "$68.01",
+            "Expected the source receipt detail to preserve the remaining refundable gross balance."
+        )
+
+        let summaryAttachment = XCTAttachment(screenshot: app.screenshot())
+        summaryAttachment.name = "Receipt refund summary after save"
+        summaryAttachment.lifetime = .keepAlways
+        add(summaryAttachment)
+
+        app.terminate()
+
+        let restoredApp = makeApp(mode: .restoredSession, preserveState: true)
+        restoredApp.launch()
+
+        XCTAssertTrue(
+            restoredApp.tabBars.firstMatch.waitForExistence(timeout: 5),
+            "Expected the preserved session to restore after recording a partial refund."
+        )
+        restoredApp.tabBars.buttons["Receipts"].tap()
+
+        let restoredVendorCards = restoredApp.buttons.matching(identifier: "receipt-card-\(vendorName)")
+        let restoredSourceReceiptCard = restoredVendorCards.element(boundBy: 1)
+        XCTAssertTrue(
+            restoredSourceReceiptCard.waitForExistence(timeout: 8),
+            "Expected the original scanned receipt and linked refund to persist after relaunch."
+        )
+        restoredSourceReceiptCard.tap()
+
+        XCTAssertTrue(
+            restoredApp.navigationBars["Receipt Details"].waitForExistence(timeout: 5),
+            "Expected the relaunched source receipt to remain navigable after recording a linked refund."
+        )
+        XCTAssertEqual(
+            restoredApp.staticTexts["receipt-detail-amount"].label,
+            "$89.76",
+            "Expected relaunch coverage to reopen the original source receipt rather than the linked refund."
+        )
+        XCTAssertEqual(
+            restoredApp.staticTexts["receipt-detail-refunded-total"].label,
+            "$21.75",
+            "Expected linked refund totals to persist after relaunch."
+        )
+        XCTAssertEqual(
+            restoredApp.staticTexts["receipt-detail-refundable-remaining"].label,
+            "$68.01",
+            "Expected the remaining refundable balance to persist after relaunch."
+        )
+
+        let relaunchAttachment = XCTAttachment(screenshot: restoredApp.screenshot())
+        relaunchAttachment.name = "Receipt refund summary after relaunch"
+        relaunchAttachment.lifetime = .keepAlways
+        add(relaunchAttachment)
     }
 
     @MainActor

@@ -3,7 +3,7 @@
 ## Repo
 - Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Branch: `gm/rheir-hardening-phase1`
-- HEAD: `765cfbc51d06f48d5b7eb03505deb27923771640`
+- HEAD: `173ee361fe08d345fa2cac9ca1704ef8eb6bd372`
 
 ## Active Initiative
 - RHEIR release hardening, Fast-Ship Hybrid contractor workflow hardening.
@@ -168,6 +168,8 @@
 - Added focused receipt/category parity proving itemized selected-category totals, quick receipt image view, and mixed-receipt high-level budget rollups stay correct.
 - Added linked item-level partial receipt refunds so mixed receipts can return selected line quantities without rewriting the original purchase, with proportional tax/discount allocation, over-refund prevention, visible refund entry from receipt detail, locked financial history after linked refunds, and CSV source-receipt export linkage.
 - Added focused receipt-refund unit/UI parity proving category-scoped returned lines, tax/discount residual reconciliation, export linkage, and the live partial-refund sheet on saved scanned receipts.
+- Hardened the live partial-refund acceptance path so refund quantity controls are independently accessible, the source receipt exposes deterministic refunded/remaining totals, and the saved-scanned-receipt UI test now proves save plus terminate/relaunch persistence of the linked refund balance.
+- Completed the broader simulator Receipts trust pass across scanned receipt save/reopen, persisted edits, manual-receipt relaunch, mixed-category drilldown math, linked partial refunds, and report export visibility.
 - Hardened selected-project restore reconciliation so a launch-restored project selection is rehydrated from the loaded organization project payload, making persisted receipts visible immediately instead of waiting for a scan/manual receipt mutation to refresh `selectedProject`.
 - Added startup legacy project-payload compaction in `Shared/Views/Auth/AppSessionSupport.swift` so `LocalCacheStore` rewrites stale `projects*` `UserDefaults` blobs through `Project.persistenceSafeCopy` before legacy session migration runs.
 - Hardened `Shared/ViewModels/ProjectViewModel+Import.swift` so the legacy `projects_backup` fallback also strips inline receipt image data before writing to `UserDefaults`.
@@ -208,7 +210,7 @@
 - Treat accounting math and professional UI/UX as release blockers for every remaining Fast-Ship surface: totals must reconcile from persisted records, payment history must not be rewritten by later edits, over/under balances must be explicit, and compact-device rows/sheets must be visually bounded with no truncation before moving a seam to release-accepted.
 - Treat task photo UX and reporting fidelity as standing release criteria: before/after proof must stay separated, previewable, swipeable, correctable, and reflected in project reports before Tasks can be considered field-ready.
 - Continue broader selected-project estimator variance/runtime QA on top of the approved-baseline mapping seam inside the simplified v1 shell.
-- Continue broader selected-project receipt runtime QA in parallel, with same-device/device validation now the active release seam after manual-receipt relaunch, scanned-receipt return/reopen, and launch-time receipt hydration parity are green in simulator.
+- Continue broader selected-project receipt runtime QA in parallel, with same-device/device validation now the active release seam after scanned/manual receipt persistence, linked partial-refund relaunch, mixed-category drilldown math, and export visibility are green in simulator.
 - Continue shrinking the remaining oversized active state owners around the new sync and access store boundaries.
 - Expand deterministic parity beyond the focused `RHEIRTests` suite.
 
@@ -218,6 +220,11 @@
 - Raw in-sandbox `xcodebuild` commands are still less reliable than elevated CLI or `xcodebuildmcp` paths in this environment because CoreSimulator and DerivedData access remain sandbox-sensitive.
 
 ## Latest Evidence
+- Receipts trust-pass Gate A: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -configuration Debug -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_receipts_trust_pass_dd -resultBundlePath /tmp/rheir_gateA_receipts_trust_pass_20260517.xcresult clean build` -> PASS (`/tmp/rheir_gateA_receipts_trust_pass_20260517.xcresult`)
+- Receipts trust-pass focused parity: `xcodebuild test -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -configuration Debug -destination 'id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_receipts_trust_pass_dd -resultBundlePath /tmp/rheir_receipts_trust_pass_20260517.xcresult -only-testing:RHEIRTests/ReceiptPartialRefundTests -only-testing:RHEIRTests/ReportingServiceTests '-only-testing:RHEIRUITests/RHEIRUITests/testScannedReceiptPersistsAfterLeavingAndReturningToReceipts()' '-only-testing:RHEIRUITests/RHEIRUITests/testSavedScannedReceiptEditSheetShowsPersistedItems()' '-only-testing:RHEIRUITests/RHEIRUITests/testSavedReceiptDetailPersistsEdits()' '-only-testing:RHEIRUITests/RHEIRUITests/testManualReceiptPersistsAcrossFastShipRelaunch()' '-only-testing:RHEIRUITests/RHEIRUITests/testMixedCategoryReceiptCategoryDrilldownUsesItemizedSpend()' '-only-testing:RHEIRUITests/RHEIRUITests/testProjectReportsPreviewSurfaceExposesPDFAndCSVExports()' '-only-testing:RHEIRUITests/RHEIRUITests/testSavedScannedReceiptOpensPartialRefundFlow()'` -> PASS (`/tmp/rheir_receipts_trust_pass_20260517.xcresult`, `6 unit/report tests plus 7 UI tests`)
+- Partial-refund acceptance rerun: `xcodebuild test -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -configuration Debug -destination 'id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_receipt_partial_refund_acceptance_dd -resultBundlePath /tmp/rheir_receipt_partial_refund_acceptance_20260517_rerun8.xcresult '-only-testing:RHEIRUITests/RHEIRUITests/testSavedScannedReceiptOpensPartialRefundFlow()'` -> PASS (`/tmp/rheir_receipt_partial_refund_acceptance_20260517_rerun8.xcresult`, `1 UI test`)
+- Partial-refund visual evidence: kept xcresult attachments `Receipt partial refund sheet`, `Receipt refund summary after save`, and `Receipt refund summary after relaunch`
+- Receipts trust-pass pbxproj drift: NONE
 - Reports Gate A: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/rheir_gateA_reports_dd -resultBundlePath /tmp/rheir_gateA_reports.xcresult clean build` -> PASS (`/tmp/rheir_gateA_reports.xcresult`)
 - Reports focused parity: `xcodebuild -project /Users/kevinbarrett/Dev/RHEIR/RHEIR.xcodeproj -scheme RHEIR -destination 'platform=iOS Simulator,id=DD0211FE-8732-4DA9-9E9E-78C61F0734DC' -derivedDataPath /tmp/rheir_reports_parity_final5_dd -resultBundlePath /tmp/rheir_reports_parity_final5.xcresult test '-only-testing:RHEIRTests/ReportingServiceTests' '-only-testing:RHEIRUITests/RHEIRUITests/testProjectReportsPreviewSurfaceExposesPDFAndCSVExports()'` -> PASS (`/tmp/rheir_reports_parity_final5.xcresult`, `3 report service tests plus 1 UI preview/export test`)
 - Reports visual evidence: kept xcresult attachment named `Project PDF preview` in `/tmp/rheir_reports_parity_final5.xcresult`

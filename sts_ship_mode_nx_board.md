@@ -11,6 +11,8 @@
 - `Receipt.swift` now supports linked item-level partial refunds with original-line identity, remaining refundable quantity, proportional tax/discount allocation, final-residual reconciliation, and over-refund prevention so mixed supplier receipts can be partially returned without rewriting the source purchase.
 - `ReceiptDetailView.swift` now exposes a visible `Record Partial Refund` path plus linked refund summary, `ReceiptEditView.swift` locks linked financial history from silent rewrites, `ReceiptRowView.swift` distinguishes partial refunds, and `ReportingService.swift` exports source-receipt linkage for bookkeeping.
 - `RHEIRTests.swift` and `RHEIRUITests.swift` now prove partial-refund math, CSV linkage, and live saved-scanned-receipt refund-sheet access.
+- `ReceiptDetailView.swift` now exposes deterministic refund-balance metrics plus independently addressable quantity controls, and `RHEIRUITests.swift` now proves the source receipt keeps the correct linked-refund totals immediately after save and after terminate/relaunch.
+- The broader simulator Receipts trust pass is now green across scanned/manual persistence, persisted edits, mixed-category itemized math, linked partial refunds, and report export visibility.
 - `ProjectAccessStore`, `ProjectViewModel`, and `SessionStore` now rehydrate restored selected projects from the loaded organization project payload, so existing persisted receipts appear on launch without needing a scan/manual add to refresh the selected-project model.
 - `SessionStore` now keeps fast-ship launches in `launching` while CloudKit organization loading is unresolved and activates a local personal workspace fallback when no organization resolves, keeping restored signed-in users out of legacy `Create Your Organization` onboarding.
 - `AuthRouterView` now treats `selectingOrganization` as a loading-only state in the fast-ship profile, so the shipping shell cannot expose the legacy organization setup form while the personal-workspace fallback resolves.
@@ -243,8 +245,8 @@
 - `AuthViewModel.swift` now cancels in-flight organization-switch work when the fast-ship session clears, and `ProjectViewModel.swift` now refuses stale org-sync results after `setCurrentOrganization(nil)` or a different org selection wins.
 - `AuthViewModel.notifyProjectViewModelOrganizationChange(nil)` now clears the connected project view model before the async refresh wrapper runs, and `ProjectViewModel.organizationDidChange(nil)` now honors the nil org as an authoritative clear instead of reusing the last active organization id.
 - Continue broader selected-project estimator variance/runtime QA on top of the approved-baseline mapping seam inside the simplified v1 shell.
-- Continue broader selected-project receipt runtime QA in parallel with the estimator seam so the fast-ship contractor workflow stays stable on device and simulator, with same-device and real-device acceptance now the next receipt release seam after scanned-receipt return/reopen parity closed in simulator.
-- Relaunch persistence, launch-time selected-project receipt hydration, and scanned-receipt return/reopen are simulator-proven on the simplified shell, and restored-session/session-resolution parity is now green in focused tests; finish same-device and real-device acceptance before cutting a promo candidate.
+- Continue broader selected-project receipt runtime QA in parallel with the estimator seam so the fast-ship contractor workflow stays stable on device and simulator, with same-device and real-device acceptance now the next receipt release seam after scanned/manual persistence, linked partial-refund relaunch, mixed-category drilldown math, and export visibility are green in simulator.
+- Relaunch persistence, launch-time selected-project receipt hydration, scanned-receipt return/reopen, and linked partial-refund balances are simulator-proven on the simplified shell, and restored-session/session-resolution parity is now green in focused tests; finish same-device and real-device acceptance before cutting a promo candidate.
 - Use `SHIP_READINESS_CHECKLIST.md` as the current release-progress reference alongside the STS docs.
 - `ProjectViewModel+Filters.swift` now aligns the receipt-level legacy bridge with detailed receipt-category mapping, and `ProjectStatus` / `ChangeOrderStatus` now expose semantic SwiftUI tint colors so the active fast-ship path is clear of the lingering materials-divergence log spam and missing `green` asset warning.
 
@@ -252,3 +254,10 @@
 - The restored-session freeze and nil-org sign-out replay seam are now both clean in device logs, and the no-organization fast-ship fallback is simulator-proven; the remaining launch-critical device risk is proving the same behavior on hardware, then confirming immediate launch-time receipt visibility, scanned-item persistence, and menu-only detail actions on device.
 - Same-user iCloud restore/sync is not yet treated as ship-proven; if it fails release-candidate validation, local-device persistence must remain the authoritative launch promise.
 - Raw in-sandbox `xcodebuild` remains less reliable than elevated CLI or the stable `xcodebuildmcp` simulator path in this environment.
+
+## Latest Receipt Evidence
+- Receipts trust-pass Gate A: PASS (`/tmp/rheir_gateA_receipts_trust_pass_20260517.xcresult`)
+- Receipts trust-pass focused parity: PASS (`/tmp/rheir_receipts_trust_pass_20260517.xcresult`, `6 unit/report tests plus 7 UI tests`)
+- Partial-refund acceptance rerun: PASS (`/tmp/rheir_receipt_partial_refund_acceptance_20260517_rerun8.xcresult`, `1 UI test`)
+- Partial-refund visual evidence: kept xcresult attachments `Receipt partial refund sheet`, `Receipt refund summary after save`, and `Receipt refund summary after relaunch`
+- Receipts trust-pass pbxproj drift: NONE

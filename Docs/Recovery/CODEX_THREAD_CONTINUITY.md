@@ -5,8 +5,8 @@
 - Active Branch: `gm/rheir-hardening-phase1`
 - Thread Start SHA: `117d5755bf2449139366c4bdeda6f7ff7d9ea6ac`
 - Last Commit At Thread Start: `117d575 Phase 2: wire task photo proof`
-- Current HEAD: `765cfbc51d06f48d5b7eb03505deb27923771640`
-- Current Head Commit: `765cfbc Phase 2: support partial receipt refunds`
+- Current HEAD: `173ee361fe08d345fa2cac9ca1704ef8eb6bd372`
+- Current Head Commit: `173ee36 Phase 2: reconcile partial refund docs (docs only)`
 - Authority Truth: `origin/authority/main` and local `authority/main` are not present in this repo; no promotion is being attempted in this GM hardening run.
 
 ## Current Objective
@@ -24,7 +24,9 @@
 - Latest Tasks photo-gallery/report seam is simulator-proven: task photo previews are swipeable across before-confirmation, active-detail, and completed-detail contexts; thumbnails expose correction delete badges where logical; Mark Complete is visible as a bottom action; the task summary is pinned near the top; and task progress/proof metadata is wired into project report previews and generated PDF reports.
 - Reports first live preview/export seam is now simulator-proven after Tasks acceptance: the visible project Reports & Exports sheet uses real project data for PDF and CSV artifacts, supports page/image-based swipe plus pinch-to-zoom preview, and exposes contractor-useful exports for project PDF, receipt line items, labor payments, labor timesheets, task closeout, and job-cost detail.
 - Active polish/user-trust pass: re-audit Receipts, Labor, and Tasks for persistence, immediate selected-project refresh, relaunch visibility, and UI availability so saved work is never hidden, stale, or silently dropped.
-- Latest Receipts accounting seam is simulator-proven: itemized source receipts now support linked partial refunds by selected line quantity, proportional tax/discount allocation, over-refund prevention, visible refund entry from receipt detail, locked linked financial history, and CSV source-receipt export linkage.
+- Latest Receipts accounting seam is simulator-proven: itemized source receipts now support linked partial refunds by selected line quantity, proportional tax/discount allocation, over-refund prevention, visible refund entry from receipt detail, locked linked financial history, CSV source-receipt export linkage, and explicit linked-refund balances that remain correct after terminate/relaunch.
+- Latest Receipts trust pass is simulator-proven across scanned/manual receipt persistence, persisted edits, mixed-category itemized rollups, linked partial refunds, relaunch visibility, and report export visibility.
+- Active next step: run same-device and physical-device receipt acceptance across scan -> edit -> partial refund -> relaunch -> export so the simulator-proven trust pass is confirmed on hardware before promo candidacy.
 - Treat contractor job-costing validation as a release requirement: itemized materials, labor/payroll, tasks/progress, payment status, profitability, and closeout reports must answer real contractor operating questions.
 - Preserve the simplified visible session flow `launch -> sign in -> ready`, with invite, org-selection, company/admin, and legacy AI-key surfaces still hidden unless the app is explicitly forced back into the legacy/full profile.
 - Keep the selected-project receipt seam green end-to-end: saved scanned receipt itemized lines now persist into receipt detail and into the ellipsis-menu edit sheet with a dedicated line-item editor, mixed-category receipt category summaries/drilldown cards now honor per-item categories instead of treating the whole receipt total as one category, and the Receipts list quick-view now opens the real receipt image viewer.

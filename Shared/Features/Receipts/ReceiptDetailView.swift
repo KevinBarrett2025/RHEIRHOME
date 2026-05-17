@@ -306,8 +306,16 @@ struct ReceiptDetailView: View {
                 detailRow("Original Receipt", value: sourceReceiptLabel(for: receipt))
                 detailRow("Refund Type", value: "Partial refund")
             } else {
-                detailRow("Refunded To Date", value: refundedAmount.formatAsCurrency())
-                detailRow("Remaining Refundable", value: remainingAmount.formatAsCurrency())
+                refundMetricRow(
+                    title: "Refunded To Date",
+                    value: refundedAmount.formatAsCurrency(),
+                    identifier: "receipt-detail-refunded-total"
+                )
+                refundMetricRow(
+                    title: "Remaining Refundable",
+                    value: remainingAmount.formatAsCurrency(),
+                    identifier: "receipt-detail-refundable-remaining"
+                )
 
                 if !linkedRefunds.isEmpty {
                     detailRow("Partial Refunds", value: "\(linkedRefunds.count)")
@@ -477,6 +485,19 @@ struct ReceiptDetailView: View {
                 .foregroundColor(.secondary)
         }
     }
+
+    private func refundMetricRow(title: String, value: String, identifier: String) -> some View {
+        HStack {
+            Text(title)
+                .font(.subheadline)
+                .fontWeight(.medium)
+            Spacer()
+            Text(value)
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+                .accessibilityIdentifier(identifier)
+        }
+    }
 }
 
 private struct PartialReceiptRefundView: View {
@@ -538,10 +559,26 @@ private struct PartialReceiptRefundView: View {
 
                 Section("Refund Summary") {
                     if let previewRefund {
-                        detailRow("Item Subtotal", value: refundSubtotal(for: previewRefund).formatAsCurrency())
-                        detailRow("Tax Refunded", value: previewRefund.taxAmount.formatAsCurrency())
-                        detailRow("Discount Reversed", value: previewRefund.discountAmount.formatAsCurrency())
-                        detailRow("Refund Total", value: previewRefund.amount.formatAsCurrency())
+                        refundMetricRow(
+                            title: "Item Subtotal",
+                            value: refundSubtotal(for: previewRefund).formatAsCurrency(),
+                            identifier: "receipt-refund-preview-subtotal"
+                        )
+                        refundMetricRow(
+                            title: "Tax Refunded",
+                            value: previewRefund.taxAmount.formatAsCurrency(),
+                            identifier: "receipt-refund-preview-tax"
+                        )
+                        refundMetricRow(
+                            title: "Discount Reversed",
+                            value: previewRefund.discountAmount.formatAsCurrency(),
+                            identifier: "receipt-refund-preview-discount"
+                        )
+                        refundMetricRow(
+                            title: "Refund Total",
+                            value: previewRefund.amount.formatAsCurrency(),
+                            identifier: "receipt-refund-preview-total"
+                        )
                     } else {
                         Text("Select at least one refundable item.")
                             .foregroundStyle(.secondary)
@@ -584,6 +621,7 @@ private struct PartialReceiptRefundView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(item.name)
                         .font(.headline)
+                        .accessibilityIdentifier("receipt-refund-item-\(receiptDetailAccessibilitySlug(item.name))")
 
                     Text("\(item.category.rawValue) · \(available, specifier: "%.2f") available")
                         .font(.caption)
@@ -596,23 +634,47 @@ private struct PartialReceiptRefundView: View {
                     .font(.subheadline.weight(.semibold))
             }
 
-            Stepper(
-                value: quantityBinding(for: item),
-                in: 0...available,
-                step: refundStep(for: item)
-            ) {
-                Text("Return Qty: \(selected, specifier: "%.2f")")
+            HStack {
+                Text("Return Qty")
                     .font(.subheadline)
+
+                Spacer()
+
+                Button {
+                    adjustSelectedQuantity(for: item, by: -refundStep(for: item))
+                } label: {
+                    Image(systemName: "minus.circle.fill")
+                        .font(.title3)
+                }
+                .buttonStyle(.plain)
+                .disabled(selected <= 0)
+                .accessibilityLabel("Decrease \(item.name) refund quantity")
+                .accessibilityIdentifier("receipt-refund-decrement-\(receiptDetailAccessibilitySlug(item.name))")
+
+                Text("\(selected, specifier: "%.2f")")
+                    .font(.subheadline.monospacedDigit())
+                    .frame(minWidth: 46)
+                    .multilineTextAlignment(.center)
+
+                Button {
+                    adjustSelectedQuantity(for: item, by: refundStep(for: item))
+                } label: {
+                    Image(systemName: "plus.circle.fill")
+                        .font(.title3)
+                }
+                .buttonStyle(.plain)
+                .disabled(selected >= available)
+                .accessibilityLabel("Increase \(item.name) refund quantity")
+                .accessibilityIdentifier("receipt-refund-increment-\(receiptDetailAccessibilitySlug(item.name))")
             }
         }
         .padding(.vertical, 4)
     }
 
-    private func quantityBinding(for item: ReceiptItem) -> Binding<Double> {
-        Binding(
-            get: { selectedQuantities[item.id] ?? 0 },
-            set: { selectedQuantities[item.id] = min(max(0, $0), sourceReceipt.remainingRefundableQuantity(for: item, in: projectReceipts)) }
-        )
+    private func adjustSelectedQuantity(for item: ReceiptItem, by delta: Double) {
+        let available = sourceReceipt.remainingRefundableQuantity(for: item, in: projectReceipts)
+        let current = selectedQuantities[item.id] ?? 0
+        selectedQuantities[item.id] = min(max(0, current + delta), available)
     }
 
     private func refundStep(for item: ReceiptItem) -> Double {
@@ -629,6 +691,16 @@ private struct PartialReceiptRefundView: View {
             Spacer()
             Text(value)
                 .foregroundStyle(.secondary)
+        }
+    }
+
+    private func refundMetricRow(title: String, value: String, identifier: String) -> some View {
+        HStack {
+            Text(title)
+            Spacer()
+            Text(value)
+                .foregroundStyle(.secondary)
+                .accessibilityIdentifier(identifier)
         }
     }
 
