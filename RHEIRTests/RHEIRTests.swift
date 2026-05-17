@@ -1482,6 +1482,207 @@ struct ProjectMutationPropagationTests {
         #expect(projectStore.loadProjects(for: orgID).first?.status == .active)
         #expect(repository.savedProjects.first?.project.status == .active)
     }
+
+    @Test
+    func projectRefreshTracksSameIDTaskAndLaborContentChanges() {
+        let orgID = UUID().uuidString
+        let viewModel = ProjectViewModel(
+            offlineDataManager: OfflineDataManager(networkMonitoringEnabled: false),
+            projectRepository: RecordingProjectRepository()
+        )
+        viewModel.setCurrentOrganization(
+            Organization(id: orgID, name: "Personal Workspace"),
+            role: .admin
+        )
+
+        let projectID = UUID()
+        let modifiedDate = Date(timeIntervalSince1970: 1_714_000_000)
+        let workDate = Date(timeIntervalSince1970: 1_714_003_600)
+        let task = ProjectTask(
+            id: UUID(),
+            title: "Rough plumbing",
+            description: "Before photo scope",
+            dueDate: workDate,
+            priority: .medium,
+            category: .general,
+            projectID: projectID,
+            updatedAt: modifiedDate
+        )
+        let workHour = WorkHour(
+            id: UUID(),
+            date: workDate,
+            startTime: workDate,
+            endTime: workDate.addingTimeInterval(3_600),
+            lunchStart: nil,
+            lunchEnd: nil,
+            employee: "Alex Rivera",
+            employeeID: UUID(),
+            rate: 45,
+            category: "Demo",
+            isPaid: false,
+            paymentMethod: nil,
+            paymentNote: nil,
+            paymentTimestamp: nil
+        )
+        var project = Project(
+            id: projectID,
+            name: "Trust Refresh Project",
+            client: "Client E",
+            totalBudget: 21000,
+            startDate: workDate,
+            endDate: workDate.addingTimeInterval(86_400),
+            organizationID: orgID,
+            lastModifiedDate: modifiedDate
+        )
+        project.tasks = [task]
+        project.loggedHours = [workHour]
+        viewModel.projects = [project]
+        viewModel.organizationProjects = [project]
+        viewModel.selectedProject = project
+        viewModel.updateAccessibleProjects()
+
+        var refreshedTask = task
+        refreshedTask.title = "Finish plumbing"
+        refreshedTask.description = "After proof attached"
+        refreshedTask.completionPhotoIDs = [UUID()]
+        refreshedTask.updatedAt = modifiedDate
+
+        var refreshedHour = workHour
+        refreshedHour.rate = 60
+        refreshedHour.recordPayment(
+            amount: 30,
+            method: "Check",
+            reference: "1004",
+            note: "Partial progress payment",
+            paidAt: workDate.addingTimeInterval(7_200)
+        )
+
+        var refreshedProject = project
+        refreshedProject.tasks = [refreshedTask]
+        refreshedProject.loggedHours = [refreshedHour]
+        refreshedProject.lastModifiedDate = modifiedDate
+        viewModel.organizationProjects = [refreshedProject]
+
+        viewModel.updateAccessibleProjects()
+
+        #expect(viewModel.selectedProject?.tasks.first?.title == "Finish plumbing")
+        #expect(viewModel.selectedProject?.tasks.first?.completionPhotoIDs == refreshedTask.completionPhotoIDs)
+        #expect(viewModel.accessibleProjects.first?.loggedHours.first?.rate == 60)
+        #expect(viewModel.selectedProject?.loggedHours.first?.totalPaidAmount == 30)
+    }
+
+    @Test
+    func receiptLaborAndTaskMutationsStayVisibleWhenOrganizationProjectsIsTemporarilyStale() async {
+        let suiteName = "ProjectMutationFallbackTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let orgID = UUID().uuidString
+        let repository = RecordingProjectRepository()
+        let projectStore = ProjectStore(userDefaults: defaults)
+        let viewModel = ProjectViewModel(
+            offlineDataManager: OfflineDataManager(networkMonitoringEnabled: false),
+            projectStore: projectStore,
+            projectRepository: repository
+        )
+        viewModel.setCurrentOrganization(
+            Organization(id: orgID, name: "Personal Workspace"),
+            role: .admin
+        )
+
+        let projectID = UUID()
+        let workDate = Date(timeIntervalSince1970: 1_714_010_000)
+        let receipt = Receipt(
+            id: "fallback-receipt",
+            vendor: "Supply House",
+            date: workDate,
+            amount: 72,
+            category: .material,
+            paymentMethod: "Card"
+        )
+        let task = ProjectTask(
+            id: UUID(),
+            title: "Replace copper joint",
+            description: "Left sink",
+            projectID: projectID
+        )
+        let workHour = WorkHour(
+            id: UUID(),
+            date: workDate,
+            startTime: workDate,
+            endTime: workDate.addingTimeInterval(3_600),
+            lunchStart: nil,
+            lunchEnd: nil,
+            employee: "Alex Rivera",
+            employeeID: UUID(),
+            rate: 45,
+            category: "Plumbing",
+            isPaid: false,
+            paymentMethod: nil,
+            paymentNote: nil,
+            paymentTimestamp: nil
+        )
+        var project = Project(
+            id: projectID,
+            name: "Fallback Project",
+            client: "Client F",
+            totalBudget: 9000,
+            startDate: workDate,
+            endDate: workDate.addingTimeInterval(86_400),
+            organizationID: orgID
+        )
+        project.receipts = [receipt]
+        project.tasks = [task]
+        project.loggedHours = [workHour]
+        viewModel.projects = [project]
+        viewModel.organizationProjects = [project]
+        viewModel.selectedProject = project
+        viewModel.updateAccessibleProjects()
+
+        viewModel.organizationProjects = []
+        var editedReceipt = receipt
+        editedReceipt.amount = 91
+        await viewModel.updateReceipt(editedReceipt, in: projectID)
+
+        viewModel.organizationProjects = []
+        var editedTask = task
+        editedTask.title = "Replace repaired copper joint"
+        editedTask.completionNotes = "Verified no leak"
+        await viewModel.updateTask(editedTask, in: projectID)
+
+        viewModel.organizationProjects = []
+        var editedHour = workHour
+        editedHour.rate = 65
+        viewModel.updateHours(editedHour)
+
+        viewModel.organizationProjects = []
+        guard let payableHour = viewModel.selectedProject?.loggedHours.first else {
+            Issue.record("Expected selected project to keep the edited labor entry visible.")
+            return
+        }
+        viewModel.recordLaborPayment(
+            for: [payableHour],
+            amount: 25,
+            method: "Cash",
+            reference: "drawer",
+            note: "Partial payment"
+        )
+
+        let persistedProject = projectStore.loadProjects(for: orgID).first
+        #expect(viewModel.selectedProject?.receipts.first?.amount == 91)
+        #expect(viewModel.selectedProject?.tasks.first?.title == "Replace repaired copper joint")
+        #expect(viewModel.selectedProject?.loggedHours.first?.rate == 65)
+        #expect(viewModel.selectedProject?.loggedHours.first?.totalPaidAmount == 25)
+        #expect(viewModel.organizationProjects.map(\.id) == [projectID])
+        #expect(viewModel.accessibleProjects.map(\.id) == [projectID])
+        #expect(persistedProject?.receipts.first?.amount == 91)
+        #expect(persistedProject?.tasks.first?.completionNotes == "Verified no leak")
+        #expect(persistedProject?.loggedHours.first?.totalPaidAmount == 25)
+        #expect(repository.savedProjects.count >= 2)
+    }
 }
 
 struct ReceiptIntelligenceStoreTests {

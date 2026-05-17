@@ -20,7 +20,7 @@ extension ProjectViewModel {
         location: CLLocation? = nil
     ) {
         guard let sel = selectedProject,
-              let idx = organizationProjects.firstIndex(where: { $0.id == sel.id })
+              var updatedProject = projectForMutation(projectID: sel.id)
         else { 
             Logger.labor.error("Failed to log hours because no active project is selected.")
             return 
@@ -64,15 +64,14 @@ extension ProjectViewModel {
 
         // CRITICAL FIX: Auto-assign team member to project when they log hours
         if let employeeID = wh.employeeID,
-           !organizationProjects[idx].assignedTeamMemberIDs.contains(employeeID.uuidString) {
-            organizationProjects[idx].assignTeamMember(employeeID.uuidString)
+           !updatedProject.assignedTeamMemberIDs.contains(employeeID.uuidString) {
+            updatedProject.assignTeamMember(employeeID.uuidString)
             Logger.labor.info("Auto-assigned team member from logged hours [teamMember=\(employeeID.uuidString, privacy: .private(mask: .hash))]")
         } else if let employeeID = wh.employeeID, 
-                  organizationProjects[idx].assignedTeamMemberIDs.contains(employeeID.uuidString) {
+                  updatedProject.assignedTeamMemberIDs.contains(employeeID.uuidString) {
             Logger.labor.debug("Team member already assigned to project [teamMember=\(employeeID.uuidString, privacy: .private(mask: .hash))]")
         }
 
-        var updatedProject = organizationProjects[idx]
         updatedProject.loggedHours.append(wh)
         applyProjectMutationLocally(
             updatedProject,
@@ -96,14 +95,14 @@ extension ProjectViewModel {
         location: CLLocation? = nil
     ) -> UUID? {
         guard let sel = selectedProject,
-              let idx = organizationProjects.firstIndex(where: { $0.id == sel.id })
+              var updatedProject = projectForMutation(projectID: sel.id)
         else { 
             Logger.labor.error("Failed to start live tracking because no active project is selected.")
             return nil
         }
         
         // Check if user already has an active timer
-        if organizationProjects[idx].loggedHours.contains(where: { 
+        if updatedProject.loggedHours.contains(where: {
             $0.employeeID == teamMember.id && $0.endTime == nil 
         }) {
             Logger.labor.warning("Attempted to start duplicate live timer for a team member.")
@@ -119,12 +118,11 @@ extension ProjectViewModel {
         )
         
         // CRITICAL FIX: Auto-assign team member to project when they start tracking time
-        if !organizationProjects[idx].assignedTeamMemberIDs.contains(teamMember.id.uuidString) {
-            organizationProjects[idx].assignTeamMember(teamMember.id.uuidString)
+        if !updatedProject.assignedTeamMemberIDs.contains(teamMember.id.uuidString) {
+            updatedProject.assignTeamMember(teamMember.id.uuidString)
             Logger.labor.info("Auto-assigned team member from live tracking [teamMember=\(teamMember.id.uuidString, privacy: .private(mask: .hash))]")
         }
         
-        var updatedProject = organizationProjects[idx]
         updatedProject.loggedHours.append(workHour)
         applyProjectMutationLocally(
             updatedProject,
@@ -144,14 +142,14 @@ extension ProjectViewModel {
         notes: String? = nil
     ) -> Bool {
         guard let sel = selectedProject,
-              let idx = organizationProjects.firstIndex(where: { $0.id == sel.id }),
-              let whIdx = organizationProjects[idx].loggedHours.firstIndex(where: { $0.id == workHourID })
+              var updatedProject = projectForMutation(projectID: sel.id),
+              let whIdx = updatedProject.loggedHours.firstIndex(where: { $0.id == workHourID })
         else { 
             Logger.labor.error("Failed to stop live tracking because the work-hour entry was not found.")
             return false
         }
         
-        var workHour = organizationProjects[idx].loggedHours[whIdx]
+        var workHour = updatedProject.loggedHours[whIdx]
         workHour.endTime = Date()
         workHour.clockOutLocation = endLocation
         
@@ -166,7 +164,6 @@ extension ProjectViewModel {
             }
         }
         
-        var updatedProject = organizationProjects[idx]
         updatedProject.loggedHours[whIdx] = workHour
         applyProjectMutationLocally(
             updatedProject,
@@ -194,20 +191,20 @@ extension ProjectViewModel {
     /// Approve work hours (for managers)
     func approveWorkHours(_ workHourIDs: [UUID], managerID: UUID, notes: String? = nil) {
         guard let sel = selectedProject,
-              let idx = organizationProjects.firstIndex(where: { $0.id == sel.id })
+              var updatedProject = projectForMutation(projectID: sel.id)
         else { return }
         
         var approvedCount = 0
         
-        for i in 0..<organizationProjects[idx].loggedHours.count {
-            if workHourIDs.contains(organizationProjects[idx].loggedHours[i].id) {
-                organizationProjects[idx].loggedHours[i].approve(by: managerID, notes: notes)
+        for i in 0..<updatedProject.loggedHours.count {
+            if workHourIDs.contains(updatedProject.loggedHours[i].id) {
+                updatedProject.loggedHours[i].approve(by: managerID, notes: notes)
                 approvedCount += 1
             }
         }
         
         applyProjectMutationLocally(
-            organizationProjects[idx],
+            updatedProject,
             reason: "approve labor hours",
             selectProject: true,
             scheduleCloudSync: true
@@ -294,8 +291,8 @@ extension ProjectViewModel {
     /// Update an existing work‐hour entry.
     func updateHours(_ entry: WorkHour) {
         guard let sel = selectedProject,
-              let idx = organizationProjects.firstIndex(where: { $0.id == sel.id }),
-              let whIdx = organizationProjects[idx].loggedHours.firstIndex(where: { $0.id == entry.id })
+              var updatedProject = projectForMutation(projectID: sel.id),
+              let whIdx = updatedProject.loggedHours.firstIndex(where: { $0.id == entry.id })
         else { 
             Logger.labor.error("Failed to update hours because the project or work-hour entry was not found.")
             return 
@@ -305,12 +302,11 @@ extension ProjectViewModel {
 
         // CRITICAL FIX: Auto-assign team member to project when hours are updated with employeeID
         if let employeeID = entry.employeeID,
-           !organizationProjects[idx].assignedTeamMemberIDs.contains(employeeID.uuidString) {
-            organizationProjects[idx].assignTeamMember(employeeID.uuidString)
+           !updatedProject.assignedTeamMemberIDs.contains(employeeID.uuidString) {
+            updatedProject.assignTeamMember(employeeID.uuidString)
             Logger.labor.info("Auto-assigned team member from updated hours [teamMember=\(employeeID.uuidString, privacy: .private(mask: .hash))]")
         }
 
-        var updatedProject = organizationProjects[idx]
         updatedProject.loggedHours[whIdx] = entry
         applyProjectMutationLocally(
             updatedProject,
@@ -347,14 +343,13 @@ extension ProjectViewModel {
     ) {
         guard amount > 0,
               let sel = selectedProject,
-              let idx = organizationProjects.firstIndex(where: { $0.id == sel.id })
+              var updatedProject = projectForMutation(projectID: sel.id)
         else {
             Logger.labor.error("Failed to record labor payment because the request was invalid.")
             return
         }
 
         var remainingAmount = amount
-        var updatedProject = organizationProjects[idx]
         var paidEntryCount = 0
         let entryIDs = entries
             .sorted { $0.date < $1.date }
@@ -412,14 +407,13 @@ extension ProjectViewModel {
     ) {
         guard amount > 0,
               let sel = selectedProject,
-              let idx = organizationProjects.firstIndex(where: { $0.id == sel.id }),
-              let hourIndex = organizationProjects[idx].loggedHours.firstIndex(where: { $0.id == entry.id })
+              var updatedProject = projectForMutation(projectID: sel.id),
+              let hourIndex = updatedProject.loggedHours.firstIndex(where: { $0.id == entry.id })
         else {
             Logger.labor.error("Failed to replace labor payment because the request was invalid.")
             return
         }
 
-        var updatedProject = organizationProjects[idx]
         var workHour = updatedProject.loggedHours[hourIndex]
         let requestedAmount = max(0, amount)
 
@@ -448,13 +442,14 @@ extension ProjectViewModel {
     /// Delete entries matching paid/unpaid status.
     func deleteHours(at offsets: IndexSet, paid: Bool) {
         guard let sel = selectedProject,
-              let idx = organizationProjects.firstIndex(where: { $0.id == sel.id })
+              var updatedProject = projectForMutation(projectID: sel.id)
         else { return }
 
-        let hoursToDelete = offsets.map { organizationProjects[idx].loggedHours[$0] }
+        let hoursToDelete = offsets.compactMap { index in
+            updatedProject.loggedHours.indices.contains(index) ? updatedProject.loggedHours[index] : nil
+        }
             .filter { $0.isPaid == paid }
         
-        var updatedProject = organizationProjects[idx]
         updatedProject.loggedHours.removeAll { wh in
             hoursToDelete.contains { $0.id == wh.id }
         }
@@ -470,12 +465,11 @@ extension ProjectViewModel {
     /// Delete multiple entries by their IDs.
     func deleteHours(withIDs ids: [UUID]) {
         guard let sel = selectedProject,
-              let idx = organizationProjects.firstIndex(where: { $0.id == sel.id })
+              var updatedProject = projectForMutation(projectID: sel.id)
         else { return }
 
-        let beforeCount = organizationProjects[idx].loggedHours.count
-        
-        var updatedProject = organizationProjects[idx]
+        let beforeCount = updatedProject.loggedHours.count
+
         updatedProject.loggedHours.removeAll { ids.contains($0.id) }
         
         let afterCount = updatedProject.loggedHours.count
@@ -506,11 +500,11 @@ extension ProjectViewModel {
     /// Quick clock toggle: clock out if open, else clock in now.
     func quickToggleClock(employee: String, rate: Double) {
         guard let sel = selectedProject,
-              let idx = organizationProjects.firstIndex(where: { $0.id == sel.id })
+              var updatedProject = projectForMutation(projectID: sel.id)
         else { return }
 
         // Try to find by employee name (legacy support)
-        if let openHour = organizationProjects[idx].loggedHours.first(where: { 
+        if let openHour = updatedProject.loggedHours.first(where: {
             $0.employee == employee && $0.endTime == nil 
         }) {
             // Clock out
@@ -536,7 +530,6 @@ extension ProjectViewModel {
                 paymentNote: nil,
                 paymentTimestamp: nil
             )
-            var updatedProject = organizationProjects[idx]
             updatedProject.loggedHours.append(wh)
             applyProjectMutationLocally(
                 updatedProject,

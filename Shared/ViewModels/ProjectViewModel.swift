@@ -22,8 +22,8 @@ private struct ProjectRefreshSignature: Equatable {
     let status: ProjectStatus
     let lastModifiedDate: Date
     let receipts: [ReceiptRefreshSignature]
-    let taskIDs: [UUID]
-    let workHourIDs: [UUID]
+    let tasks: [TaskRefreshSignature]
+    let workHours: [WorkHourRefreshSignature]
 
     init(_ project: Project) {
         let normalizedProject = project.normalizedReceiptCopy
@@ -32,8 +32,98 @@ private struct ProjectRefreshSignature: Equatable {
         status = normalizedProject.status
         lastModifiedDate = normalizedProject.lastModifiedDate
         receipts = normalizedProject.receipts.map(ReceiptRefreshSignature.init)
-        taskIDs = normalizedProject.tasks.map(\.id)
-        workHourIDs = normalizedProject.workHours.map(\.id)
+        tasks = normalizedProject.tasks.map(TaskRefreshSignature.init)
+        workHours = normalizedProject.workHours.map(WorkHourRefreshSignature.init)
+    }
+}
+
+private struct TaskRefreshSignature: Equatable {
+    let id: UUID
+    let title: String
+    let description: String
+    let dueDate: Date?
+    let isCompleted: Bool
+    let completedDate: Date?
+    let priority: TaskPriority
+    let category: TaskCategory
+    let estimatedHours: Double
+    let actualHours: Double
+    let budgetLineID: UUID?
+    let estimateVersionID: UUID?
+    let phaseName: String?
+    let photoIDs: [UUID]
+    let completionPhotoIDs: [UUID]
+    let assignedEmployeeIDs: [UUID]
+    let completedByEmployeeIDs: [UUID]
+    let completionNotes: String
+    let createdAt: Date
+    let updatedAt: Date
+
+    init(_ task: ProjectTask) {
+        id = task.id
+        title = task.title
+        description = task.description
+        dueDate = task.dueDate
+        isCompleted = task.isCompleted
+        completedDate = task.completedDate
+        priority = task.priority
+        category = task.category
+        estimatedHours = task.estimatedHours
+        actualHours = task.actualHours
+        budgetLineID = task.budgetLineID
+        estimateVersionID = task.estimateVersionID
+        phaseName = task.phaseName
+        photoIDs = task.photoIDs
+        completionPhotoIDs = task.completionPhotoIDs
+        assignedEmployeeIDs = task.assignedEmployeeIDs
+        completedByEmployeeIDs = task.completedByEmployeeIDs
+        completionNotes = task.completionNotes
+        createdAt = task.createdAt
+        updatedAt = task.updatedAt
+    }
+}
+
+private struct WorkHourRefreshSignature: Equatable {
+    let id: UUID
+    let date: Date
+    let startTime: Date
+    let endTime: Date?
+    let lunchStart: Date?
+    let lunchEnd: Date?
+    let employee: String
+    let employeeID: UUID?
+    let rate: Double
+    let category: String
+    let isPaid: Bool
+    let paymentMethod: String?
+    let paymentNote: String?
+    let paymentTimestamp: Date?
+    let paymentEntries: [LaborPaymentEntry]
+    let isApproved: Bool
+    let approvedBy: UUID?
+    let approvedAt: Date?
+    let validationNotes: String?
+
+    init(_ workHour: WorkHour) {
+        id = workHour.id
+        date = workHour.date
+        startTime = workHour.startTime
+        endTime = workHour.endTime
+        lunchStart = workHour.lunchStart
+        lunchEnd = workHour.lunchEnd
+        employee = workHour.employee
+        employeeID = workHour.employeeID
+        rate = workHour.rate
+        category = workHour.category
+        isPaid = workHour.isPaid
+        paymentMethod = workHour.paymentMethod
+        paymentNote = workHour.paymentNote
+        paymentTimestamp = workHour.paymentTimestamp
+        paymentEntries = workHour.paymentEntries
+        isApproved = workHour.isApproved
+        approvedBy = workHour.approvedBy
+        approvedAt = workHour.approvedAt
+        validationNotes = workHour.validationNotes
     }
 }
 
@@ -1127,6 +1217,23 @@ class ProjectViewModel: ObservableObject {
         return secureProject
     }
 
+    internal func projectForMutation(projectID: UUID) -> Project? {
+        if let organizationProject = organizationProjects.first(where: { $0.id == projectID }) {
+            return organizationProject
+        }
+
+        if let selectedProject, selectedProject.id == projectID {
+            if currentOrganizationID == nil || selectedProject.organizationID == currentOrganizationID {
+                return selectedProject
+            }
+        }
+
+        return projects.first { project in
+            project.id == projectID &&
+            (currentOrganizationID == nil || project.organizationID == currentOrganizationID)
+        }
+    }
+
     private func scheduleProjectMutationCloudSync(_ project: Project, reason: String) {
         guard isUsingCloudKitForOrganizationData else { return }
 
@@ -1311,31 +1418,40 @@ class ProjectViewModel: ObservableObject {
     // MARK: - Task Management
     
     func addTask(_ task: ProjectTask, to projectID: UUID) async {
-        guard let projectIndex = organizationProjects.firstIndex(where: { $0.id == projectID }) else { return }
-        
-        var updatedProject = organizationProjects[projectIndex]
+        guard var updatedProject = projectForMutation(projectID: projectID) else { return }
+
         updatedProject.tasks.append(task)
-        
-        await updateProject(updatedProject)
+
+        await commitProjectMutation(
+            updatedProject,
+            reason: "add task",
+            selectProject: selectedProject?.id == projectID
+        )
     }
     
     func updateTask(_ task: ProjectTask, in projectID: UUID) async {
-        guard let projectIndex = organizationProjects.firstIndex(where: { $0.id == projectID }) else { return }
-        
-        var updatedProject = organizationProjects[projectIndex]
+        guard var updatedProject = projectForMutation(projectID: projectID) else { return }
+
         if let taskIndex = updatedProject.tasks.firstIndex(where: { $0.id == task.id }) {
             updatedProject.tasks[taskIndex] = task
-            await updateProject(updatedProject)
+            await commitProjectMutation(
+                updatedProject,
+                reason: "update task",
+                selectProject: selectedProject?.id == projectID
+            )
         }
     }
     
     func deleteTask(_ task: ProjectTask, from projectID: UUID) async {
-        guard let projectIndex = organizationProjects.firstIndex(where: { $0.id == projectID }) else { return }
-        
-        var updatedProject = organizationProjects[projectIndex]
+        guard var updatedProject = projectForMutation(projectID: projectID) else { return }
+
         updatedProject.tasks.removeAll { $0.id == task.id }
-        
-        await updateProject(updatedProject)
+
+        await commitProjectMutation(
+            updatedProject,
+            reason: "delete task",
+            selectProject: selectedProject?.id == projectID
+        )
     }
     
     // MARK: - Progress Log Management
@@ -1444,52 +1560,67 @@ class ProjectViewModel: ObservableObject {
     }
     
     func updateReceipt(_ receipt: Receipt, in projectID: UUID) async {
-        guard let projectIndex = organizationProjects.firstIndex(where: { $0.id == projectID }) else { return }
-        
-        let updatedProject = organizationProjects[projectIndex]
+        guard let updatedProject = projectForMutation(projectID: projectID) else { return }
+
         if updatedProject.receipts.contains(where: { $0.id == receipt.id }) {
             let normalizedProject = updatedProject.upsertingReceipt(receipt)
-            await updateProject(normalizedProject)
+            await commitProjectMutation(
+                normalizedProject,
+                reason: "update receipt",
+                selectProject: selectedProject?.id == projectID
+            )
         }
     }
     
     func deleteReceipt(_ receipt: Receipt, from projectID: UUID) async {
-        guard let projectIndex = organizationProjects.firstIndex(where: { $0.id == projectID }) else { return }
-        
-        var updatedProject = organizationProjects[projectIndex]
+        guard var updatedProject = projectForMutation(projectID: projectID) else { return }
+
         updatedProject.receipts.removeAll { $0.id == receipt.id }
-        
-        await updateProject(updatedProject)
+
+        await commitProjectMutation(
+            updatedProject,
+            reason: "delete receipt",
+            selectProject: selectedProject?.id == projectID
+        )
     }
     
     // MARK: - Work Hour Management
     
     func logHours(_ workHour: WorkHour, for projectID: UUID) async {
-        guard let projectIndex = organizationProjects.firstIndex(where: { $0.id == projectID }) else { return }
-        
-        var updatedProject = organizationProjects[projectIndex]
+        guard var updatedProject = projectForMutation(projectID: projectID) else { return }
+
         updatedProject.workHours.append(workHour)
-        
-        await updateProject(updatedProject)
+
+        await commitProjectMutation(
+            updatedProject,
+            reason: "log work hour",
+            selectProject: selectedProject?.id == projectID
+        )
     }
     
     func updateWorkHour(_ workHour: WorkHour, in projectID: UUID) async {
-        guard let projectIndex = organizationProjects.firstIndex(where: { $0.id == projectID }) else { return }
-        
-        var updatedProject = organizationProjects[projectIndex]
+        guard var updatedProject = projectForMutation(projectID: projectID) else { return }
+
         if let hourIndex = updatedProject.workHours.firstIndex(where: { $0.id == workHour.id }) {
             updatedProject.workHours[hourIndex] = workHour
-            await updateProject(updatedProject)
+            await commitProjectMutation(
+                updatedProject,
+                reason: "update work hour",
+                selectProject: selectedProject?.id == projectID
+            )
         }
     }
     
     func deleteWorkHour(_ workHour: WorkHour, from projectID: UUID) async {
-        guard let projectIndex = organizationProjects.firstIndex(where: { $0.id == projectID }) else { return }
-        
-        var updatedProject = organizationProjects[projectIndex]
+        guard var updatedProject = projectForMutation(projectID: projectID) else { return }
+
         updatedProject.workHours.removeAll { $0.id == workHour.id }
-        
-        await updateProject(updatedProject)
+
+        await commitProjectMutation(
+            updatedProject,
+            reason: "delete work hour",
+            selectProject: selectedProject?.id == projectID
+        )
     }
     
     // MARK: - Team Member Management Methods (For PHASE 2 compatibility)

@@ -5,8 +5,8 @@
 - Active Branch: `gm/rheir-hardening-phase1`
 - Thread Start SHA: `117d5755bf2449139366c4bdeda6f7ff7d9ea6ac`
 - Last Commit At Thread Start: `117d575 Phase 2: wire task photo proof`
-- Current HEAD: `aca25ff681f378ead18b399ffba0d9c4d48fe71a`
-- Current Head Commit: `aca25ff Phase 2: harden task photo gallery and reports`
+- Current HEAD: `e07443065e4fe7b675b764fdbc034a7e02d21118`
+- Current Head Commit: `e074430 Phase 2: harden project reports and exports`
 - Authority Truth: `origin/authority/main` and local `authority/main` are not present in this repo; no promotion is being attempted in this GM hardening run.
 
 ## Current Objective
@@ -23,6 +23,7 @@
 - The latest Tasks before/after photo-proof slice turns photo proof into a contractor workflow: task create/edit supports before/scope photos, task completion supports after/proof photos, both paths support camera capture plus multi-select Photos selection, and task detail keeps Before Photos and After Photos separate with full-screen pinch-to-zoom previews.
 - Latest Tasks photo-gallery/report seam is simulator-proven: task photo previews are swipeable across before-confirmation, active-detail, and completed-detail contexts; thumbnails expose correction delete badges where logical; Mark Complete is visible as a bottom action; the task summary is pinned near the top; and task progress/proof metadata is wired into project report previews and generated PDF reports.
 - Reports first live preview/export seam is now simulator-proven after Tasks acceptance: the visible project Reports & Exports sheet uses real project data for PDF and CSV artifacts, supports page/image-based swipe plus pinch-to-zoom preview, and exposes contractor-useful exports for project PDF, receipt line items, labor payments, labor timesheets, task closeout, and job-cost detail.
+- Active polish/user-trust pass: re-audit Receipts, Labor, and Tasks for persistence, immediate selected-project refresh, relaunch visibility, and UI availability so saved work is never hidden, stale, or silently dropped.
 - Treat contractor job-costing validation as a release requirement: itemized materials, labor/payroll, tasks/progress, payment status, profitability, and closeout reports must answer real contractor operating questions.
 - Preserve the simplified visible session flow `launch -> sign in -> ready`, with invite, org-selection, company/admin, and legacy AI-key surfaces still hidden unless the app is explicitly forced back into the legacy/full profile.
 - Keep the selected-project receipt seam green end-to-end: saved scanned receipt itemized lines now persist into receipt detail and into the ellipsis-menu edit sheet with a dedicated line-item editor, mixed-category receipt category summaries/drilldown cards now honor per-item categories instead of treating the whole receipt total as one category, and the Receipts list quick-view now opens the real receipt image viewer.
