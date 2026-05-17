@@ -29,6 +29,8 @@ struct ScannedReceiptEntryView: View {
     @State private var receiptNumber: String = ""
     @State private var taxAmount: Double = 0.0
     @State private var discountAmount: Double = 0.0
+    @State private var tipAmount: Double = 0.0
+    @State private var pricePerGallon: Double = 0.0
     
     // UI states
     @State private var showingSuccessAlert = false
@@ -47,6 +49,10 @@ struct ScannedReceiptEntryView: View {
         if analysisResult.confidence >= 0.8 { return .green }
         else if analysisResult.confidence >= 0.6 { return .orange }
         else { return .red }
+    }
+
+    private var currentVendorCategory: VendorCategory {
+        selectedVendor?.category ?? VendorCategory.inferred(from: vendor)
     }
     
     var body: some View {
@@ -291,6 +297,38 @@ struct ScannedReceiptEntryView: View {
                 .frame(width: 100)
                 .accessibilityIdentifier("receipt-scan-discount")
             }
+
+            if currentVendorCategory == .restaurant || tipAmount > 0 {
+                HStack {
+                    Text("Tip:")
+                    Spacer()
+                    TextField(
+                        "0.00",
+                        value: $tipAmount,
+                        format: .number.precision(.fractionLength(2))
+                    )
+                    .keyboardType(.decimalPad)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 100)
+                    .accessibilityIdentifier("receipt-scan-tip")
+                }
+            }
+
+            if currentVendorCategory == .gas || pricePerGallon > 0 {
+                HStack {
+                    Text("Price / Gallon:")
+                    Spacer()
+                    TextField(
+                        "0.000",
+                        value: $pricePerGallon,
+                        format: .number.precision(.fractionLength(3))
+                    )
+                    .keyboardType(.decimalPad)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 100)
+                    .accessibilityIdentifier("receipt-scan-price-per-gallon")
+                }
+            }
             
             DatePicker("Date", selection: $date, displayedComponents: [.date])
             
@@ -418,20 +456,25 @@ struct ScannedReceiptEntryView: View {
     @ViewBuilder
     private var imagePreviewSection: some View {
         Section("Scanned Image") {
-            Button(action: {
+            Button {
                 showingImagePreview = true
-            }) {
-                HStack {
-                    Image(systemName: "photo")
-                        .foregroundColor(.blue)
-                    
-                    Text("View Original Receipt")
-                        .foregroundColor(.blue)
-                    
-                    Spacer()
-                    
-                    Image(systemName: "chevron.right")
-                        .foregroundColor(.secondary)
+            } label: {
+                VStack(alignment: .leading, spacing: 12) {
+                    Image(uiImage: scannedImage)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(maxWidth: .infinity)
+                        .frame(maxHeight: 240)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .accessibilityIdentifier("receipt-scan-image-preview")
+
+                    HStack {
+                        Label("View Full Size", systemImage: "photo")
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.semibold))
+                    }
+                    .foregroundColor(.blue)
                 }
             }
             .buttonStyle(.plain)
@@ -444,6 +487,8 @@ struct ScannedReceiptEntryView: View {
         amountText = String(format: "%.2f", analysisResult.amount)
         taxAmount = analysisResult.taxAmount
         discountAmount = analysisResult.discountAmount
+        tipAmount = analysisResult.tipAmount ?? 0
+        pricePerGallon = analysisResult.pricePerGallon ?? 0
         receiptNumber = analysisResult.receiptNumber
         isReturn = analysisResult.isReturn
         
@@ -539,6 +584,8 @@ struct ScannedReceiptEntryView: View {
             paymentMethodDetails: analysisResult.paymentMethodDetails,
             taxAmount: taxAmount > 0 ? taxAmount : 0.0,
             discountAmount: discountAmount > 0 ? discountAmount : 0.0,
+            tipAmount: tipAmount > 0 ? tipAmount : nil,
+            pricePerGallon: pricePerGallon > 0 ? pricePerGallon : nil,
             receiptNumber: receiptNumber.isEmpty ? "" : receiptNumber,
             processingStatus: .completed,
             aiAnalysis: AIAnalysisData(
@@ -576,7 +623,7 @@ struct ScannedReceiptEntryView: View {
         if !receipt.vendor.isEmpty {
             let vendor = projectVM.vendorService.findOrCreateVendor(
                 name: receipt.vendor,
-                category: mapReceiptCategoryToVendorCategory(receipt.category)
+                category: selectedVendor?.category ?? VendorCategory.inferred(from: receipt.vendor)
             )
             
             // Update vendor spending
@@ -678,22 +725,8 @@ struct ImagePreviewView: View {
     @Environment(\.dismiss) private var dismiss
     
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                Image(uiImage: image)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .padding()
-            }
-            .navigationTitle("Scanned Receipt")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") {
-                        dismiss()
-                    }
-                }
-            }
+        ZoomableImageView(image: image) {
+            dismiss()
         }
     }
 }

@@ -1038,6 +1038,15 @@ final class RHEIRUITests: XCTestCase {
             receiptNumberField.exists,
             "Expected the scanned-receipt review sheet to expose the editable receipt number field."
         )
+        let imagePreview = revealElement(
+            identifier: "receipt-scan-image-preview",
+            in: app,
+            query: { $0.images["receipt-scan-image-preview"] }
+        )
+        XCTAssertTrue(
+            imagePreview.exists,
+            "Expected the scanned-receipt review sheet to keep a visible preview of the source image before saving."
+        )
 
         let saveButton = app.buttons["receipt-scan-save"]
         XCTAssertTrue(
@@ -1104,6 +1113,10 @@ final class RHEIRUITests: XCTestCase {
         XCTAssertTrue(
             app.staticTexts["receipt-detail-item-brush-set"].exists,
             "Expected the second scanned receipt item to persist into the saved receipt detail."
+        )
+        XCTAssertTrue(
+            app.images["receipt-detail-image-preview"].exists,
+            "Expected the saved scanned receipt to keep a visible receipt-image preview in detail."
         )
     }
 
@@ -1263,55 +1276,52 @@ final class RHEIRUITests: XCTestCase {
             "Expected the saved scanned receipt to reopen from the receipts list."
         )
 
-        let partialRefundButton = app.buttons["receipt-detail-partial-refund-button"]
-        XCTAssertTrue(
-            revealElement(
-                identifier: "receipt-detail-partial-refund-button",
-                in: app,
-                query: { $0.buttons["receipt-detail-partial-refund-button"] }
-            ).exists,
-            "Expected itemized purchase receipts to expose the visible partial refund action."
+        openReceiptActionsMenu(in: app)
+        let editButton = receiptDetailMenuAction(
+            identifier: "receipt-detail-menu-edit",
+            fallbackTitle: "Edit Receipt",
+            in: app
         )
-        partialRefundButton.tap()
-
         XCTAssertTrue(
-            app.navigationBars["Partial Refund"].waitForExistence(timeout: 5),
-            "Expected the visible receipt action to open the partial refund sheet."
+            editButton.waitForExistence(timeout: 5),
+            "Expected the receipt detail actions menu to expose Edit Receipt before line-item refunds."
         )
+        editButton.tap()
 
-        let primerRefundIncrementButton = revealElement(
-            identifier: "receipt-refund-increment-primer",
+        let primerRow = revealElement(
+            identifier: "receipt-edit-item-primer",
             in: app,
-            query: { $0.buttons["receipt-refund-increment-primer"] }
+            query: { $0.buttons["receipt-edit-item-primer"] }
         )
         XCTAssertTrue(
-            primerRefundIncrementButton.waitForExistence(timeout: 5),
-            "Expected the partial refund sheet to expose a quantity control for the refundable Primer line."
+            primerRow.waitForExistence(timeout: 5),
+            "Expected the receipt editor to expose the persisted Primer line item before refunding it."
         )
-        primerRefundIncrementButton.tap()
+        primerRow.swipeLeft()
 
-        let refundPreviewTotal = revealElement(
-            identifier: "receipt-refund-preview-total",
-            in: app,
-            query: { $0.staticTexts["receipt-refund-preview-total"] }
+        let refundButton = app.buttons["receipt-edit-item-refund-primer"]
+        XCTAssertTrue(
+            refundButton.waitForExistence(timeout: 5),
+            "Expected swiping an editable receipt line item to expose the row-level Refund action."
         )
-        XCTAssertEqual(
-            refundPreviewTotal.label,
-            "$21.75",
-            "Expected the partial refund preview to allocate the matching tax share onto one returned Primer unit."
+        refundButton.tap()
+
+        let refundAlert = app.alerts["Refund Primer?"]
+        XCTAssertTrue(
+            refundAlert.waitForExistence(timeout: 5),
+            "Expected the row-level Refund action to ask for confirmation."
+        )
+        XCTAssertTrue(
+            refundAlert.staticTexts["Refund $43.50 for this line item including $3.52 tax."].exists,
+            "Expected the confirmation to include the item-level tax allocation."
         )
 
         let previewAttachment = XCTAttachment(screenshot: app.screenshot())
-        previewAttachment.name = "Receipt partial refund sheet"
+        previewAttachment.name = "Receipt line-item refund confirmation"
         previewAttachment.lifetime = .keepAlways
         add(previewAttachment)
 
-        let saveRefundButton = app.buttons["Save Refund"]
-        XCTAssertTrue(
-            waitForEnabled(saveRefundButton, timeout: 5),
-            "Expected a selected partial refund line to enable Save Refund."
-        )
-        saveRefundButton.tap()
+        refundAlert.buttons["Refund"].tap()
 
         XCTAssertTrue(
             app.navigationBars["Receipt Details"].waitForExistence(timeout: 5),
@@ -1319,12 +1329,12 @@ final class RHEIRUITests: XCTestCase {
         )
         XCTAssertEqual(
             app.staticTexts["receipt-detail-refunded-total"].label,
-            "$21.75",
+            "$43.50",
             "Expected the source receipt detail to show the linked refund total immediately after save."
         )
         XCTAssertEqual(
             app.staticTexts["receipt-detail-refundable-remaining"].label,
-            "$68.01",
+            "$46.26",
             "Expected the source receipt detail to preserve the remaining refundable gross balance."
         )
 
@@ -1363,12 +1373,12 @@ final class RHEIRUITests: XCTestCase {
         )
         XCTAssertEqual(
             restoredApp.staticTexts["receipt-detail-refunded-total"].label,
-            "$21.75",
+            "$43.50",
             "Expected linked refund totals to persist after relaunch."
         )
         XCTAssertEqual(
             restoredApp.staticTexts["receipt-detail-refundable-remaining"].label,
-            "$68.01",
+            "$46.26",
             "Expected the remaining refundable balance to persist after relaunch."
         )
 

@@ -168,6 +168,8 @@ actor ProductionChatGPTService {
             "amount": number - total amount,
             "taxAmount": number - tax amount (0 if not found),
             "discountAmount": number - discount amount (0 if not found),
+            "tipAmount": number - restaurant gratuity amount (null if not found),
+            "pricePerGallon": number - gas/fuel price per gallon (null if not found),
             "paymentMethod": "Credit Card|Debit Card|Cash|Check|Bank Transfer|Other",
             "paymentMethodDetails": {
                 "cardBrand": "string - Visa, Mastercard, American Express, Discover, etc. (if card payment)",
@@ -208,6 +210,10 @@ actor ProductionChatGPTService {
         
         3. VENDOR RECOGNITION: Use the correct store names from the common stores list above
            - Look for partial matches or OCR errors in store names and correct them
+
+        4. CONTRACTOR-SPECIFIC FIELDS:
+           - For restaurants, extract tip/gratuity separately when visible.
+           - For gas/fuel receipts, extract the posted price per gallon when visible.
         
         Guidelines:
         - Materials: lumber, nails, screws, paint, tools, hardware, building supplies
@@ -259,6 +265,8 @@ actor ProductionChatGPTService {
                 amount: globalAnalysis.amount,
                 taxAmount: globalAnalysis.taxAmount,
                 discountAmount: globalAnalysis.discountAmount,
+                tipAmount: globalAnalysis.tipAmount,
+                pricePerGallon: globalAnalysis.pricePerGallon,
                 paymentMethod: globalAnalysis.paymentMethod,
                 paymentMethodDetails: paymentMethodDetails,
                 receiptNumber: globalAnalysis.receiptNumber,

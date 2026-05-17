@@ -26,9 +26,12 @@ struct ReceiptEditView: View {
     @State private var receiptNumber: String
     @State private var taxAmount: String
     @State private var discountAmount: String
+    @State private var tipAmount: String
+    @State private var pricePerGallon: String
     @State private var isReturn: Bool
     @State private var items: [ReceiptItem]
     @State private var editingItem: ReceiptItem?
+    @State private var pendingRefundPrompt: ReceiptItemRefundPrompt?
     @State private var showingPaymentMethodPicker = false
     @State private var isSaving = false
     
@@ -45,6 +48,8 @@ struct ReceiptEditView: View {
         self._receiptNumber = State(initialValue: receipt.receiptNumber)
         self._taxAmount = State(initialValue: String(format: "%.2f", receipt.taxAmount))
         self._discountAmount = State(initialValue: String(format: "%.2f", receipt.discountAmount))
+        self._tipAmount = State(initialValue: receipt.tipAmount.map { String(format: "%.2f", $0) } ?? "")
+        self._pricePerGallon = State(initialValue: receipt.pricePerGallon.map { String(format: "%.3f", $0) } ?? "")
         self._isReturn = State(initialValue: receipt.isReturn)
         self._items = State(initialValue: receipt.items)
     }
@@ -59,6 +64,24 @@ struct ReceiptEditView: View {
 
     private var locksFinancialHistory: Bool {
         receipt.isPartialRefund || !linkedRefunds.isEmpty
+    }
+
+    private var projectReceipts: [Receipt] {
+        projectVM.selectedProject?.receipts ?? [receipt]
+    }
+
+    private var currentVendorCategory: VendorCategory {
+        projectVM.vendorService.vendors.first(where: {
+            $0.name.caseInsensitiveCompare(vendor) == .orderedSame
+        })?.category ?? VendorCategory.inferred(from: vendor)
+    }
+
+    private var hasUnsavedFinancialChanges: Bool {
+        amount != String(format: "%.2f", receipt.amount)
+            || taxAmount != String(format: "%.2f", receipt.taxAmount)
+            || discountAmount != String(format: "%.2f", receipt.discountAmount)
+            || isReturn != receipt.isReturn
+            || items != receipt.items
     }
     
     var body: some View {
@@ -125,6 +148,28 @@ struct ReceiptEditView: View {
                             .multilineTextAlignment(.trailing)
                     }
                     .disabled(locksFinancialHistory)
+
+                    if currentVendorCategory == .restaurant || !(Double(tipAmount) ?? 0).isZero {
+                        HStack {
+                            Text("Tip Amount")
+                            Spacer()
+                            TextField("0.00", text: $tipAmount)
+                                .keyboardType(.decimalPad)
+                                .multilineTextAlignment(.trailing)
+                                .accessibilityIdentifier("receipt-edit-tip")
+                        }
+                    }
+
+                    if currentVendorCategory == .gas || !(Double(pricePerGallon) ?? 0).isZero {
+                        HStack {
+                            Text("Price / Gallon")
+                            Spacer()
+                            TextField("0.000", text: $pricePerGallon)
+                                .keyboardType(.decimalPad)
+                                .multilineTextAlignment(.trailing)
+                                .accessibilityIdentifier("receipt-edit-price-per-gallon")
+                        }
+                    }
                 }
                 
                 Section("Notes") {
@@ -136,6 +181,7 @@ struct ReceiptEditView: View {
                     Section {
                         ForEach(items) { item in
                             Button {
+                                guard !locksFinancialHistory else { return }
                                 editingItem = item
                             } label: {
                                 HStack(spacing: 12) {
@@ -157,14 +203,30 @@ struct ReceiptEditView: View {
 
                                     Spacer()
 
-                                    Image(systemName: "chevron.right")
-                                        .font(.caption.weight(.semibold))
-                                        .foregroundStyle(.tertiary)
+                                    if locksFinancialHistory {
+                                        Image(systemName: "lock.fill")
+                                            .font(.caption.weight(.semibold))
+                                            .foregroundStyle(.tertiary)
+                                    } else {
+                                        Image(systemName: "chevron.right")
+                                            .font(.caption.weight(.semibold))
+                                            .foregroundStyle(.tertiary)
+                                    }
                                 }
                                 .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
-                            .disabled(locksFinancialHistory)
+                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                if canRefund(item) {
+                                    Button {
+                                        prepareRefund(for: item)
+                                    } label: {
+                                        Label("Refund", systemImage: "arrow.uturn.backward")
+                                    }
+                                    .tint(.orange)
+                                    .accessibilityIdentifier("receipt-edit-item-refund-\(receiptEditAccessibilitySlug(item.name))")
+                                }
+                            }
                             .accessibilityIdentifier("receipt-edit-item-\(receiptEditAccessibilitySlug(item.name))")
                         }
                     } header: {
@@ -173,8 +235,8 @@ struct ReceiptEditView: View {
                     } footer: {
                         Text(
                             locksFinancialHistory
-                                ? "Financial line items are locked because this receipt participates in partial-refund history."
-                                : "Tap an item to review or edit the saved scan details."
+                                ? "Financial line items are locked because this receipt participates in partial-refund history. Swipe remaining refundable items to record another refund."
+                                : "Tap an item to review or edit the saved scan details. Swipe left on a refundable item to record a refund."
                         )
                     }
                 }
@@ -217,6 +279,16 @@ struct ReceiptEditView: View {
                     }
                 )
             }
+            .alert(item: $pendingRefundPrompt) { prompt in
+                Alert(
+                    title: Text("Refund \(prompt.item.name)?"),
+                    message: Text(prompt.message),
+                    primaryButton: .destructive(Text("Refund")) {
+                        recordRefund(prompt.refund)
+                    },
+                    secondaryButton: .cancel()
+                )
+            }
         }
     }
     
@@ -251,6 +323,8 @@ struct ReceiptEditView: View {
         updatedReceipt.receiptNumber = receiptNumber
         updatedReceipt.taxAmount = Double(taxAmount) ?? 0
         updatedReceipt.discountAmount = Double(discountAmount) ?? 0
+        updatedReceipt.tipAmount = parsedPositiveValue(from: tipAmount)
+        updatedReceipt.pricePerGallon = parsedPositiveValue(from: pricePerGallon)
         updatedReceipt.isReturn = isReturn
         updatedReceipt.items = items
         
@@ -283,6 +357,79 @@ struct ReceiptEditView: View {
     private func dismissEditor() {
         isPresented = false
         dismiss()
+    }
+
+    private func canRefund(_ item: ReceiptItem) -> Bool {
+        receipt.supportsPartialRefunds
+            && !receipt.isReturn
+            && !hasUnsavedFinancialChanges
+            && receipt.remainingRefundableQuantity(for: item, in: projectReceipts) > 0
+    }
+
+    private func prepareRefund(for item: ReceiptItem) {
+        let remainingQuantity = receipt.remainingRefundableQuantity(for: item, in: projectReceipts)
+        guard remainingQuantity > 0,
+              let refund = receipt.makePartialRefund(
+                selections: [ReceiptRefundSelection(itemID: item.id, quantity: remainingQuantity)],
+                existingReceipts: projectReceipts
+              )
+        else {
+            return
+        }
+
+        pendingRefundPrompt = ReceiptItemRefundPrompt(item: item, refund: refund)
+    }
+
+    private func recordRefund(_ refund: Receipt) {
+        guard let project = projectVM.selectedProject else { return }
+
+        Task {
+            await projectVM.addReceipt(refund, to: project.id)
+            await MainActor.run {
+                updateDirectorySpending(for: refund)
+                projectVM.recomputeFilteredReceipts()
+                projectVM.saveOrganizationSpecificBackup()
+                dismissEditor()
+                Logger.receiptWorkflow.notice(
+                    "Recorded line-item receipt refund [source=\(receipt.id, privacy: .private(mask: .hash)) amount=\(refund.amount, format: .fixed(precision: 2)) item=\(refund.items.first?.name ?? "unknown", privacy: .private(mask: .hash))]"
+                )
+            }
+        }
+    }
+
+    private func updateDirectorySpending(for receipt: Receipt) {
+        let signedAmount = receipt.signedAmount
+
+        let vendor = projectVM.vendorService.findOrCreateVendor(
+            name: receipt.vendor,
+            category: receipt.likelyVendorCategory
+        )
+        if let vendorIndex = projectVM.vendorService.vendors.firstIndex(where: { $0.id == vendor.id }) {
+            projectVM.vendorService.vendors[vendorIndex].totalSpent += signedAmount
+            projectVM.vendorService.vendors[vendorIndex].totalSpent = max(
+                0,
+                projectVM.vendorService.vendors[vendorIndex].totalSpent
+            )
+        }
+
+        guard !receipt.paymentMethod.isEmpty else { return }
+
+        let paymentMethod = projectVM.paymentMethodService.findOrCreatePaymentMethod(
+            name: receipt.paymentMethod,
+            type: .other
+        )
+        if let paymentIndex = projectVM.paymentMethodService.paymentMethods.firstIndex(where: { $0.id == paymentMethod.id }) {
+            projectVM.paymentMethodService.paymentMethods[paymentIndex].totalSpent += signedAmount
+            projectVM.paymentMethodService.paymentMethods[paymentIndex].totalSpent = max(
+                0,
+                projectVM.paymentMethodService.paymentMethods[paymentIndex].totalSpent
+            )
+        }
+    }
+
+    private func parsedPositiveValue(from text: String) -> Double? {
+        guard let value = Double(text), value > 0 else { return nil }
+        return value
     }
     
     private func updateVendorSpending(oldVendor: String, newVendor: String, oldAmount: Double, newAmount: Double) {
@@ -335,6 +482,26 @@ struct ReceiptEditView: View {
                 projectVM.paymentMethodService.paymentMethods[index].totalSpent = max(0, projectVM.paymentMethodService.paymentMethods[index].totalSpent)
             }
         }
+    }
+}
+
+private struct ReceiptItemRefundPrompt: Identifiable {
+    let id = UUID()
+    let item: ReceiptItem
+    let refund: Receipt
+
+    var message: String {
+        var parts = ["Refund \(refund.amount.formatAsCurrency()) for this line item"]
+
+        if refund.taxAmount > 0 {
+            parts.append("including \(refund.taxAmount.formatAsCurrency()) tax")
+        }
+
+        if refund.discountAmount > 0 {
+            parts.append("after reversing \(refund.discountAmount.formatAsCurrency()) discount")
+        }
+
+        return parts.joined(separator: " ") + "."
     }
 }
 

@@ -849,6 +849,8 @@ struct ReceiptScannerView: View {
             amount: amount,
             taxAmount: 0.0,
             discountAmount: 0.0,
+            tipAmount: nil,
+            pricePerGallon: nil,
             paymentMethod: paymentMethod,
             paymentMethodDetails: paymentMethodDetails,
             receiptNumber: "",
@@ -1147,6 +1149,8 @@ struct ReceiptScannerView: View {
             "amount": number - total amount,
             "taxAmount": number - tax amount (0 if not found),
             "discountAmount": number - discount amount (0 if not found),
+            "tipAmount": number - restaurant gratuity amount (null if not found),
+            "pricePerGallon": number - gas/fuel price per gallon (null if not found),
             "paymentMethod": "Credit Card|Debit Card|Cash|Check|Bank Transfer|Other",
             "paymentMethodDetails": {
                 "cardBrand": "string - Visa, Mastercard, American Express, Discover, etc. (null if not found)",
@@ -1187,6 +1191,8 @@ struct ReceiptScannerView: View {
         - Building supply stores, hardware stores → Materials
         - Gas stations → General Conditions (fuel)
         - Office supply stores → General Conditions
+        - For restaurants, extract tip/gratuity separately when visible.
+        - For gas/fuel receipts, extract the displayed price per gallon when visible.
         
         Extract as many individual items as possible and be conservative with confidence scores.
 
@@ -1314,6 +1320,8 @@ struct ReceiptScannerView: View {
                 amount: amount,
                 taxAmount: taxAmount,
                 discountAmount: discountAmount,
+                tipAmount: json["tipAmount"] as? Double,
+                pricePerGallon: json["pricePerGallon"] as? Double,
                 paymentMethod: paymentMethod,
                 paymentMethodDetails: paymentMethodDetails,
                 receiptNumber: receiptNumber,

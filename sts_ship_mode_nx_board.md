@@ -9,9 +9,11 @@
 - `RHEIRUITests.swift` now proves scanned receipt item lines survive save, leave/return, reopen, and appear inside the saved-receipt edit sheet while the receipt-detail ellipsis menu remains the only edit/delete action surface.
 - `ReceiptsView.swift` now shows a selected-category drilldown header with category-scoped receipt count and total spend, and `Receipt.swift` / `ProjectViewModel+Filters.swift` now share an itemized budget rollup so Materials, General Conditions, and Contingency totals are not blocked by the mixed receipt's top-level category.
 - `Receipt.swift` now supports linked item-level partial refunds with original-line identity, remaining refundable quantity, proportional tax/discount allocation, final-residual reconciliation, and over-refund prevention so mixed supplier receipts can be partially returned without rewriting the source purchase.
-- `ReceiptDetailView.swift` now exposes a visible `Record Partial Refund` path plus linked refund summary, `ReceiptEditView.swift` locks linked financial history from silent rewrites, `ReceiptRowView.swift` distinguishes partial refunds, and `ReportingService.swift` exports source-receipt linkage for bookkeeping.
-- `RHEIRTests.swift` and `RHEIRUITests.swift` now prove partial-refund math, CSV linkage, and live saved-scanned-receipt refund-sheet access.
-- `ReceiptDetailView.swift` now exposes deterministic refund-balance metrics plus independently addressable quantity controls, and `RHEIRUITests.swift` now proves the source receipt keeps the correct linked-refund totals immediately after save and after terminate/relaunch.
+- `ReceiptEditView.swift` now exposes contractor-native row-swipe refund actions with tax-inclusive confirmation, locks linked financial history from silent rewrites, and `ReceiptDetailView.swift` keeps linked refund balances visible without forcing a separate receipt-level refund sheet.
+- `Receipt.swift`, scan parsing, manual entry, edit/detail screens, and `ReportingService.swift` now carry restaurant `Tip Amount` and gas `Price / Gallon` metadata end to end.
+- Scanned receipt review, manual receipt entry, and saved receipt detail now all show visible image previews, with saved receipts reloading local preview files after inline image data is compacted from persisted project payloads.
+- `RHEIRTests.swift` and `RHEIRUITests.swift` now prove partial-refund math, CSV linkage, visible preview persistence, and the live saved-scanned-receipt row-swipe refund flow.
+- `ReceiptDetailView.swift` now exposes deterministic refund-balance metrics, and `RHEIRUITests.swift` now proves the source receipt keeps the correct linked-refund totals immediately after save and after terminate/relaunch.
 - The broader simulator Receipts trust pass is now green across scanned/manual persistence, persisted edits, mixed-category itemized math, linked partial refunds, and report export visibility.
 - `ProjectAccessStore`, `ProjectViewModel`, and `SessionStore` now rehydrate restored selected projects from the loaded organization project payload, so existing persisted receipts appear on launch without needing a scan/manual add to refresh the selected-project model.
 - `SessionStore` now keeps fast-ship launches in `launching` while CloudKit organization loading is unresolved and activates a local personal workspace fallback when no organization resolves, keeping restored signed-in users out of legacy `Create Your Organization` onboarding.
@@ -245,8 +247,8 @@
 - `AuthViewModel.swift` now cancels in-flight organization-switch work when the fast-ship session clears, and `ProjectViewModel.swift` now refuses stale org-sync results after `setCurrentOrganization(nil)` or a different org selection wins.
 - `AuthViewModel.notifyProjectViewModelOrganizationChange(nil)` now clears the connected project view model before the async refresh wrapper runs, and `ProjectViewModel.organizationDidChange(nil)` now honors the nil org as an authoritative clear instead of reusing the last active organization id.
 - Continue broader selected-project estimator variance/runtime QA on top of the approved-baseline mapping seam inside the simplified v1 shell.
-- Continue broader selected-project receipt runtime QA in parallel with the estimator seam so the fast-ship contractor workflow stays stable on device and simulator, with same-device and real-device acceptance now the next receipt release seam after scanned/manual persistence, linked partial-refund relaunch, mixed-category drilldown math, and export visibility are green in simulator.
-- Relaunch persistence, launch-time selected-project receipt hydration, scanned-receipt return/reopen, and linked partial-refund balances are simulator-proven on the simplified shell, and restored-session/session-resolution parity is now green in focused tests; finish same-device and real-device acceptance before cutting a promo candidate.
+- Continue broader selected-project receipt runtime QA in parallel with the estimator seam so the fast-ship contractor workflow stays stable on device and simulator, with same-device and real-device acceptance now the next receipt release seam after scanned/manual preview visibility, row-swipe refunds, linked partial-refund relaunch, mixed-category drilldown math, gas/tip metadata, and export visibility are green in simulator.
+- Relaunch persistence, launch-time selected-project receipt hydration, scanned-receipt return/reopen, visible image previews, and linked partial-refund balances are simulator-proven on the simplified shell, and restored-session/session-resolution parity is now green in focused tests; finish same-device and real-device acceptance before cutting a promo candidate.
 - Use `SHIP_READINESS_CHECKLIST.md` as the current release-progress reference alongside the STS docs.
 - `ProjectViewModel+Filters.swift` now aligns the receipt-level legacy bridge with detailed receipt-category mapping, and `ProjectStatus` / `ChangeOrderStatus` now expose semantic SwiftUI tint colors so the active fast-ship path is clear of the lingering materials-divergence log spam and missing `green` asset warning.
 
@@ -256,8 +258,7 @@
 - Raw in-sandbox `xcodebuild` remains less reliable than elevated CLI or the stable `xcodebuildmcp` simulator path in this environment.
 
 ## Latest Receipt Evidence
-- Receipts trust-pass Gate A: PASS (`/tmp/rheir_gateA_receipts_trust_pass_20260517.xcresult`)
-- Receipts trust-pass focused parity: PASS (`/tmp/rheir_receipts_trust_pass_20260517.xcresult`, `6 unit/report tests plus 7 UI tests`)
-- Partial-refund acceptance rerun: PASS (`/tmp/rheir_receipt_partial_refund_acceptance_20260517_rerun8.xcresult`, `1 UI test`)
-- Partial-refund visual evidence: kept xcresult attachments `Receipt partial refund sheet`, `Receipt refund summary after save`, and `Receipt refund summary after relaunch`
-- Receipts trust-pass pbxproj drift: NONE
+- Receipt refund/metadata Gate A: PASS (`/tmp/rheir_gateA_receipt_refund_metadata_20260517.xcresult`)
+- Receipt refund/metadata focused parity: PASS (`/tmp/rheir_receipt_refund_metadata_parity_rerun_20260517.xcresult`, `14 focused unit tests plus 2 UI tests`)
+- Receipt refund visual evidence: kept xcresult attachments `Receipt line-item refund confirmation`, `Receipt refund summary after save`, and `Receipt refund summary after relaunch`
+- Receipt refund/metadata pbxproj drift: NONE

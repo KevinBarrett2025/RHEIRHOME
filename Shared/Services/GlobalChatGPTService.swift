@@ -102,6 +102,8 @@ actor GlobalChatGPTService {
             "amount": number - total amount,
             "taxAmount": number - tax amount (0 if not found),
             "discountAmount": number - discount amount (0 if not found),
+            "tipAmount": number - restaurant gratuity amount (null if not found),
+            "pricePerGallon": number - gas/fuel price per gallon (null if not found),
             "paymentMethod": "Credit Card|Debit Card|Cash|Check|Bank Transfer|Other",
             "receiptNumber": "string - receipt/transaction number",
             "items": [
@@ -124,6 +126,8 @@ actor GlobalChatGPTService {
         - General Conditions: permits, insurance, utilities, office supplies, fuel
         - Contingency: unexpected items, misc supplies
         - Other: food, personal items, non-construction related
+        - For restaurants, extract tip/gratuity separately when visible.
+        - For gas/fuel receipts, extract the displayed price per gallon when visible.
         - Extract as many individual items as possible
         - Be conservative with confidence scores
 
@@ -173,6 +177,8 @@ public struct GlobalReceiptAnalysis: Codable {
     public let amount: Double
     public let taxAmount: Double
     public let discountAmount: Double
+    public let tipAmount: Double?
+    public let pricePerGallon: Double?
     public let paymentMethod: String
     public let paymentMethodDetails: GlobalPaymentMethodDetails?
     public let receiptNumber: String
@@ -187,6 +193,8 @@ public struct GlobalReceiptAnalysis: Codable {
         amount: Double,
         taxAmount: Double,
         discountAmount: Double,
+        tipAmount: Double? = nil,
+        pricePerGallon: Double? = nil,
         paymentMethod: String,
         paymentMethodDetails: GlobalPaymentMethodDetails? = nil,
         receiptNumber: String,
@@ -200,6 +208,8 @@ public struct GlobalReceiptAnalysis: Codable {
         self.amount = amount
         self.taxAmount = taxAmount
         self.discountAmount = discountAmount
+        self.tipAmount = tipAmount
+        self.pricePerGallon = pricePerGallon
         self.paymentMethod = paymentMethod
         self.paymentMethodDetails = paymentMethodDetails
         self.receiptNumber = receiptNumber

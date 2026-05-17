@@ -88,6 +88,8 @@ public actor ReceiptOCRService {
             amount: analysis.amount,
             taxAmount: analysis.taxAmount,
             discountAmount: analysis.discountAmount,
+            tipAmount: analysis.tipAmount,
+            pricePerGallon: analysis.pricePerGallon,
             paymentMethod: analysis.paymentMethod,
             receiptNumber: analysis.receiptNumber,
             items: analysis.items.map { item in

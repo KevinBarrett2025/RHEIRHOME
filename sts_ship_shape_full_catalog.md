@@ -25,7 +25,9 @@
 - Labor and Business Resources UI professionalism/no-truncation checks for compact device sheets and accounting rows
 - Log Hours actual-rate-only selection with in-flow add-rate editing from the project labor entry path
 - Task assignment, due/overdue, completion proof, and photo semantics
-- Linked item-level receipt partial refunds with source-receipt audit trail, quantity guards, and proportional tax/discount allocation
+- Linked item-level receipt partial refunds with source-receipt audit trail, quantity guards, proportional tax/discount allocation, and row-swipe refund entry
+- Receipt-type metadata for restaurant tips and gas-station price-per-gallon values
+- Visible receipt-image previews across scanned review, manual entry, and saved receipt detail after persistence compaction
 - Contractor reports for category spend, vendor spend, payment-method spend, payroll, profit/loss, and closeout
 - Live Reports & Exports project sheet with project PDF, job-cost CSV, receipt line-item CSV, labor payment ledger CSV, labor timesheet CSV, and task closeout CSV artifacts
 - Image-backed swipeable/pinch-to-zoom report PDF preview
@@ -166,12 +168,13 @@
 - `ScannedReceiptEntryView` pre-save tax/discount/receipt-number editing
 - `Receipt` top-level subcategory persistence
 - `Receipt` itemized budget-scoped rollup helper for Materials / General Conditions / Contingency
-- `Receipt` partial-refund accounting helpers and source-receipt linkage
-- `ReceiptDetailView` visible partial-refund flow and refund-summary card
-- `ReceiptDetailView` deterministic linked-refund balance metrics and independently addressable partial-refund quantity controls
+- `Receipt` partial-refund accounting helpers, source-receipt linkage, restaurant tip metadata, gas price-per-gallon metadata, and local image-file fallback
+- `ReceiptEditView` row-swipe line-item refund actions plus tax-inclusive confirmation
+- `ReceiptDetailView` deterministic linked-refund balance metrics, tip/gas metadata rendering, and restored saved-image preview
 - `ReceiptEditView` linked-refund financial-history locking
-- `ReportingService` receipt CSV source-receipt export linkage
-- `RHEIRUITests` saved scanned receipt partial-refund sheet, save, and relaunch-persistence coverage
+- `ScannedReceiptEntryView` and `ManualReceiptEntryView` visible pre-save receipt-image previews
+- `ReportingService` receipt CSV source-receipt, tip, and price-per-gallon export linkage
+- `RHEIRUITests` saved scanned receipt row-swipe refund, image-preview, save, and relaunch-persistence coverage
 - `ScannedReceiptEntryView` scanned-item persistence and non-segmented category review control
 - `ReceiptDetailView` menu-only receipt actions plus persisted item/subcategory rendering
 - `ReceiptEditView` saved scanned-item breakdown rendering and line-item editor
@@ -233,11 +236,10 @@
 - `SignInWithAppleCoordinator` structured logging
 
 ## Current Validation Baseline
-- Latest Receipts trust-pass Gate A result: `PASS` (`/tmp/rheir_gateA_receipts_trust_pass_20260517.xcresult`)
-- Latest Receipts trust-pass focused parity result: `PASS` (`/tmp/rheir_receipts_trust_pass_20260517.xcresult`, `6 unit/report tests plus 7 UI tests`)
-- Latest Receipts partial-refund acceptance result: `PASS` (`/tmp/rheir_receipt_partial_refund_acceptance_20260517_rerun8.xcresult`, `1 UI test`)
-- Latest Receipts partial-refund visual evidence: kept xcresult attachments `Receipt partial refund sheet`, `Receipt refund summary after save`, and `Receipt refund summary after relaunch`
-- Latest Receipts trust-pass pbxproj drift: `NONE`
+- Latest receipt refund/metadata Gate A result: `PASS` (`/tmp/rheir_gateA_receipt_refund_metadata_20260517.xcresult`)
+- Latest receipt refund/metadata focused parity result: `PASS` (`/tmp/rheir_receipt_refund_metadata_parity_rerun_20260517.xcresult`, `14 focused unit tests plus 2 UI tests`)
+- Latest receipt refund visual evidence: kept xcresult attachments `Receipt line-item refund confirmation`, `Receipt refund summary after save`, and `Receipt refund summary after relaunch`
+- Latest receipt refund/metadata pbxproj drift: `NONE`
 - Latest Reports Gate A result: `PASS` (`/tmp/rheir_gateA_reports.xcresult`)
 - Latest Reports focused parity result: `PASS` (`/tmp/rheir_reports_parity_final5.xcresult`, `3 report service tests plus 1 UI preview/export test`)
 - Latest Reports visual evidence: kept xcresult attachment `Project PDF preview`

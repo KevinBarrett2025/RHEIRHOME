@@ -9,6 +9,8 @@ public struct ReceiptAnalysisResult {
     public let amount: Double
     public let taxAmount: Double
     public let discountAmount: Double
+    public let tipAmount: Double?
+    public let pricePerGallon: Double?
     public let paymentMethod: String
     public let paymentMethodDetails: PaymentMethodDetails?
     public let receiptNumber: String
@@ -23,6 +25,8 @@ public struct ReceiptAnalysisResult {
         amount: Double,
         taxAmount: Double,
         discountAmount: Double,
+        tipAmount: Double? = nil,
+        pricePerGallon: Double? = nil,
         paymentMethod: String,
         paymentMethodDetails: PaymentMethodDetails? = nil,
         receiptNumber: String,
@@ -36,6 +40,8 @@ public struct ReceiptAnalysisResult {
         self.amount = amount
         self.taxAmount = taxAmount
         self.discountAmount = discountAmount
+        self.tipAmount = tipAmount
+        self.pricePerGallon = pricePerGallon
         self.paymentMethod = paymentMethod
         self.paymentMethodDetails = paymentMethodDetails
         self.receiptNumber = receiptNumber

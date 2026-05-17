@@ -1,6 +1,52 @@
 import Foundation
 #if canImport(UIKit)
 import UIKit
+
+final class ReceiptImageStore {
+    static let shared = ReceiptImageStore()
+
+    private let fileManager: FileManager
+    private let directoryURL: URL
+
+    private init(fileManager: FileManager = .default) {
+        self.fileManager = fileManager
+        let baseURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first
+            ?? fileManager.temporaryDirectory
+        self.directoryURL = baseURL.appendingPathComponent("ReceiptImages", isDirectory: true)
+    }
+
+    @discardableResult
+    func persistEmbeddedImageIfNeeded(for receipt: Receipt) -> Receipt {
+        guard let imageData = receipt.receiptImageData else { return receipt }
+
+        var copy = receipt
+        let fileName = receipt.receiptImageName ?? "receipt_\(receipt.id).jpg"
+
+        do {
+            try ensureDirectoryExists()
+            try imageData.write(to: directoryURL.appendingPathComponent(fileName), options: .atomic)
+            copy.receiptImageName = fileName
+        } catch {
+            // Keep the in-memory image available for the current session even if disk persistence fails.
+        }
+
+        return copy
+    }
+
+    func loadImageData(named fileName: String) -> Data? {
+        try? Data(contentsOf: directoryURL.appendingPathComponent(fileName))
+    }
+
+    func removeImage(named fileName: String?) {
+        guard let fileName else { return }
+        try? fileManager.removeItem(at: directoryURL.appendingPathComponent(fileName))
+    }
+
+    private func ensureDirectoryExists() throws {
+        guard !fileManager.fileExists(atPath: directoryURL.path) else { return }
+        try fileManager.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+    }
+}
 #endif
 
 /// Which budget bucket a receipt applies to - Enhanced for renovation intelligence.
@@ -257,6 +303,47 @@ public enum VendorCategory: String, CaseIterable, Identifiable, Codable, Sendabl
     case other = "Other"
     
     public var id: Self { self }
+
+    public static func inferred(from vendorName: String) -> VendorCategory {
+        let normalized = vendorName.lowercased()
+
+        if normalized.contains("home depot") || normalized.contains("lowe") || normalized.contains("menards") {
+            return .hardware
+        } else if normalized.contains("lumber") || normalized.contains("84 lumber") {
+            return .lumber
+        } else if normalized.contains("sherwin") || normalized.contains("paint") {
+            return .paint
+        } else if normalized.contains("electrical") || normalized.contains("electric") {
+            return .electrical
+        } else if normalized.contains("plumbing") || normalized.contains("plumber") {
+            return .plumbing
+        } else if normalized.contains("rental") || normalized.contains("rent") {
+            return .rental
+        } else if normalized.contains("gas")
+                    || normalized.contains("fuel")
+                    || normalized.contains("shell")
+                    || normalized.contains("bp")
+                    || normalized.contains("exxon")
+                    || normalized.contains("chevron")
+                    || normalized.contains("mobil") {
+            return .gas
+        } else if normalized.contains("restaurant")
+                    || normalized.contains("food")
+                    || normalized.contains("cafe")
+                    || normalized.contains("bar")
+                    || normalized.contains("bistro")
+                    || normalized.contains("grill") {
+            return .restaurant
+        } else if normalized.contains("grocery") || normalized.contains("market") {
+            return .grocery
+        } else if normalized.contains("office") || normalized.contains("staples") {
+            return .office
+        } else if normalized.contains("auto") || normalized.contains("car") {
+            return .automotive
+        } else {
+            return .other
+        }
+    }
     
     /// Common subcategories for each vendor type
     public var commonSubcategories: [String] {
@@ -438,6 +525,8 @@ public struct Receipt: Identifiable, Codable, Hashable, Sendable {
     public var paymentMethodDetails: PaymentMethodDetails?
     public var taxAmount: Double
     public var discountAmount: Double
+    public var tipAmount: Double?
+    public var pricePerGallon: Double?
     public var receiptNumber: String
     public var sourceReceiptID: String?
     public var teamMemberID: UUID?       // Link to team member who made the purchase
@@ -456,7 +545,7 @@ public struct Receipt: Identifiable, Codable, Hashable, Sendable {
     // MARK: - Receipt Image Storage
     public var receiptImageData: Data?
     public var receiptImageName: String?
-    public var hasReceiptImage: Bool { receiptImageData != nil }
+    public var hasReceiptImage: Bool { receiptImageData != nil || receiptImageName != nil }
     
     public init(
         id: String = UUID().uuidString,
@@ -473,6 +562,8 @@ public struct Receipt: Identifiable, Codable, Hashable, Sendable {
         paymentMethodDetails: PaymentMethodDetails? = nil,
         taxAmount: Double = 0.0,
         discountAmount: Double = 0.0,
+        tipAmount: Double? = nil,
+        pricePerGallon: Double? = nil,
         receiptNumber: String = "",
         sourceReceiptID: String? = nil,
         processingStatus: ReceiptProcessingStatus = .pending,
@@ -497,6 +588,8 @@ public struct Receipt: Identifiable, Codable, Hashable, Sendable {
         self.paymentMethodDetails = paymentMethodDetails
         self.taxAmount = taxAmount
         self.discountAmount = discountAmount
+        self.tipAmount = tipAmount
+        self.pricePerGallon = pricePerGallon
         self.receiptNumber = receiptNumber
         self.sourceReceiptID = sourceReceiptID
         self.teamMemberID = nil
@@ -519,7 +612,16 @@ public struct Receipt: Identifiable, Codable, Hashable, Sendable {
     /// Get the receipt image as UIImage (when UIKit is available)
     #if canImport(UIKit)
     public var receiptImage: UIImage? {
-        guard let imageData = receiptImageData else { return nil }
+        if let imageData = receiptImageData {
+            return UIImage(data: imageData)
+        }
+
+        guard let receiptImageName,
+              let imageData = ReceiptImageStore.shared.loadImageData(named: receiptImageName)
+        else {
+            return nil
+        }
+
         return UIImage(data: imageData)
     }
     
@@ -773,6 +875,10 @@ public struct Receipt: Identifiable, Codable, Hashable, Sendable {
         return aiAnalysis != nil
     }
 
+    public var likelyVendorCategory: VendorCategory {
+        VendorCategory.inferred(from: vendor)
+    }
+
     private func roundToCents(_ value: Double) -> Double {
         (value * 100).rounded() / 100
     }
@@ -780,13 +886,12 @@ public struct Receipt: Identifiable, Codable, Hashable, Sendable {
 
 extension Receipt {
     var persistenceSafeCopy: Receipt {
-        guard receiptImageData != nil || receiptImageName != nil else {
+        guard receiptImageData != nil else {
             return self
         }
 
         var copy = self
         copy.receiptImageData = nil
-        copy.receiptImageName = nil
         return copy
     }
 }
@@ -826,6 +931,8 @@ public struct ReceiptAnalysisResult {
     public let amount: Double
     public let taxAmount: Double
     public let discountAmount: Double
+    public let tipAmount: Double?
+    public let pricePerGallon: Double?
     public let paymentMethod: String
     public let paymentMethodDetails: PaymentMethodDetails?
     public let receiptNumber: String
@@ -840,6 +947,8 @@ public struct ReceiptAnalysisResult {
         amount: Double,
         taxAmount: Double,
         discountAmount: Double,
+        tipAmount: Double? = nil,
+        pricePerGallon: Double? = nil,
         paymentMethod: String,
         paymentMethodDetails: PaymentMethodDetails? = nil,
         receiptNumber: String,
@@ -853,6 +962,8 @@ public struct ReceiptAnalysisResult {
         self.amount = amount
         self.taxAmount = taxAmount
         self.discountAmount = discountAmount
+        self.tipAmount = tipAmount
+        self.pricePerGallon = pricePerGallon
         self.paymentMethod = paymentMethod
         self.paymentMethodDetails = paymentMethodDetails
         self.receiptNumber = receiptNumber

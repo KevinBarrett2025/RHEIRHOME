@@ -640,9 +640,9 @@ struct SessionSupportTests {
 
         #expect(compactedOrgProjects.first?.receipts.first?.vendor == "North Shore Supply")
         #expect(compactedOrgProjects.first?.receipts.first?.receiptImageData == nil)
-        #expect(compactedOrgProjects.first?.receipts.first?.receiptImageName == nil)
+        #expect(compactedOrgProjects.first?.receipts.first?.receiptImageName != nil)
         #expect(compactedBackupProjects.first?.receipts.first?.receiptImageData == nil)
-        #expect(compactedBackupProjects.first?.receipts.first?.receiptImageName == nil)
+        #expect(compactedBackupProjects.first?.receipts.first?.receiptImageName != nil)
     }
 
     @Test
@@ -831,7 +831,7 @@ struct ProjectStoreTests {
         #expect(loadedProjects.first?.receipts.first?.vendor == "North Shore Supply")
         #expect(loadedProjects.first?.receipts.first?.amount == 128.42)
         #expect(loadedProjects.first?.receipts.first?.receiptImageData == nil)
-        #expect(loadedProjects.first?.receipts.first?.receiptImageName == nil)
+        #expect(loadedProjects.first?.receipts.first?.receiptImageName != nil)
     }
 }
 
@@ -861,7 +861,7 @@ struct ProjectPersistencePayloadTests {
         #expect(decodedProject.receipts.count == 1)
         #expect(decodedProject.receipts.first?.vendor == "Builder Depot")
         #expect(decodedProject.receipts.first?.receiptImageData == nil)
-        #expect(decodedProject.receipts.first?.receiptImageName == nil)
+        #expect(decodedProject.receipts.first?.receiptImageName != nil)
     }
 
     @Test
@@ -889,7 +889,7 @@ struct ProjectPersistencePayloadTests {
         #expect(decodedProjects.count == 1)
         #expect(decodedProjects.first?.receipts.first?.vendor == "North Shore Supply")
         #expect(decodedProjects.first?.receipts.first?.receiptImageData == nil)
-        #expect(decodedProjects.first?.receipts.first?.receiptImageName == nil)
+        #expect(decodedProjects.first?.receipts.first?.receiptImageName != nil)
     }
 
     @Test
@@ -2542,6 +2542,45 @@ struct ReportingServiceTests {
         #expect(csv.contains("Source Receipt ID"))
         #expect(csv.contains("RET-2001"))
         #expect(csv.contains("source-r-2001"))
+    }
+
+    @Test
+    func receiptsCSVExportsRestaurantTipAndFuelPriceMetadata() throws {
+        let service = ReportingService()
+        var project = Project(
+            name: "Receipt Metadata Project",
+            client: "Client C",
+            totalBudget: 25000,
+            startDate: Date(timeIntervalSince1970: 1_747_260_000),
+            endDate: Date(timeIntervalSince1970: 1_747_346_400),
+            organizationID: "org-reporting"
+        )
+        project.receipts = [
+            Receipt(
+                vendor: "Bar Bix",
+                date: Date(timeIntervalSince1970: 1_747_268_820),
+                amount: 137.45,
+                category: .general,
+                paymentMethod: "Visa",
+                tipAmount: 40
+            ),
+            Receipt(
+                vendor: "Shell",
+                date: Date(timeIntervalSince1970: 1_747_355_220),
+                amount: 48.62,
+                category: .general,
+                paymentMethod: "Visa",
+                pricePerGallon: 3.549
+            )
+        ]
+
+        let data = try #require(service.generateReceiptsCSV(project: project))
+        let csv = try #require(String(data: data, encoding: .utf8))
+
+        #expect(csv.contains("Tip Amount"))
+        #expect(csv.contains("Price Per Gallon"))
+        #expect(csv.contains("40.00"))
+        #expect(csv.contains("3.549"))
     }
 
     @Test

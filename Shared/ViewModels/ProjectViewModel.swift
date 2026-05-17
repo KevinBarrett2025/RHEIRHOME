@@ -1141,6 +1141,9 @@ class ProjectViewModel: ObservableObject {
         var secureProject = project.normalizedReceiptCopy
         secureProject.organizationID = orgID
         secureProject.lastModifiedDate = Date()
+        secureProject.receipts = secureProject.receipts.map {
+            ReceiptImageStore.shared.persistEmbeddedImageIfNeeded(for: $0)
+        }
 
         if duplicateReceiptCount > 0 {
             Logger.project.warning(
@@ -1576,6 +1579,7 @@ class ProjectViewModel: ObservableObject {
         guard var updatedProject = projectForMutation(projectID: projectID) else { return }
 
         updatedProject.receipts.removeAll { $0.id == receipt.id }
+        ReceiptImageStore.shared.removeImage(named: receipt.receiptImageName)
 
         await commitProjectMutation(
             updatedProject,

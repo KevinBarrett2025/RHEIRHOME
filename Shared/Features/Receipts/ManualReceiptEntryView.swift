@@ -1,5 +1,8 @@
 import OSLog
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#endif
 
 // MARK: - Inline Simple Vendor Picker
 struct SimpleVendorPickerView: View {
@@ -589,10 +592,20 @@ struct ManualReceiptEntryView: View {
     @State private var receiptNumber = ""
     @State private var taxAmount = ""
     @State private var discountAmount = ""
+    @State private var tipAmount = ""
+    @State private var pricePerGallon = ""
     @State private var isReturn = false
+    @State private var receiptImage: UIImage?
+    @State private var showingCamera = false
+    @State private var showingPhotoLibrary = false
+    @State private var showingImagePreview = false
     
     private var isValidForm: Bool {
         !vendor.isEmpty && !amount.isEmpty && (Double(amount) ?? 0) > 0
+    }
+
+    private var currentVendorCategory: VendorCategory {
+        selectedVendor?.category ?? VendorCategory.inferred(from: vendor)
     }
     
     var body: some View {
@@ -698,11 +711,75 @@ struct ManualReceiptEntryView: View {
                             .keyboardType(.decimalPad)
                             .multilineTextAlignment(.trailing)
                     }
+
+                    if currentVendorCategory == .restaurant || !(Double(tipAmount) ?? 0).isZero {
+                        HStack {
+                            Text("Tip Amount")
+                            Spacer()
+                            TextField("0.00", text: $tipAmount)
+                                .keyboardType(.decimalPad)
+                                .multilineTextAlignment(.trailing)
+                                .accessibilityIdentifier("manual-receipt-tip")
+                        }
+                    }
+
+                    if currentVendorCategory == .gas || !(Double(pricePerGallon) ?? 0).isZero {
+                        HStack {
+                            Text("Price / Gallon")
+                            Spacer()
+                            TextField("0.000", text: $pricePerGallon)
+                                .keyboardType(.decimalPad)
+                                .multilineTextAlignment(.trailing)
+                                .accessibilityIdentifier("manual-receipt-price-per-gallon")
+                        }
+                    }
                 }
                 
                 Section("Notes") {
                     TextField("Additional notes...", text: $notes, axis: .vertical)
                         .lineLimit(3...6)
+                }
+
+                Section("Receipt Image") {
+                    if let receiptImage {
+                        Button {
+                            showingImagePreview = true
+                        } label: {
+                            VStack(alignment: .leading, spacing: 10) {
+                                Image(uiImage: receiptImage)
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(maxWidth: .infinity)
+                                    .frame(maxHeight: 220)
+                                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                                    .accessibilityIdentifier("manual-receipt-image-preview")
+
+                                Label("View Full Size", systemImage: "photo")
+                                    .foregroundColor(.blue)
+                            }
+                        }
+                        .buttonStyle(.plain)
+
+                        Button("Remove Photo", role: .destructive) {
+                            self.receiptImage = nil
+                        }
+                    }
+
+                    HStack {
+                        Button {
+                            showingCamera = true
+                        } label: {
+                            Label("Take Photo", systemImage: "camera")
+                        }
+
+                        Spacer()
+
+                        Button {
+                            showingPhotoLibrary = true
+                        } label: {
+                            Label("Choose Photo", systemImage: "photo")
+                        }
+                    }
                 }
             }
             .navigationTitle("Add Receipt")
@@ -742,6 +819,20 @@ struct ManualReceiptEntryView: View {
                     }
                 )
             }
+            .fullScreenCover(isPresented: $showingCamera) {
+                CameraCaptureView(image: $receiptImage)
+                    .ignoresSafeArea()
+            }
+            .sheet(isPresented: $showingPhotoLibrary) {
+                ImagePicker(sourceType: .photoLibrary, image: $receiptImage)
+            }
+            .sheet(isPresented: $showingImagePreview) {
+                if let receiptImage {
+                    ZoomableImageView(image: receiptImage) {
+                        showingImagePreview = false
+                    }
+                }
+            }
         }
     }
     
@@ -762,7 +853,10 @@ struct ManualReceiptEntryView: View {
             paymentMethodID: selectedPaymentMethod?.id.uuidString,
             taxAmount: Double(taxAmount) ?? 0,
             discountAmount: Double(discountAmount) ?? 0,
-            receiptNumber: receiptNumber
+            tipAmount: parsedPositiveValue(from: tipAmount),
+            pricePerGallon: parsedPositiveValue(from: pricePerGallon),
+            receiptNumber: receiptNumber,
+            receiptImageData: receiptImage?.jpegData(compressionQuality: 0.8)
         )
         
         // CRITICAL FIX: Use the correct async method with project ID
@@ -786,7 +880,7 @@ struct ManualReceiptEntryView: View {
         if !receipt.vendor.isEmpty {
             let vendor = projectVM.vendorService.findOrCreateVendor(
                 name: receipt.vendor,
-                category: mapReceiptCategoryToVendorCategory(receipt.category)
+                category: selectedVendor?.category ?? VendorCategory.inferred(from: receipt.vendor)
             )
             
             // Update vendor spending
@@ -841,6 +935,11 @@ struct ManualReceiptEntryView: View {
         } else {
             return .other
         }
+    }
+
+    private func parsedPositiveValue(from text: String) -> Double? {
+        guard let value = Double(text), value > 0 else { return nil }
+        return value
     }
 }
 

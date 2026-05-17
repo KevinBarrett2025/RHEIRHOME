@@ -39,7 +39,7 @@ struct ReceiptDetailView: View {
                 // Receipt Details
                 receiptDetailsSection
 
-                if currentReceipt.supportsPartialRefunds || currentReceipt.isPartialRefund {
+                if currentReceipt.isPartialRefund || !currentReceipt.linkedRefunds(in: projectReceipts).isEmpty {
                     refundSummarySection
                 }
                 
@@ -67,14 +67,6 @@ struct ReceiptDetailView: View {
                     }
                     .accessibilityIdentifier("receipt-detail-menu-edit")
 
-                    if currentReceipt.supportsPartialRefunds,
-                       currentReceipt.remainingRefundableAmount(in: projectReceipts) > 0 {
-                        Button("Record Partial Refund") {
-                            refundingReceipt = currentReceipt
-                        }
-                        .accessibilityIdentifier("receipt-detail-menu-partial-refund")
-                    }
-                    
                     Button("Delete Receipt", role: .destructive) {
                         showingDeleteAlert = true
                     }
@@ -138,6 +130,7 @@ struct ReceiptDetailView: View {
         
         var updatedProject = project
         updatedProject.receipts.removeAll { $0.id == activeReceipt.id }
+        ReceiptImageStore.shared.removeImage(named: activeReceipt.receiptImageName)
         
         // Update vendor and payment method spending totals
         updateVendorSpending(for: activeReceipt, isRemoving: true)
@@ -273,6 +266,16 @@ struct ReceiptDetailView: View {
             if receipt.discountAmount > 0 {
                 detailRow("Discount", value: receipt.discountAmount.formatAsCurrency())
             }
+
+            if let tipAmount = receipt.tipAmount, tipAmount > 0 {
+                detailRow("Tip", value: tipAmount.formatAsCurrency())
+                    .accessibilityIdentifier("receipt-detail-tip")
+            }
+
+            if let pricePerGallon = receipt.pricePerGallon, pricePerGallon > 0 {
+                detailRow("Price / Gallon", value: String(format: "$%.3f", pricePerGallon))
+                    .accessibilityIdentifier("receipt-detail-price-per-gallon")
+            }
             
             if !receipt.notes.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
@@ -321,16 +324,6 @@ struct ReceiptDetailView: View {
                     detailRow("Partial Refunds", value: "\(linkedRefunds.count)")
                 }
 
-                if remainingAmount > 0 {
-                    Button {
-                        refundingReceipt = receipt
-                    } label: {
-                        Label("Record Partial Refund", systemImage: "arrow.uturn.backward.circle")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .accessibilityIdentifier("receipt-detail-partial-refund-button")
-                }
             }
         }
         .padding()
@@ -368,6 +361,7 @@ struct ReceiptDetailView: View {
                         .frame(maxHeight: 400)
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                         .shadow(radius: 4)
+                        .accessibilityIdentifier("receipt-detail-image-preview")
                     
                     HStack {
                         Image(systemName: "photo")
