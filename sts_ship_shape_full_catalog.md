@@ -25,6 +25,7 @@
 - Labor and Business Resources UI professionalism/no-truncation checks for compact device sheets and accounting rows
 - Log Hours actual-rate-only selection with in-flow add-rate editing from the project labor entry path
 - Task assignment, due/overdue, completion proof, and photo semantics
+- Linked item-level receipt partial refunds with source-receipt audit trail, quantity guards, and proportional tax/discount allocation
 - Contractor reports for category spend, vendor spend, payment-method spend, payroll, profit/loss, and closeout
 - Live Reports & Exports project sheet with project PDF, job-cost CSV, receipt line-item CSV, labor payment ledger CSV, labor timesheet CSV, and task closeout CSV artifacts
 - Image-backed swipeable/pinch-to-zoom report PDF preview
@@ -165,6 +166,11 @@
 - `ScannedReceiptEntryView` pre-save tax/discount/receipt-number editing
 - `Receipt` top-level subcategory persistence
 - `Receipt` itemized budget-scoped rollup helper for Materials / General Conditions / Contingency
+- `Receipt` partial-refund accounting helpers and source-receipt linkage
+- `ReceiptDetailView` visible partial-refund flow and refund-summary card
+- `ReceiptEditView` linked-refund financial-history locking
+- `ReportingService` receipt CSV source-receipt export linkage
+- `RHEIRUITests` saved scanned receipt partial-refund sheet coverage
 - `ScannedReceiptEntryView` scanned-item persistence and non-segmented category review control
 - `ReceiptDetailView` menu-only receipt actions plus persisted item/subcategory rendering
 - `ReceiptEditView` saved scanned-item breakdown rendering and line-item editor

@@ -3,7 +3,7 @@
 ## Repo
 - Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Branch: `gm/rheir-hardening-phase1`
-- HEAD: `aca25ff681f378ead18b399ffba0d9c4d48fe71a`
+- HEAD: `765cfbc51d06f48d5b7eb03505deb27923771640`
 
 ## Active Initiative
 - RHEIR release hardening, Fast-Ship Hybrid contractor workflow hardening.
@@ -166,6 +166,8 @@
 - Added an itemized Receipts category drilldown header so selected categories show receipt count plus the category-scoped total before the receipt list.
 - Added a receipt budget-rollup helper and routed the active Materials / General Conditions / Contingency budget bridge through itemized spend, so mixed receipts no longer require a receipt-level category match before contributing to high-level budget totals.
 - Added focused receipt/category parity proving itemized selected-category totals, quick receipt image view, and mixed-receipt high-level budget rollups stay correct.
+- Added linked item-level partial receipt refunds so mixed receipts can return selected line quantities without rewriting the original purchase, with proportional tax/discount allocation, over-refund prevention, visible refund entry from receipt detail, locked financial history after linked refunds, and CSV source-receipt export linkage.
+- Added focused receipt-refund unit/UI parity proving category-scoped returned lines, tax/discount residual reconciliation, export linkage, and the live partial-refund sheet on saved scanned receipts.
 - Hardened selected-project restore reconciliation so a launch-restored project selection is rehydrated from the loaded organization project payload, making persisted receipts visible immediately instead of waiting for a scan/manual receipt mutation to refresh `selectedProject`.
 - Added startup legacy project-payload compaction in `Shared/Views/Auth/AppSessionSupport.swift` so `LocalCacheStore` rewrites stale `projects*` `UserDefaults` blobs through `Project.persistenceSafeCopy` before legacy session migration runs.
 - Hardened `Shared/ViewModels/ProjectViewModel+Import.swift` so the legacy `projects_backup` fallback also strips inline receipt image data before writing to `UserDefaults`.

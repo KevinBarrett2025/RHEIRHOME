@@ -13,6 +13,7 @@
 - Shared business setup moves back into v1 as Business Resources, not Company or Organization.
 - Active project detail uses Breakdown, Resources, and Reports as primary project-management areas. Estimator becomes a secondary action for setup/revisions, not a dominant active-project tab.
 - Receipts remain the strongest current module, but receipt itemization must continue to drive category totals, budget actuals, reports, and filtered summaries.
+- Receipt returns must support real contractor workflows, including item-level partial refunds from mixed receipts without rewriting the original purchase history.
 
 ## Implementation Plan
 - Add a tracked release hardening checklist that covers global refresh, completed projects, business resources, labor, tasks, reports, UI cleanup, and device acceptance.
@@ -20,6 +21,7 @@
 - Restore completed/past projects by preserving completed projects in storage and showing them in a clear Projects segmented control or archive section.
 - Reintroduce Business Resources under Projects/settings and project detail Resources: workers/team members, job titles, labor rates, vendors, and payment methods/cards.
 - Rework Labor into a shippable flow: top-aligned UI, add/edit workers, rates/titles, log hours, assign work, mark paid, partial/split payments, check/reference details, edit payment, and unpay/reissue.
+- Rework Receipts into a shippable accounting flow: scanned itemization, mixed-category totals, whole returns, linked partial refunds by selected line/quantity, proportional tax/discount allocation, and refund history that cannot be silently rewritten later.
 - Rework Tasks into a shippable flow: add multiple tasks, edit/delete, assign owner, due dates, status, completion timestamp, completion photo, overdue state, and in-app badge/alert behavior.
 - Finish Reports as practical contractor outputs: project summary, category spend, vendor spend, payment method spend, labor payroll, profit/loss, and completed-project closeout/export.
 - Remove or wire all placeholder actions, including "coming soon" sheets, dead links, duplicate edit/delete controls, redundant choose/change controls, and extra navigation affordances.
@@ -29,6 +31,7 @@
 - Validate every core workflow against real contractor job-costing needs: materials, labor, subcontractors/vendors, payment method, task progress, and project profitability.
 - Keep field capture simple: scan receipt, log labor, update task, mark paid, see totals immediately.
 - Make itemized receipts authoritative for cost-code/category spend, because mixed Home Depot receipts cannot be counted as one grand-total category.
+- Make refunds accountant-safe: a returned plumbing line from a mixed supplier receipt must become a linked negative transaction that reduces the plumbing balance while preserving the original purchase, refund amount, tax share, and source receipt.
 - Make labor useful for payroll and job costing, not just hours: rate, title, paid/unpaid state, payment split, check/reference, and reversal.
 - Make tasks useful for field control: assignment, due/overdue state, completion proof, and downstream project impact visibility.
 - Make reports accountant/owner friendly: payroll summary, vendor spend, category/cost-code spend, payment-method spend, project profit/loss, completed-job closeout, and tax-year summaries.
@@ -39,9 +42,11 @@
 - Labor payments support multiple payment entries per labor item, including amount, method, optional reference/check number, date, paid/unpaid status, and edit/reversal.
 - Tasks support assignment, due/overdue state, completion metadata, and optional completion photos.
 - Receipt itemized categories remain authoritative for category-filter totals and budget actuals. A mixed-category receipt must never count the full receipt total toward one selected item category.
+- Receipt partial refunds preserve original line identities, track remaining refundable quantity, allocate tax/discount proportionally, export the source receipt linkage, and lock linked financial history against later silent rewrites.
 
 ## Test Plan
 - Add unit tests for project mutation propagation, completed project visibility, receipt itemized category totals, labor payment splits/reversals, task overdue state, and report totals.
+- Add receipt-refund parity for selected-line partial returns, over-refund prevention, tax/discount residual reconciliation, source-link export, and live refund-sheet access from saved scanned receipts.
 - Add deterministic UI smoke tests for no org onboarding, project selection gate, active/completed project switching, Business Resources entry, labor worker/payment flows, task CRUD, and report access.
 - Device acceptance must cover Apple sign-in, project select/relaunch restore, receipt scan/relaunch restore, itemized category totals, labor log/payment edit/unpay, task edit/complete/photo, completed project archive, and reports.
 - Every implementation slice still needs Gate A build, focused parity tests for the touched module, pbxproj drift check, and continuity doc update before commit.
