@@ -5,8 +5,8 @@
 - Active Branch: `gm/rheir-hardening-phase1`
 - Thread Start SHA: `117d5755bf2449139366c4bdeda6f7ff7d9ea6ac`
 - Last Commit At Thread Start: `117d575 Phase 2: wire task photo proof`
-- Current HEAD: `e42bce8b2315dd03b3ef3353916a1c8d83e0a6f0`
-- Current Head Commit: `e42bce8 Phase 2: align receipt refund entry and metadata`
+- Current HEAD: `d4874896b834f4745bc7caf31f555f98f6b0379c`
+- Current Head Commit: `d487489 Phase 2: capture receipt preview evidence`
 - Authority Truth: `origin/authority/main` and local `authority/main` are not present in this repo; no promotion is being attempted in this GM hardening run.
 
 ## Current Objective
