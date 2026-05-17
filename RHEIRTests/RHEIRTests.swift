@@ -2499,6 +2499,52 @@ struct ReportingServiceTests {
     }
 
     @Test
+    func receiptsCSVExportsPartialRefundSourceLinkage() throws {
+        let service = ReportingService()
+        var source = Receipt(
+            id: "source-r-2001",
+            vendor: "Home Depot",
+            date: Date(timeIntervalSince1970: 1_747_268_820),
+            amount: 214,
+            category: .material,
+            paymentMethod: "Visa",
+            taxAmount: 14
+        )
+        let item = ReceiptItem(
+            name: "Copper Tee",
+            quantity: 1,
+            unitPrice: 200,
+            totalPrice: 200,
+            category: .plumbing
+        )
+        source.items = [item]
+        let refund = try #require(
+            source.makePartialRefund(
+                selections: [ReceiptRefundSelection(itemID: item.id, quantity: 1)],
+                existingReceipts: [],
+                receiptNumber: "RET-2001"
+            )
+        )
+
+        var project = Project(
+            name: "Reporting Refund Project",
+            client: "Client B",
+            totalBudget: 25000,
+            startDate: Date(timeIntervalSince1970: 1_747_260_000),
+            endDate: Date(timeIntervalSince1970: 1_747_346_400),
+            organizationID: "org-reporting"
+        )
+        project.receipts = [source, refund]
+
+        let data = try #require(service.generateReceiptsCSV(project: project))
+        let csv = try #require(String(data: data, encoding: .utf8))
+
+        #expect(csv.contains("Source Receipt ID"))
+        #expect(csv.contains("RET-2001"))
+        #expect(csv.contains("source-r-2001"))
+    }
+
+    @Test
     func laborAndTaskExportsPreserveAccountingContext() throws {
         let service = ReportingService()
         let workerID = UUID(uuidString: "2F7BA1F4-B7E8-4A1F-9D10-1D5E7646F1E1")!
@@ -2856,6 +2902,114 @@ struct ReceiptCategoryBreakdownTests {
         #expect(receipt.hasScopedCategory(.permits))
         #expect(receipt.scopedAmount(for: .permits) == 55)
         #expect(receipt.scopedAmount(for: .material) == 0)
+    }
+}
+
+struct ReceiptPartialRefundTests {
+    @Test
+    func partialRefundAllocatesTaxDiscountAndPreservesReturnedItemCategories() throws {
+        var receipt = Receipt(
+            id: "source-receipt",
+            vendor: "Home Depot",
+            date: .now,
+            amount: 1_050,
+            category: .material,
+            paymentMethod: "Card",
+            taxAmount: 70,
+            discountAmount: 20
+        )
+        let plumbingItem = ReceiptItem(
+            id: UUID(),
+            name: "Copper Elbow",
+            quantity: 2,
+            unitPrice: 200,
+            totalPrice: 400,
+            category: .plumbing
+        )
+        receipt.items = [
+            plumbingItem,
+            ReceiptItem(
+                name: "Electrical Wire",
+                quantity: 1,
+                unitPrice: 600,
+                totalPrice: 600,
+                category: .electrical
+            )
+        ]
+
+        let refund = try #require(
+            receipt.makePartialRefund(
+                selections: [ReceiptRefundSelection(itemID: plumbingItem.id, quantity: 1)],
+                existingReceipts: [],
+                refundDate: Date(timeIntervalSince1970: 1_714_100_000),
+                receiptNumber: "RET-1001",
+                notes: "Returned extra fitting"
+            )
+        )
+
+        #expect(refund.isReturn)
+        #expect(refund.isPartialRefund)
+        #expect(refund.sourceReceiptID == receipt.id)
+        #expect(refund.amount == 210)
+        #expect(refund.taxAmount == 14)
+        #expect(refund.discountAmount == 4)
+        #expect(refund.items.count == 1)
+        #expect(refund.items.first?.id == plumbingItem.id)
+        #expect(refund.items.first?.quantity == 1)
+        #expect(refund.items.first?.totalPrice == 200)
+        #expect(refund.scopedAmount(for: .plumbing) == -200)
+        #expect(refund.scopedAmount(for: .electrical) == 0)
+    }
+
+    @Test
+    func partialRefundPreventsOverRefundAndFinalRefundUsesRemainingGrossResidual() throws {
+        var receipt = Receipt(
+            id: "rounding-source",
+            vendor: "Supply House",
+            date: .now,
+            amount: 32.01,
+            category: .material,
+            paymentMethod: "Card",
+            taxAmount: 2.01
+        )
+        let item = ReceiptItem(
+            id: UUID(),
+            name: "Fastener Pack",
+            quantity: 3,
+            unitPrice: 10,
+            totalPrice: 30,
+            category: .framing
+        )
+        receipt.items = [item]
+
+        let firstRefund = try #require(
+            receipt.makePartialRefund(
+                selections: [ReceiptRefundSelection(itemID: item.id, quantity: 1)],
+                existingReceipts: []
+            )
+        )
+
+        #expect(firstRefund.amount == 10.67)
+        #expect(firstRefund.taxAmount == 0.67)
+        #expect(receipt.remainingRefundableQuantity(for: item, in: [firstRefund]) == 2)
+        #expect(
+            receipt.makePartialRefund(
+                selections: [ReceiptRefundSelection(itemID: item.id, quantity: 3)],
+                existingReceipts: [firstRefund]
+            ) == nil
+        )
+
+        let finalRefund = try #require(
+            receipt.makePartialRefund(
+                selections: [ReceiptRefundSelection(itemID: item.id, quantity: 2)],
+                existingReceipts: [firstRefund]
+            )
+        )
+
+        #expect(finalRefund.amount == 21.34)
+        #expect(finalRefund.taxAmount == 1.34)
+        #expect(receipt.refundedAmount(in: [firstRefund, finalRefund]) == 32.01)
+        #expect(receipt.remainingRefundableAmount(in: [firstRefund, finalRefund]) == 0)
     }
 }
 

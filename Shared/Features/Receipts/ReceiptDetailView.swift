@@ -13,11 +13,21 @@ struct ReceiptDetailView: View {
     @EnvironmentObject var projectVM: ProjectViewModel
     @Environment(\.dismiss) private var dismiss
     @State private var editingReceipt: Receipt?
+    @State private var refundingReceipt: Receipt?
     @State private var showingDeleteAlert = false
     @State private var showingImageViewer = false
 
     private var currentReceipt: Receipt {
         projectVM.selectedProject?.receipts.first(where: { $0.id == receipt.id }) ?? receipt
+    }
+
+    private var projectReceipts: [Receipt] {
+        projectVM.selectedProject?.receipts ?? [currentReceipt]
+    }
+
+    private var sourceReceiptForCurrentRefund: Receipt? {
+        guard let sourceReceiptID = currentReceipt.sourceReceiptID else { return nil }
+        return projectReceipts.first { $0.id == sourceReceiptID }
     }
     
     var body: some View {
@@ -28,6 +38,10 @@ struct ReceiptDetailView: View {
                 
                 // Receipt Details
                 receiptDetailsSection
+
+                if currentReceipt.supportsPartialRefunds || currentReceipt.isPartialRefund {
+                    refundSummarySection
+                }
                 
                 // Photos Section
                 if currentReceipt.hasPhotos || currentReceipt.hasReceiptImage {
@@ -52,6 +66,14 @@ struct ReceiptDetailView: View {
                         editingReceipt = currentReceipt
                     }
                     .accessibilityIdentifier("receipt-detail-menu-edit")
+
+                    if currentReceipt.supportsPartialRefunds,
+                       currentReceipt.remainingRefundableAmount(in: projectReceipts) > 0 {
+                        Button("Record Partial Refund") {
+                            refundingReceipt = currentReceipt
+                        }
+                        .accessibilityIdentifier("receipt-detail-menu-partial-refund")
+                    }
                     
                     Button("Delete Receipt", role: .destructive) {
                         showingDeleteAlert = true
@@ -77,6 +99,21 @@ struct ReceiptDetailView: View {
                 )
             )
                 .environmentObject(projectVM)
+        }
+        .sheet(item: $refundingReceipt) { sourceReceipt in
+            PartialReceiptRefundView(
+                sourceReceipt: sourceReceipt,
+                projectReceipts: projectReceipts,
+                isPresented: Binding(
+                    get: { refundingReceipt != nil },
+                    set: { isPresented in
+                        if !isPresented {
+                            refundingReceipt = nil
+                        }
+                    }
+                )
+            )
+            .environmentObject(projectVM)
         }
         .alert("Delete Receipt", isPresented: $showingDeleteAlert) {
             Button("Cancel", role: .cancel) {}
@@ -252,6 +289,58 @@ struct ReceiptDetailView: View {
         .background(Color(.systemGray6))
         .cornerRadius(12)
     }
+
+    @ViewBuilder
+    private var refundSummarySection: some View {
+        let receipt = currentReceipt
+        let linkedRefunds = receipt.linkedRefunds(in: projectReceipts)
+        let refundedAmount = receipt.refundedAmount(in: projectReceipts)
+        let remainingAmount = receipt.remainingRefundableAmount(in: projectReceipts)
+
+        VStack(alignment: .leading, spacing: 14) {
+            Text(receipt.isPartialRefund ? "Refund Link" : "Refund Summary")
+                .font(.headline)
+                .fontWeight(.semibold)
+
+            if receipt.isPartialRefund {
+                detailRow("Original Receipt", value: sourceReceiptLabel(for: receipt))
+                detailRow("Refund Type", value: "Partial refund")
+            } else {
+                detailRow("Refunded To Date", value: refundedAmount.formatAsCurrency())
+                detailRow("Remaining Refundable", value: remainingAmount.formatAsCurrency())
+
+                if !linkedRefunds.isEmpty {
+                    detailRow("Partial Refunds", value: "\(linkedRefunds.count)")
+                }
+
+                if remainingAmount > 0 {
+                    Button {
+                        refundingReceipt = receipt
+                    } label: {
+                        Label("Record Partial Refund", systemImage: "arrow.uturn.backward.circle")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .accessibilityIdentifier("receipt-detail-partial-refund-button")
+                }
+            }
+        }
+        .padding()
+        .background(Color(.systemGray6))
+        .cornerRadius(12)
+    }
+
+    private func sourceReceiptLabel(for refund: Receipt) -> String {
+        guard let sourceReceipt = sourceReceiptForCurrentRefund else {
+            return refund.sourceReceiptID ?? "Unknown"
+        }
+
+        if !sourceReceipt.receiptNumber.isEmpty {
+            return "\(sourceReceipt.vendor) · \(sourceReceipt.receiptNumber)"
+        }
+
+        return "\(sourceReceipt.vendor) · \(sourceReceipt.date.formatted(date: .abbreviated, time: .omitted))"
+    }
     
     @ViewBuilder
     private var photosSection: some View {
@@ -387,6 +476,220 @@ struct ReceiptDetailView: View {
                 .font(.subheadline)
                 .foregroundColor(.secondary)
         }
+    }
+}
+
+private struct PartialReceiptRefundView: View {
+    let sourceReceipt: Receipt
+    let projectReceipts: [Receipt]
+    @Binding var isPresented: Bool
+
+    @EnvironmentObject private var projectVM: ProjectViewModel
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var refundDate = Date()
+    @State private var refundReceiptNumber = ""
+    @State private var notes = ""
+    @State private var selectedQuantities: [UUID: Double] = [:]
+    @State private var isSaving = false
+    @State private var saveError: String?
+
+    private var refundableItems: [ReceiptItem] {
+        sourceReceipt.items.filter {
+            sourceReceipt.remainingRefundableQuantity(for: $0, in: projectReceipts) > 0
+        }
+    }
+
+    private var selections: [ReceiptRefundSelection] {
+        selectedQuantities.compactMap { itemID, quantity in
+            quantity > 0 ? ReceiptRefundSelection(itemID: itemID, quantity: quantity) : nil
+        }
+    }
+
+    private var previewRefund: Receipt? {
+        sourceReceipt.makePartialRefund(
+            selections: selections,
+            existingReceipts: projectReceipts,
+            refundDate: refundDate,
+            receiptNumber: refundReceiptNumber,
+            notes: notes
+        )
+    }
+
+    private var canSave: Bool {
+        previewRefund != nil && !isSaving
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Return Details") {
+                    DatePicker("Refund Date", selection: $refundDate, displayedComponents: .date)
+                    TextField("Return receipt number (optional)", text: $refundReceiptNumber)
+                    TextField("Notes (optional)", text: $notes, axis: .vertical)
+                        .lineLimit(2...4)
+                }
+
+                Section("Select Returned Items") {
+                    ForEach(refundableItems) { item in
+                        refundItemRow(for: item)
+                    }
+                }
+
+                Section("Refund Summary") {
+                    if let previewRefund {
+                        detailRow("Item Subtotal", value: refundSubtotal(for: previewRefund).formatAsCurrency())
+                        detailRow("Tax Refunded", value: previewRefund.taxAmount.formatAsCurrency())
+                        detailRow("Discount Reversed", value: previewRefund.discountAmount.formatAsCurrency())
+                        detailRow("Refund Total", value: previewRefund.amount.formatAsCurrency())
+                    } else {
+                        Text("Select at least one refundable item.")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                if let saveError {
+                    Section {
+                        Text(saveError)
+                            .foregroundStyle(.red)
+                    }
+                }
+            }
+            .navigationTitle("Partial Refund")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        dismissEditor()
+                    }
+                }
+
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save Refund") {
+                        saveRefund()
+                    }
+                    .disabled(!canSave)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func refundItemRow(for item: ReceiptItem) -> some View {
+        let available = sourceReceipt.remainingRefundableQuantity(for: item, in: projectReceipts)
+        let selected = selectedQuantities[item.id] ?? 0
+
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(item.name)
+                        .font(.headline)
+
+                    Text("\(item.category.rawValue) · \(available, specifier: "%.2f") available")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                Text(item.totalPrice.formatAsCurrency())
+                    .font(.subheadline.weight(.semibold))
+            }
+
+            Stepper(
+                value: quantityBinding(for: item),
+                in: 0...available,
+                step: refundStep(for: item)
+            ) {
+                Text("Return Qty: \(selected, specifier: "%.2f")")
+                    .font(.subheadline)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func quantityBinding(for item: ReceiptItem) -> Binding<Double> {
+        Binding(
+            get: { selectedQuantities[item.id] ?? 0 },
+            set: { selectedQuantities[item.id] = min(max(0, $0), sourceReceipt.remainingRefundableQuantity(for: item, in: projectReceipts)) }
+        )
+    }
+
+    private func refundStep(for item: ReceiptItem) -> Double {
+        item.quantity.truncatingRemainder(dividingBy: 1) == 0 ? 1 : 0.25
+    }
+
+    private func refundSubtotal(for receipt: Receipt) -> Double {
+        receipt.items.reduce(0.0) { $0 + $1.totalPrice }
+    }
+
+    private func detailRow(_ title: String, value: String) -> some View {
+        HStack {
+            Text(title)
+            Spacer()
+            Text(value)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func saveRefund() {
+        guard !isSaving,
+              let refund = previewRefund,
+              let project = projectVM.selectedProject
+        else {
+            return
+        }
+
+        isSaving = true
+        saveError = nil
+
+        Task {
+            await projectVM.addReceipt(refund, to: project.id)
+            await MainActor.run {
+                updateDirectorySpending(for: refund)
+                projectVM.recomputeFilteredReceipts()
+                projectVM.saveOrganizationSpecificBackup()
+                dismissEditor()
+                Logger.receiptWorkflow.notice(
+                    "Recorded partial receipt refund [source=\(sourceReceipt.id, privacy: .private(mask: .hash)) amount=\(refund.amount, format: .fixed(precision: 2)) lines=\(refund.items.count, privacy: .public)]"
+                )
+            }
+        }
+    }
+
+    private func updateDirectorySpending(for receipt: Receipt) {
+        let signedAmount = receipt.signedAmount
+
+        let vendor = projectVM.vendorService.findOrCreateVendor(
+            name: receipt.vendor,
+            category: .other
+        )
+        if let vendorIndex = projectVM.vendorService.vendors.firstIndex(where: { $0.id == vendor.id }) {
+            projectVM.vendorService.vendors[vendorIndex].totalSpent += signedAmount
+            projectVM.vendorService.vendors[vendorIndex].totalSpent = max(
+                0,
+                projectVM.vendorService.vendors[vendorIndex].totalSpent
+            )
+        }
+
+        guard !receipt.paymentMethod.isEmpty else { return }
+
+        let paymentMethod = projectVM.paymentMethodService.findOrCreatePaymentMethod(
+            name: receipt.paymentMethod,
+            type: .other
+        )
+        if let paymentIndex = projectVM.paymentMethodService.paymentMethods.firstIndex(where: { $0.id == paymentMethod.id }) {
+            projectVM.paymentMethodService.paymentMethods[paymentIndex].totalSpent += signedAmount
+            projectVM.paymentMethodService.paymentMethods[paymentIndex].totalSpent = max(
+                0,
+                projectVM.paymentMethodService.paymentMethods[paymentIndex].totalSpent
+            )
+        }
+    }
+
+    private func dismissEditor() {
+        isPresented = false
+        dismiss()
     }
 }
 

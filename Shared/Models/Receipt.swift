@@ -409,6 +409,17 @@ public struct ReceiptItem: Identifiable, Codable, Hashable, Sendable {
     }
 }
 
+/// A requested partial return against one original receipt item.
+public struct ReceiptRefundSelection: Hashable, Sendable {
+    public let itemID: UUID
+    public let quantity: Double
+
+    public init(itemID: UUID, quantity: Double) {
+        self.itemID = itemID
+        self.quantity = quantity
+    }
+}
+
 /// A purchase receipt (sales or returns).
 public struct Receipt: Identifiable, Codable, Hashable, Sendable {
     public let id: String
@@ -428,6 +439,7 @@ public struct Receipt: Identifiable, Codable, Hashable, Sendable {
     public var taxAmount: Double
     public var discountAmount: Double
     public var receiptNumber: String
+    public var sourceReceiptID: String?
     public var teamMemberID: UUID?       // Link to team member who made the purchase
     
     // PHASE 2I STEP 4: Budget integration metadata
@@ -462,6 +474,7 @@ public struct Receipt: Identifiable, Codable, Hashable, Sendable {
         taxAmount: Double = 0.0,
         discountAmount: Double = 0.0,
         receiptNumber: String = "",
+        sourceReceiptID: String? = nil,
         processingStatus: ReceiptProcessingStatus = .pending,
         aiAnalysis: AIAnalysisData? = nil,
         receiptImageData: Data? = nil  // Accept Data directly instead of UIImage
@@ -485,6 +498,7 @@ public struct Receipt: Identifiable, Codable, Hashable, Sendable {
         self.taxAmount = taxAmount
         self.discountAmount = discountAmount
         self.receiptNumber = receiptNumber
+        self.sourceReceiptID = sourceReceiptID
         self.teamMemberID = nil
         
         // PHASE 2I STEP 4: Initialize budget integration fields
@@ -530,6 +544,162 @@ public struct Receipt: Identifiable, Codable, Hashable, Sendable {
     /// Signed receipt total (sales positive, returns negative).
     public var signedAmount: Double {
         isReturn ? -amount : amount
+    }
+
+    /// A linked return created from selected lines on an original purchase receipt.
+    public var isPartialRefund: Bool {
+        isReturn && sourceReceiptID != nil
+    }
+
+    /// Original item subtotal before receipt-level tax and discount adjustments.
+    public var itemSubtotal: Double {
+        items.reduce(0.0) { total, item in
+            total + max(0, item.totalPrice)
+        }
+    }
+
+    /// Whether this receipt can act as the source for item-level refunds.
+    public var supportsPartialRefunds: Bool {
+        !isReturn && itemSubtotal > 0 && items.contains { $0.quantity > 0 && $0.totalPrice > 0 }
+    }
+
+    /// Existing linked return receipts for this source receipt.
+    public func linkedRefunds(in receipts: [Receipt]) -> [Receipt] {
+        receipts.filter { $0.isReturn && $0.sourceReceiptID == id }
+    }
+
+    /// Quantity already refunded for one source item.
+    public func refundedQuantity(for itemID: UUID, in receipts: [Receipt]) -> Double {
+        linkedRefunds(in: receipts)
+            .flatMap(\.items)
+            .filter { $0.id == itemID }
+            .reduce(0.0) { $0 + max(0, $1.quantity) }
+    }
+
+    /// Quantity still available to refund for one source item.
+    public func remainingRefundableQuantity(for item: ReceiptItem, in receipts: [Receipt]) -> Double {
+        max(0, item.quantity - refundedQuantity(for: item.id, in: receipts))
+    }
+
+    /// Gross amount already refunded from linked partial-return receipts.
+    public func refundedAmount(in receipts: [Receipt]) -> Double {
+        linkedRefunds(in: receipts).reduce(0.0) { $0 + max(0, $1.amount) }
+    }
+
+    /// Gross amount still available to refund from the original receipt.
+    public func remainingRefundableAmount(in receipts: [Receipt]) -> Double {
+        max(0, amount - refundedAmount(in: receipts))
+    }
+
+    /// Builds a linked negative receipt from selected source lines.
+    /// Line totals preserve the original per-line allocation, while tax and discount are
+    /// proportionally assigned so the returned cash amount reconciles with the source receipt.
+    public func makePartialRefund(
+        selections: [ReceiptRefundSelection],
+        existingReceipts: [Receipt],
+        refundDate: Date = Date(),
+        receiptNumber: String = "",
+        notes: String = ""
+    ) -> Receipt? {
+        guard supportsPartialRefunds else { return nil }
+
+        let positiveSelections = selections.filter { $0.quantity > 0 }
+        guard !positiveSelections.isEmpty else { return nil }
+
+        let sourceItemsByID = Dictionary(uniqueKeysWithValues: items.map { ($0.id, $0) })
+        let priorRefunds = linkedRefunds(in: existingReceipts)
+        var refundItems: [ReceiptItem] = []
+        var selectedSubtotal = 0.0
+
+        for selection in positiveSelections {
+            guard let sourceItem = sourceItemsByID[selection.itemID],
+                  sourceItem.quantity > 0
+            else {
+                return nil
+            }
+
+            let availableQuantity = remainingRefundableQuantity(
+                for: sourceItem,
+                in: existingReceipts
+            )
+            guard selection.quantity <= availableQuantity + 0.000_001 else {
+                return nil
+            }
+
+            let refundLineTotal = roundToCents(
+                sourceItem.totalPrice * (selection.quantity / sourceItem.quantity)
+            )
+            guard refundLineTotal > 0 else { continue }
+
+            refundItems.append(
+                ReceiptItem(
+                    id: sourceItem.id,
+                    name: sourceItem.name,
+                    quantity: selection.quantity,
+                    unitPrice: sourceItem.unitPrice,
+                    totalPrice: refundLineTotal,
+                    category: sourceItem.category,
+                    subcategory: sourceItem.subcategory,
+                    sku: sourceItem.sku,
+                    notes: sourceItem.notes
+                )
+            )
+            selectedSubtotal += refundLineTotal
+        }
+
+        guard !refundItems.isEmpty, itemSubtotal > 0 else { return nil }
+
+        let taxAlreadyRefunded = priorRefunds.reduce(0.0) { $0 + max(0, $1.taxAmount) }
+        let discountAlreadyRefunded = priorRefunds.reduce(0.0) { $0 + max(0, $1.discountAmount) }
+        let remainingSelectionsByID = Dictionary(
+            uniqueKeysWithValues: refundItems.map { ($0.id, $0.quantity) }
+        )
+        let exhaustsAllRemainingItems = items.allSatisfy { sourceItem in
+            let remaining = remainingRefundableQuantity(for: sourceItem, in: existingReceipts)
+            let selected = remainingSelectionsByID[sourceItem.id] ?? 0
+            return abs(remaining - selected) < 0.000_001
+        }
+
+        let refundTax: Double
+        let refundDiscount: Double
+        let refundAmount: Double
+
+        if exhaustsAllRemainingItems {
+            refundTax = roundToCents(max(0, taxAmount - taxAlreadyRefunded))
+            refundDiscount = roundToCents(max(0, discountAmount - discountAlreadyRefunded))
+            refundAmount = roundToCents(remainingRefundableAmount(in: existingReceipts))
+        } else {
+            let allocationRatio = selectedSubtotal / itemSubtotal
+            refundTax = roundToCents(max(0, taxAmount * allocationRatio))
+            refundDiscount = roundToCents(max(0, discountAmount * allocationRatio))
+            refundAmount = roundToCents(max(0, selectedSubtotal + refundTax - refundDiscount))
+        }
+
+        guard refundAmount > 0 else { return nil }
+
+        var refund = Receipt(
+            vendor: vendor,
+            vendorID: vendorID,
+            date: refundDate,
+            amount: refundAmount,
+            notes: notes,
+            category: refundItems.first?.category ?? category,
+            subcategory: refundItems.count == 1 ? refundItems.first?.subcategory ?? "" : "",
+            isReturn: true,
+            paymentMethod: paymentMethod,
+            paymentMethodID: paymentMethodID,
+            paymentMethodDetails: paymentMethodDetails,
+            taxAmount: refundTax,
+            discountAmount: refundDiscount,
+            receiptNumber: receiptNumber,
+            sourceReceiptID: id,
+            processingStatus: .completed
+        )
+        refund.teamMemberID = teamMemberID
+        refund.teamMemberName = teamMemberName
+        refund.projectID = projectID
+        refund.items = refundItems
+        return refund
     }
 
     /// Categories represented by this receipt.
@@ -601,6 +771,10 @@ public struct Receipt: Identifiable, Codable, Hashable, Sendable {
     /// Whether this receipt was processed using AI
     public var wasProcessedByAI: Bool {
         return aiAnalysis != nil
+    }
+
+    private func roundToCents(_ value: Double) -> Double {
+        (value * 100).rounded() / 100
     }
 }
 

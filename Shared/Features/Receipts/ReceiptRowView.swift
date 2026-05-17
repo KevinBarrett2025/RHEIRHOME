@@ -34,7 +34,7 @@ struct ReceiptRowView: View {
                         .font(.headline)
                     
                     if receipt.isReturn {
-                        Text("RETURN")
+                        Text(receipt.isPartialRefund ? "PARTIAL REFUND" : "RETURN")
                             .font(.caption2)
                             .fontWeight(.bold)
                             .foregroundColor(.white)

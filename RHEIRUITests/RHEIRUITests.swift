@@ -1220,6 +1220,72 @@ final class RHEIRUITests: XCTestCase {
     }
 
     @MainActor
+    func testSavedScannedReceiptOpensPartialRefundFlow() throws {
+        let app = makeApp(mode: .scannedReceiptReview)
+        app.launch()
+        app.tabBars.buttons["Receipts"].tap()
+
+        let vendorName = "UI Test Scanned Vendor"
+        let scannedReceiptNavBar = app.navigationBars["AI-Scanned Receipt"]
+        XCTAssertTrue(
+            scannedReceiptNavBar.waitForExistence(timeout: 5),
+            "Expected the seeded scanned-receipt review flow before testing partial refunds."
+        )
+
+        let saveButton = app.buttons["receipt-scan-save"]
+        XCTAssertTrue(
+            waitForEnabled(saveButton, timeout: 5),
+            "Expected the seeded scanned receipt review to be savable before testing partial refunds."
+        )
+        saveButton.tap()
+
+        let successAlert = app.alerts["Receipt Added Successfully"]
+        XCTAssertTrue(
+            successAlert.waitForExistence(timeout: 8),
+            "Expected saving the scanned receipt review to surface the success alert."
+        )
+        successAlert.buttons["OK"].tap()
+
+        XCTAssertTrue(
+            waitForNonExistence(of: scannedReceiptNavBar, timeout: 5),
+            "Expected confirming the scanned receipt success alert to dismiss the review sheet."
+        )
+
+        let receiptCard = app.buttons["receipt-card-\(vendorName)"]
+        XCTAssertTrue(
+            receiptCard.waitForExistence(timeout: 8),
+            "Expected the scanned receipt to render before opening the partial refund flow."
+        )
+        receiptCard.tap()
+
+        XCTAssertTrue(
+            app.navigationBars["Receipt Details"].waitForExistence(timeout: 5),
+            "Expected the saved scanned receipt to reopen from the receipts list."
+        )
+
+        let partialRefundButton = app.buttons["receipt-detail-partial-refund-button"]
+        XCTAssertTrue(
+            revealElement(
+                identifier: "receipt-detail-partial-refund-button",
+                in: app,
+                query: { $0.buttons["receipt-detail-partial-refund-button"] }
+            ).exists,
+            "Expected itemized purchase receipts to expose the visible partial refund action."
+        )
+        partialRefundButton.tap()
+
+        XCTAssertTrue(
+            app.navigationBars["Partial Refund"].waitForExistence(timeout: 5),
+            "Expected the visible receipt action to open the partial refund sheet."
+        )
+
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = "Receipt partial refund sheet"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
+    @MainActor
     func testSavedReceiptDetailOpensEditSheet() throws {
         let app = makeApp(mode: .selectedProject)
         app.launch()

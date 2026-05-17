@@ -82,7 +82,7 @@ public class ReportingService: ObservableObject {
     
     /// Export receipts as line-item CSV for accounting and bookkeeping.
     public func generateReceiptsCSV(project: Project) -> Data? {
-        var csvContent = "Date,Vendor,Receipt Number,Payment Method,Receipt Total,Receipt Tax,Receipt Discount,Top-Level Category,Receipt Subcategory,Line Item,Quantity,Unit Price,Line Amount,Line Category,Line Subcategory,Notes,Is Return\n"
+        var csvContent = "Date,Vendor,Receipt Number,Payment Method,Receipt Total,Receipt Tax,Receipt Discount,Top-Level Category,Receipt Subcategory,Line Item,Quantity,Unit Price,Line Amount,Line Category,Line Subcategory,Notes,Is Return,Source Receipt ID\n"
 
         for receipt in project.receipts.sorted(by: { $0.date < $1.date }) {
             let sign = receipt.isReturn ? -1.0 : 1.0
@@ -450,7 +450,8 @@ public class ReportingService: ObservableObject {
             lineCategory,
             escapeCSV(lineSubcategory),
             escapeCSV(receipt.notes),
-            receipt.isReturn ? "Yes" : "No"
+            receipt.isReturn ? "Yes" : "No",
+            escapeCSV(receipt.sourceReceiptID ?? "")
         ].joined(separator: ",")
     }
 

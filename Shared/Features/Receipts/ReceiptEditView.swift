@@ -52,6 +52,14 @@ struct ReceiptEditView: View {
     private var isValidForm: Bool {
         !vendor.isEmpty && !amount.isEmpty && (Double(amount) ?? 0) > 0
     }
+
+    private var linkedRefunds: [Receipt] {
+        projectVM.selectedProject?.receipts.filter { $0.isReturn && $0.sourceReceiptID == receipt.id } ?? []
+    }
+
+    private var locksFinancialHistory: Bool {
+        receipt.isPartialRefund || !linkedRefunds.isEmpty
+    }
     
     var body: some View {
         NavigationStack {
@@ -68,6 +76,7 @@ struct ReceiptEditView: View {
                             .multilineTextAlignment(.trailing)
                             .accessibilityIdentifier("receipt-edit-amount")
                     }
+                    .disabled(locksFinancialHistory)
                     
                     DatePicker("Date", selection: $date, displayedComponents: .date)
                     
@@ -80,6 +89,7 @@ struct ReceiptEditView: View {
                     TextField("Subcategory (optional)", text: $subcategory)
                     
                     Toggle("Return/Refund", isOn: $isReturn)
+                        .disabled(locksFinancialHistory)
                 }
                 
                 Section("Payment Details") {
@@ -105,6 +115,7 @@ struct ReceiptEditView: View {
                             .keyboardType(.decimalPad)
                             .multilineTextAlignment(.trailing)
                     }
+                    .disabled(locksFinancialHistory)
                     
                     HStack {
                         Text("Discount Amount")
@@ -113,6 +124,7 @@ struct ReceiptEditView: View {
                             .keyboardType(.decimalPad)
                             .multilineTextAlignment(.trailing)
                     }
+                    .disabled(locksFinancialHistory)
                 }
                 
                 Section("Notes") {
@@ -152,13 +164,18 @@ struct ReceiptEditView: View {
                                 .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
+                            .disabled(locksFinancialHistory)
                             .accessibilityIdentifier("receipt-edit-item-\(receiptEditAccessibilitySlug(item.name))")
                         }
                     } header: {
                         Text("Itemized Breakdown")
                             .accessibilityIdentifier("receipt-edit-items-header")
                     } footer: {
-                        Text("Tap an item to review or edit the saved scan details.")
+                        Text(
+                            locksFinancialHistory
+                                ? "Financial line items are locked because this receipt participates in partial-refund history."
+                                : "Tap an item to review or edit the saved scan details."
+                        )
                     }
                 }
             }
