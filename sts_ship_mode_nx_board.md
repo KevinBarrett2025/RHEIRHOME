@@ -230,13 +230,12 @@
 ## Open Work
 - Use the new global project mutation/refresh contract while hardening Tasks, Reports, and remaining UI cleanup so those flows inherit immediate refresh instead of adding one-off state writes.
 - Completed-project archive/reopen is simulator-proven; verify the reopen action on device during the next project lifecycle acceptance pass.
-- Business Resources hub entry is simulator-proven; verify add/edit workers, vendors, and payment methods on device during the next Labor/Resources acceptance pass.
+- Business Resources hub entry is device-accepted for add/edit workers, vendors, payment methods, multi-rate editing, and worker deactivation.
 - Labor + Business Resources device acceptance is PASS for multi-rate worker/rate management, editable logged hours, partial/split payments, payment correction, check/reference metadata, worker removal, add-rate-in-flow, unpay/reissue, and persisted totals.
 - Labor accounting and UI professionalism remain standing release criteria for every later seam: paid history must survive later edits, over/under balances must be visible, totals must reconcile from persistence, and compact device sheets/rows must remain bounded and untruncated.
-- Continue Tasks hardening from the now simulator-proven CRUD and before/after photo slices into real-device validation of immediate project/report refresh and persisted photo proof.
-- Before/after task photo proof is simulator-proven; next device pass must capture a real camera photo, multi-select Photos assets, confirm CloudKit upload succeeds before save/completion, relaunch, verify before/after separation persists, and open saved images full screen with pinch-to-zoom.
-- Task photo-gallery/report hardening is simulator-proven; next device pass should also verify swipeable galleries across create/detail/completed contexts, thumbnail delete correction, visible bottom Mark Complete, pinned summary position, and task report fields.
-- Reports live preview/export is simulator-proven for project PDF, job-cost CSV, receipt line-item CSV, labor payment ledger CSV, labor timesheet CSV, and task closeout CSV; next Reports work is physical-device preview/export/share validation and any additional yearly/company-level report surfaces.
+- Tasks device acceptance is PASS for CRUD, before/after photo capture, camera plus multi-select Photos, persisted proof, swipeable full-screen previews, thumbnail correction, visible Mark Complete, pinned summary position, and report fields.
+- Reports device acceptance is PASS for project PDF, job-cost CSV, receipt line-item CSV, labor payment ledger CSV, labor timesheet CSV, task closeout CSV, preview/share/export UX, and persisted-row inspection.
+- Move next into same-user iCloud restore/sync release-candidate validation, then any remaining UI cleanup and optional yearly/company-level report surfaces.
 - Remove placeholder/dead/redundant UI across active v1 flows before promo candidacy.
 - Re-run the real-device project-selection home and confirm the bottom tab bar is hidden before project selection, project cards are the only path into project work, and selecting a project reveals Receipts/Labor/Tasks.
 - Re-run the real-device launch path that previously showed `Create Your Organization` and confirm it now lands in the fast-ship v1 shell with no Company/admin/org setup UI, even when CloudKit organization resolution is slow or empty.
@@ -256,7 +255,6 @@
 - `ProjectViewModel+Filters.swift` now aligns the receipt-level legacy bridge with detailed receipt-category mapping, and `ProjectStatus` / `ChangeOrderStatus` now expose semantic SwiftUI tint colors so the active fast-ship path is clear of the lingering materials-divergence log spam and missing `green` asset warning.
 
 ## Blockers
-- The restored-session freeze and nil-org sign-out replay seam are now both clean in device logs, and the no-organization fast-ship fallback is simulator-proven; the remaining launch-critical device risk is proving the same behavior on hardware, then confirming immediate launch-time receipt visibility, scanned-item persistence, and menu-only detail actions on device.
 - Same-user iCloud restore/sync is not yet treated as ship-proven; if it fails release-candidate validation, local-device persistence must remain the authoritative launch promise.
 - Raw in-sandbox `xcodebuild` remains less reliable than elevated CLI or the stable `xcodebuildmcp` simulator path in this environment.
 

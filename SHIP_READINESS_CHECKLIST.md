@@ -105,7 +105,7 @@ Exit criteria: release candidate is validated on real hardware and ready for sub
 - Freeze scope and submit.
 
 ## Immediate Next Steps
-1. Commit the Labor payment hardening slice with Gate A plus focused parity evidence.
-2. Run the next device Labor/Resources acceptance pass: add/edit worker, log hours, record partial/split payments, capture check/reference details, unpay/reissue, relaunch, and verify totals.
-3. Rework Tasks to shippable contractor workflows with focused unit/UI parity.
-4. Finish Reports and device acceptance after the underlying data flows refresh immediately and persist across relaunch.
+1. Run same-user iCloud restore/sync release-candidate validation on hardware and decide whether cross-device restore is safe to promise at launch.
+2. Re-run completed-project reopen on device during the next project-lifecycle acceptance pass.
+3. Finish remaining UI cleanup, then decide whether any company/yearly report surfaces belong before launch or after the core release.
+4. Complete final device acceptance and App Store-readiness verification with local-device persistence as the fallback launch promise if same-user iCloud restore is not release-candidate green.
