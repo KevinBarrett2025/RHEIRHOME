@@ -939,11 +939,11 @@ struct BusinessWorkersResourceView: View {
 
     private var workers: [TeamMember] {
         let liveWorkers = activeWorkers(from: projectVM.teamMembers)
-        if liveWorkers.isEmpty, projectVM.teamMembers.isEmpty, !cachedActiveWorkers.isEmpty {
-            return cachedActiveWorkers
-        }
+        return cachedActiveWorkers.isEmpty ? liveWorkers : cachedActiveWorkers
+    }
 
-        return liveWorkers
+    private var ownerProfileNeedingSetup: TeamMember? {
+        workers.first(where: \.needsOwnerProfileCompletion)
     }
 
     private func activeWorkers(from members: [TeamMember]) -> [TeamMember] {
@@ -958,9 +958,11 @@ struct BusinessWorkersResourceView: View {
 
     private func refreshCachedWorkers(from members: [TeamMember]) {
         let liveWorkers = activeWorkers(from: members)
-        if !liveWorkers.isEmpty || !members.isEmpty {
-            cachedActiveWorkers = liveWorkers
-        }
+        cachedActiveWorkers = BusinessWorkerRosterCache.reconciled(
+            cachedWorkers: cachedActiveWorkers,
+            liveWorkers: liveWorkers,
+            allMembers: members
+        )
     }
 
     var body: some View {
@@ -996,6 +998,25 @@ struct BusinessWorkersResourceView: View {
                     ForEach(workers) { worker in
                         workerRow(worker)
                     }
+                }
+            }
+
+            if let ownerProfileNeedingSetup {
+                Section("Owner Profile") {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Complete the signed-in owner's worker profile")
+                            .font(.headline)
+                        Text("Set the real name, job title, and rates for this app user so labor entries are tied to a person instead of a placeholder identity.")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Button("Complete Owner Profile") {
+                            editorState = .edit(ownerProfileNeedingSetup)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .accessibilityIdentifier("business-workers-complete-owner-profile-button")
+                    }
+                    .padding(.vertical, 4)
                 }
             }
         }
@@ -1113,6 +1134,35 @@ struct BusinessWorkersResourceView: View {
     private func defaultRateSummary(for worker: TeamMember) -> String {
         guard let rate = worker.defaultRate else { return "No rate set" }
         return "\(rate.taskType): \(rate.rate.formatAsCurrency())/hr"
+    }
+}
+
+struct BusinessWorkerRosterCache {
+    static func reconciled(
+        cachedWorkers: [TeamMember],
+        liveWorkers: [TeamMember],
+        allMembers: [TeamMember]
+    ) -> [TeamMember] {
+        guard !allMembers.isEmpty else {
+            return cachedWorkers
+        }
+
+        var workersByID = Dictionary(uniqueKeysWithValues: cachedWorkers.map { ($0.id, $0) })
+        for worker in liveWorkers {
+            workersByID[worker.id] = worker
+        }
+
+        let inactiveIDs = Set(
+            allMembers
+                .filter { $0.isArchived || !$0.isActive }
+                .map(\.id)
+        )
+
+        inactiveIDs.forEach { workersByID.removeValue(forKey: $0) }
+
+        return workersByID.values.sorted {
+            $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+        }
     }
 }
 

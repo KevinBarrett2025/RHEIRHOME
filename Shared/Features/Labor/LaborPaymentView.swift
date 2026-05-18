@@ -17,6 +17,7 @@ struct LaborPaymentView: View {
     @State private var bulkPaymentAmount: Double = 0
     @State private var editingHour: WorkHour?
     @State private var correctingPaymentHour: WorkHour?
+    @State private var showingLogHours = false
     
     enum PaymentTab: String, CaseIterable {
         case unpaid = "Unpaid"
@@ -137,6 +138,13 @@ struct LaborPaymentView: View {
             LaborPaymentCorrectionView(teamMember: teamMember, hour: hour)
                 .environmentObject(projectVM)
         }
+        .sheet(isPresented: $showingLogHours) {
+            LogHoursView(
+                isPresented: $showingLogHours,
+                preselectedTeamMember: teamMember
+            )
+            .environmentObject(projectVM)
+        }
         .accessibilityIdentifier("labor-payment-view")
     }
     
@@ -207,6 +215,17 @@ struct LaborPaymentView: View {
                 statBox(totalOverpaidAmount > 0 ? "Overpaid" : "Total Earned",
                         (totalOverpaidAmount > 0 ? totalOverpaidAmount : calculateTotalEarned()).formatAsCurrency(),
                         totalOverpaidAmount > 0 ? .red : .blue)
+            }
+
+            HStack {
+                Spacer()
+                Button {
+                    showingLogHours = true
+                } label: {
+                    Label("Add Hours", systemImage: "plus.circle")
+                }
+                .buttonStyle(.bordered)
+                .accessibilityIdentifier("labor-payment-add-hours-button")
             }
         }
         .padding()

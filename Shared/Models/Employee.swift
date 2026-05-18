@@ -133,6 +133,19 @@ public struct TeamMember: Identifiable, Codable, Hashable, Sendable {
     }
 }
 
+public extension TeamMember {
+    var needsOwnerProfileCompletion: Bool {
+        guard role == .admin, hasAppAccess else { return false }
+
+        let normalizedName = name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let normalizedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+
+        return normalizedName == "user.email.not.available"
+            || normalizedName == "owner"
+            || normalizedEmail == "user.email.not.available@rheir.com"
+    }
+}
+
 // MARK: - Employment Status & Termination Types
 
 public enum EmploymentStatus: String, Codable, CaseIterable, Sendable {

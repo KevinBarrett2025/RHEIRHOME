@@ -48,6 +48,7 @@ final class LocalCacheStore {
         static let pendingInviteRole = "pending_invite_role"
         static let lastProjectPrefix = "selected_project_for_org_"
         static let appleEmailPrefix = "stored_apple_email_"
+        static let appleDisplayNamePrefix = "stored_apple_display_name_"
         static let legacyProjects = "projects"
         static let legacyProjectsBackup = "projects_backup"
     }
@@ -154,6 +155,14 @@ final class LocalCacheStore {
         userDefaults.string(forKey: Key.appleEmailPrefix + userID)
     }
 
+    func storeAppleDisplayName(_ displayName: String, for userID: String) {
+        userDefaults.set(displayName, forKey: Key.appleDisplayNamePrefix + userID)
+    }
+
+    func appleDisplayName(for userID: String) -> String? {
+        userDefaults.string(forKey: Key.appleDisplayNamePrefix + userID)
+    }
+
     func clearSessionState() {
         selectionState = SelectionState(organizationID: nil, projectID: nil)
         previousOrganizationID = nil
@@ -165,7 +174,9 @@ final class LocalCacheStore {
         userDefaults.removeObject(forKey: Key.selectionState)
 
         for key in userDefaults.dictionaryRepresentation().keys {
-            if key.hasPrefix(Key.lastProjectPrefix) || key.hasPrefix(Key.appleEmailPrefix) {
+            if key.hasPrefix(Key.lastProjectPrefix)
+                || key.hasPrefix(Key.appleEmailPrefix)
+                || key.hasPrefix(Key.appleDisplayNamePrefix) {
                 userDefaults.removeObject(forKey: key)
             }
         }

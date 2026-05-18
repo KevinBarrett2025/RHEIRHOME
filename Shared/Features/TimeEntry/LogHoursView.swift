@@ -15,6 +15,12 @@ struct LogHoursView: View {
     @State private var category = "Labor"
     @State private var notes = ""
     @State private var hasLunchBreak = false
+    private let preselectedTeamMember: TeamMember?
+
+    init(isPresented: Binding<Bool>, preselectedTeamMember: TeamMember? = nil) {
+        _isPresented = isPresented
+        self.preselectedTeamMember = preselectedTeamMember
+    }
     
     // CRITICAL FIX: Use project-based team member discovery like BudgetBreakdownView
     private var availableTeamMembers: [TeamMember] {
@@ -292,6 +298,20 @@ struct LogHoursView: View {
                 EnhancedEditTeamMemberView(member: worker)
                     .environmentObject(projectVM)
             }
+            .onChange(of: hasLunchBreak) { _, enabled in
+                if enabled {
+                    initializeLunchWindowIfNeeded()
+                } else {
+                    lunchStart = nil
+                    lunchEnd = nil
+                }
+            }
+            .onChange(of: startTime) { _, _ in
+                normalizeLunchWindowIfNeeded()
+            }
+            .onChange(of: endTime) { _, _ in
+                normalizeLunchWindowIfNeeded()
+            }
             .onChange(of: projectVM.teamMembers) { _, members in
                 refreshSelectedEmployee(from: members)
             }
@@ -299,9 +319,14 @@ struct LogHoursView: View {
                 // Set default end time to 1 hour after start time
                 endTime = startTime.addingTimeInterval(3600)
                 
-                // Auto-select first team member if only one available
-                if availableTeamMembers.count == 1 {
-                    selectedEmployee = availableTeamMembers.first
+                if let preselectedTeamMember {
+                    selectEmployee(
+                        availableTeamMembers.first(where: { $0.id == preselectedTeamMember.id })
+                            ?? preselectedTeamMember
+                    )
+                } else if availableTeamMembers.count == 1 {
+                    // Auto-select first team member if only one available
+                    selectEmployee(availableTeamMembers.first)
                 }
                 
                 Logger.labor.info(
@@ -351,6 +376,16 @@ struct LogHoursView: View {
         isPresented = false
     }
 
+    private func selectEmployee(_ member: TeamMember?) {
+        selectedEmployee = member
+
+        if let member {
+            selectedRate = member.defaultRate ?? member.rates.first
+        } else {
+            selectedRate = nil
+        }
+    }
+
     private var rateMenuTitle: String {
         guard let selectedRate else { return "Choose Rate" }
         return "\(selectedRate.taskType) - \(selectedRate.rate.formatAsCurrency())/hr"
@@ -369,6 +404,40 @@ struct LogHoursView: View {
             self.selectedRate = refreshedRate
         } else {
             self.selectedRate = refreshedEmployee.defaultRate ?? refreshedEmployee.rates.first
+        }
+    }
+
+    private func initializeLunchWindowIfNeeded() {
+        guard hasLunchBreak else { return }
+        guard lunchStart == nil || lunchEnd == nil else { return }
+        guard endTime > startTime else { return }
+
+        let shiftDuration = endTime.timeIntervalSince(startTime)
+        let lunchDuration = min(3600, shiftDuration / 2)
+        guard lunchDuration > 0 else { return }
+
+        let leadIn = max(0, (shiftDuration - lunchDuration) / 2)
+        lunchStart = startTime.addingTimeInterval(leadIn)
+        lunchEnd = lunchStart?.addingTimeInterval(lunchDuration)
+    }
+
+    private func normalizeLunchWindowIfNeeded() {
+        guard hasLunchBreak else { return }
+        guard endTime > startTime else {
+            lunchStart = nil
+            lunchEnd = nil
+            return
+        }
+
+        guard let lunchStart,
+              let lunchEnd,
+              lunchEnd > lunchStart,
+              lunchStart >= startTime,
+              lunchEnd <= endTime else {
+            self.lunchStart = nil
+            self.lunchEnd = nil
+            initializeLunchWindowIfNeeded()
+            return
         }
     }
 }

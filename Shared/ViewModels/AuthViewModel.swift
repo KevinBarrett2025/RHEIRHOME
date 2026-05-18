@@ -275,6 +275,7 @@ class AuthViewModel: ObservableObject {
             if cloudKitService.currentUser != nil {
                 logInfo("CloudKit user already authenticated; restoring session.")
                 if let user = self.user {
+                    self.storeAppleDisplayNameIfAvailable(from: appleCred, for: user.id)
                     // ENHANCEMENT: Try to restore actual email from stored data if available
                     if user.email == "user.email.not.available@rheir.com" {
                         self.tryRestoreActualEmail(for: user)
@@ -296,6 +297,7 @@ class AuthViewModel: ObservableObject {
                     },
                     receiveValue: { [weak self] user in
                         guard let self = self else { return }
+                        self.storeAppleDisplayNameIfAvailable(from: appleCred, for: user.id)
                         
                         // ENHANCEMENT: Store actual email if this is first-time auth
                         if let email = appleCred.email, !email.isEmpty {
@@ -336,6 +338,37 @@ class AuthViewModel: ObservableObject {
         } else {
             Logger.session.info("No cached Apple email available.")
         }
+    }
+
+    private func storeAppleDisplayNameIfAvailable(
+        from credential: ASAuthorizationAppleIDCredential,
+        for userID: String
+    ) {
+        guard let fullName = credential.fullName else { return }
+        let formatter = PersonNameComponentsFormatter()
+        let displayName = formatter.string(from: fullName)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !displayName.isEmpty else { return }
+
+        localCache.storeAppleDisplayName(displayName, for: userID)
+        Logger.session.info("Stored Apple display name for authenticated user.")
+    }
+
+    private func resolvedAdminDisplayName(for userID: String, email: String) -> String {
+        if let displayName = localCache.appleDisplayName(for: userID)?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+           !displayName.isEmpty {
+            return displayName
+        }
+
+        if email != "user.email.not.available@rheir.com",
+           let localPart = email.components(separatedBy: "@").first,
+           !localPart.isEmpty {
+            return localPart.capitalized
+        }
+
+        return "Owner"
     }
 
     // MARK: - Organization Status Check
@@ -533,7 +566,7 @@ class AuthViewModel: ObservableObject {
             if existingAdmin == nil {
                 self.logOrganizationEvent("Admin team member missing; creating one.", organizationID: currentOrg.id)
                 
-                let adminName = userEmail.components(separatedBy: "@").first?.capitalized ?? "Administrator";
+                let adminName = self.resolvedAdminDisplayName(for: userID, email: userEmail)
                 
                 let adminTeamMember = TeamMember(
                     id: UUID(),
@@ -674,7 +707,7 @@ class AuthViewModel: ObservableObject {
             if existingAdmin == nil {
                 self.logOrganizationEvent("Admin team member missing; creating organization owner record.", organizationID: organization.id)
                 
-                let adminName = userEmail.components(separatedBy: "@").first?.capitalized ?? "Admin User"
+                let adminName = self.resolvedAdminDisplayName(for: userID, email: userEmail)
                 
                 let adminTeamMember = TeamMember(
                     id: UUID(),

@@ -443,6 +443,14 @@ final class RHEIRUITests: XCTestCase {
         XCTAssertTrue(app.buttons["labor-payment-tab-unpaid"].exists)
         XCTAssertTrue(app.buttons["labor-payment-tab-paid"].exists)
         XCTAssertTrue(app.buttons["labor-unpaid-hour-DA7A5D5E-9150-43EE-B0E4-B9CE93457D15"].exists)
+        XCTAssertTrue(app.buttons["labor-payment-add-hours-button"].exists)
+
+        app.buttons["labor-payment-add-hours-button"].tap()
+        XCTAssertTrue(
+            app.navigationBars["Log Hours"].waitForExistence(timeout: 5),
+            "Expected worker payment sheets to expose a direct add-hours path."
+        )
+        app.buttons["Cancel"].tap()
 
         app.buttons["labor-payment-tab-paid"].tap()
         app.swipeUp()

@@ -399,6 +399,7 @@ struct SessionSupportTests {
         )
         store.storeLastSelectedProjectID("project-1", for: "org-1")
         store.storeAppleEmail("owner@example.com", for: "user-1")
+        store.storeAppleDisplayName("Kevin Barrett", for: "user-1")
 
         store.clearAllKnownSessionKeys()
 
@@ -408,6 +409,7 @@ struct SessionSupportTests {
         #expect(store.pendingInvite == nil)
         #expect(store.lastSelectedProjectID(for: "org-1") == nil)
         #expect(store.appleEmail(for: "user-1") == nil)
+        #expect(store.appleDisplayName(for: "user-1") == nil)
     }
 
     @Test
@@ -702,6 +704,66 @@ struct SessionSupportTests {
         #expect(compactedProjectsPayload.contains("\"Legacy progress note\""))
         #expect(compactedOfflineProjects.first?.receipts.first?.vendor == "North Shore Supply")
         #expect(compactedOfflineProjects.first?.receipts.first?.receiptImageData == nil)
+    }
+}
+
+struct BusinessWorkerRosterCacheTests {
+
+    @Test
+    func preservesCachedWorkersDuringTransientPartialRefresh() {
+        let orgID = "org-workers"
+        let kevin = TeamMember(
+            id: UUID(uuidString: "AA111111-1111-1111-1111-111111111111")!,
+            name: "Kevin Barrett",
+            jobTitle: "Owner",
+            organizationID: orgID
+        )
+        let rachel = TeamMember(
+            id: UUID(uuidString: "BB222222-2222-2222-2222-222222222222")!,
+            name: "Rachel",
+            jobTitle: "Designer",
+            organizationID: orgID
+        )
+        let newWorker = TeamMember(
+            id: UUID(uuidString: "CC333333-3333-3333-3333-333333333333")!,
+            name: "Jordan",
+            jobTitle: "Plumber",
+            organizationID: orgID
+        )
+
+        let reconciled = BusinessWorkerRosterCache.reconciled(
+            cachedWorkers: [kevin, rachel],
+            liveWorkers: [newWorker],
+            allMembers: [newWorker]
+        )
+
+        #expect(reconciled.map(\.name) == ["Jordan", "Kevin Barrett", "Rachel"])
+    }
+
+    @Test
+    func removesExplicitlyInactiveWorkersFromCache() {
+        let orgID = "org-workers"
+        let activeWorker = TeamMember(
+            id: UUID(uuidString: "DD444444-4444-4444-4444-444444444444")!,
+            name: "Active Worker",
+            jobTitle: "Carpenter",
+            organizationID: orgID
+        )
+        var terminatedWorker = TeamMember(
+            id: UUID(uuidString: "EE555555-5555-5555-5555-555555555555")!,
+            name: "Former Worker",
+            jobTitle: "Painter",
+            organizationID: orgID
+        )
+        terminatedWorker.terminate(reason: "Contract ended", type: .endOfContract)
+
+        let reconciled = BusinessWorkerRosterCache.reconciled(
+            cachedWorkers: [activeWorker, terminatedWorker],
+            liveWorkers: [activeWorker],
+            allMembers: [activeWorker, terminatedWorker]
+        )
+
+        #expect(reconciled.map(\.name) == ["Active Worker"])
     }
 }
 
@@ -2281,6 +2343,58 @@ struct LaborPaymentLedgerTests {
         #expect(restoredInactiveWorker?.employmentStatus == .terminated)
         #expect(restoredInactiveWorker?.terminationType == .endOfContract)
         #expect(projectStore.loadProjects(for: orgID).first { $0.id == project.id }?.loggedHours.contains { $0.employeeID == worker.id } == true)
+    }
+
+    @Test
+    func loggedLunchBreakReducesPayableHoursAndUnpaidAmount() {
+        let orgID = UUID().uuidString
+        let viewModel = ProjectViewModel(
+            offlineDataManager: OfflineDataManager(),
+            projectRepository: RecordingProjectRepository()
+        )
+        viewModel.setCurrentOrganization(
+            Organization(id: orgID, name: "Personal Workspace"),
+            role: .admin
+        )
+
+        let worker = TeamMember(
+            name: "Rachel",
+            email: "rachel@example.com",
+            jobTitle: "Designer",
+            rates: [EmployeeRate(taskType: "Design", rate: 100, isDefault: true)],
+            organizationID: orgID
+        )
+        viewModel.teamMembers = [worker]
+
+        let project = Project(
+            name: "Lunch Accounting Project",
+            client: "Client",
+            totalBudget: 10_000,
+            startDate: .now,
+            endDate: .now.addingTimeInterval(86_400),
+            organizationID: orgID
+        )
+        viewModel.projects = [project]
+        viewModel.organizationProjects = [project]
+        viewModel.accessibleProjects = [project]
+        viewModel.selectProject(project)
+
+        let shiftStart = Date(timeIntervalSince1970: 1_747_268_820)
+        viewModel.logHours(
+            startTime: shiftStart,
+            endTime: shiftStart.addingTimeInterval(18_000),
+            employee: worker.name,
+            rate: 100,
+            category: "Design",
+            lunchBreakDuration: 1,
+            employeeID: worker.id
+        )
+
+        let loggedHour = viewModel.selectedProject?.loggedHours.first
+        #expect(loggedHour?.lunchBreakDuration == 1)
+        #expect(loggedHour?.hours == 4)
+        #expect(loggedHour?.straightTimePay == 400)
+        #expect(viewModel.projectUnpaidAmount == 400)
     }
 }
 
