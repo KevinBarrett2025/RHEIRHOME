@@ -24,6 +24,7 @@
 - Labor accounting invariants for paid-cash history, earned/applied labor, unpaid balances, overpayment balances, and full-ledger reversal behavior
 - Labor and Business Resources UI professionalism/no-truncation checks for compact device sheets and accounting rows
 - Log Hours actual-rate-only selection with in-flow add-rate editing from the project labor entry path
+- Stable post-add worker refresh, lunch-deducted payable hours, direct add-hours entry from worker ledgers, and owner-profile repair for placeholder Apple-sign-in identities
 - Task assignment, due/overdue, completion proof, and photo semantics
 - Linked item-level receipt partial refunds with source-receipt audit trail, quantity guards, proportional tax/discount allocation, row-swipe refund entry, collapsed child refund rows, source/edit item refund badges, reversible linked refunds, and refund/payment-card filters
 - Receipt-type metadata for restaurant tips and gas-station price-per-gallon values
@@ -246,6 +247,9 @@
 - Latest receipt edit cancel-staging focused parity result: `PASS` (`/tmp/rheir_receipt_edit_cancel_staging_parity_20260517_1.xcresult`, `2 refund unit tests plus 1 edit-sheet staged refund/revert Cancel/Save UI relaunch test`)
 - Latest receipt edit cancel-staging visual evidence: kept xcresult attachments `Receipt line-item refund confirmation`, `Receipt refund summary after save`, and `Receipt refund filters and reversal after relaunch`
 - Latest receipt edit cancel-staging pbxproj drift: `NONE`
+- Latest Labor follow-up Gate A result: `PASS` (`/tmp/rheir_gateA_labor_followup_20260518.xcresult`)
+- Latest Labor follow-up focused parity result: `PASS` (`/tmp/rheir_labor_icandidate_parity_20260518.log`, worker-roster suite plus worker-ledger UI path; `/tmp/rheir_labor_icandidate_unit_parity_serial_20260518.log`, `23 tests across 3 suites`)
+- Latest Labor follow-up pbxproj drift: `NONE`
 - Latest receipt edit-item revert Gate A result: `PASS` (`/tmp/rheir_gateA_receipt_edit_item_revert_20260517_2.xcresult`; sandbox attempt `_1` failed on CoreSimulator asset-catalog runtime, escalated rerun passed)
 - Latest receipt edit-item revert focused parity result: `PASS` (`/tmp/rheir_receipt_edit_item_revert_parity_20260517_3.xcresult`, `2 refund unit tests plus 1 edit-sheet refund/revert UI relaunch test`; sandbox attempt `_2` failed before test execution on CoreSimulator service loss)
 - Latest receipt edit-item revert visual evidence: kept xcresult attachment `Receipt refund filters and reversal after relaunch`
@@ -357,7 +361,7 @@
 - Latest focused fast-ship project-context shell Gate A result: `PASS` (`/tmp/rheir_gateA_project_context_shell_20260514.xcresult`)
 
 ## Known Residual Risks
-- The fast-ship v1 release profile is now the active launch target, but same-user iCloud restore still needs explicit release-candidate validation before it can be treated as a ship promise.
+- The fast-ship v1 release profile is now the active launch target, but same-user iCloud restore still needs explicit release-candidate validation after the latest Labor follow-up before it can be treated as a ship promise.
 - Deterministic UI smoke coverage is now in place for the simplified shell plus AI Project Calculator intake/draft/approval, live receipt/hour/task mapping parity into approved budget lines, and manual-receipt relaunch persistence, but broader approved-baseline runtime QA and device validation are still open.
 - Remaining raw `print(...)` statements are now limited to development-only seams such as `Shared/Services/Development/DevelopmentDataManager.swift`, `Shared/Services/StubServices.swift`, and `Shared/Services/PreviewAuthService.swift`.
 - Stable simulator and elevated CLI simulator paths are warning-clean for the active target, and device launch/file-state validation now shows compact `projects.json`, `offline_projects.json`, and prefs payloads; remaining release hardening centers on the simplified single-user contractor flow plus same-device and real-device QA.
