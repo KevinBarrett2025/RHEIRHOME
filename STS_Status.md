@@ -3,7 +3,7 @@
 ## Repo
 - Root: `/Users/kevinbarrett/Dev/RHEIR`
 - Branch: `gm/rheir-hardening-phase1`
-- HEAD: `85b286fdff887d1a5f3630228a20145ddfd752c6`
+- HEAD: `e60a1d117e5c98c2ed6932ef4d05cbcf8c6d664e`
 
 ## Active Initiative
 - RHEIR release hardening, Fast-Ship Hybrid contractor workflow hardening.
@@ -49,6 +49,7 @@
 - Added reversible linked receipt refunds so a mistaken partial refund can be removed from the project ledger and the source receipt's refundable state is derived correctly again.
 - Added receipt refund-state and payment/card filters with visible purchase/refund/net summaries so contractors can inspect returned money and card spend without exporting first.
 - Added refunded line-item reversal in `Edit Receipt`, where the same row-swipe workflow now shows `Refund` before return and `Revert` after return without adding a second swipe affordance to read-only receipt detail.
+- Staged `Edit Receipt` row-swipe refund/revert actions locally so `Cancel` discards attempted ledger changes and `Save` is the only project mutation point for receipt refund edits.
 - Aligned receipt-level legacy materials/general-conditions/contingency bridge totals with detailed receipt-category mapping in `ProjectViewModel+Filters.swift`, removing expected `Materials enhanced spending diverged from legacy...` noise from active fast-ship logs.
 - Replaced string asset-name status color lookups in client-card and change-order UI with semantic SwiftUI tint colors on `ProjectStatus` and `ChangeOrderStatus`, removing the active `No color named 'green' found in asset catalog...` warning.
 - Added focused budget-bridge regression coverage proving a detailed-category material receipt validates cleanly through the receipt-level legacy bridge.

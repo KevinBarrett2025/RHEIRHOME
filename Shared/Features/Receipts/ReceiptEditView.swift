@@ -32,6 +32,8 @@ struct ReceiptEditView: View {
     @State private var items: [ReceiptItem]
     @State private var editingItem: ReceiptItem?
     @State private var pendingRefundActionPrompt: ReceiptItemRefundActionPrompt?
+    @State private var stagedRefunds: [Receipt] = []
+    @State private var stagedReversedRefundIDs: Set<String> = []
     @State private var showingPaymentMethodPicker = false
     @State private var isSaving = false
     
@@ -59,7 +61,7 @@ struct ReceiptEditView: View {
     }
 
     private var linkedRefunds: [Receipt] {
-        projectVM.selectedProject?.receipts.filter { $0.isReturn && $0.sourceReceiptID == receipt.id } ?? []
+        effectiveProjectReceipts.filter { $0.isReturn && $0.sourceReceiptID == receipt.id }
     }
 
     private var locksFinancialHistory: Bool {
@@ -70,18 +72,32 @@ struct ReceiptEditView: View {
         projectVM.selectedProject?.receipts ?? [receipt]
     }
 
+    private var effectiveProjectReceipts: [Receipt] {
+        let stagedRefundIDs = Set(stagedRefunds.map(\.id))
+        var receipts = projectReceipts.filter { receipt in
+            !stagedReversedRefundIDs.contains(receipt.id)
+                && !stagedRefundIDs.contains(receipt.id)
+        }
+        receipts.append(contentsOf: stagedRefunds)
+        return receipts
+    }
+
     private var currentVendorCategory: VendorCategory {
         projectVM.vendorService.vendors.first(where: {
             $0.name.caseInsensitiveCompare(vendor) == .orderedSame
         })?.category ?? VendorCategory.inferred(from: vendor)
     }
 
-    private var hasUnsavedFinancialChanges: Bool {
+    private var hasUnsavedFinancialEdits: Bool {
         amount != String(format: "%.2f", receipt.amount)
             || taxAmount != String(format: "%.2f", receipt.taxAmount)
             || discountAmount != String(format: "%.2f", receipt.discountAmount)
             || isReturn != receipt.isReturn
             || items != receipt.items
+    }
+
+    private var hasStagedRefundChanges: Bool {
+        !stagedRefunds.isEmpty || !stagedReversedRefundIDs.isEmpty
     }
     
     var body: some View {
@@ -266,11 +282,15 @@ struct ReceiptEditView: View {
                         Text("Itemized Breakdown")
                             .accessibilityIdentifier("receipt-edit-items-header")
                     } footer: {
-                        Text(
-                            locksFinancialHistory
-                                ? "Financial line items are locked because this receipt participates in partial-refund history. Swipe item rows to refund remaining quantities or revert recorded refunds."
-                                : "Tap an item to review or edit the saved scan details. Swipe left on a refundable item to record a refund."
-                        )
+                        if hasStagedRefundChanges {
+                            Text("Pending refund changes are staged until Save. Cancel discards them.")
+                        } else {
+                            Text(
+                                locksFinancialHistory
+                                    ? "Financial line items are locked because this receipt participates in partial-refund history. Swipe item rows to refund remaining quantities or revert recorded refunds."
+                                    : "Tap an item to review or edit the saved scan details. Swipe left on a refundable item to record a refund."
+                            )
+                        }
                     }
                 }
             }
@@ -378,11 +398,25 @@ struct ReceiptEditView: View {
             var updatedProject = project.normalizedReceiptCopy
             if updatedProject.receipts.contains(where: { $0.id == receipt.id }) {
                 updatedProject = updatedProject.upsertingReceipt(updatedReceipt)
+                updatedProject.receipts.removeAll { stagedReversedRefundIDs.contains($0.id) }
+                for refund in stagedRefunds {
+                    updatedProject = updatedProject.upsertingReceipt(refund)
+                }
+                updatedProject.lastModifiedDate = Date()
+                let refundsToReverse = projectReceipts.filter { stagedReversedRefundIDs.contains($0.id) }
+                let refundsToRecord = stagedRefunds
                 
                 Task {
                     await projectVM.updateProject(updatedProject)
                     await MainActor.run {
+                        for refund in refundsToReverse {
+                            updateDirectorySpending(for: refund, removing: true)
+                        }
+                        for refund in refundsToRecord {
+                            updateDirectorySpending(for: refund)
+                        }
                         projectVM.recomputeFilteredReceipts()
+                        projectVM.saveOrganizationSpecificBackup()
                         dismissEditor()
                         isSaving = false
 
@@ -407,22 +441,22 @@ struct ReceiptEditView: View {
     private func canRefund(_ item: ReceiptItem) -> Bool {
         receipt.supportsPartialRefunds
             && !receipt.isReturn
-            && !hasUnsavedFinancialChanges
-            && receipt.remainingRefundableQuantity(for: item, in: projectReceipts) > 0
+            && !hasUnsavedFinancialEdits
+            && receipt.remainingRefundableQuantity(for: item, in: effectiveProjectReceipts) > 0
     }
 
     private func canRevertRefund(for item: ReceiptItem) -> Bool {
         receipt.supportsPartialRefunds
             && !receipt.isReturn
-            && !hasUnsavedFinancialChanges
+            && !hasUnsavedFinancialEdits
             && refundToRevert(for: item) != nil
     }
 
     private func refundStatus(for item: ReceiptItem) -> ReceiptEditItemRefundStatus? {
-        let refundedQuantity = receipt.refundedQuantity(for: item.id, in: projectReceipts)
+        let refundedQuantity = receipt.refundedQuantity(for: item.id, in: effectiveProjectReceipts)
         guard refundedQuantity > 0 else { return nil }
 
-        let remainingQuantity = receipt.remainingRefundableQuantity(for: item, in: projectReceipts)
+        let remainingQuantity = receipt.remainingRefundableQuantity(for: item, in: effectiveProjectReceipts)
         let isFullyRefunded = remainingQuantity <= 0.000_001
         let label = isFullyRefunded ? "REFUNDED" : "PARTIAL REFUND"
         let refundedText = refundedQuantity.formatted(.number.precision(.fractionLength(0...2)))
@@ -436,11 +470,11 @@ struct ReceiptEditView: View {
     }
 
     private func prepareRefund(for item: ReceiptItem) {
-        let remainingQuantity = receipt.remainingRefundableQuantity(for: item, in: projectReceipts)
+        let remainingQuantity = receipt.remainingRefundableQuantity(for: item, in: effectiveProjectReceipts)
         guard remainingQuantity > 0,
               let refund = receipt.makePartialRefund(
                 selections: [ReceiptRefundSelection(itemID: item.id, quantity: remainingQuantity)],
-                existingReceipts: projectReceipts
+                existingReceipts: effectiveProjectReceipts
               )
         else {
             return
@@ -468,42 +502,32 @@ struct ReceiptEditView: View {
     }
 
     private func recordRefund(_ refund: Receipt) {
-        guard let project = projectVM.selectedProject else { return }
+        guard projectVM.selectedProject != nil else { return }
 
-        Task {
-            await projectVM.addReceipt(refund, to: project.id)
-            await MainActor.run {
-                updateDirectorySpending(for: refund)
-                projectVM.recomputeFilteredReceipts()
-                projectVM.saveOrganizationSpecificBackup()
-                dismissEditor()
-                Logger.receiptWorkflow.notice(
-                    "Recorded line-item receipt refund [source=\(receipt.id, privacy: .private(mask: .hash)) amount=\(refund.amount, format: .fixed(precision: 2)) item=\(refund.items.first?.name ?? "unknown", privacy: .private(mask: .hash))]"
-                )
-            }
+        stagedReversedRefundIDs.remove(refund.id)
+        if let index = stagedRefunds.firstIndex(where: { $0.id == refund.id }) {
+            stagedRefunds[index] = refund
+        } else {
+            stagedRefunds.append(refund)
         }
+
+        Logger.receiptWorkflow.notice(
+            "Staged line-item receipt refund [source=\(receipt.id, privacy: .private(mask: .hash)) amount=\(refund.amount, format: .fixed(precision: 2)) item=\(refund.items.first?.name ?? "unknown", privacy: .private(mask: .hash))]"
+        )
     }
 
     private func reverseRefund(_ refund: Receipt) {
-        guard refund.isPartialRefund,
-              let project = projectVM.selectedProject
-        else { return }
+        guard refund.isPartialRefund else { return }
 
-        var updatedProject = project
-        updatedProject.receipts.removeAll { $0.id == refund.id }
-        updatedProject.lastModifiedDate = Date()
-
-        Task {
-            await projectVM.updateProject(updatedProject)
-            await MainActor.run {
-                updateDirectorySpending(for: refund, removing: true)
-                projectVM.recomputeFilteredReceipts()
-                projectVM.saveOrganizationSpecificBackup()
-                Logger.receiptWorkflow.notice(
-                    "Reversed line-item receipt refund [source=\(receipt.id, privacy: .private(mask: .hash)) amount=\(refund.amount, format: .fixed(precision: 2)) item=\(refund.items.first?.name ?? "unknown", privacy: .private(mask: .hash))]"
-                )
-            }
+        if let stagedIndex = stagedRefunds.firstIndex(where: { $0.id == refund.id }) {
+            stagedRefunds.remove(at: stagedIndex)
+        } else {
+            stagedReversedRefundIDs.insert(refund.id)
         }
+
+        Logger.receiptWorkflow.notice(
+            "Staged line-item receipt refund reversal [source=\(receipt.id, privacy: .private(mask: .hash)) amount=\(refund.amount, format: .fixed(precision: 2)) item=\(refund.items.first?.name ?? "unknown", privacy: .private(mask: .hash))]"
+        )
     }
 
     private func updateDirectorySpending(for receipt: Receipt, removing: Bool = false) {

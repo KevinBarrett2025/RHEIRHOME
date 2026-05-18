@@ -242,6 +242,10 @@
 - `SignInWithAppleCoordinator` structured logging
 
 ## Current Validation Baseline
+- Latest receipt edit cancel-staging Gate A result: `PASS` (`/tmp/rheir_gateA_receipt_edit_cancel_staging_20260517_1.xcresult`)
+- Latest receipt edit cancel-staging focused parity result: `PASS` (`/tmp/rheir_receipt_edit_cancel_staging_parity_20260517_1.xcresult`, `2 refund unit tests plus 1 edit-sheet staged refund/revert Cancel/Save UI relaunch test`)
+- Latest receipt edit cancel-staging visual evidence: kept xcresult attachments `Receipt line-item refund confirmation`, `Receipt refund summary after save`, and `Receipt refund filters and reversal after relaunch`
+- Latest receipt edit cancel-staging pbxproj drift: `NONE`
 - Latest receipt edit-item revert Gate A result: `PASS` (`/tmp/rheir_gateA_receipt_edit_item_revert_20260517_2.xcresult`; sandbox attempt `_1` failed on CoreSimulator asset-catalog runtime, escalated rerun passed)
 - Latest receipt edit-item revert focused parity result: `PASS` (`/tmp/rheir_receipt_edit_item_revert_parity_20260517_3.xcresult`, `2 refund unit tests plus 1 edit-sheet refund/revert UI relaunch test`; sandbox attempt `_2` failed before test execution on CoreSimulator service loss)
 - Latest receipt edit-item revert visual evidence: kept xcresult attachment `Receipt refund filters and reversal after relaunch`
