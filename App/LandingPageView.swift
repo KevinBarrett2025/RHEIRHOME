@@ -69,9 +69,25 @@ struct LandingPageView: View {
         }
     }
 
+    private func statusAccentColor(for status: ProjectStatus) -> Color {
+        switch status {
+        case .active, .completed:
+            return RheirTheme.Colors.success
+        case .onHold:
+            return RheirTheme.Colors.warning
+        case .cancelled:
+            return RheirTheme.Colors.destructive
+        case .planning:
+            return RheirTheme.Colors.information
+        }
+    }
+
     var body: some View {
         NavigationStack {
             ZStack {
+                RheirTheme.Colors.appBackground
+                    .ignoresSafeArea()
+
                 VStack {
                     if releaseProfile.shouldHideCollaborationSurface {
                         fastShipHeaderSection
@@ -210,11 +226,11 @@ struct LandingPageView: View {
     }
 
     private var fastShipHeaderSection: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: RheirTheme.Spacing.large) {
             HStack(alignment: .center) {
                 Text("Projects")
                     .font(.largeTitle.weight(.bold))
-                    .foregroundColor(.primary)
+                    .foregroundStyle(RheirTheme.Colors.primaryText)
                     .accessibilityIdentifier("fast-ship-projects-title")
 
                 Spacer()
@@ -226,7 +242,7 @@ struct LandingPageView: View {
                 } label: {
                     Image(systemName: "gearshape.fill")
                         .font(.title2)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(RheirTheme.Colors.secondaryText)
                         .frame(width: 44, height: 44)
                         .contentShape(Rectangle())
                 }
@@ -234,24 +250,27 @@ struct LandingPageView: View {
             }
 
             if let selectedProject = viewModel.selectedProject {
+                let statusAccent = statusAccentColor(for: selectedProject.status)
+
                 RheirCard(
                     padding: RheirTheme.Spacing.medium,
-                    borderColor: selectedProject.status.tintColor.opacity(0.35)
+                    background: RheirTheme.Colors.cardBackground,
+                    borderColor: statusAccent.opacity(0.32)
                 ) {
                     HStack(alignment: .center, spacing: RheirTheme.Spacing.medium) {
                         Image(systemName: selectedProject.status.icon)
                             .font(.title3)
-                            .foregroundStyle(selectedProject.status.tintColor)
+                            .foregroundStyle(statusAccent)
                             .frame(width: 32, height: 32)
 
                         VStack(alignment: .leading, spacing: RheirTheme.Spacing.xSmall) {
                             Text("Current Project")
                                 .font(.caption.weight(.semibold))
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(RheirTheme.Colors.secondaryText)
 
                             Text(selectedProject.name)
                                 .font(.headline)
-                                .foregroundStyle(.primary)
+                                .foregroundStyle(RheirTheme.Colors.primaryText)
                                 .lineLimit(1)
                         }
 
@@ -271,18 +290,18 @@ struct LandingPageView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Choose a project to begin")
                         .font(.title3.weight(.semibold))
-                        .foregroundColor(.primary)
+                        .foregroundStyle(RheirTheme.Colors.primaryText)
                     Text("Receipts, labor, tasks, and budget unlock after a project is selected.")
                         .font(.subheadline)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(RheirTheme.Colors.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .accessibilityIdentifier("fast-ship-project-selection-guidance")
             }
         }
-        .padding(.horizontal)
+        .padding(.horizontal, RheirTheme.Spacing.large)
         .padding(.top, 8)
-        .padding(.bottom, 8)
+        .padding(.bottom, RheirTheme.Spacing.small)
     }
 
     private var businessResourcesEntrySection: some View {
@@ -291,42 +310,42 @@ struct LandingPageView: View {
                 .environmentObject(viewModel)
                 .environmentObject(authVM)
         } label: {
-            HStack(spacing: 14) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(Color.blue.opacity(0.16))
-                    Image(systemName: "person.crop.rectangle.stack.fill")
-                        .font(.title3)
-                        .foregroundColor(.blue)
+            RheirCard(
+                padding: RheirTheme.Spacing.medium,
+                background: RheirTheme.Colors.cardBackground
+            ) {
+                HStack(spacing: 14) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: RheirTheme.Radius.medium, style: .continuous)
+                            .fill(RheirTheme.Colors.information.opacity(0.16))
+                        Image(systemName: "person.crop.rectangle.stack.fill")
+                            .font(.title3)
+                            .foregroundStyle(RheirTheme.Colors.information)
+                    }
+                    .frame(width: 48, height: 48)
+
+                    VStack(alignment: .leading, spacing: RheirTheme.Spacing.xSmall) {
+                        Text("Business Resources")
+                            .font(.headline)
+                            .foregroundStyle(RheirTheme.Colors.primaryText)
+                        Text("Workers, vendors, and payment methods used across projects.")
+                            .font(.subheadline)
+                            .foregroundStyle(RheirTheme.Colors.secondaryText)
+                            .lineLimit(2)
+                    }
+
+                    Spacer()
+
+                    Image(systemName: "chevron.right")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(RheirTheme.Colors.secondaryText)
                 }
-                .frame(width: 48, height: 48)
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Business Resources")
-                        .font(.headline)
-                        .foregroundColor(.primary)
-                    Text("Workers, vendors, and payment methods used across projects.")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                        .lineLimit(2)
-                }
-
-                Spacer()
-
-                Image(systemName: "chevron.right")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundColor(.secondary)
             }
-            .padding(14)
-            .background(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(Color(.secondarySystemBackground))
-            )
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("business-resources-entry")
-        .padding(.horizontal)
+        .padding(.horizontal, RheirTheme.Spacing.large)
         .padding(.bottom, 8)
     }
 
