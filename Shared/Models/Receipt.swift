@@ -472,6 +472,20 @@ public struct ReceiptItem: Identifiable, Codable, Hashable, Sendable {
     public var subcategory: String       // Dynamic subcategory
     public var sku: String
     public var notes: String
+    public var isMarkedForReturn: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case quantity
+        case unitPrice
+        case totalPrice
+        case category
+        case subcategory
+        case sku
+        case notes
+        case isMarkedForReturn
+    }
     
     public init(
         id: UUID = UUID(),
@@ -482,7 +496,8 @@ public struct ReceiptItem: Identifiable, Codable, Hashable, Sendable {
         category: ReceiptCategory = .material,
         subcategory: String = "",
         sku: String = "",
-        notes: String = ""
+        notes: String = "",
+        isMarkedForReturn: Bool = false
     ) {
         self.id = id
         self.name = name
@@ -493,6 +508,35 @@ public struct ReceiptItem: Identifiable, Codable, Hashable, Sendable {
         self.subcategory = subcategory
         self.sku = sku
         self.notes = notes
+        self.isMarkedForReturn = isMarkedForReturn
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        quantity = try container.decode(Double.self, forKey: .quantity)
+        unitPrice = try container.decode(Double.self, forKey: .unitPrice)
+        totalPrice = try container.decode(Double.self, forKey: .totalPrice)
+        category = try container.decode(ReceiptCategory.self, forKey: .category)
+        subcategory = try container.decode(String.self, forKey: .subcategory)
+        sku = try container.decode(String.self, forKey: .sku)
+        notes = try container.decode(String.self, forKey: .notes)
+        isMarkedForReturn = try container.decodeIfPresent(Bool.self, forKey: .isMarkedForReturn) ?? false
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(name, forKey: .name)
+        try container.encode(quantity, forKey: .quantity)
+        try container.encode(unitPrice, forKey: .unitPrice)
+        try container.encode(totalPrice, forKey: .totalPrice)
+        try container.encode(category, forKey: .category)
+        try container.encode(subcategory, forKey: .subcategory)
+        try container.encode(sku, forKey: .sku)
+        try container.encode(notes, forKey: .notes)
+        try container.encode(isMarkedForReturn, forKey: .isMarkedForReturn)
     }
 }
 
@@ -691,6 +735,14 @@ public struct Receipt: Identifiable, Codable, Hashable, Sendable {
     /// Gross amount still available to refund from the original receipt.
     public func remainingRefundableAmount(in receipts: [Receipt]) -> Double {
         max(0, amount - refundedAmount(in: receipts))
+    }
+
+    public var itemsMarkedForReturn: [ReceiptItem] {
+        items.filter(\.isMarkedForReturn)
+    }
+
+    public var hasItemsMarkedForReturn: Bool {
+        items.contains { $0.isMarkedForReturn }
     }
 
     /// Builds a linked negative receipt from selected source lines.
