@@ -1963,6 +1963,100 @@ struct ProjectMutationPropagationTests {
     }
 
     @Test
+    func projectRefreshTracksSameIDOperationsMetadataChanges() {
+        let orgID = UUID().uuidString
+        let viewModel = ProjectViewModel(
+            offlineDataManager: OfflineDataManager(networkMonitoringEnabled: false),
+            projectRepository: RecordingProjectRepository()
+        )
+        viewModel.setCurrentOrganization(
+            Organization(id: orgID, name: "Personal Workspace"),
+            role: .admin
+        )
+
+        let projectID = UUID()
+        let modifiedDate = Date(timeIntervalSince1970: 1_714_020_000)
+        var project = Project(
+            id: projectID,
+            name: "Operations Refresh Project",
+            client: "Client G",
+            totalBudget: 34_000,
+            startDate: modifiedDate,
+            endDate: modifiedDate.addingTimeInterval(86_400),
+            organizationID: orgID,
+            lastModifiedDate: modifiedDate
+        )
+        project.clientProfile = ProjectClientProfile(name: "Client G", notes: "Original access notes")
+        project.paymentMilestones = [
+            ProjectPaymentMilestone(title: "Deposit", amount: 2_000)
+        ]
+        project.projectDocuments = [
+            ProjectDocument(
+                title: "Original agreement",
+                category: .contract,
+                fileName: "agreement.pdf",
+                mimeType: "application/pdf",
+                storageKind: .externalURL,
+                storageIdentifier: "https://example.com/agreement.pdf"
+            )
+        ]
+        project.projectChecklists = [
+            ProjectChecklist(title: "Demo prep", category: .tools)
+        ]
+        project.projectCalendarEvents = [
+            ProjectCalendarEvent(title: "Dumpster delivery", kind: .deliveryOrder, startDate: modifiedDate)
+        ]
+        project.shoppingListItems = [
+            ProjectShoppingListItem(title: "Contractor bags")
+        ]
+
+        viewModel.projects = [project]
+        viewModel.organizationProjects = [project]
+        viewModel.selectedProject = project
+        viewModel.updateAccessibleProjects()
+
+        var refreshedProject = project
+        refreshedProject.lastModifiedDate = modifiedDate
+        refreshedProject.clientProfile = ProjectClientProfile(name: "Client G", notes: "Use side gate")
+        refreshedProject.paymentMilestones = [
+            ProjectPaymentMilestone(title: "Rough-in draw", amount: 8_500)
+        ]
+        refreshedProject.projectDocuments = [
+            ProjectDocument(
+                title: "Signed change order",
+                category: .other,
+                fileName: "change-order.pdf",
+                mimeType: "application/pdf",
+                storageKind: .externalURL,
+                storageIdentifier: "https://example.com/change-order.pdf"
+            )
+        ]
+        refreshedProject.projectChecklists = [
+            ProjectChecklist(
+                title: "Electrical prep",
+                category: .tools,
+                items: [ProjectChecklistItem(title: "Voltage tester")]
+            )
+        ]
+        refreshedProject.projectCalendarEvents = [
+            ProjectCalendarEvent(title: "Fixture delivery", kind: .deliveryOrder, startDate: modifiedDate)
+        ]
+        refreshedProject.shoppingListItems = [
+            ProjectShoppingListItem(title: "Wire staples", quantity: 2, unit: "boxes")
+        ]
+        viewModel.organizationProjects = [refreshedProject]
+
+        viewModel.updateAccessibleProjects()
+
+        #expect(viewModel.selectedProject?.clientProfile?.notes == "Use side gate")
+        #expect(viewModel.accessibleProjects.first?.paymentMilestones?.first?.title == "Rough-in draw")
+        #expect(viewModel.selectedProject?.projectDocuments?.first?.title == "Signed change order")
+        #expect(viewModel.selectedProject?.projectChecklists?.first?.items.map(\.title) == ["Voltage tester"])
+        #expect(viewModel.selectedProject?.projectCalendarEvents?.first?.title == "Fixture delivery")
+        #expect(viewModel.accessibleProjects.first?.shoppingListItems?.first?.quantity == 2)
+    }
+
+    @Test
     func receiptLaborAndTaskMutationsStayVisibleWhenOrganizationProjectsIsTemporarilyStale() async {
         let suiteName = "ProjectMutationFallbackTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!

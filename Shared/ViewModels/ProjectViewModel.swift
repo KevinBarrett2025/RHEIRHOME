@@ -24,6 +24,12 @@ private struct ProjectRefreshSignature: Equatable {
     let receipts: [ReceiptRefreshSignature]
     let tasks: [TaskRefreshSignature]
     let workHours: [WorkHourRefreshSignature]
+    let clientProfile: ProjectClientProfile?
+    let paymentMilestones: [ProjectPaymentMilestone]?
+    let projectDocuments: [ProjectDocument]?
+    let projectChecklists: [ProjectChecklist]?
+    let projectCalendarEvents: [ProjectCalendarEvent]?
+    let shoppingListItems: [ProjectShoppingListItem]?
 
     init(_ project: Project) {
         let normalizedProject = project.normalizedReceiptCopy
@@ -34,6 +40,12 @@ private struct ProjectRefreshSignature: Equatable {
         receipts = normalizedProject.receipts.map(ReceiptRefreshSignature.init)
         tasks = normalizedProject.tasks.map(TaskRefreshSignature.init)
         workHours = normalizedProject.workHours.map(WorkHourRefreshSignature.init)
+        clientProfile = normalizedProject.clientProfile
+        paymentMilestones = normalizedProject.paymentMilestones
+        projectDocuments = normalizedProject.projectDocuments
+        projectChecklists = normalizedProject.projectChecklists
+        projectCalendarEvents = normalizedProject.projectCalendarEvents
+        shoppingListItems = normalizedProject.shoppingListItems
     }
 }
 
