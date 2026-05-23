@@ -771,6 +771,31 @@ public struct ProjectAssistantSnapshot: Sendable {
     }
 }
 
+public struct ProjectOperationsSummary: Equatable, Sendable {
+    public let generatedAt: Date
+    public let openShoppingItemCount: Int
+    public let completedShoppingItemCount: Int
+    public let openChecklistCount: Int
+    public let completedChecklistCount: Int
+    public let openChecklistItemCount: Int
+    public let completedChecklistItemCount: Int
+    public let overdueTaskCount: Int
+    public let dueTodayTaskCount: Int
+    public let dueTodayCalendarEventCount: Int
+    public let upcomingCalendarEventCount: Int
+    public let nextCalendarEvent: ProjectCalendarEvent?
+    public let markedReturnItemCount: Int
+
+    public var actionableItemCount: Int {
+        openShoppingItemCount
+            + openChecklistItemCount
+            + overdueTaskCount
+            + dueTodayTaskCount
+            + dueTodayCalendarEventCount
+            + markedReturnItemCount
+    }
+}
+
 public struct ProjectAssistantChecklistPrep: Identifiable, Sendable {
     public let checklist: ProjectChecklist
     public let linkedTaskCategory: TaskCategory
@@ -825,6 +850,43 @@ public extension Project {
 
     var activeShoppingListItems: [ProjectShoppingListItem] {
         shoppingListItems ?? []
+    }
+
+    func operationsSummary(
+        on date: Date = Date(),
+        calendar: Calendar = .current,
+        upcomingDays: Int = 7
+    ) -> ProjectOperationsSummary {
+        let snapshot = assistantSnapshot(
+            on: date,
+            calendar: calendar,
+            upcomingDays: upcomingDays
+        )
+        let shoppingItems = activeShoppingListItems
+        let checklists = activeProjectChecklists
+        let completedChecklistCount = checklists.filter { checklist in
+            !checklist.items.isEmpty && checklist.items.allSatisfy(\.isComplete)
+        }.count
+        let nextCalendarEvent = (snapshot.dueTodayEvents + snapshot.upcomingEvents)
+            .min { lhs, rhs in lhs.startDate < rhs.startDate }
+
+        return ProjectOperationsSummary(
+            generatedAt: date,
+            openShoppingItemCount: shoppingItems.filter { !$0.isPurchased }.count,
+            completedShoppingItemCount: shoppingItems.filter(\.isPurchased).count,
+            openChecklistCount: checklists.count - completedChecklistCount,
+            completedChecklistCount: completedChecklistCount,
+            openChecklistItemCount: snapshot.openChecklistItemCount,
+            completedChecklistItemCount: checklists.reduce(0) { total, checklist in
+                total + checklist.items.filter(\.isComplete).count
+            },
+            overdueTaskCount: snapshot.overdueTasks.count,
+            dueTodayTaskCount: snapshot.dueTodayTasks.count,
+            dueTodayCalendarEventCount: snapshot.dueTodayEvents.count,
+            upcomingCalendarEventCount: snapshot.upcomingEvents.count,
+            nextCalendarEvent: nextCalendarEvent,
+            markedReturnItemCount: snapshot.markedReturnItems.count
+        )
     }
 
     func paymentMilestonesReadyForPrompt(on date: Date = Date()) -> [ProjectPaymentMilestone] {

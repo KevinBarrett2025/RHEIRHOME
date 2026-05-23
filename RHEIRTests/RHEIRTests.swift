@@ -1318,6 +1318,187 @@ struct ProjectAssistantSnapshotTests {
     }
 }
 
+struct ProjectOperationsSummaryTests {
+
+    @Test
+    func operationsSummaryCountsCurrentWorkWithoutMutatingProject() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let now = Date(timeIntervalSince1970: 1_800_057_600)
+        let startOfToday = calendar.startOfDay(for: now)
+        let projectID = UUID(uuidString: "413E5981-28C1-4E10-B43B-ABBB72891001")!
+
+        let overdueTask = ProjectTask(
+            id: UUID(uuidString: "413E5981-28C1-4E10-B43B-ABBB72891002")!,
+            title: "Patch subfloor",
+            dueDate: startOfToday.addingTimeInterval(-86_400),
+            category: .general,
+            projectID: projectID
+        )
+        let dueTodayTask = ProjectTask(
+            id: UUID(uuidString: "413E5981-28C1-4E10-B43B-ABBB72891003")!,
+            title: "Confirm tile pickup",
+            dueDate: startOfToday.addingTimeInterval(12 * 3_600),
+            category: .materials,
+            projectID: projectID
+        )
+        var completedPastTask = ProjectTask(
+            id: UUID(uuidString: "413E5981-28C1-4E10-B43B-ABBB72891004")!,
+            title: "Measure floor",
+            dueDate: startOfToday.addingTimeInterval(-2 * 86_400),
+            category: .general,
+            projectID: projectID
+        )
+        completedPastTask.isCompleted = true
+
+        var receipt = Receipt(
+            id: "operations-summary-return-source",
+            vendor: "Supply House",
+            date: startOfToday.addingTimeInterval(-86_400),
+            amount: 95,
+            category: .material,
+            paymentMethod: "Card"
+        )
+        receipt.items = [
+            ReceiptItem(
+                id: UUID(uuidString: "413E5981-28C1-4E10-B43B-ABBB72891005")!,
+                name: "Wrong transition strip",
+                quantity: 1,
+                unitPrice: 35,
+                totalPrice: 35,
+                isMarkedForReturn: true
+            ),
+            ReceiptItem(
+                id: UUID(uuidString: "413E5981-28C1-4E10-B43B-ABBB72891006")!,
+                name: "Extra tile spacers",
+                quantity: 2,
+                unitPrice: 12,
+                totalPrice: 24,
+                isMarkedForReturn: true
+            ),
+            ReceiptItem(
+                id: UUID(uuidString: "413E5981-28C1-4E10-B43B-ABBB72891007")!,
+                name: "Keep grout",
+                quantity: 1,
+                unitPrice: 36,
+                totalPrice: 36
+            )
+        ]
+
+        var project = Project(
+            id: projectID,
+            name: "Operations Summary Remodel",
+            client: "Client",
+            totalBudget: 10_000,
+            startDate: startOfToday,
+            endDate: startOfToday.addingTimeInterval(14 * 86_400),
+            organizationID: "org-operations-summary",
+            projectChecklists: [
+                ProjectChecklist(
+                    id: UUID(uuidString: "413E5981-28C1-4E10-B43B-ABBB72891008")!,
+                    title: "Floor prep",
+                    category: .quality,
+                    items: [
+                        ProjectChecklistItem(title: "Sweep subfloor", isComplete: true),
+                        ProjectChecklistItem(title: "Prime patch")
+                    ]
+                ),
+                ProjectChecklist(
+                    id: UUID(uuidString: "413E5981-28C1-4E10-B43B-ABBB72891009")!,
+                    title: "Closeout photos",
+                    category: .closeout,
+                    items: [
+                        ProjectChecklistItem(title: "Take after photos", isComplete: true)
+                    ]
+                )
+            ],
+            projectCalendarEvents: [
+                ProjectCalendarEvent(
+                    id: UUID(uuidString: "413E5981-28C1-4E10-B43B-ABBB72891010")!,
+                    title: "Inspection walk",
+                    kind: .inspection,
+                    startDate: startOfToday.addingTimeInterval(9 * 3_600),
+                    status: .scheduled
+                ),
+                ProjectCalendarEvent(
+                    id: UUID(uuidString: "413E5981-28C1-4E10-B43B-ABBB72891011")!,
+                    title: "Tile delivery",
+                    kind: .deliveryOrder,
+                    startDate: startOfToday.addingTimeInterval(2 * 86_400),
+                    status: .planned
+                ),
+                ProjectCalendarEvent(
+                    id: UUID(uuidString: "413E5981-28C1-4E10-B43B-ABBB72891012")!,
+                    title: "Cancelled pickup",
+                    kind: .pickupOrder,
+                    startDate: startOfToday.addingTimeInterval(86_400),
+                    status: .cancelled
+                )
+            ],
+            shoppingListItems: [
+                ProjectShoppingListItem(title: "Tile spacers"),
+                ProjectShoppingListItem(title: "Dust masks", isPurchased: true),
+                ProjectShoppingListItem(title: "Contractor bags")
+            ]
+        )
+        project.tasks = [overdueTask, dueTodayTask, completedPastTask]
+        project.receipts = [receipt]
+
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let encodedBefore = try encoder.encode(project)
+        let summary = project.operationsSummary(on: now, calendar: calendar)
+        let encodedAfter = try encoder.encode(project)
+
+        #expect(encodedBefore == encodedAfter)
+        #expect(summary.openShoppingItemCount == 2)
+        #expect(summary.completedShoppingItemCount == 1)
+        #expect(summary.openChecklistCount == 1)
+        #expect(summary.completedChecklistCount == 1)
+        #expect(summary.openChecklistItemCount == 1)
+        #expect(summary.completedChecklistItemCount == 2)
+        #expect(summary.overdueTaskCount == 1)
+        #expect(summary.dueTodayTaskCount == 1)
+        #expect(!dueTodayTask.isOverdue(on: now, calendar: calendar))
+        #expect(summary.dueTodayCalendarEventCount == 1)
+        #expect(summary.upcomingCalendarEventCount == 1)
+        #expect(summary.nextCalendarEvent?.title == "Inspection walk")
+        #expect(summary.markedReturnItemCount == 2)
+        #expect(summary.actionableItemCount == 8)
+    }
+
+    @Test
+    func operationsSummaryDefaultsToSafeEmptyValues() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let now = Date(timeIntervalSince1970: 1_800_057_600)
+        let project = Project(
+            name: "Empty Operations Summary",
+            client: "Client",
+            totalBudget: 10_000,
+            startDate: now,
+            endDate: now.addingTimeInterval(86_400),
+            organizationID: "org-empty-operations-summary"
+        )
+
+        let summary = project.operationsSummary(on: now, calendar: calendar)
+
+        #expect(summary.openShoppingItemCount == 0)
+        #expect(summary.completedShoppingItemCount == 0)
+        #expect(summary.openChecklistCount == 0)
+        #expect(summary.completedChecklistCount == 0)
+        #expect(summary.openChecklistItemCount == 0)
+        #expect(summary.completedChecklistItemCount == 0)
+        #expect(summary.overdueTaskCount == 0)
+        #expect(summary.dueTodayTaskCount == 0)
+        #expect(summary.dueTodayCalendarEventCount == 0)
+        #expect(summary.upcomingCalendarEventCount == 0)
+        #expect(summary.nextCalendarEvent == nil)
+        #expect(summary.markedReturnItemCount == 0)
+        #expect(summary.actionableItemCount == 0)
+    }
+}
+
 struct CloudKitProjectRepositoryTests {
 
     @Test
