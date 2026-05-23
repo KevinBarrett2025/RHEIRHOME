@@ -1730,6 +1730,145 @@ struct ProjectMutationPropagationTests {
     }
 
     @Test
+    func operationsMetadataHelpersPersistAndReloadProjectState() async throws {
+        let suiteName = "ProjectOperationsMutationTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let orgID = UUID().uuidString
+        let repository = RecordingProjectRepository()
+        let projectStore = ProjectStore(userDefaults: defaults)
+        let viewModel = ProjectViewModel(
+            offlineDataManager: OfflineDataManager(networkMonitoringEnabled: false),
+            projectStore: projectStore,
+            projectRepository: repository
+        )
+        viewModel.setCurrentOrganization(
+            Organization(id: orgID, name: "Personal Workspace"),
+            role: .admin
+        )
+
+        let projectID = UUID()
+        let baselineDate = Date(timeIntervalSince1970: 1_714_030_000)
+        let paymentMilestone = ProjectPaymentMilestone(title: "Deposit", amount: 2_000)
+        let projectDocument = ProjectDocument(
+            title: "Signed agreement",
+            category: .contract,
+            fileName: "agreement.pdf",
+            mimeType: "application/pdf",
+            storageKind: .externalURL,
+            storageIdentifier: "https://example.com/agreement.pdf"
+        )
+        let project = Project(
+            id: projectID,
+            name: "Operations Mutation Project",
+            client: "Client H",
+            totalBudget: 34_000,
+            startDate: baselineDate,
+            endDate: baselineDate.addingTimeInterval(86_400),
+            organizationID: orgID,
+            lastModifiedDate: baselineDate,
+            clientProfile: ProjectClientProfile(name: "Client H", notes: "Keep access note"),
+            paymentMilestones: [paymentMilestone],
+            projectDocuments: [projectDocument]
+        )
+        viewModel.projects = [project]
+        viewModel.organizationProjects = [project]
+        viewModel.selectedProject = project
+        viewModel.updateAccessibleProjects()
+
+        let shoppingID = UUID()
+        let secondShoppingID = UUID()
+        await viewModel.addOrUpdateShoppingListItem(
+            ProjectShoppingListItem(id: shoppingID, title: "Contractor bags"),
+            in: projectID
+        )
+        let shoppingModifiedDate = try #require(viewModel.selectedProject?.lastModifiedDate)
+        #expect(shoppingModifiedDate > baselineDate)
+        #expect(viewModel.selectedProject?.shoppingListItems?.map(\.title) == ["Contractor bags"])
+        #expect(projectStore.loadProjects(for: orgID).first?.shoppingListItems?.map(\.title) == ["Contractor bags"])
+
+        await viewModel.addOrUpdateShoppingListItem(
+            ProjectShoppingListItem(id: shoppingID, title: "Heavy contractor bags", quantity: 2, unit: "boxes"),
+            in: projectID
+        )
+        await viewModel.addOrUpdateShoppingListItem(
+            ProjectShoppingListItem(id: secondShoppingID, title: "Dust masks"),
+            in: projectID
+        )
+
+        let checklistID = UUID()
+        await viewModel.addOrUpdateProjectChecklist(
+            ProjectChecklist(
+                id: checklistID,
+                title: "Demo prep",
+                category: .safety,
+                items: [ProjectChecklistItem(title: "Shut off water")]
+            ),
+            in: projectID
+        )
+        await viewModel.addOrUpdateProjectChecklist(
+            ProjectChecklist(
+                id: checklistID,
+                title: "Demo prep",
+                category: .safety,
+                items: [
+                    ProjectChecklistItem(title: "Shut off water", isComplete: true),
+                    ProjectChecklistItem(title: "Protect flooring")
+                ]
+            ),
+            in: projectID
+        )
+
+        let eventID = UUID()
+        await viewModel.addOrUpdateProjectCalendarEvent(
+            ProjectCalendarEvent(
+                id: eventID,
+                title: "Dumpster delivery",
+                kind: .deliveryOrder,
+                startDate: baselineDate.addingTimeInterval(86_400)
+            ),
+            in: projectID
+        )
+        await viewModel.addOrUpdateProjectCalendarEvent(
+            ProjectCalendarEvent(
+                id: eventID,
+                title: "Fixture delivery",
+                kind: .deliveryOrder,
+                startDate: baselineDate.addingTimeInterval(172_800)
+            ),
+            in: projectID
+        )
+
+        let reloadedProject = try #require(projectStore.loadProjects(for: orgID).first { $0.id == projectID })
+        #expect(reloadedProject.shoppingListItems?.map(\.title) == ["Heavy contractor bags", "Dust masks"])
+        #expect(reloadedProject.shoppingListItems?.first?.quantity == 2)
+        #expect(reloadedProject.projectChecklists?.first?.items.map(\.title) == ["Shut off water", "Protect flooring"])
+        #expect(reloadedProject.projectChecklists?.first?.completionFraction == 0.5)
+        #expect(reloadedProject.projectCalendarEvents?.first?.title == "Fixture delivery")
+        #expect(reloadedProject.lastModifiedDate > baselineDate)
+        #expect(viewModel.accessibleProjects.first?.shoppingListItems?.count == 2)
+        #expect(viewModel.selectedProject?.projectChecklists?.first?.items.count == 2)
+        #expect(repository.savedProjects.last?.project.projectCalendarEvents?.first?.title == "Fixture delivery")
+
+        await viewModel.removeShoppingListItem(shoppingID, from: projectID)
+        await viewModel.removeProjectChecklist(checklistID, from: projectID)
+        await viewModel.removeProjectCalendarEvent(eventID, from: projectID)
+
+        let afterRemovalProject = try #require(projectStore.loadProjects(for: orgID).first { $0.id == projectID })
+        #expect(afterRemovalProject.shoppingListItems?.map(\.title) == ["Dust masks"])
+        #expect(afterRemovalProject.projectChecklists?.isEmpty == true)
+        #expect(afterRemovalProject.projectCalendarEvents?.isEmpty == true)
+        #expect(afterRemovalProject.clientProfile?.notes == "Keep access note")
+        #expect(afterRemovalProject.paymentMilestones?.first == paymentMilestone)
+        #expect(afterRemovalProject.projectDocuments?.first == projectDocument)
+        #expect(afterRemovalProject.lastModifiedDate > baselineDate)
+    }
+
+    @Test
     func deleteProjectClearsVisibleCollectionsAndSelection() async {
         let suiteName = "ProjectMutationDeletionTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
