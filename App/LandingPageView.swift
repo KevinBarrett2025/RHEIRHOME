@@ -248,37 +248,12 @@ struct LandingPageView: View {
                 .environmentObject(viewModel)
                 .environmentObject(authVM)
         } label: {
-            RheirCard(
-                padding: RheirTheme.Spacing.medium,
-                background: RheirTheme.Colors.cardBackground
-            ) {
-                HStack(spacing: 14) {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: RheirTheme.Radius.medium, style: .continuous)
-                            .fill(RheirTheme.Colors.information.opacity(0.16))
-                        Image(systemName: "person.crop.rectangle.stack.fill")
-                            .font(.title3)
-                            .foregroundStyle(RheirTheme.Colors.information)
-                    }
-                    .frame(width: 48, height: 48)
-
-                    VStack(alignment: .leading, spacing: RheirTheme.Spacing.xSmall) {
-                        Text("Business Resources")
-                            .font(.headline)
-                            .foregroundStyle(RheirTheme.Colors.primaryText)
-                        Text("Workers, vendors, and payment methods used across projects.")
-                            .font(.subheadline)
-                            .foregroundStyle(RheirTheme.Colors.secondaryText)
-                            .lineLimit(2)
-                    }
-
-                    Spacer()
-
-                    Image(systemName: "chevron.right")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(RheirTheme.Colors.secondaryText)
-                }
-            }
+            QuickActionTile(
+                title: "Business Resources",
+                subtitle: "Workers, vendors, and payment methods used across projects.",
+                systemImage: "person.crop.rectangle.stack.fill",
+                accent: RheirTheme.Colors.information
+            )
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
