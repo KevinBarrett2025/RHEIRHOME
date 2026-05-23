@@ -54,34 +54,6 @@ struct LandingPageView: View {
         "\(visibleProjects.count) \(projectListScope.title(for: visibleProjects.count))"
     }
 
-    private func statusChipStyle(for status: ProjectStatus) -> RheirStatusChip.Style {
-        switch status {
-        case .active:
-            return .active
-        case .completed:
-            return .paid
-        case .onHold:
-            return .warning
-        case .cancelled:
-            return .pastDue
-        case .planning:
-            return .neutral
-        }
-    }
-
-    private func statusAccentColor(for status: ProjectStatus) -> Color {
-        switch status {
-        case .active, .completed:
-            return RheirTheme.Colors.success
-        case .onHold:
-            return RheirTheme.Colors.warning
-        case .cancelled:
-            return RheirTheme.Colors.destructive
-        case .planning:
-            return RheirTheme.Colors.information
-        }
-    }
-
     var body: some View {
         NavigationStack {
             ZStack {
@@ -250,41 +222,7 @@ struct LandingPageView: View {
             }
 
             if let selectedProject = viewModel.selectedProject {
-                let statusAccent = statusAccentColor(for: selectedProject.status)
-
-                RheirCard(
-                    padding: RheirTheme.Spacing.medium,
-                    background: RheirTheme.Colors.cardBackground,
-                    borderColor: statusAccent.opacity(0.32)
-                ) {
-                    HStack(alignment: .center, spacing: RheirTheme.Spacing.medium) {
-                        Image(systemName: selectedProject.status.icon)
-                            .font(.title3)
-                            .foregroundStyle(statusAccent)
-                            .frame(width: 32, height: 32)
-
-                        VStack(alignment: .leading, spacing: RheirTheme.Spacing.xSmall) {
-                            Text("Current Project")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(RheirTheme.Colors.secondaryText)
-
-                            Text(selectedProject.name)
-                                .font(.headline)
-                                .foregroundStyle(RheirTheme.Colors.primaryText)
-                                .lineLimit(1)
-                        }
-
-                        Spacer(minLength: RheirTheme.Spacing.medium)
-
-                        RheirStatusChip(
-                            label: selectedProject.status.displayName,
-                            systemImage: "circle.fill",
-                            style: statusChipStyle(for: selectedProject.status)
-                        )
-                    }
-                }
-                .accessibilityIdentifier("fast-ship-current-project-card")
-
+                ProjectHealthCard(project: selectedProject)
                 TodayCommandCard(project: selectedProject)
             } else {
                 VStack(alignment: .leading, spacing: 6) {
