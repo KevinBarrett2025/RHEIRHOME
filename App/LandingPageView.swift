@@ -265,6 +265,8 @@ struct LandingPageView: View {
                     }
                 }
                 .accessibilityIdentifier("fast-ship-current-project-card")
+
+                TodayCommandCard(project: selectedProject)
             } else {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Choose a project to begin")
