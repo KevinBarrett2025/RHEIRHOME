@@ -1383,6 +1383,194 @@ struct ProjectOperationsFoundationTests {
         #expect(receipt.budgetScopedAmount(for: .plumbing) == 98)
         #expect(receipt.budgetScopedAmount(for: .general) == 0)
     }
+
+    @Test
+    func legacyProjectsDecodeWithoutReceiptExceptionReconciliations() throws {
+        let project = Project(
+            id: UUID(uuidString: "413E5981-28C1-4E10-B43B-ABBB72891001")!,
+            name: "Legacy Receipt Project",
+            client: "Client A",
+            totalBudget: 50_000,
+            startDate: Date(timeIntervalSince1970: 1_747_260_000),
+            endDate: Date(timeIntervalSince1970: 1_747_346_400),
+            organizationID: "org-receipt-reconciliation"
+        )
+
+        var rawObject = try #require(JSONSerialization.jsonObject(
+            with: JSONEncoder().encode(project)
+        ) as? [String: Any])
+        rawObject.removeValue(forKey: "receiptExceptionReconciliations")
+
+        let decoded = try JSONDecoder().decode(
+            Project.self,
+            from: JSONSerialization.data(withJSONObject: rawObject)
+        )
+
+        #expect(decoded.receiptExceptionReconciliations == nil)
+        #expect(decoded.id == project.id)
+        #expect(decoded.receipts.isEmpty)
+    }
+
+    @Test
+    func projectReceiptExceptionReconciliationsRoundTripAndAffectProjectEquality() throws {
+        let itemID = UUID(uuidString: "413E5981-28C1-4E10-B43B-ABBB72891002")!
+        let reconciliation = ReceiptExceptionReconciliation(
+            id: UUID(uuidString: "413E5981-28C1-4E10-B43B-ABBB72891003")!,
+            sourceReceiptID: "source-receipt-100",
+            sourceItemID: itemID,
+            kind: .missingQuantity,
+            quantity: 1,
+            outcome: .storeCredit,
+            refundReceiptID: "store-credit-100",
+            resolvedDate: Date(timeIntervalSince1970: 1_747_300_000),
+            notes: "Store issued a credit for missing pickup item.",
+            createdAt: Date(timeIntervalSince1970: 1_747_260_000),
+            updatedAt: Date(timeIntervalSince1970: 1_747_300_000)
+        )
+
+        var project = Project(
+            id: UUID(uuidString: "413E5981-28C1-4E10-B43B-ABBB72891004")!,
+            name: "Reconciliation Project",
+            client: "Client A",
+            totalBudget: 50_000,
+            startDate: Date(timeIntervalSince1970: 1_747_260_000),
+            endDate: Date(timeIntervalSince1970: 1_747_346_400),
+            organizationID: "org-receipt-reconciliation"
+        )
+        var candidate = project
+        candidate.receiptExceptionReconciliations = [reconciliation]
+        #expect(project != candidate)
+
+        project.receiptExceptionReconciliations = [reconciliation]
+        let decoded = try JSONDecoder().decode(
+            Project.self,
+            from: JSONEncoder().encode(project)
+        )
+
+        #expect(decoded.receiptExceptionReconciliations == [reconciliation])
+        #expect(decoded == project)
+    }
+
+    @Test
+    func receiptExceptionReconciliationOutcomesRepresentManualResolutionPaths() {
+        let sourceItemID = UUID(uuidString: "413E5981-28C1-4E10-B43B-ABBB72891005")!
+        let outcomes: [ReceiptExceptionReconciliationOutcome] = [
+            .refundReceipt,
+            .storeCredit,
+            .replacement,
+            .disputeResolved,
+            .noCredit,
+            .other
+        ]
+
+        let reconciliations = outcomes.map { outcome in
+            ReceiptExceptionReconciliation(
+                sourceReceiptID: "source-receipt-200",
+                sourceItemID: sourceItemID,
+                kind: .returnQuantity,
+                quantity: 1,
+                outcome: outcome
+            )
+        }
+
+        #expect(reconciliations.map(\.outcome) == outcomes)
+        #expect(reconciliations.allSatisfy { $0.quantity == 1 })
+    }
+
+    @Test
+    func receiptExceptionReconciliationQuantitiesNormalizeSafely() {
+        let itemID = UUID(uuidString: "413E5981-28C1-4E10-B43B-ABBB72891006")!
+        let negative = ReceiptExceptionReconciliation(
+            sourceReceiptID: "source-receipt-300",
+            sourceItemID: itemID,
+            kind: .missingQuantity,
+            quantity: -2,
+            outcome: .disputeResolved
+        )
+        let oversized = ReceiptExceptionReconciliation(
+            sourceReceiptID: "source-receipt-300",
+            sourceItemID: itemID,
+            kind: .returnQuantity,
+            quantity: 8,
+            outcome: .refundReceipt
+        )
+
+        #expect(negative.quantity == 0)
+        #expect(negative.normalizedQuantity(for: 4) == 0)
+        #expect(oversized.quantity == 8)
+        #expect(oversized.normalizedQuantity(for: 4) == 4)
+        #expect(oversized.normalized(for: 4).quantity == 4)
+    }
+
+    @Test
+    func receiptExceptionReconciliationLinksExceptionToRefundWithoutChangingMoney() throws {
+        var source = Receipt(
+            id: "reconciliation-source",
+            vendor: "Home Depot",
+            date: Date(timeIntervalSince1970: 1_747_260_000),
+            amount: 107,
+            category: .material,
+            paymentMethod: "Card",
+            taxAmount: 7
+        )
+        let item = ReceiptItem(
+            id: UUID(uuidString: "413E5981-28C1-4E10-B43B-ABBB72891007")!,
+            name: "Water supply line",
+            quantity: 4,
+            unitPrice: 25,
+            totalPrice: 100,
+            category: .plumbing,
+            exceptionMetadata: ReceiptItemExceptionMetadata(
+                returnQuantity: 2,
+                missingQuantity: 1,
+                status: .disputeNeeded,
+                notes: "Pickup order count did not match paid receipt."
+            )
+        )
+        source.items = [item]
+
+        let refund = try #require(
+            source.makePartialRefund(
+                selections: [ReceiptRefundSelection(itemID: item.id, quantity: 2)],
+                existingReceipts: [],
+                refundDate: Date(timeIntervalSince1970: 1_747_346_400),
+                receiptNumber: "RET-300"
+            )
+        )
+        let reconciliation = ReceiptExceptionReconciliation(
+            sourceReceiptID: source.id,
+            sourceItemID: item.id,
+            kind: .returnQuantity,
+            quantity: 2,
+            outcome: .refundReceipt,
+            refundReceiptID: refund.id,
+            refundItemID: refund.items.first?.id,
+            resolvedDate: refund.date,
+            notes: "Refund receipt received for two extra supply lines."
+        )
+        var project = Project(
+            name: "Money-Safe Reconciliation Project",
+            client: "Client A",
+            totalBudget: 50_000,
+            startDate: Date(timeIntervalSince1970: 1_747_260_000),
+            endDate: Date(timeIntervalSince1970: 1_747_346_400),
+            organizationID: "org-receipt-reconciliation"
+        )
+        project.receipts = [source, refund]
+        project.receiptExceptionReconciliations = [reconciliation]
+
+        #expect(project.receiptExceptionReconciliations?.first?.refundReceiptID == refund.id)
+        #expect(project.receiptExceptionReconciliations?.first?.refundItemID == item.id)
+        #expect(source.amount == 107)
+        #expect(source.signedAmount == 107)
+        #expect(source.scopedAmount(for: .plumbing) == 100)
+        #expect(source.budgetScopedAmount(for: .material) == 100)
+        #expect(refund.amount == 53.5)
+        #expect(refund.signedAmount == -53.5)
+        #expect(refund.scopedAmount(for: .plumbing) == -50)
+        #expect(source.refundedAmount(in: project.receipts) == 53.5)
+        #expect(source.remainingRefundableAmount(in: project.receipts) == 53.5)
+    }
 }
 
 struct ProjectAssistantSnapshotTests {
