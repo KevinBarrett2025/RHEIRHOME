@@ -1231,12 +1231,157 @@ struct ProjectOperationsFoundationTests {
         let encoded = try JSONEncoder().encode(item)
         let decoded = try JSONDecoder().decode(ReceiptItem.self, from: encoded)
         #expect(decoded.isMarkedForReturn)
+        #expect(decoded.returnExceptionQuantity == 1)
+        #expect(decoded.hasReturnException)
+        #expect(decoded.exceptionMetadata == nil)
 
         var legacyObject = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
         legacyObject.removeValue(forKey: "isMarkedForReturn")
+        legacyObject.removeValue(forKey: "exceptionMetadata")
         let legacyData = try JSONSerialization.data(withJSONObject: legacyObject)
         let legacyDecoded = try JSONDecoder().decode(ReceiptItem.self, from: legacyData)
         #expect(!legacyDecoded.isMarkedForReturn)
+        #expect(legacyDecoded.exceptionMetadata == nil)
+        #expect(legacyDecoded.returnExceptionQuantity == 0)
+        #expect(legacyDecoded.missingExceptionQuantity == 0)
+        #expect(legacyDecoded.quantityToKeep == 1)
+        #expect(!legacyDecoded.hasAnyLineItemException)
+    }
+
+    @Test
+    func receiptItemExceptionMetadataRoundTrips() throws {
+        let item = ReceiptItem(
+            name: "Water supply line",
+            quantity: 4,
+            unitPrice: 12,
+            totalPrice: 48,
+            category: .plumbing,
+            sku: "HD-1200",
+            exceptionMetadata: ReceiptItemExceptionMetadata(
+                returnQuantity: 2,
+                missingQuantity: 1,
+                status: .disputeNeeded,
+                notes: "Two extras to return; one missing from pickup bag."
+            )
+        )
+
+        #expect(!item.isMarkedForReturn)
+        #expect(item.returnExceptionQuantity == 2)
+        #expect(item.missingExceptionQuantity == 1)
+        #expect(item.quantityToKeep == 1)
+        #expect(item.hasReturnException)
+        #expect(item.hasMissingException)
+        #expect(item.hasAnyLineItemException)
+
+        let decoded = try JSONDecoder().decode(
+            ReceiptItem.self,
+            from: JSONEncoder().encode(item)
+        )
+
+        #expect(decoded.exceptionMetadata?.returnQuantity == 2)
+        #expect(decoded.exceptionMetadata?.missingQuantity == 1)
+        #expect(decoded.exceptionMetadata?.status == .disputeNeeded)
+        #expect(decoded.exceptionMetadata?.notes == "Two extras to return; one missing from pickup bag.")
+        #expect(decoded.returnExceptionQuantity == 2)
+        #expect(decoded.missingExceptionQuantity == 1)
+        #expect(decoded.quantityToKeep == 1)
+    }
+
+    @Test
+    func receiptItemExceptionQuantitiesNormalizeToLineItemQuantity() throws {
+        let negativeItem = ReceiptItem(
+            name: "Valve",
+            quantity: 4,
+            unitPrice: 9,
+            totalPrice: 36,
+            exceptionMetadata: ReceiptItemExceptionMetadata(
+                returnQuantity: -2,
+                missingQuantity: -1,
+                status: .open
+            )
+        )
+
+        #expect(negativeItem.returnExceptionQuantity == 0)
+        #expect(negativeItem.missingExceptionQuantity == 0)
+        #expect(negativeItem.quantityToKeep == 4)
+        #expect(!negativeItem.hasAnyLineItemException)
+
+        let oversizedItem = ReceiptItem(
+            name: "Water supply line",
+            quantity: 4,
+            unitPrice: 12,
+            totalPrice: 48,
+            exceptionMetadata: ReceiptItemExceptionMetadata(
+                returnQuantity: 3,
+                missingQuantity: 3,
+                status: .disputeNeeded,
+                notes: "Pickup count did not match paid order."
+            )
+        )
+
+        #expect(oversizedItem.returnExceptionQuantity == 3)
+        #expect(oversizedItem.missingExceptionQuantity == 1)
+        #expect(oversizedItem.quantityToKeep == 0)
+
+        var rawObject = try #require(JSONSerialization.jsonObject(
+            with: JSONEncoder().encode(oversizedItem)
+        ) as? [String: Any])
+        rawObject["exceptionMetadata"] = [
+            "returnQuantity": -4,
+            "missingQuantity": 12,
+            "status": ReceiptItemExceptionStatus.resolved.rawValue,
+            "notes": "Resolved at service desk."
+        ]
+        let decoded = try JSONDecoder().decode(
+            ReceiptItem.self,
+            from: JSONSerialization.data(withJSONObject: rawObject)
+        )
+
+        #expect(decoded.returnExceptionQuantity == 0)
+        #expect(decoded.missingExceptionQuantity == 4)
+        #expect(decoded.quantityToKeep == 0)
+        #expect(decoded.exceptionMetadata?.status == .resolved)
+        #expect(decoded.exceptionMetadata?.notes == "Resolved at service desk.")
+    }
+
+    @Test
+    func receiptItemExceptionsDoNotChangeReceiptTotalsOrBudgetMath() {
+        var receipt = Receipt(
+            id: "exception-source-receipt",
+            vendor: "Home Depot",
+            date: .now,
+            amount: 105,
+            category: .material,
+            paymentMethod: "Card",
+            taxAmount: 7
+        )
+        receipt.items = [
+            ReceiptItem(
+                name: "Water supply line",
+                quantity: 4,
+                unitPrice: 12,
+                totalPrice: 48,
+                category: .plumbing,
+                exceptionMetadata: ReceiptItemExceptionMetadata(
+                    returnQuantity: 2,
+                    missingQuantity: 1,
+                    status: .disputeNeeded
+                )
+            ),
+            ReceiptItem(
+                name: "Valve",
+                quantity: 1,
+                unitPrice: 50,
+                totalPrice: 50,
+                category: .plumbing
+            )
+        ]
+
+        #expect(receipt.amount == 105)
+        #expect(receipt.signedAmount == 105)
+        #expect(receipt.scopedAmount(for: .plumbing) == 98)
+        #expect(receipt.budgetScopedAmount(for: .plumbing) == 98)
+        #expect(receipt.budgetScopedAmount(for: .general) == 0)
     }
 }
 
@@ -4000,6 +4145,48 @@ struct ReceiptPartialRefundTests {
         #expect(finalRefund.taxAmount == 1.34)
         #expect(receipt.refundedAmount(in: [firstRefund, finalRefund]) == 32.01)
         #expect(receipt.remainingRefundableAmount(in: [firstRefund, finalRefund]) == 0)
+    }
+
+    @Test
+    func lineItemExceptionsDoNotChangePartialRefundCalculations() throws {
+        var receipt = Receipt(
+            id: "exception-refund-source",
+            vendor: "Home Depot",
+            date: .now,
+            amount: 107,
+            category: .material,
+            paymentMethod: "Card",
+            taxAmount: 7
+        )
+        let item = ReceiptItem(
+            id: UUID(),
+            name: "Water supply line",
+            quantity: 4,
+            unitPrice: 25,
+            totalPrice: 100,
+            category: .plumbing,
+            exceptionMetadata: ReceiptItemExceptionMetadata(
+                returnQuantity: 2,
+                missingQuantity: 1,
+                status: .disputeNeeded
+            )
+        )
+        receipt.items = [item]
+
+        let refund = try #require(
+            receipt.makePartialRefund(
+                selections: [ReceiptRefundSelection(itemID: item.id, quantity: 1)],
+                existingReceipts: []
+            )
+        )
+
+        #expect(refund.amount == 26.75)
+        #expect(refund.taxAmount == 1.75)
+        #expect(refund.items.count == 1)
+        #expect(refund.items.first?.quantity == 1)
+        #expect(refund.items.first?.totalPrice == 25)
+        #expect(receipt.remainingRefundableQuantity(for: item, in: [refund]) == 3)
+        #expect(receipt.remainingRefundableAmount(in: [refund]) == 80.25)
     }
 }
 
