@@ -21,6 +21,7 @@ final class RHEIRUITests: XCTestCase {
         case selectingOrganization = "selecting_organization"
         case projectSelection = "project_selection"
         case selectedProject = "selected_project"
+        case budgetBreakdown = "budget_breakdown"
         case laborManagement = "labor_management"
         case taskManagement = "task_management"
         case estimatorMapping = "estimator_mapping"
