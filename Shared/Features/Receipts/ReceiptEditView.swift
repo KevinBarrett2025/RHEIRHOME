@@ -682,6 +682,11 @@ private struct ReceiptLineItemEditView: View {
     @State private var subcategory: String
     @State private var sku: String
     @State private var notes: String
+    @State private var isMarkedForReturn: Bool
+    @State private var returnQuantity: String
+    @State private var missingQuantity: String
+    @State private var exceptionStatus: ReceiptItemExceptionStatus
+    @State private var exceptionNotes: String
 
     init(item: ReceiptItem, onSave: @escaping (ReceiptItem) -> Void) {
         self.item = item
@@ -694,12 +699,21 @@ private struct ReceiptLineItemEditView: View {
         self._subcategory = State(initialValue: item.subcategory)
         self._sku = State(initialValue: item.sku)
         self._notes = State(initialValue: item.notes)
+        self._isMarkedForReturn = State(initialValue: item.isMarkedForReturn)
+        self._returnQuantity = State(initialValue: Self.quantityText(item.returnExceptionQuantity))
+        self._missingQuantity = State(initialValue: Self.quantityText(item.missingExceptionQuantity))
+        self._exceptionStatus = State(initialValue: item.exceptionMetadata?.status ?? .open)
+        self._exceptionNotes = State(initialValue: item.exceptionMetadata?.notes ?? "")
     }
 
     private var isValidForm: Bool {
         !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && (Double(quantity) ?? 0) > 0
             && ((Double(totalPrice) ?? 0) > 0 || (Double(unitPrice) ?? 0) > 0)
+    }
+
+    private var parsedLineQuantity: Double {
+        max(Double(quantity) ?? item.quantity, 0.01)
     }
 
     var body: some View {
@@ -752,6 +766,46 @@ private struct ReceiptLineItemEditView: View {
                         .accessibilityIdentifier("receipt-edit-line-item-sku")
                 }
 
+                Section {
+                    Toggle("Mark full line for return", isOn: $isMarkedForReturn)
+                        .accessibilityIdentifier("receipt-edit-line-item-return-marker")
+
+                    HStack {
+                        Text("Return Qty")
+                        Spacer()
+                        TextField("0.00", text: $returnQuantity)
+                            .keyboardType(.decimalPad)
+                            .multilineTextAlignment(.trailing)
+                            .disabled(isMarkedForReturn)
+                            .accessibilityIdentifier("receipt-edit-line-item-return-quantity")
+                    }
+
+                    HStack {
+                        Text("Missing Qty")
+                        Spacer()
+                        TextField("0.00", text: $missingQuantity)
+                            .keyboardType(.decimalPad)
+                            .multilineTextAlignment(.trailing)
+                            .accessibilityIdentifier("receipt-edit-line-item-missing-quantity")
+                    }
+
+                    Picker("Status", selection: $exceptionStatus) {
+                        ForEach(ReceiptItemExceptionStatus.allCases) { status in
+                            Text(status.rawValue).tag(status)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .accessibilityIdentifier("receipt-edit-line-item-exception-status")
+
+                    TextField("Exception notes", text: $exceptionNotes, axis: .vertical)
+                        .lineLimit(2...5)
+                        .accessibilityIdentifier("receipt-edit-line-item-exception-notes")
+                } header: {
+                    Text("Return / Missing Item Tracking")
+                } footer: {
+                    Text("Tracking is passive and does not change receipt totals. Quantities are limited to this line item's quantity.")
+                }
+
                 Section("Notes") {
                     TextField("Notes", text: $notes, axis: .vertical)
                         .lineLimit(2...5)
@@ -785,10 +839,11 @@ private struct ReceiptLineItemEditView: View {
         let trimmedSKU = sku.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedNotes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        let parsedQuantity = max(Double(quantity) ?? item.quantity, 0.01)
+        let parsedQuantity = parsedLineQuantity
         let parsedUnitPrice = max(Double(unitPrice) ?? item.unitPrice, 0)
         let fallbackTotal = parsedQuantity * parsedUnitPrice
         let parsedTotalPrice = max(Double(totalPrice) ?? fallbackTotal, 0.01)
+        let exceptionMetadata = normalizedExceptionMetadata(for: parsedQuantity)
 
         onSave(
             ReceiptItem(
@@ -800,11 +855,43 @@ private struct ReceiptLineItemEditView: View {
                 category: category,
                 subcategory: trimmedSubcategory,
                 sku: trimmedSKU,
-                notes: trimmedNotes
+                notes: trimmedNotes,
+                isMarkedForReturn: isMarkedForReturn,
+                exceptionMetadata: exceptionMetadata
             )
         )
 
         dismiss()
+    }
+
+    private func normalizedExceptionMetadata(for lineItemQuantity: Double) -> ReceiptItemExceptionMetadata? {
+        let trimmedExceptionNotes = exceptionNotes.trimmingCharacters(in: .whitespacesAndNewlines)
+        let parsedReturnQuantity = max(Double(returnQuantity) ?? 0, 0)
+        let parsedMissingQuantity = max(Double(missingQuantity) ?? 0, 0)
+        let effectiveReturnQuantity = isMarkedForReturn ? lineItemQuantity : parsedReturnQuantity
+
+        let metadata = ReceiptItemExceptionMetadata(
+            returnQuantity: effectiveReturnQuantity,
+            missingQuantity: parsedMissingQuantity,
+            status: exceptionStatus,
+            notes: trimmedExceptionNotes
+        )
+        .normalized(for: lineItemQuantity)
+
+        guard metadata.returnQuantity > 0
+            || metadata.missingQuantity > 0
+            || metadata.status != .open
+            || !metadata.notes.isEmpty
+        else {
+            return nil
+        }
+
+        return metadata
+    }
+
+    private static func quantityText(_ value: Double) -> String {
+        guard value > 0 else { return "" }
+        return value.formatted(.number.precision(.fractionLength(0...2)))
     }
 }
 

@@ -1276,6 +1276,166 @@ final class RHEIRUITests: XCTestCase {
     }
 
     @MainActor
+    func testSavedScannedReceiptLineItemExceptionsPersistToDetail() throws {
+        let app = makeApp(mode: .scannedReceiptReview)
+        app.launch()
+        app.tabBars.buttons["Receipts"].tap()
+
+        let vendorName = "UI Test Scanned Vendor"
+        let scannedReceiptNavBar = app.navigationBars["AI-Scanned Receipt"]
+        XCTAssertTrue(
+            scannedReceiptNavBar.waitForExistence(timeout: 5),
+            "Expected the seeded scanned-receipt review flow to present before testing line-item exceptions."
+        )
+
+        let saveScanButton = app.buttons["receipt-scan-save"]
+        XCTAssertTrue(
+            waitForEnabled(saveScanButton, timeout: 5),
+            "Expected the seeded scanned receipt review to be savable before editing line-item exceptions."
+        )
+        saveScanButton.tap()
+
+        let successAlert = app.alerts["Receipt Added Successfully"]
+        XCTAssertTrue(
+            successAlert.waitForExistence(timeout: 8),
+            "Expected saving the scanned receipt review to surface the success alert."
+        )
+        successAlert.buttons["OK"].tap()
+
+        let receiptCard = app.buttons["receipt-card-\(vendorName)"]
+        XCTAssertTrue(
+            receiptCard.waitForExistence(timeout: 8),
+            "Expected the saved scanned receipt to render before editing line-item exceptions."
+        )
+        receiptCard.tap()
+
+        XCTAssertTrue(
+            app.navigationBars["Receipt Details"].waitForExistence(timeout: 5),
+            "Expected the saved scanned receipt detail to open before editing line-item exceptions."
+        )
+
+        openReceiptActionsMenu(in: app)
+        let editButton = receiptDetailMenuAction(
+            identifier: "receipt-detail-menu-edit",
+            fallbackTitle: "Edit Receipt",
+            in: app
+        )
+        XCTAssertTrue(
+            editButton.waitForExistence(timeout: 5),
+            "Expected the receipt detail actions menu to expose Edit Receipt before editing line-item exceptions."
+        )
+        editButton.tap()
+
+        let primerRow = revealElement(
+            identifier: "receipt-edit-item-primer",
+            in: app,
+            query: { $0.buttons["receipt-edit-item-primer"] }
+        )
+        XCTAssertTrue(
+            primerRow.waitForExistence(timeout: 5),
+            "Expected the saved scanned receipt edit sheet to expose the Primer line item before exception editing."
+        )
+        primerRow.tap()
+
+        let lineItemNavBar = app.navigationBars["Edit Line Item"]
+        XCTAssertTrue(
+            lineItemNavBar.waitForExistence(timeout: 5),
+            "Expected tapping the Primer line item to open the line-item editor."
+        )
+
+        let returnQuantityField = revealElement(
+            identifier: "receipt-edit-line-item-return-quantity",
+            in: app,
+            query: { $0.textFields["receipt-edit-line-item-return-quantity"] }
+        )
+        XCTAssertTrue(
+            returnQuantityField.waitForExistence(timeout: 5),
+            "Expected the line-item editor to expose return quantity tracking."
+        )
+        replaceText(in: returnQuantityField, with: "1", app: app)
+
+        let missingQuantityField = revealElement(
+            identifier: "receipt-edit-line-item-missing-quantity",
+            in: app,
+            query: { $0.textFields["receipt-edit-line-item-missing-quantity"] }
+        )
+        XCTAssertTrue(
+            missingQuantityField.waitForExistence(timeout: 5),
+            "Expected the line-item editor to expose missing quantity tracking."
+        )
+        replaceText(in: missingQuantityField, with: "1", app: app)
+
+        dismissEditingFocusIfNeeded(in: app, navigationBar: lineItemNavBar)
+
+        let disputeStatusButton = app.segmentedControls.buttons["Dispute Needed"]
+        XCTAssertTrue(
+            disputeStatusButton.waitForExistence(timeout: 5),
+            "Expected the line-item editor to expose a dispute-needed status option."
+        )
+        disputeStatusButton.tap()
+
+        let exceptionNotesField = revealElement(
+            identifier: "receipt-edit-line-item-exception-notes",
+            in: app,
+            query: { $0.textFields["receipt-edit-line-item-exception-notes"] }
+        )
+        XCTAssertTrue(
+            exceptionNotesField.waitForExistence(timeout: 5),
+            "Expected the line-item editor to expose optional exception notes."
+        )
+        replaceText(in: exceptionNotesField, with: "One extra, one missing at pickup.", app: app)
+        dismissEditingFocusIfNeeded(in: app, navigationBar: lineItemNavBar)
+
+        lineItemNavBar.buttons["Save"].tap()
+
+        let editReceiptNavBar = app.navigationBars["Edit Receipt"]
+        XCTAssertTrue(
+            editReceiptNavBar.waitForExistence(timeout: 5),
+            "Expected saving the line-item exception edit to return to the parent receipt edit sheet."
+        )
+
+        let saveReceiptButton = app.buttons["receipt-edit-save"]
+        XCTAssertTrue(
+            waitForEnabled(saveReceiptButton, timeout: 5),
+            "Expected the receipt edit save action to remain enabled after line-item exception edits."
+        )
+        saveReceiptButton.tap()
+
+        XCTAssertTrue(
+            app.navigationBars["Receipt Details"].waitForExistence(timeout: 5),
+            "Expected saving receipt edits to return to the receipt detail surface."
+        )
+
+        let returnChip = revealElement(
+            identifier: "receipt-detail-item-return-quantity-primer",
+            in: app,
+            query: { $0.staticTexts["receipt-detail-item-return-quantity-primer"] }
+        )
+        XCTAssertEqual(returnChip.label, "Return qty 1")
+
+        let missingChip = revealElement(
+            identifier: "receipt-detail-item-missing-quantity-primer",
+            in: app,
+            query: { $0.staticTexts["receipt-detail-item-missing-quantity-primer"] }
+        )
+        XCTAssertEqual(missingChip.label, "Missing qty 1")
+
+        let statusChip = revealElement(
+            identifier: "receipt-detail-item-exception-status-primer",
+            in: app,
+            query: { $0.staticTexts["receipt-detail-item-exception-status-primer"] }
+        )
+        XCTAssertEqual(statusChip.label, "Needs Dispute")
+
+        let notesText = revealElement(
+            identifier: "receipt-detail-item-exception-notes-primer",
+            in: app,
+            query: { $0.staticTexts["receipt-detail-item-exception-notes-primer"] }
+        )
+        XCTAssertEqual(notesText.label, "One extra, one missing at pickup.")
+    }
+
+    @MainActor
     func testSavedScannedReceiptOpensPartialRefundFlow() throws {
         let app = makeApp(mode: .scannedReceiptReview)
         app.launch()

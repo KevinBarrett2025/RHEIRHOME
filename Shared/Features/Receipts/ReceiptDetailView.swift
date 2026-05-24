@@ -648,15 +648,22 @@ private struct ReceiptDetailItemRow: View {
         isFullyRefunded ? .red : .orange
     }
 
+    private var rowAccentColor: Color {
+        if hasRefund { return statusColor }
+        if item.hasMissingException || item.exceptionMetadata?.status == .disputeNeeded { return .orange }
+        if item.exceptionMetadata?.status == .resolved { return .green }
+        return .blue
+    }
+
     private var accessibilitySlug: String {
         receiptDetailAccessibilitySlug(item.name)
     }
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            if hasRefund {
+            if hasRefund || item.hasAnyLineItemException {
                 RoundedRectangle(cornerRadius: 2)
-                    .fill(statusColor.opacity(0.85))
+                    .fill(rowAccentColor.opacity(0.85))
                     .frame(width: 4)
             }
 
@@ -697,6 +704,10 @@ private struct ReceiptDetailItemRow: View {
                         .foregroundColor(statusColor)
                         .accessibilityIdentifier("receipt-detail-item-refunded-quantity-\(accessibilitySlug)")
                 }
+
+                if item.hasAnyLineItemException {
+                    lineItemExceptionChips
+                }
             }
 
             Spacer()
@@ -707,23 +718,98 @@ private struct ReceiptDetailItemRow: View {
                 .foregroundColor(hasRefund ? statusColor : .primary)
         }
         .padding(.vertical, 8)
-        .padding(.horizontal, hasRefund ? 10 : 0)
+        .padding(.horizontal, (hasRefund || item.hasAnyLineItemException) ? 10 : 0)
         .background(
             Group {
-                if hasRefund {
+                if hasRefund || item.hasAnyLineItemException {
                     RoundedRectangle(cornerRadius: 10)
-                        .fill(statusColor.opacity(0.08))
+                        .fill(rowAccentColor.opacity(0.08))
                 }
             }
         )
         .overlay(
             Group {
-                if hasRefund {
+                if hasRefund || item.hasAnyLineItemException {
                     RoundedRectangle(cornerRadius: 10)
-                        .stroke(statusColor.opacity(0.28), lineWidth: 1)
+                        .stroke(rowAccentColor.opacity(0.28), lineWidth: 1)
                 }
             }
         )
+    }
+
+    @ViewBuilder
+    private var lineItemExceptionChips: some View {
+        let returnQuantity = item.returnExceptionQuantity
+        let missingQuantity = item.missingExceptionQuantity
+
+        VStack(alignment: .leading, spacing: 5) {
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 6) {
+                    exceptionChipViews(returnQuantity: returnQuantity, missingQuantity: missingQuantity)
+                }
+
+                VStack(alignment: .leading, spacing: 5) {
+                    exceptionChipViews(returnQuantity: returnQuantity, missingQuantity: missingQuantity)
+                }
+            }
+
+            if let notes = item.exceptionMetadata?.notes.trimmingCharacters(in: .whitespacesAndNewlines),
+               !notes.isEmpty {
+                Text(notes)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .accessibilityIdentifier("receipt-detail-item-exception-notes-\(accessibilitySlug)")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func exceptionChipViews(returnQuantity: Double, missingQuantity: Double) -> some View {
+        if returnQuantity > 0 {
+            exceptionChip(
+                text: "Return qty \(quantityLabel(returnQuantity))",
+                color: .orange,
+                identifier: "receipt-detail-item-return-quantity-\(accessibilitySlug)"
+            )
+        }
+
+        if missingQuantity > 0 {
+            exceptionChip(
+                text: "Missing qty \(quantityLabel(missingQuantity))",
+                color: .red,
+                identifier: "receipt-detail-item-missing-quantity-\(accessibilitySlug)"
+            )
+        }
+
+        if item.exceptionMetadata?.status == .disputeNeeded {
+            exceptionChip(
+                text: "Needs Dispute",
+                color: .orange,
+                identifier: "receipt-detail-item-exception-status-\(accessibilitySlug)"
+            )
+        } else if item.exceptionMetadata?.status == .resolved {
+            exceptionChip(
+                text: "Resolved",
+                color: .green,
+                identifier: "receipt-detail-item-exception-status-\(accessibilitySlug)"
+            )
+        }
+    }
+
+    private func exceptionChip(text: String, color: Color, identifier: String) -> some View {
+        Text(text)
+            .font(.caption2)
+            .fontWeight(.bold)
+            .foregroundColor(.white)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(color)
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .accessibilityIdentifier(identifier)
+    }
+
+    private func quantityLabel(_ quantity: Double) -> String {
+        quantity.formatted(.number.precision(.fractionLength(0...2)))
     }
 }
 
