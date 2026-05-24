@@ -375,111 +375,60 @@ struct TaskRowView: View {
     
     var body: some View {
         Button(action: onTap) {
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Text(task.title)
-                            .font(.headline)
-                            .strikethrough(task.isCompleted)
-                            .foregroundColor(task.isCompleted ? .secondary : .primary)
-                        
-                        Spacer()
-                        
-                        HStack(spacing: 4) {
-                            Image(systemName: task.category.icon)
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                            
-                            if task.hasPhotos {
-                                Image(systemName: "photo.fill")
-                                    .font(.caption)
-                                    .foregroundColor(.blue)
-                            }
-                        }
-                    }
-                    
-                    if !task.description.isEmpty {
-                        Text(task.description)
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                            .lineLimit(2)
-                    }
-
-                    if !task.assignedEmployeeIDs.isEmpty {
-                        Text(assigneeSummary)
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-                            .lineLimit(1)
-                    }
-                    
-                    HStack {
-                        // Priority indicator
-                        HStack(spacing: 2) {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .font(.caption2)
-                            Text(task.priority.displayName)
-                                .font(.caption2)
-                                .fontWeight(.medium)
-                        }
-                        .foregroundColor(priorityColor(task.priority))
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(priorityColor(task.priority).opacity(0.2))
-                        .cornerRadius(4)
-                        
-                        Spacer()
-                        
-                        // Due date / completion status
-                        if task.isOverdue && !task.isCompleted {
-                            HStack(spacing: 2) {
-                                Image(systemName: "clock.badge.exclamationmark")
-                                    .font(.caption2)
-                                Text("OVERDUE")
-                                    .font(.caption2)
-                                    .fontWeight(.bold)
-                            }
-                            .foregroundColor(.red)
-                        } else if !task.isCompleted, let dueDate = task.dueDate {
-                            Text("Due \(dueDate, style: .date)")
-                                .font(.caption2)
-                                .foregroundColor(.secondary)
-                        } else if let completed = task.completedDate {
-                            HStack(spacing: 2) {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .font(.caption2)
-                                Text("Completed \(completed, style: .date)")
-                                    .font(.caption2)
-                            }
-                            .foregroundColor(.green)
-                        }
-                    }
-                }
-                
-                VStack {
-                    if task.isCompleted {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.title3)
-                            .foregroundColor(.green)
-                    } else {
-                        Circle()
-                            .stroke(Color.secondary, lineWidth: 2)
-                            .frame(width: 20, height: 20)
-                    }
-                }
-            }
-            .opacity(task.isCompleted ? 0.7 : 1.0)
+            TaskPriorityRow(
+                title: task.title,
+                isCompleted: task.isCompleted,
+                description: task.description.isEmpty ? nil : task.description,
+                assigneeSummary: task.assignedEmployeeIDs.isEmpty ? nil : assigneeSummary,
+                categorySystemImage: task.category.icon,
+                showsPhotoIndicator: task.hasPhotos,
+                priorityBadge: priorityBadge,
+                statusBadge: statusBadge
+            )
         }
         .buttonStyle(PlainButtonStyle())
         .accessibilityIdentifier("task-row-\(task.id.uuidString)")
     }
-    
-    private func priorityColor(_ priority: TaskPriority) -> Color {
-        switch priority {
-        case .low: return .green
-        case .medium: return .blue
-        case .high: return .orange
-        case .urgent: return .red
+
+    private var priorityBadge: TaskPriorityRow.PriorityBadge {
+        TaskPriorityRow.PriorityBadge(
+            label: task.priority.displayName,
+            systemImage: "exclamationmark.triangle.fill",
+            style: priorityStyle
+        )
+    }
+
+    private var priorityStyle: RheirStatusChip.Style {
+        switch task.priority {
+        case .low: return .paid
+        case .medium: return .selected
+        case .high: return .warning
+        case .urgent: return .pastDue
         }
+    }
+
+    private var statusBadge: TaskPriorityRow.StatusBadge? {
+        if task.isOverdue && !task.isCompleted {
+            return TaskPriorityRow.StatusBadge(
+                label: Text("OVERDUE"),
+                systemImage: "clock.badge.exclamationmark",
+                style: .pastDue
+            )
+        } else if !task.isCompleted, let dueDate = task.dueDate {
+            return TaskPriorityRow.StatusBadge(
+                label: Text("Due \(dueDate, style: .date)"),
+                systemImage: nil,
+                style: .neutral
+            )
+        } else if let completed = task.completedDate {
+            return TaskPriorityRow.StatusBadge(
+                label: Text("Completed \(completed, style: .date)"),
+                systemImage: "checkmark.circle.fill",
+                style: .paid
+            )
+        }
+
+        return nil
     }
 
     private var assigneeSummary: String {
