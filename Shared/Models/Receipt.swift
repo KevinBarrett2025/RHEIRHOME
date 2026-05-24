@@ -461,6 +461,52 @@ public enum CardBrand: String, CaseIterable, Identifiable, Codable, Sendable {
     public var id: Self { self }
 }
 
+public enum ReceiptItemExceptionStatus: String, CaseIterable, Identifiable, Codable, Sendable {
+    case open = "Open"
+    case disputeNeeded = "Dispute Needed"
+    case resolved = "Resolved"
+
+    public var id: Self { self }
+}
+
+public struct ReceiptItemExceptionMetadata: Codable, Hashable, Sendable {
+    public var returnQuantity: Double
+    public var missingQuantity: Double
+    public var status: ReceiptItemExceptionStatus
+    public var notes: String
+
+    public init(
+        returnQuantity: Double = 0,
+        missingQuantity: Double = 0,
+        status: ReceiptItemExceptionStatus = .open,
+        notes: String = ""
+    ) {
+        self.returnQuantity = max(0, returnQuantity)
+        self.missingQuantity = max(0, missingQuantity)
+        self.status = status
+        self.notes = notes
+    }
+
+    public func normalizedReturnQuantity(for lineItemQuantity: Double) -> Double {
+        min(max(0, returnQuantity), max(0, lineItemQuantity))
+    }
+
+    public func normalizedMissingQuantity(for lineItemQuantity: Double) -> Double {
+        let safeLineQuantity = max(0, lineItemQuantity)
+        let remainingAfterReturn = max(0, safeLineQuantity - normalizedReturnQuantity(for: safeLineQuantity))
+        return min(max(0, missingQuantity), remainingAfterReturn)
+    }
+
+    public func normalized(for lineItemQuantity: Double) -> ReceiptItemExceptionMetadata {
+        ReceiptItemExceptionMetadata(
+            returnQuantity: normalizedReturnQuantity(for: lineItemQuantity),
+            missingQuantity: normalizedMissingQuantity(for: lineItemQuantity),
+            status: status,
+            notes: notes
+        )
+    }
+}
+
 /// Represents an individual item on a receipt
 public struct ReceiptItem: Identifiable, Codable, Hashable, Sendable {
     public let id: UUID
@@ -473,6 +519,7 @@ public struct ReceiptItem: Identifiable, Codable, Hashable, Sendable {
     public var sku: String
     public var notes: String
     public var isMarkedForReturn: Bool
+    public var exceptionMetadata: ReceiptItemExceptionMetadata?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -485,6 +532,7 @@ public struct ReceiptItem: Identifiable, Codable, Hashable, Sendable {
         case sku
         case notes
         case isMarkedForReturn
+        case exceptionMetadata
     }
     
     public init(
@@ -497,7 +545,8 @@ public struct ReceiptItem: Identifiable, Codable, Hashable, Sendable {
         subcategory: String = "",
         sku: String = "",
         notes: String = "",
-        isMarkedForReturn: Bool = false
+        isMarkedForReturn: Bool = false,
+        exceptionMetadata: ReceiptItemExceptionMetadata? = nil
     ) {
         self.id = id
         self.name = name
@@ -509,6 +558,38 @@ public struct ReceiptItem: Identifiable, Codable, Hashable, Sendable {
         self.sku = sku
         self.notes = notes
         self.isMarkedForReturn = isMarkedForReturn
+        self.exceptionMetadata = exceptionMetadata?.normalized(for: quantity)
+    }
+
+    public var returnExceptionQuantity: Double {
+        if let exceptionMetadata {
+            return exceptionMetadata.normalizedReturnQuantity(for: quantity)
+        }
+        return isMarkedForReturn ? max(0, quantity) : 0
+    }
+
+    public var missingExceptionQuantity: Double {
+        exceptionMetadata?.normalizedMissingQuantity(for: quantity) ?? 0
+    }
+
+    public var quantityToKeep: Double {
+        max(0, max(0, quantity) - returnExceptionQuantity - missingExceptionQuantity)
+    }
+
+    public var hasReturnException: Bool {
+        returnExceptionQuantity > 0
+    }
+
+    public var hasMissingException: Bool {
+        missingExceptionQuantity > 0
+    }
+
+    public var hasAnyLineItemException: Bool {
+        hasReturnException
+            || hasMissingException
+            || exceptionMetadata?.status == .disputeNeeded
+            || exceptionMetadata?.status == .resolved
+            || !(exceptionMetadata?.notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
     }
 
     public init(from decoder: Decoder) throws {
@@ -523,6 +604,9 @@ public struct ReceiptItem: Identifiable, Codable, Hashable, Sendable {
         sku = try container.decode(String.self, forKey: .sku)
         notes = try container.decode(String.self, forKey: .notes)
         isMarkedForReturn = try container.decodeIfPresent(Bool.self, forKey: .isMarkedForReturn) ?? false
+        exceptionMetadata = try container
+            .decodeIfPresent(ReceiptItemExceptionMetadata.self, forKey: .exceptionMetadata)?
+            .normalized(for: quantity)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -537,6 +621,7 @@ public struct ReceiptItem: Identifiable, Codable, Hashable, Sendable {
         try container.encode(sku, forKey: .sku)
         try container.encode(notes, forKey: .notes)
         try container.encode(isMarkedForReturn, forKey: .isMarkedForReturn)
+        try container.encodeIfPresent(exceptionMetadata, forKey: .exceptionMetadata)
     }
 }
 
