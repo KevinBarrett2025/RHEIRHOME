@@ -6,24 +6,45 @@ import Testing
 @testable import RHEIR
 
 private final class RecordingProjectRepository: ProjectRepository {
-    var fetchedProjectsByOrganization: [String: [Project]] = [:]
-    var savedProjects: [(project: Project, organizationID: String)] = []
-    var savedAssignmentsByOrganization: [String: [String]] = [:]
+    private let lock = NSLock()
+    private var _fetchedProjectsByOrganization: [String: [Project]] = [:]
+    private var _savedProjects: [(project: Project, organizationID: String)] = []
+    private var _savedAssignmentsByOrganization: [String: [String]] = [:]
+
+    var fetchedProjectsByOrganization: [String: [Project]] {
+        get { withLock { _fetchedProjectsByOrganization } }
+        set { withLock { _fetchedProjectsByOrganization = newValue } }
+    }
+
+    var savedProjects: [(project: Project, organizationID: String)] {
+        withLock { _savedProjects }
+    }
+
+    var savedAssignmentsByOrganization: [String: [String]] {
+        get { withLock { _savedAssignmentsByOrganization } }
+        set { withLock { _savedAssignmentsByOrganization = newValue } }
+    }
 
     func fetchProjects(for organizationID: String) async throws -> [Project] {
-        fetchedProjectsByOrganization[organizationID] ?? []
+        withLock { _fetchedProjectsByOrganization[organizationID] ?? [] }
     }
 
     func saveProject(_ project: Project, organizationID: String) async throws {
-        savedProjects.append((project, organizationID))
+        withLock { _savedProjects.append((project, organizationID)) }
     }
 
     func saveProjectAssignments(_ projectIDs: [String], organizationID: String) async throws {
-        savedAssignmentsByOrganization[organizationID] = projectIDs
+        withLock { _savedAssignmentsByOrganization[organizationID] = projectIDs }
     }
 
     func loadProjectAssignments(organizationID: String) async -> [String] {
-        savedAssignmentsByOrganization[organizationID] ?? []
+        withLock { _savedAssignmentsByOrganization[organizationID] ?? [] }
+    }
+
+    private func withLock<T>(_ operation: () throws -> T) rethrows -> T {
+        lock.lock()
+        defer { lock.unlock() }
+        return try operation()
     }
 }
 
@@ -999,6 +1020,7 @@ struct ProjectOperationsFoundationTests {
         let documentID = UUID(uuidString: "7E7D5745-C6F0-45CE-A3F6-4603EA7F1004")!
         let checklistID = UUID(uuidString: "7E7D5745-C6F0-45CE-A3F6-4603EA7F1005")!
         let shoppingID = UUID(uuidString: "7E7D5745-C6F0-45CE-A3F6-4603EA7F1006")!
+        let hiddenConditionID = UUID(uuidString: "7E7D5745-C6F0-45CE-A3F6-4603EA7F1007")!
         let dueDate = Date(timeIntervalSince1970: 1_786_320_000)
 
         var task = ProjectTask(
@@ -1079,6 +1101,19 @@ struct ProjectOperationsFoundationTests {
                     quantity: 2,
                     unit: "boxes"
                 )
+            ],
+            hiddenConditions: [
+                HiddenCondition(
+                    id: hiddenConditionID,
+                    title: "Hidden water damage",
+                    internalNotes: "Vanity wall blocking is soft after demo.",
+                    discoveredDate: dueDate,
+                    severity: .high,
+                    status: .approvalNeeded,
+                    estimatedCostImpact: 1_250,
+                    estimatedLaborHoursImpact: 6,
+                    clientFacingSummary: "We found concealed water damage after opening the vanity wall."
+                )
             ]
         )
         project.tasks = [task]
@@ -1092,6 +1127,8 @@ struct ProjectOperationsFoundationTests {
         #expect(decoded.activeProjectChecklists.first?.completionFraction == 0.5)
         #expect(decoded.activeProjectCalendarEvents.first?.kind == .deliveryOrder)
         #expect(decoded.activeShoppingListItems.first?.title == "Wire staples")
+        #expect(decoded.activeHiddenConditions.first?.title == "Hidden water damage")
+        #expect(decoded.activeHiddenConditions.first?.status == .approvalNeeded)
         #expect(decoded.projectTimelineEvents(on: dueDate).contains { $0.kind == .clientPaymentDue })
 
         var legacyObject = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
@@ -1101,6 +1138,7 @@ struct ProjectOperationsFoundationTests {
         legacyObject.removeValue(forKey: "projectChecklists")
         legacyObject.removeValue(forKey: "projectCalendarEvents")
         legacyObject.removeValue(forKey: "shoppingListItems")
+        legacyObject.removeValue(forKey: "hiddenConditions")
 
         let legacyData = try JSONSerialization.data(withJSONObject: legacyObject)
         let legacyDecoded = try JSONDecoder().decode(Project.self, from: legacyData)
@@ -1112,6 +1150,7 @@ struct ProjectOperationsFoundationTests {
         #expect(legacyDecoded.activeProjectChecklists.isEmpty)
         #expect(legacyDecoded.activeProjectCalendarEvents.isEmpty)
         #expect(legacyDecoded.activeShoppingListItems.isEmpty)
+        #expect(legacyDecoded.activeHiddenConditions.isEmpty)
     }
 
     @Test
@@ -1169,6 +1208,12 @@ struct ProjectOperationsFoundationTests {
         candidate = baseProject
         candidate.shoppingListItems = [
             ProjectShoppingListItem(title: "Wire staples")
+        ]
+        #expect(baseProject != candidate)
+
+        candidate = baseProject
+        candidate.hiddenConditions = [
+            HiddenCondition(title: "Hidden water damage", status: .needsReview)
         ]
         #expect(baseProject != candidate)
     }
@@ -2024,16 +2069,52 @@ struct ProjectMutationPropagationTests {
             in: projectID
         )
 
+        let hiddenConditionID = UUID()
+        await viewModel.addOrUpdateHiddenCondition(
+            HiddenCondition(
+                id: hiddenConditionID,
+                title: "Water damage behind vanity",
+                internalNotes: "Soft drywall found during demo.",
+                discoveredDate: baselineDate,
+                severity: .high,
+                status: .needsReview,
+                estimatedCostImpact: 750,
+                estimatedLaborHoursImpact: 4,
+                clientFacingSummary: "Demo exposed hidden water damage that should be repaired before finishes go in."
+            ),
+            in: projectID
+        )
+        await viewModel.addOrUpdateHiddenCondition(
+            HiddenCondition(
+                id: hiddenConditionID,
+                title: "Water damage behind vanity wall",
+                internalNotes: "Soft drywall and blocking found during demo.",
+                discoveredDate: baselineDate,
+                severity: .high,
+                status: .approvalNeeded,
+                estimatedCostImpact: 1_250,
+                estimatedLaborHoursImpact: 6,
+                clientFacingSummary: "Demo exposed hidden water damage behind the vanity wall."
+            ),
+            in: projectID
+        )
+
         let reloadedProject = try #require(projectStore.loadProjects(for: orgID).first { $0.id == projectID })
         #expect(reloadedProject.shoppingListItems?.map(\.title) == ["Heavy contractor bags", "Dust masks"])
         #expect(reloadedProject.shoppingListItems?.first?.quantity == 2)
         #expect(reloadedProject.projectChecklists?.first?.items.map(\.title) == ["Shut off water", "Protect flooring"])
         #expect(reloadedProject.projectChecklists?.first?.completionFraction == 0.5)
         #expect(reloadedProject.projectCalendarEvents?.first?.title == "Fixture delivery")
+        #expect(reloadedProject.hiddenConditions?.first?.title == "Water damage behind vanity wall")
+        #expect(reloadedProject.hiddenConditions?.first?.status == .approvalNeeded)
+        #expect(reloadedProject.hiddenConditions?.first?.estimatedCostImpact == 1_250)
+        #expect(reloadedProject.hiddenConditions?.first?.estimatedLaborHoursImpact == 6)
         #expect(reloadedProject.lastModifiedDate > baselineDate)
         #expect(viewModel.accessibleProjects.first?.shoppingListItems?.count == 2)
         #expect(viewModel.selectedProject?.projectChecklists?.first?.items.count == 2)
+        #expect(viewModel.selectedProject?.hiddenConditions?.first?.clientFacingSummary == "Demo exposed hidden water damage behind the vanity wall.")
         #expect(repository.savedProjects.last?.project.projectCalendarEvents?.first?.title == "Fixture delivery")
+        #expect(repository.savedProjects.last?.project.hiddenConditions?.first?.title == "Water damage behind vanity wall")
 
         await viewModel.removeShoppingListItem(shoppingID, from: projectID)
         await viewModel.removeProjectChecklist(checklistID, from: projectID)
@@ -2046,6 +2127,7 @@ struct ProjectMutationPropagationTests {
         #expect(afterRemovalProject.clientProfile?.notes == "Keep access note")
         #expect(afterRemovalProject.paymentMilestones?.first == paymentMilestone)
         #expect(afterRemovalProject.projectDocuments?.first == projectDocument)
+        #expect(afterRemovalProject.hiddenConditions?.first?.title == "Water damage behind vanity wall")
         #expect(afterRemovalProject.lastModifiedDate > baselineDate)
     }
 
@@ -2329,6 +2411,9 @@ struct ProjectMutationPropagationTests {
         project.shoppingListItems = [
             ProjectShoppingListItem(title: "Contractor bags")
         ]
+        project.hiddenConditions = [
+            HiddenCondition(title: "Soft subfloor", status: .needsReview)
+        ]
 
         viewModel.projects = [project]
         viewModel.organizationProjects = [project]
@@ -2364,6 +2449,13 @@ struct ProjectMutationPropagationTests {
         refreshedProject.shoppingListItems = [
             ProjectShoppingListItem(title: "Wire staples", quantity: 2, unit: "boxes")
         ]
+        refreshedProject.hiddenConditions = [
+            HiddenCondition(
+                title: "Soft subfloor near tub",
+                status: .approvalNeeded,
+                estimatedCostImpact: 900
+            )
+        ]
         viewModel.organizationProjects = [refreshedProject]
 
         viewModel.updateAccessibleProjects()
@@ -2374,6 +2466,8 @@ struct ProjectMutationPropagationTests {
         #expect(viewModel.selectedProject?.projectChecklists?.first?.items.map(\.title) == ["Voltage tester"])
         #expect(viewModel.selectedProject?.projectCalendarEvents?.first?.title == "Fixture delivery")
         #expect(viewModel.accessibleProjects.first?.shoppingListItems?.first?.quantity == 2)
+        #expect(viewModel.selectedProject?.hiddenConditions?.first?.title == "Soft subfloor near tub")
+        #expect(viewModel.accessibleProjects.first?.hiddenConditions?.first?.estimatedCostImpact == 900)
     }
 
     @Test

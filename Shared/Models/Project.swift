@@ -44,6 +44,7 @@ public struct Project: Identifiable, Codable, Equatable, Sendable {
     public var projectChecklists: [ProjectChecklist]?
     public var projectCalendarEvents: [ProjectCalendarEvent]?
     public var shoppingListItems: [ProjectShoppingListItem]?
+    public var hiddenConditions: [HiddenCondition]?
     
     public init(
         id: UUID = UUID(),
@@ -72,7 +73,8 @@ public struct Project: Identifiable, Codable, Equatable, Sendable {
         projectDocuments: [ProjectDocument]? = nil,
         projectChecklists: [ProjectChecklist]? = nil,
         projectCalendarEvents: [ProjectCalendarEvent]? = nil,
-        shoppingListItems: [ProjectShoppingListItem]? = nil
+        shoppingListItems: [ProjectShoppingListItem]? = nil,
+        hiddenConditions: [HiddenCondition]? = nil
     ) {
         self.id = id
         self.name = name
@@ -101,6 +103,7 @@ public struct Project: Identifiable, Codable, Equatable, Sendable {
         self.projectChecklists = projectChecklists
         self.projectCalendarEvents = projectCalendarEvents
         self.shoppingListItems = shoppingListItems
+        self.hiddenConditions = hiddenConditions
     }
     
     // MARK: - Equatable Conformance
@@ -116,7 +119,8 @@ public struct Project: Identifiable, Codable, Equatable, Sendable {
                lhs.projectDocuments == rhs.projectDocuments &&
                lhs.projectChecklists == rhs.projectChecklists &&
                lhs.projectCalendarEvents == rhs.projectCalendarEvents &&
-               lhs.shoppingListItems == rhs.shoppingListItems
+               lhs.shoppingListItems == rhs.shoppingListItems &&
+               lhs.hiddenConditions == rhs.hiddenConditions
     }
     
     // MARK: - CloudKit Conversion
@@ -180,6 +184,7 @@ public struct Project: Identifiable, Codable, Equatable, Sendable {
         projectChecklists = nil
         projectCalendarEvents = nil
         shoppingListItems = nil
+        hiddenConditions = nil
         
         // Try to decode full project data if available
         if let data = record["fullProjectData"] as? Data {
@@ -196,6 +201,7 @@ public struct Project: Identifiable, Codable, Equatable, Sendable {
             projectChecklists = fullProject.projectChecklists
             projectCalendarEvents = fullProject.projectCalendarEvents
             shoppingListItems = fullProject.shoppingListItems
+            hiddenConditions = fullProject.hiddenConditions
         }
     }
 }
@@ -712,6 +718,61 @@ public struct ProjectCalendarEvent: Identifiable, Codable, Hashable, Sendable {
     }
 }
 
+public enum HiddenConditionSeverity: String, CaseIterable, Codable, Hashable, Sendable {
+    case low
+    case moderate
+    case high
+    case blocking
+}
+
+public enum HiddenConditionStatus: String, CaseIterable, Codable, Hashable, Sendable {
+    case documented
+    case needsReview
+    case approvalNeeded
+    case approved
+    case resolved
+}
+
+public struct HiddenCondition: Identifiable, Codable, Hashable, Sendable {
+    public let id: UUID
+    public var title: String
+    public var internalNotes: String
+    public var discoveredDate: Date
+    public var severity: HiddenConditionSeverity
+    public var status: HiddenConditionStatus
+    public var estimatedCostImpact: Double?
+    public var estimatedLaborHoursImpact: Double?
+    public var clientFacingSummary: String
+    public var createdAt: Date
+    public var updatedAt: Date
+
+    public init(
+        id: UUID = UUID(),
+        title: String,
+        internalNotes: String = "",
+        discoveredDate: Date = Date(),
+        severity: HiddenConditionSeverity = .moderate,
+        status: HiddenConditionStatus = .documented,
+        estimatedCostImpact: Double? = nil,
+        estimatedLaborHoursImpact: Double? = nil,
+        clientFacingSummary: String = "",
+        createdAt: Date = Date(),
+        updatedAt: Date = Date()
+    ) {
+        self.id = id
+        self.title = title
+        self.internalNotes = internalNotes
+        self.discoveredDate = discoveredDate
+        self.severity = severity
+        self.status = status
+        self.estimatedCostImpact = estimatedCostImpact
+        self.estimatedLaborHoursImpact = estimatedLaborHoursImpact
+        self.clientFacingSummary = clientFacingSummary
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+}
+
 public struct ProjectAssistantSnapshot: Sendable {
     public let generatedAt: Date
     public let overdueTasks: [ProjectTask]
@@ -850,6 +911,10 @@ public extension Project {
 
     var activeShoppingListItems: [ProjectShoppingListItem] {
         shoppingListItems ?? []
+    }
+
+    var activeHiddenConditions: [HiddenCondition] {
+        (hiddenConditions ?? []).sortedForHiddenConditions()
     }
 
     func operationsSummary(
@@ -1127,6 +1192,20 @@ private extension Array where Element == ProjectChecklist {
     }
 }
 
+private extension Array where Element == HiddenCondition {
+    func sortedForHiddenConditions() -> [HiddenCondition] {
+        sorted { lhs, rhs in
+            if lhs.status.sortOrder != rhs.status.sortOrder {
+                return lhs.status.sortOrder < rhs.status.sortOrder
+            }
+            if lhs.discoveredDate != rhs.discoveredDate {
+                return lhs.discoveredDate > rhs.discoveredDate
+            }
+            return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
+        }
+    }
+}
+
 private extension Array where Element == ProjectAssistantChecklistPrep {
     func sortedForAssistantPrep() -> [ProjectAssistantChecklistPrep] {
         sorted { lhs, rhs in
@@ -1148,6 +1227,18 @@ private extension Array where Element == ProjectAssistantReturnItem {
                 return lhs.receiptVendor.localizedCaseInsensitiveCompare(rhs.receiptVendor) == .orderedAscending
             }
             return lhs.itemName.localizedCaseInsensitiveCompare(rhs.itemName) == .orderedAscending
+        }
+    }
+}
+
+private extension HiddenConditionStatus {
+    var sortOrder: Int {
+        switch self {
+        case .approvalNeeded: return 0
+        case .needsReview: return 1
+        case .documented: return 2
+        case .approved: return 3
+        case .resolved: return 4
         }
     }
 }
