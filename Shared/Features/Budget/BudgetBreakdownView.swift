@@ -166,6 +166,7 @@ struct BudgetBreakdownContentView: View {
     @State private var showingEditProject = false
     @State private var showingReports = false
     @State private var showingBusinessResources = false
+    @State private var hiddenConditionEditorContext: HiddenConditionEditorContext?
 
     var body: some View {
         if let project = projectVM.selectedProject {
@@ -195,6 +196,14 @@ struct BudgetBreakdownContentView: View {
                 BusinessResourcesView()
                     .environmentObject(projectVM)
                     .environmentObject(authVM)
+            }
+        }
+        .sheet(item: $hiddenConditionEditorContext) { context in
+            HiddenConditionEditorView(condition: context.condition) { condition in
+                Task { @MainActor in
+                    await projectVM.addOrUpdateHiddenCondition(condition, in: project.id)
+                    hiddenConditionEditorContext = nil
+                }
             }
         }
     }
@@ -235,6 +244,8 @@ struct BudgetBreakdownContentView: View {
                     .padding(.horizontal)
                     
                     projectOverviewHero(for: project)
+
+                    hiddenConditionsSection(for: project)
                     
                     categorySection(for: project)
                     
@@ -290,6 +301,65 @@ struct BudgetBreakdownContentView: View {
             remainingTint: remaining < 0 ? RheirTheme.Colors.destructive : RheirTheme.Colors.success
         )
         .padding(.horizontal)
+    }
+
+    @ViewBuilder
+    private func hiddenConditionsSection(for project: Project) -> some View {
+        let conditions = project.activeHiddenConditions
+
+        VStack(alignment: .leading, spacing: RheirTheme.Spacing.medium) {
+            RheirSectionHeader(
+                "Hidden Conditions",
+                subtitle: "Document unexpected site conditions before they become margin or client-trust issues."
+            ) {
+                Button {
+                    hiddenConditionEditorContext = HiddenConditionEditorContext(condition: nil)
+                } label: {
+                    Label("Document", systemImage: "plus")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(RheirTheme.Colors.primaryAction)
+                        .frame(minHeight: 44)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("hidden-condition-add-button")
+            }
+
+            if conditions.isEmpty {
+                RheirCard(
+                    padding: RheirTheme.Spacing.medium,
+                    background: RheirTheme.Colors.elevatedCardBackground
+                ) {
+                    HStack(alignment: .top, spacing: RheirTheme.Spacing.medium) {
+                        Image(systemName: "shield.lefthalf.filled")
+                            .font(.title3)
+                            .foregroundStyle(RheirTheme.Colors.information)
+                            .frame(width: 28)
+
+                        VStack(alignment: .leading, spacing: RheirTheme.Spacing.xSmall) {
+                            Text("No hidden conditions documented")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(RheirTheme.Colors.primaryText)
+
+                            Text("Capture surprises with internal notes, client-ready wording, and rough cost/labor impact.")
+                                .font(.caption)
+                                .foregroundStyle(RheirTheme.Colors.secondaryText)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+
+                        Spacer(minLength: RheirTheme.Spacing.small)
+                    }
+                }
+                .accessibilityIdentifier("hidden-condition-empty-state")
+            } else {
+                ForEach(conditions) { condition in
+                    HiddenConditionCard(condition: condition) {
+                        hiddenConditionEditorContext = HiddenConditionEditorContext(condition: condition)
+                    }
+                }
+            }
+        }
+        .padding(.horizontal)
+        .accessibilityIdentifier("hidden-condition-section")
     }
     
     @ViewBuilder
@@ -523,8 +593,153 @@ struct BudgetBreakdownContentView: View {
             }
         )
     }
-    
+
+    private struct HiddenConditionEditorContext: Identifiable {
+        let id = UUID()
+        let condition: HiddenCondition?
+    }
+
+    private struct HiddenConditionEditorView: View {
+        let condition: HiddenCondition?
+        let onSave: (HiddenCondition) -> Void
+
+        @Environment(\.dismiss) private var dismiss
+        @State private var title: String
+        @State private var internalNotes: String
+        @State private var discoveredDate: Date
+        @State private var severity: HiddenConditionSeverity
+        @State private var status: HiddenConditionStatus
+        @State private var estimatedCostImpact: String
+        @State private var estimatedLaborHoursImpact: String
+        @State private var clientFacingSummary: String
+
+        init(condition: HiddenCondition?, onSave: @escaping (HiddenCondition) -> Void) {
+            self.condition = condition
+            self.onSave = onSave
+            _title = State(initialValue: condition?.title ?? "")
+            _internalNotes = State(initialValue: condition?.internalNotes ?? "")
+            _discoveredDate = State(initialValue: condition?.discoveredDate ?? Date())
+            _severity = State(initialValue: condition?.severity ?? .moderate)
+            _status = State(initialValue: condition?.status ?? .needsReview)
+            _estimatedCostImpact = State(initialValue: condition?.estimatedCostImpact.map { String($0) } ?? "")
+            _estimatedLaborHoursImpact = State(initialValue: condition?.estimatedLaborHoursImpact.map { String($0) } ?? "")
+            _clientFacingSummary = State(initialValue: condition?.clientFacingSummary ?? "")
+        }
+
+        var body: some View {
+            NavigationStack {
+                Form {
+                    Section("Condition") {
+                        TextField("Title", text: $title)
+                            .accessibilityIdentifier("hidden-condition-title-field")
+
+                        DatePicker(
+                            "Discovered",
+                            selection: $discoveredDate,
+                            displayedComponents: .date
+                        )
+
+                        Picker("Severity", selection: $severity) {
+                            ForEach(HiddenConditionSeverity.allCases, id: \.self) { severity in
+                                Text(severity.displayLabel).tag(severity)
+                            }
+                        }
+
+                        Picker("Status", selection: $status) {
+                            ForEach(HiddenConditionStatus.allCases, id: \.self) { status in
+                                Text(status.displayLabel).tag(status)
+                            }
+                        }
+                    }
+
+                    Section("Estimated Impact") {
+                        TextField("Cost impact", text: $estimatedCostImpact)
+                            .keyboardType(.decimalPad)
+                            .accessibilityIdentifier("hidden-condition-cost-field")
+
+                        TextField("Labor hours impact", text: $estimatedLaborHoursImpact)
+                            .keyboardType(.decimalPad)
+                            .accessibilityIdentifier("hidden-condition-labor-field")
+                    }
+
+                    Section("Internal Notes") {
+                        TextEditor(text: $internalNotes)
+                            .frame(minHeight: 96)
+                            .accessibilityIdentifier("hidden-condition-internal-notes")
+                    }
+
+                    Section("Client-Facing Summary") {
+                        TextEditor(text: $clientFacingSummary)
+                            .frame(minHeight: 112)
+                            .accessibilityIdentifier("hidden-condition-client-summary")
+
+                        Text("Client-facing text stays editable and is not sent or shared from this workflow.")
+                            .font(.caption)
+                            .foregroundStyle(RheirTheme.Colors.secondaryText)
+                    }
+                }
+                .scrollContentBackground(.hidden)
+                .background(RheirTheme.Colors.appBackground)
+                .navigationTitle(condition == nil ? "Document Hidden Condition" : "Edit Hidden Condition")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") {
+                            dismiss()
+                        }
+                    }
+
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Save") {
+                            save()
+                        }
+                        .disabled(trimmedTitle.isEmpty)
+                        .accessibilityIdentifier("hidden-condition-save-button")
+                    }
+                }
+            }
+        }
+
+        private var trimmedTitle: String {
+            title.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        private func save() {
+            let now = Date()
+            let savedCondition = HiddenCondition(
+                id: condition?.id ?? UUID(),
+                title: trimmedTitle,
+                internalNotes: internalNotes.trimmingCharacters(in: .whitespacesAndNewlines),
+                discoveredDate: discoveredDate,
+                severity: severity,
+                status: status,
+                estimatedCostImpact: sanitizedNumber(from: estimatedCostImpact),
+                estimatedLaborHoursImpact: sanitizedNumber(from: estimatedLaborHoursImpact),
+                clientFacingSummary: clientFacingSummary.trimmingCharacters(in: .whitespacesAndNewlines),
+                createdAt: condition?.createdAt ?? now,
+                updatedAt: now
+            )
+
+            onSave(savedCondition)
+            dismiss()
+        }
+
+        private func sanitizedNumber(from text: String) -> Double? {
+            let cleaned = text
+                .replacingOccurrences(of: "$", with: "")
+                .replacingOccurrences(of: ",", with: "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+
+            guard !cleaned.isEmpty, let value = Double(cleaned), value.isFinite else {
+                return nil
+            }
+
+            return max(0, value)
+        }
+    }
+
     // MARK: - Helper Methods
+
     private func calculateTotalSpent() -> Double {
         let total = projectVM.spentGeneralConditions + 
                    projectVM.spentMaterials + 
@@ -559,6 +774,29 @@ struct BudgetBreakdownContentView: View {
             await projectVM.updateProject(copy)
         }
         selectedTab = AppReleaseProfile.current.shouldHideCompanySurface ? .projects : .company
+    }
+}
+
+private extension HiddenConditionSeverity {
+    var displayLabel: String {
+        switch self {
+        case .low: return "Low"
+        case .moderate: return "Moderate"
+        case .high: return "High"
+        case .blocking: return "Blocking"
+        }
+    }
+}
+
+private extension HiddenConditionStatus {
+    var displayLabel: String {
+        switch self {
+        case .documented: return "Documented"
+        case .needsReview: return "Needs Review"
+        case .approvalNeeded: return "Approval Needed"
+        case .approved: return "Approved"
+        case .resolved: return "Resolved"
+        }
     }
 }
 

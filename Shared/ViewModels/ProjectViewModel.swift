@@ -30,6 +30,7 @@ private struct ProjectRefreshSignature: Equatable {
     let projectChecklists: [ProjectChecklist]?
     let projectCalendarEvents: [ProjectCalendarEvent]?
     let shoppingListItems: [ProjectShoppingListItem]?
+    let hiddenConditions: [HiddenCondition]?
 
     init(_ project: Project) {
         let normalizedProject = project.normalizedReceiptCopy
@@ -46,6 +47,7 @@ private struct ProjectRefreshSignature: Equatable {
         projectChecklists = normalizedProject.projectChecklists
         projectCalendarEvents = normalizedProject.projectCalendarEvents
         shoppingListItems = normalizedProject.shoppingListItems
+        hiddenConditions = normalizedProject.hiddenConditions
     }
 }
 
@@ -1748,6 +1750,30 @@ class ProjectViewModel: ObservableObject {
         await commitProjectMutation(
             updatedProject,
             reason: "remove project calendar event",
+            selectProject: selectedProject?.id == projectID
+        )
+    }
+
+    func addOrUpdateHiddenCondition(_ condition: HiddenCondition, in projectID: UUID) async {
+        guard var updatedProject = projectForMutation(projectID: projectID) else { return }
+
+        var conditionToStore = condition
+        conditionToStore.updatedAt = Date()
+
+        var conditions = updatedProject.hiddenConditions ?? []
+        let reason: String
+        if let conditionIndex = conditions.firstIndex(where: { $0.id == condition.id }) {
+            conditions[conditionIndex] = conditionToStore
+            reason = "update hidden condition"
+        } else {
+            conditions.append(conditionToStore)
+            reason = "add hidden condition"
+        }
+        updatedProject.hiddenConditions = conditions
+
+        await commitProjectMutation(
+            updatedProject,
+            reason: reason,
             selectProject: selectedProject?.id == projectID
         )
     }

@@ -668,6 +668,45 @@ final class RHEIRUITests: XCTestCase {
     }
 
     @MainActor
+    func testBudgetBreakdownExposesHiddenConditionCaptureSurface() throws {
+        let app = makeApp(mode: .budgetBreakdown)
+        app.launch()
+
+        let section = revealElement(identifier: "hidden-condition-section", in: app, maxSwipes: 3)
+        XCTAssertTrue(
+            section.exists,
+            "Expected the Budget Breakdown surface to expose the hidden-condition client-proof section."
+        )
+
+        let addButton = revealElement(
+            identifier: "hidden-condition-add-button",
+            in: app,
+            maxSwipes: 2,
+            query: { application in
+                let identifiedButton = application.buttons["hidden-condition-add-button"]
+                if identifiedButton.exists { return identifiedButton }
+
+                let labeledButton = application.buttons["Document"]
+                if labeledButton.exists { return labeledButton }
+
+                return identifiedButton
+            }
+        )
+        XCTAssertTrue(
+            addButton.exists,
+            "Expected the hidden-condition section to expose a manual document action."
+        )
+        addButton.tap()
+
+        XCTAssertTrue(
+            app.navigationBars["Document Hidden Condition"].waitForExistence(timeout: 5),
+            "Expected tapping the hidden-condition action to open the manual capture sheet."
+        )
+        XCTAssertTrue(app.textFields["hidden-condition-title-field"].exists)
+        XCTAssertTrue(app.buttons["hidden-condition-save-button"].exists)
+    }
+
+    @MainActor
     func testProjectReportsPreviewSurfaceExposesPDFAndCSVExports() throws {
         let app = makeApp(mode: .selectedProject)
         app.launch()
