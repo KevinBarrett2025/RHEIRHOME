@@ -45,6 +45,7 @@ public struct Project: Identifiable, Codable, Equatable, Sendable {
     public var projectCalendarEvents: [ProjectCalendarEvent]?
     public var shoppingListItems: [ProjectShoppingListItem]?
     public var hiddenConditions: [HiddenCondition]?
+    public var receiptExceptionReconciliations: [ReceiptExceptionReconciliation]?
     
     public init(
         id: UUID = UUID(),
@@ -74,7 +75,8 @@ public struct Project: Identifiable, Codable, Equatable, Sendable {
         projectChecklists: [ProjectChecklist]? = nil,
         projectCalendarEvents: [ProjectCalendarEvent]? = nil,
         shoppingListItems: [ProjectShoppingListItem]? = nil,
-        hiddenConditions: [HiddenCondition]? = nil
+        hiddenConditions: [HiddenCondition]? = nil,
+        receiptExceptionReconciliations: [ReceiptExceptionReconciliation]? = nil
     ) {
         self.id = id
         self.name = name
@@ -104,6 +106,7 @@ public struct Project: Identifiable, Codable, Equatable, Sendable {
         self.projectCalendarEvents = projectCalendarEvents
         self.shoppingListItems = shoppingListItems
         self.hiddenConditions = hiddenConditions
+        self.receiptExceptionReconciliations = receiptExceptionReconciliations
     }
     
     // MARK: - Equatable Conformance
@@ -120,7 +123,8 @@ public struct Project: Identifiable, Codable, Equatable, Sendable {
                lhs.projectChecklists == rhs.projectChecklists &&
                lhs.projectCalendarEvents == rhs.projectCalendarEvents &&
                lhs.shoppingListItems == rhs.shoppingListItems &&
-               lhs.hiddenConditions == rhs.hiddenConditions
+               lhs.hiddenConditions == rhs.hiddenConditions &&
+               lhs.receiptExceptionReconciliations == rhs.receiptExceptionReconciliations
     }
     
     // MARK: - CloudKit Conversion
@@ -185,6 +189,7 @@ public struct Project: Identifiable, Codable, Equatable, Sendable {
         projectCalendarEvents = nil
         shoppingListItems = nil
         hiddenConditions = nil
+        receiptExceptionReconciliations = nil
         
         // Try to decode full project data if available
         if let data = record["fullProjectData"] as? Data {
@@ -202,6 +207,7 @@ public struct Project: Identifiable, Codable, Equatable, Sendable {
             projectCalendarEvents = fullProject.projectCalendarEvents
             shoppingListItems = fullProject.shoppingListItems
             hiddenConditions = fullProject.hiddenConditions
+            receiptExceptionReconciliations = fullProject.receiptExceptionReconciliations
         }
     }
 }
@@ -770,6 +776,84 @@ public struct HiddenCondition: Identifiable, Codable, Hashable, Sendable {
         self.clientFacingSummary = clientFacingSummary
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+    }
+}
+
+public enum ReceiptExceptionReconciliationKind: String, CaseIterable, Codable, Hashable, Sendable {
+    case returnQuantity
+    case missingQuantity
+}
+
+public enum ReceiptExceptionReconciliationOutcome: String, CaseIterable, Codable, Hashable, Sendable {
+    case refundReceipt
+    case storeCredit
+    case replacement
+    case disputeResolved
+    case noCredit
+    case other
+}
+
+public struct ReceiptExceptionReconciliation: Identifiable, Codable, Hashable, Sendable {
+    public let id: UUID
+    public var sourceReceiptID: String
+    public var sourceItemID: UUID
+    public var kind: ReceiptExceptionReconciliationKind
+    public var quantity: Double
+    public var outcome: ReceiptExceptionReconciliationOutcome
+    public var refundReceiptID: String?
+    public var refundItemID: UUID?
+    public var resolvedDate: Date?
+    public var notes: String
+    public var createdAt: Date
+    public var updatedAt: Date
+
+    public init(
+        id: UUID = UUID(),
+        sourceReceiptID: String,
+        sourceItemID: UUID,
+        kind: ReceiptExceptionReconciliationKind,
+        quantity: Double,
+        outcome: ReceiptExceptionReconciliationOutcome,
+        refundReceiptID: String? = nil,
+        refundItemID: UUID? = nil,
+        resolvedDate: Date? = nil,
+        notes: String = "",
+        createdAt: Date = Date(),
+        updatedAt: Date = Date()
+    ) {
+        self.id = id
+        self.sourceReceiptID = sourceReceiptID
+        self.sourceItemID = sourceItemID
+        self.kind = kind
+        self.quantity = max(0, quantity)
+        self.outcome = outcome
+        self.refundReceiptID = refundReceiptID
+        self.refundItemID = refundItemID
+        self.resolvedDate = resolvedDate
+        self.notes = notes
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+
+    public func normalizedQuantity(for sourceItemQuantity: Double) -> Double {
+        min(max(0, quantity), max(0, sourceItemQuantity))
+    }
+
+    public func normalized(for sourceItemQuantity: Double) -> ReceiptExceptionReconciliation {
+        ReceiptExceptionReconciliation(
+            id: id,
+            sourceReceiptID: sourceReceiptID,
+            sourceItemID: sourceItemID,
+            kind: kind,
+            quantity: normalizedQuantity(for: sourceItemQuantity),
+            outcome: outcome,
+            refundReceiptID: refundReceiptID,
+            refundItemID: refundItemID,
+            resolvedDate: resolvedDate,
+            notes: notes,
+            createdAt: createdAt,
+            updatedAt: updatedAt
+        )
     }
 }
 
