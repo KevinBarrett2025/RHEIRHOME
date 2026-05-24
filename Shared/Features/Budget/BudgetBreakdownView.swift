@@ -97,6 +97,7 @@ struct BudgetBreakdownView: View {
             .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
         }
         .navigationBarHidden(true)
+        .background(RheirTheme.Colors.appBackground.ignoresSafeArea())
         .onAppear {
             if !availableTabs.contains(selectedBudgetTab) {
                 selectedBudgetTab = .breakdown
@@ -108,6 +109,8 @@ struct BudgetBreakdownView: View {
     private var customTabBar: some View {
         HStack(spacing: 0) {
             ForEach(availableTabs, id: \.self) { tab in
+                let isSelected = selectedBudgetTab == tab
+
                 Button {
                     withAnimation(.easeInOut(duration: 0.3)) {
                         selectedBudgetTab = tab
@@ -116,33 +119,33 @@ struct BudgetBreakdownView: View {
                     VStack(spacing: 8) {
                         Image(systemName: tab.icon)
                             .font(.title3)
-                            .foregroundColor(selectedBudgetTab == tab ? .blue : .secondary)
+                            .foregroundStyle(isSelected ? RheirTheme.Colors.information : RheirTheme.Colors.secondaryText)
                         
                         Text(tab.rawValue)
                             .font(.caption)
                             .fontWeight(.medium)
-                            .foregroundColor(selectedBudgetTab == tab ? .blue : .secondary)
+                            .foregroundStyle(isSelected ? RheirTheme.Colors.information : RheirTheme.Colors.secondaryText)
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 12)
                     .padding(.horizontal, 20)
                     .background(
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(selectedBudgetTab == tab ? Color.blue.opacity(0.1) : Color.clear)
+                        RoundedRectangle(cornerRadius: RheirTheme.Radius.medium, style: .continuous)
+                            .fill(isSelected ? RheirTheme.Colors.information.opacity(0.14) : Color.clear)
                     )
                 }
                 .buttonStyle(PlainButtonStyle())
                 .accessibilityIdentifier("budget-tab-\(tab.rawValue.lowercased())")
-                .accessibilityValue(selectedBudgetTab == tab ? "selected" : "unselected")
+                .accessibilityValue(isSelected ? "selected" : "unselected")
             }
         }
-        .padding(.horizontal)
+        .padding(.horizontal, RheirTheme.Spacing.large)
         .padding(.vertical, 8)
-        .background(Color(.systemGray6))
+        .background(RheirTheme.Colors.elevatedCardBackground)
         .overlay(
             Rectangle()
                 .frame(height: 1)
-                .foregroundColor(Color(.systemGray4)),
+                .foregroundStyle(RheirTheme.Colors.subtleBorder),
             alignment: .bottom
         )
     }
@@ -204,10 +207,11 @@ struct BudgetBreakdownContentView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack {
                         Image(systemName: "person.crop.circle.fill")
-                            .foregroundColor(.blue)
+                            .foregroundStyle(RheirTheme.Colors.information)
                         Text("Client Information")
                             .font(.headline)
                             .fontWeight(.semibold)
+                            .foregroundStyle(RheirTheme.Colors.primaryText)
                         Spacer()
                     }
                     
@@ -221,15 +225,16 @@ struct BudgetBreakdownContentView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack {
                         Image(systemName: "chart.bar.fill")
-                            .foregroundColor(.green)
+                            .foregroundStyle(RheirTheme.Colors.success)
                         Text("Budget Breakdown")
                             .font(.headline)
                             .fontWeight(.semibold)
+                            .foregroundStyle(RheirTheme.Colors.primaryText)
                         Spacer()
                     }
                     .padding(.horizontal)
                     
-                    spentRemainingSection(for: project)
+                    projectOverviewHero(for: project)
                     
                     categorySection(for: project)
                     
@@ -263,48 +268,27 @@ struct BudgetBreakdownContentView: View {
             }
             .padding(.top)
         }
+        .background(RheirTheme.Colors.appBackground)
     }
     
     @ViewBuilder
-    private func spentRemainingSection(for project: Project) -> some View {
+    private func projectOverviewHero(for project: Project) -> some View {
         let spent = calculateTotalSpent()
         let remaining = project.totalBudget - spent
         let percentageUsed = project.totalBudget > 0 ? (spent / project.totalBudget) * 100 : 0
-        
-        HStack(spacing: 20) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Spent")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                Text(spent.formatAsCurrency())
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .foregroundColor(spent > project.totalBudget ? .red : .primary)
-            }
-            
-            VStack(alignment: .center, spacing: 4) {
-                Text("Budget Used")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                Text("\(Int(percentageUsed))%")
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .foregroundColor(percentageUsed > 100 ? .red : percentageUsed > 80 ? .orange : .green)
-            }
-            
-            VStack(alignment: .trailing, spacing: 4) {
-                Text("Remaining")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                Text(remaining.formatAsCurrency())
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .foregroundColor(remaining < 0 ? .red : .green)
-            }
-        }
-        .padding()
-        .background(Color(.systemGray6))
-        .cornerRadius(12)
+
+        ProjectOverviewHeroCard(
+            projectName: project.name,
+            clientName: project.client,
+            statusLabel: project.status.rawValue,
+            statusTint: project.status.tintColor,
+            spentValue: spent.formatAsCurrency(),
+            spentTint: spent > project.totalBudget ? RheirTheme.Colors.destructive : RheirTheme.Colors.primaryText,
+            budgetUsedValue: "\(Int(percentageUsed))%",
+            budgetUsedTint: percentageUsed > 100 ? RheirTheme.Colors.destructive : percentageUsed > 80 ? RheirTheme.Colors.warning : RheirTheme.Colors.success,
+            remainingValue: remaining.formatAsCurrency(),
+            remainingTint: remaining < 0 ? RheirTheme.Colors.destructive : RheirTheme.Colors.success
+        )
         .padding(.horizontal)
     }
     

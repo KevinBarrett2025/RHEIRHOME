@@ -78,8 +78,12 @@ public struct ProjectTask: Identifiable, Codable, Sendable {
     }
     
     public var isOverdue: Bool {
-        guard let dueDate = dueDate else { return false }
-        return !isCompleted && dueDate < Date()
+        isOverdue(on: Date())
+    }
+
+    public func isOverdue(on date: Date, calendar: Calendar = .current) -> Bool {
+        guard let dueDate else { return false }
+        return !isCompleted && calendar.startOfDay(for: dueDate) < calendar.startOfDay(for: date)
     }
     
     public mutating func markCompleted(by employeeIDs: [UUID], notes: String) {
@@ -261,6 +265,23 @@ public enum TaskCategory: String, CaseIterable, Codable, Sendable {
         case .inspection: return "magnifyingglass"
         case .permits: return "doc.text.fill"
         case .materials: return "shippingbox.fill"
+        }
+    }
+
+    public var sortOrder: Int {
+        switch self {
+        case .general: return 0
+        case .permits: return 1
+        case .materials: return 2
+        case .roofing: return 3
+        case .plumbing: return 4
+        case .electrical: return 5
+        case .hvac: return 6
+        case .flooring: return 7
+        case .painting: return 8
+        case .landscaping: return 9
+        case .cleanup: return 10
+        case .inspection: return 11
         }
     }
 }

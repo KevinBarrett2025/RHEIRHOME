@@ -24,6 +24,12 @@ private struct ProjectRefreshSignature: Equatable {
     let receipts: [ReceiptRefreshSignature]
     let tasks: [TaskRefreshSignature]
     let workHours: [WorkHourRefreshSignature]
+    let clientProfile: ProjectClientProfile?
+    let paymentMilestones: [ProjectPaymentMilestone]?
+    let projectDocuments: [ProjectDocument]?
+    let projectChecklists: [ProjectChecklist]?
+    let projectCalendarEvents: [ProjectCalendarEvent]?
+    let shoppingListItems: [ProjectShoppingListItem]?
 
     init(_ project: Project) {
         let normalizedProject = project.normalizedReceiptCopy
@@ -34,6 +40,12 @@ private struct ProjectRefreshSignature: Equatable {
         receipts = normalizedProject.receipts.map(ReceiptRefreshSignature.init)
         tasks = normalizedProject.tasks.map(TaskRefreshSignature.init)
         workHours = normalizedProject.workHours.map(WorkHourRefreshSignature.init)
+        clientProfile = normalizedProject.clientProfile
+        paymentMilestones = normalizedProject.paymentMilestones
+        projectDocuments = normalizedProject.projectDocuments
+        projectChecklists = normalizedProject.projectChecklists
+        projectCalendarEvents = normalizedProject.projectCalendarEvents
+        shoppingListItems = normalizedProject.shoppingListItems
     }
 }
 
@@ -1623,6 +1635,119 @@ class ProjectViewModel: ObservableObject {
         await commitProjectMutation(
             updatedProject,
             reason: "delete work hour",
+            selectProject: selectedProject?.id == projectID
+        )
+    }
+
+    // MARK: - Project Operations Metadata
+
+    func addOrUpdateShoppingListItem(_ item: ProjectShoppingListItem, in projectID: UUID) async {
+        guard var updatedProject = projectForMutation(projectID: projectID) else { return }
+
+        var items = updatedProject.shoppingListItems ?? []
+        let reason: String
+        if let itemIndex = items.firstIndex(where: { $0.id == item.id }) {
+            items[itemIndex] = item
+            reason = "update shopping list item"
+        } else {
+            items.append(item)
+            reason = "add shopping list item"
+        }
+        updatedProject.shoppingListItems = items
+
+        await commitProjectMutation(
+            updatedProject,
+            reason: reason,
+            selectProject: selectedProject?.id == projectID
+        )
+    }
+
+    func removeShoppingListItem(_ itemID: UUID, from projectID: UUID) async {
+        guard var updatedProject = projectForMutation(projectID: projectID),
+              var items = updatedProject.shoppingListItems,
+              items.contains(where: { $0.id == itemID })
+        else { return }
+
+        items.removeAll { $0.id == itemID }
+        updatedProject.shoppingListItems = items
+
+        await commitProjectMutation(
+            updatedProject,
+            reason: "remove shopping list item",
+            selectProject: selectedProject?.id == projectID
+        )
+    }
+
+    func addOrUpdateProjectChecklist(_ checklist: ProjectChecklist, in projectID: UUID) async {
+        guard var updatedProject = projectForMutation(projectID: projectID) else { return }
+
+        var checklists = updatedProject.projectChecklists ?? []
+        let reason: String
+        if let checklistIndex = checklists.firstIndex(where: { $0.id == checklist.id }) {
+            checklists[checklistIndex] = checklist
+            reason = "update project checklist"
+        } else {
+            checklists.append(checklist)
+            reason = "add project checklist"
+        }
+        updatedProject.projectChecklists = checklists
+
+        await commitProjectMutation(
+            updatedProject,
+            reason: reason,
+            selectProject: selectedProject?.id == projectID
+        )
+    }
+
+    func removeProjectChecklist(_ checklistID: UUID, from projectID: UUID) async {
+        guard var updatedProject = projectForMutation(projectID: projectID),
+              var checklists = updatedProject.projectChecklists,
+              checklists.contains(where: { $0.id == checklistID })
+        else { return }
+
+        checklists.removeAll { $0.id == checklistID }
+        updatedProject.projectChecklists = checklists
+
+        await commitProjectMutation(
+            updatedProject,
+            reason: "remove project checklist",
+            selectProject: selectedProject?.id == projectID
+        )
+    }
+
+    func addOrUpdateProjectCalendarEvent(_ event: ProjectCalendarEvent, in projectID: UUID) async {
+        guard var updatedProject = projectForMutation(projectID: projectID) else { return }
+
+        var events = updatedProject.projectCalendarEvents ?? []
+        let reason: String
+        if let eventIndex = events.firstIndex(where: { $0.id == event.id }) {
+            events[eventIndex] = event
+            reason = "update project calendar event"
+        } else {
+            events.append(event)
+            reason = "add project calendar event"
+        }
+        updatedProject.projectCalendarEvents = events
+
+        await commitProjectMutation(
+            updatedProject,
+            reason: reason,
+            selectProject: selectedProject?.id == projectID
+        )
+    }
+
+    func removeProjectCalendarEvent(_ eventID: UUID, from projectID: UUID) async {
+        guard var updatedProject = projectForMutation(projectID: projectID),
+              var events = updatedProject.projectCalendarEvents,
+              events.contains(where: { $0.id == eventID })
+        else { return }
+
+        events.removeAll { $0.id == eventID }
+        updatedProject.projectCalendarEvents = events
+
+        await commitProjectMutation(
+            updatedProject,
+            reason: "remove project calendar event",
             selectProject: selectedProject?.id == projectID
         )
     }

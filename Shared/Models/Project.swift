@@ -38,6 +38,12 @@ public struct Project: Identifiable, Codable, Equatable, Sendable {
     public var workHours: [WorkHour] = []
     public var communications: [Communication] = []
     public var changeOrders: [ChangeOrder] = []
+    public var clientProfile: ProjectClientProfile?
+    public var paymentMilestones: [ProjectPaymentMilestone]?
+    public var projectDocuments: [ProjectDocument]?
+    public var projectChecklists: [ProjectChecklist]?
+    public var projectCalendarEvents: [ProjectCalendarEvent]?
+    public var shoppingListItems: [ProjectShoppingListItem]?
     
     public init(
         id: UUID = UUID(),
@@ -60,7 +66,13 @@ public struct Project: Identifiable, Codable, Equatable, Sendable {
         organizationID: String,
         creationDate: Date = Date(),
         lastModifiedDate: Date = Date(),
-        photoIDs: [String] = []
+        photoIDs: [String] = [],
+        clientProfile: ProjectClientProfile? = nil,
+        paymentMilestones: [ProjectPaymentMilestone]? = nil,
+        projectDocuments: [ProjectDocument]? = nil,
+        projectChecklists: [ProjectChecklist]? = nil,
+        projectCalendarEvents: [ProjectCalendarEvent]? = nil,
+        shoppingListItems: [ProjectShoppingListItem]? = nil
     ) {
         self.id = id
         self.name = name
@@ -83,6 +95,12 @@ public struct Project: Identifiable, Codable, Equatable, Sendable {
         self.creationDate = creationDate
         self.lastModifiedDate = lastModifiedDate
         self.photoIDs = photoIDs
+        self.clientProfile = clientProfile
+        self.paymentMilestones = paymentMilestones
+        self.projectDocuments = projectDocuments
+        self.projectChecklists = projectChecklists
+        self.projectCalendarEvents = projectCalendarEvents
+        self.shoppingListItems = shoppingListItems
     }
     
     // MARK: - Equatable Conformance
@@ -92,7 +110,13 @@ public struct Project: Identifiable, Codable, Equatable, Sendable {
                lhs.client == rhs.client &&
                lhs.totalBudget == rhs.totalBudget &&
                lhs.status == rhs.status &&
-               lhs.lastModifiedDate == rhs.lastModifiedDate
+               lhs.lastModifiedDate == rhs.lastModifiedDate &&
+               lhs.clientProfile == rhs.clientProfile &&
+               lhs.paymentMilestones == rhs.paymentMilestones &&
+               lhs.projectDocuments == rhs.projectDocuments &&
+               lhs.projectChecklists == rhs.projectChecklists &&
+               lhs.projectCalendarEvents == rhs.projectCalendarEvents &&
+               lhs.shoppingListItems == rhs.shoppingListItems
     }
     
     // MARK: - CloudKit Conversion
@@ -150,6 +174,12 @@ public struct Project: Identifiable, Codable, Equatable, Sendable {
         creationDate = record["creationDate"] as? Date ?? Date()
         lastModifiedDate = record["lastModifiedDate"] as? Date ?? Date()
         photoIDs = record["photoIDs"] as? [String] ?? []
+        clientProfile = nil
+        paymentMilestones = nil
+        projectDocuments = nil
+        projectChecklists = nil
+        projectCalendarEvents = nil
+        shoppingListItems = nil
         
         // Try to decode full project data if available
         if let data = record["fullProjectData"] as? Data {
@@ -160,6 +190,12 @@ public struct Project: Identifiable, Codable, Equatable, Sendable {
             workHours = fullProject.workHours
             communications = fullProject.communications
             changeOrders = fullProject.changeOrders
+            clientProfile = fullProject.clientProfile
+            paymentMilestones = fullProject.paymentMilestones
+            projectDocuments = fullProject.projectDocuments
+            projectChecklists = fullProject.projectChecklists
+            projectCalendarEvents = fullProject.projectCalendarEvents
+            shoppingListItems = fullProject.shoppingListItems
         }
     }
 }
@@ -314,6 +350,820 @@ extension Project {
     public mutating func unassignUser(_ userID: String) {
         assignedUserIDs.removeAll { $0 == userID }
         lastModifiedDate = Date()
+    }
+}
+
+// MARK: - Project Operations Foundation
+
+public struct ProjectClientProfile: Codable, Hashable, Sendable {
+    public var name: String
+    public var email: String?
+    public var phone: String?
+    public var billingAddress: String?
+    public var jobSiteAddress: String?
+    public var notes: String
+    public var contractDocumentIDs: [UUID]
+
+    public init(
+        name: String,
+        email: String? = nil,
+        phone: String? = nil,
+        billingAddress: String? = nil,
+        jobSiteAddress: String? = nil,
+        notes: String = "",
+        contractDocumentIDs: [UUID] = []
+    ) {
+        self.name = name
+        self.email = email
+        self.phone = phone
+        self.billingAddress = billingAddress
+        self.jobSiteAddress = jobSiteAddress
+        self.notes = notes
+        self.contractDocumentIDs = contractDocumentIDs
+    }
+
+    public static func legacy(
+        name: String,
+        email: String?,
+        phone: String?,
+        address: String?
+    ) -> ProjectClientProfile {
+        ProjectClientProfile(
+            name: name,
+            email: email,
+            phone: phone,
+            billingAddress: address,
+            jobSiteAddress: address
+        )
+    }
+}
+
+public enum ProjectPaymentMilestoneTrigger: String, CaseIterable, Codable, Hashable, Sendable {
+    case manual
+    case date
+    case taskCompletion
+}
+
+public enum ProjectPaymentMilestoneStatus: String, CaseIterable, Codable, Hashable, Sendable {
+    case planned
+    case readyToInvoice
+    case invoiced
+    case paid
+    case waived
+
+    public var isClosed: Bool {
+        self == .paid || self == .waived
+    }
+}
+
+public struct ProjectPaymentMilestone: Identifiable, Codable, Hashable, Sendable {
+    public let id: UUID
+    public var title: String
+    public var amount: Double
+    public var dueDate: Date?
+    public var trigger: ProjectPaymentMilestoneTrigger
+    public var status: ProjectPaymentMilestoneStatus
+    public var linkedTaskIDs: [UUID]
+    public var linkedDocumentIDs: [UUID]
+    public var invoiceNumber: String?
+    public var paidDate: Date?
+    public var notes: String
+    public var createdAt: Date
+    public var updatedAt: Date
+
+    public init(
+        id: UUID = UUID(),
+        title: String,
+        amount: Double,
+        dueDate: Date? = nil,
+        trigger: ProjectPaymentMilestoneTrigger = .manual,
+        status: ProjectPaymentMilestoneStatus = .planned,
+        linkedTaskIDs: [UUID] = [],
+        linkedDocumentIDs: [UUID] = [],
+        invoiceNumber: String? = nil,
+        paidDate: Date? = nil,
+        notes: String = "",
+        createdAt: Date = Date(),
+        updatedAt: Date = Date()
+    ) {
+        self.id = id
+        self.title = title
+        self.amount = amount
+        self.dueDate = dueDate
+        self.trigger = trigger
+        self.status = status
+        self.linkedTaskIDs = linkedTaskIDs
+        self.linkedDocumentIDs = linkedDocumentIDs
+        self.invoiceNumber = invoiceNumber
+        self.paidDate = paidDate
+        self.notes = notes
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+
+    public func isReadyForPrompt(tasks: [ProjectTask], on date: Date = Date()) -> Bool {
+        guard !status.isClosed else { return false }
+
+        if status == .readyToInvoice || status == .invoiced {
+            return true
+        }
+
+        switch trigger {
+        case .manual:
+            return false
+        case .date:
+            guard let dueDate else { return false }
+            return dueDate <= date
+        case .taskCompletion:
+            guard !linkedTaskIDs.isEmpty else { return false }
+            let completedTaskIDs = Set(tasks.filter(\.isCompleted).map(\.id))
+            return Set(linkedTaskIDs).isSubset(of: completedTaskIDs)
+        }
+    }
+}
+
+public enum ProjectDocumentCategory: String, CaseIterable, Codable, Hashable, Sendable {
+    case contract
+    case budget
+    case permit
+    case pickupConfirmation
+    case deliveryOrder
+    case designIdea
+    case invoice
+    case receipt
+    case taskPhoto
+    case checklist
+    case other
+}
+
+public enum ProjectDocumentStorageKind: String, CaseIterable, Codable, Hashable, Sendable {
+    case localFile
+    case cloudKitAsset
+    case externalURL
+    case generatedReport
+}
+
+public struct ProjectDocument: Identifiable, Codable, Hashable, Sendable {
+    public let id: UUID
+    public var title: String
+    public var category: ProjectDocumentCategory
+    public var fileName: String
+    public var mimeType: String
+    public var storageKind: ProjectDocumentStorageKind
+    public var storageIdentifier: String
+    public var sourceURLString: String?
+    public var linkedTaskID: UUID?
+    public var linkedReceiptID: String?
+    public var linkedMilestoneID: UUID?
+    public var notes: String
+    public var createdAt: Date
+    public var updatedAt: Date
+
+    public init(
+        id: UUID = UUID(),
+        title: String,
+        category: ProjectDocumentCategory,
+        fileName: String,
+        mimeType: String,
+        storageKind: ProjectDocumentStorageKind,
+        storageIdentifier: String,
+        sourceURLString: String? = nil,
+        linkedTaskID: UUID? = nil,
+        linkedReceiptID: String? = nil,
+        linkedMilestoneID: UUID? = nil,
+        notes: String = "",
+        createdAt: Date = Date(),
+        updatedAt: Date = Date()
+    ) {
+        self.id = id
+        self.title = title
+        self.category = category
+        self.fileName = fileName
+        self.mimeType = mimeType
+        self.storageKind = storageKind
+        self.storageIdentifier = storageIdentifier
+        self.sourceURLString = sourceURLString
+        self.linkedTaskID = linkedTaskID
+        self.linkedReceiptID = linkedReceiptID
+        self.linkedMilestoneID = linkedMilestoneID
+        self.notes = notes
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+}
+
+public struct ProjectShoppingListItem: Identifiable, Codable, Hashable, Sendable {
+    public let id: UUID
+    public var title: String
+    public var storeName: String?
+    public var quantity: Double?
+    public var unit: String?
+    public var notes: String
+    public var isPurchased: Bool
+    public var createdAt: Date
+    public var updatedAt: Date
+
+    public init(
+        id: UUID = UUID(),
+        title: String,
+        storeName: String? = nil,
+        quantity: Double? = nil,
+        unit: String? = nil,
+        notes: String = "",
+        isPurchased: Bool = false,
+        createdAt: Date = Date(),
+        updatedAt: Date = Date()
+    ) {
+        self.id = id
+        self.title = title
+        self.storeName = storeName
+        self.quantity = quantity
+        self.unit = unit
+        self.notes = notes
+        self.isPurchased = isPurchased
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+}
+
+public enum ProjectChecklistCategory: String, CaseIterable, Codable, Hashable, Sendable {
+    case tools
+    case materials
+    case safety
+    case quality
+    case closeout
+    case custom
+}
+
+public struct ProjectChecklistItem: Identifiable, Codable, Hashable, Sendable {
+    public let id: UUID
+    public var title: String
+    public var quantity: Double?
+    public var unit: String?
+    public var isComplete: Bool
+    public var notes: String
+
+    public init(
+        id: UUID = UUID(),
+        title: String,
+        quantity: Double? = nil,
+        unit: String? = nil,
+        isComplete: Bool = false,
+        notes: String = ""
+    ) {
+        self.id = id
+        self.title = title
+        self.quantity = quantity
+        self.unit = unit
+        self.isComplete = isComplete
+        self.notes = notes
+    }
+}
+
+public struct ProjectChecklist: Identifiable, Codable, Hashable, Sendable {
+    public let id: UUID
+    public var title: String
+    public var category: ProjectChecklistCategory
+    public var linkedTaskCategory: TaskCategory?
+    public var linkedTaskID: UUID?
+    public var items: [ProjectChecklistItem]
+    public var createdAt: Date
+    public var updatedAt: Date
+
+    public init(
+        id: UUID = UUID(),
+        title: String,
+        category: ProjectChecklistCategory,
+        linkedTaskCategory: TaskCategory? = nil,
+        linkedTaskID: UUID? = nil,
+        items: [ProjectChecklistItem] = [],
+        createdAt: Date = Date(),
+        updatedAt: Date = Date()
+    ) {
+        self.id = id
+        self.title = title
+        self.category = category
+        self.linkedTaskCategory = linkedTaskCategory
+        self.linkedTaskID = linkedTaskID
+        self.items = items
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+
+    public var completionFraction: Double {
+        guard !items.isEmpty else { return 0 }
+        let completed = items.filter(\.isComplete).count
+        return Double(completed) / Double(items.count)
+    }
+}
+
+public enum ProjectCalendarEventKind: String, CaseIterable, Codable, Hashable, Sendable {
+    case clientPaymentDue
+    case employeePaymentDue
+    case pickupOrder
+    case deliveryOrder
+    case taskDue
+    case milestone
+    case inspection
+    case custom
+}
+
+public enum ProjectCalendarEventStatus: String, CaseIterable, Codable, Hashable, Sendable {
+    case planned
+    case scheduled
+    case done
+    case cancelled
+}
+
+public struct ProjectCalendarEvent: Identifiable, Codable, Hashable, Sendable {
+    public let id: UUID
+    public var title: String
+    public var kind: ProjectCalendarEventKind
+    public var startDate: Date
+    public var endDate: Date?
+    public var status: ProjectCalendarEventStatus
+    public var linkedTaskID: UUID?
+    public var linkedMilestoneID: UUID?
+    public var linkedDocumentID: UUID?
+    public var notes: String
+
+    public init(
+        id: UUID = UUID(),
+        title: String,
+        kind: ProjectCalendarEventKind,
+        startDate: Date,
+        endDate: Date? = nil,
+        status: ProjectCalendarEventStatus = .planned,
+        linkedTaskID: UUID? = nil,
+        linkedMilestoneID: UUID? = nil,
+        linkedDocumentID: UUID? = nil,
+        notes: String = ""
+    ) {
+        self.id = id
+        self.title = title
+        self.kind = kind
+        self.startDate = startDate
+        self.endDate = endDate
+        self.status = status
+        self.linkedTaskID = linkedTaskID
+        self.linkedMilestoneID = linkedMilestoneID
+        self.linkedDocumentID = linkedDocumentID
+        self.notes = notes
+    }
+}
+
+public struct ProjectAssistantSnapshot: Sendable {
+    public let generatedAt: Date
+    public let overdueTasks: [ProjectTask]
+    public let dueTodayTasks: [ProjectTask]
+    public let upcomingTasks: [ProjectTask]
+    public let overdueEvents: [ProjectCalendarEvent]
+    public let dueTodayEvents: [ProjectCalendarEvent]
+    public let upcomingEvents: [ProjectCalendarEvent]
+    public let readyPaymentMilestones: [ProjectPaymentMilestone]
+    public let checklistPrepItems: [ProjectAssistantChecklistPrep]
+    public let markedReturnItems: [ProjectAssistantReturnItem]
+    public let recentCompletedTasks: [ProjectTask]
+    public let openChecklistItemCount: Int
+
+    public var dueTodayCount: Int {
+        dueTodayTasks.count + dueTodayEvents.count
+    }
+
+    public var overdueCount: Int {
+        overdueTasks.count + overdueEvents.count
+    }
+
+    public var upcomingCount: Int {
+        upcomingTasks.count + upcomingEvents.count
+    }
+
+    public var actionCount: Int {
+        overdueCount
+            + dueTodayCount
+            + readyPaymentMilestones.count
+            + checklistPrepItems.count
+            + markedReturnItems.count
+    }
+
+    public var headline: String {
+        if actionCount == 0 {
+            return upcomingCount == 0
+                ? "No urgent project items need attention."
+                : "\(upcomingCount) upcoming item\(upcomingCount == 1 ? "" : "s") to keep on the radar."
+        }
+
+        var parts: [String] = []
+        if overdueCount > 0 {
+            parts.append("\(overdueCount) overdue")
+        }
+        if dueTodayCount > 0 {
+            parts.append("\(dueTodayCount) due today")
+        }
+        if readyPaymentMilestones.count > 0 {
+            parts.append("\(readyPaymentMilestones.count) payment prompt\(readyPaymentMilestones.count == 1 ? "" : "s")")
+        }
+        if markedReturnItems.count > 0 {
+            parts.append("\(markedReturnItems.count) return item\(markedReturnItems.count == 1 ? "" : "s")")
+        }
+
+        return parts.joined(separator: ", ")
+    }
+}
+
+public struct ProjectOperationsSummary: Equatable, Sendable {
+    public let generatedAt: Date
+    public let openShoppingItemCount: Int
+    public let completedShoppingItemCount: Int
+    public let openChecklistCount: Int
+    public let completedChecklistCount: Int
+    public let openChecklistItemCount: Int
+    public let completedChecklistItemCount: Int
+    public let overdueTaskCount: Int
+    public let dueTodayTaskCount: Int
+    public let dueTodayCalendarEventCount: Int
+    public let upcomingCalendarEventCount: Int
+    public let nextCalendarEvent: ProjectCalendarEvent?
+    public let markedReturnItemCount: Int
+
+    public var actionableItemCount: Int {
+        openShoppingItemCount
+            + openChecklistItemCount
+            + overdueTaskCount
+            + dueTodayTaskCount
+            + dueTodayCalendarEventCount
+            + markedReturnItemCount
+    }
+}
+
+public struct ProjectAssistantChecklistPrep: Identifiable, Sendable {
+    public let checklist: ProjectChecklist
+    public let linkedTaskCategory: TaskCategory
+    public let matchingTasks: [ProjectTask]
+    public let openItems: [ProjectChecklistItem]
+
+    public var id: UUID { checklist.id }
+}
+
+public struct ProjectAssistantReturnItem: Identifiable, Sendable {
+    public let receiptID: String
+    public let receiptVendor: String
+    public let receiptDate: Date
+    public let receiptNumber: String?
+    public let itemID: UUID
+    public let itemName: String
+    public let sku: String
+    public let quantity: Double
+    public let refundableQuantity: Double
+    public let amount: Double
+
+    public var id: String {
+        "\(receiptID)-\(itemID.uuidString)"
+    }
+}
+
+public extension Project {
+    var resolvedClientProfile: ProjectClientProfile {
+        clientProfile ?? .legacy(
+            name: client,
+            email: clientEmail,
+            phone: clientPhone,
+            address: clientAddress
+        )
+    }
+
+    var activePaymentMilestones: [ProjectPaymentMilestone] {
+        paymentMilestones ?? []
+    }
+
+    var activeProjectDocuments: [ProjectDocument] {
+        projectDocuments ?? []
+    }
+
+    var activeProjectChecklists: [ProjectChecklist] {
+        projectChecklists ?? []
+    }
+
+    var activeProjectCalendarEvents: [ProjectCalendarEvent] {
+        projectCalendarEvents ?? []
+    }
+
+    var activeShoppingListItems: [ProjectShoppingListItem] {
+        shoppingListItems ?? []
+    }
+
+    func operationsSummary(
+        on date: Date = Date(),
+        calendar: Calendar = .current,
+        upcomingDays: Int = 7
+    ) -> ProjectOperationsSummary {
+        let snapshot = assistantSnapshot(
+            on: date,
+            calendar: calendar,
+            upcomingDays: upcomingDays
+        )
+        let shoppingItems = activeShoppingListItems
+        let checklists = activeProjectChecklists
+        let completedChecklistCount = checklists.filter { checklist in
+            !checklist.items.isEmpty && checklist.items.allSatisfy(\.isComplete)
+        }.count
+        let nextCalendarEvent = (snapshot.dueTodayEvents + snapshot.upcomingEvents)
+            .min { lhs, rhs in lhs.startDate < rhs.startDate }
+
+        return ProjectOperationsSummary(
+            generatedAt: date,
+            openShoppingItemCount: shoppingItems.filter { !$0.isPurchased }.count,
+            completedShoppingItemCount: shoppingItems.filter(\.isPurchased).count,
+            openChecklistCount: checklists.count - completedChecklistCount,
+            completedChecklistCount: completedChecklistCount,
+            openChecklistItemCount: snapshot.openChecklistItemCount,
+            completedChecklistItemCount: checklists.reduce(0) { total, checklist in
+                total + checklist.items.filter(\.isComplete).count
+            },
+            overdueTaskCount: snapshot.overdueTasks.count,
+            dueTodayTaskCount: snapshot.dueTodayTasks.count,
+            dueTodayCalendarEventCount: snapshot.dueTodayEvents.count,
+            upcomingCalendarEventCount: snapshot.upcomingEvents.count,
+            nextCalendarEvent: nextCalendarEvent,
+            markedReturnItemCount: snapshot.markedReturnItems.count
+        )
+    }
+
+    func paymentMilestonesReadyForPrompt(on date: Date = Date()) -> [ProjectPaymentMilestone] {
+        activePaymentMilestones.filter { milestone in
+            milestone.isReadyForPrompt(tasks: tasks, on: date)
+        }
+    }
+
+    func projectTimelineEvents(on _: Date = Date()) -> [ProjectCalendarEvent] {
+        let milestoneEvents = activePaymentMilestones.compactMap { milestone -> ProjectCalendarEvent? in
+            guard let dueDate = milestone.dueDate else {
+                return nil
+            }
+
+            return ProjectCalendarEvent(
+                id: milestone.id,
+                title: milestone.title,
+                kind: .clientPaymentDue,
+                startDate: dueDate,
+                status: milestone.timelineStatus,
+                linkedMilestoneID: milestone.id,
+                notes: milestone.notes
+            )
+        }
+
+        return (activeProjectCalendarEvents + milestoneEvents).sorted { lhs, rhs in
+            lhs.startDate < rhs.startDate
+        }
+    }
+
+    func relevantChecklists(for task: ProjectTask) -> [ProjectChecklist] {
+        activeProjectChecklists
+            .filter { checklist in
+                checklist.linkedTaskID == task.id ||
+                checklist.linkedTaskCategory == task.category
+            }
+            .sortedForAssistantChecklists()
+    }
+
+    func assistantSnapshot(
+        on date: Date = Date(),
+        calendar: Calendar = .current,
+        upcomingDays: Int = 7
+    ) -> ProjectAssistantSnapshot {
+        let startOfToday = calendar.startOfDay(for: date)
+        let startOfTomorrow = calendar.date(byAdding: .day, value: 1, to: startOfToday)
+            ?? startOfToday.addingTimeInterval(86_400)
+        let upcomingEnd = calendar.date(
+            byAdding: .day,
+            value: max(1, upcomingDays) + 1,
+            to: startOfToday
+        ) ?? startOfToday.addingTimeInterval(Double(max(1, upcomingDays) + 1) * 86_400)
+        let recentStart = calendar.date(byAdding: .day, value: -7, to: startOfToday)
+            ?? startOfToday.addingTimeInterval(-7 * 86_400)
+
+        let openTasks = tasks.filter { !$0.isCompleted }
+        let overdueTasks = openTasks
+            .filter { task in
+                guard let dueDate = task.dueDate else { return false }
+                return dueDate < startOfToday
+            }
+            .sortedForAssistantTasks()
+        let dueTodayTasks = openTasks
+            .filter { task in
+                guard let dueDate = task.dueDate else { return false }
+                return dueDate >= startOfToday && dueDate < startOfTomorrow
+            }
+            .sortedForAssistantTasks()
+        let upcomingTasks = openTasks
+            .filter { task in
+                guard let dueDate = task.dueDate else { return false }
+                return dueDate >= startOfTomorrow && dueDate < upcomingEnd
+            }
+            .sortedForAssistantTasks()
+
+        let openEvents = projectTimelineEvents(on: date)
+            .filter { $0.status != .done && $0.status != .cancelled && $0.kind != .clientPaymentDue }
+        let overdueEvents = openEvents
+            .filter { $0.startDate < startOfToday }
+            .sortedForAssistantEvents()
+        let dueTodayEvents = openEvents
+            .filter { $0.startDate >= startOfToday && $0.startDate < startOfTomorrow }
+            .sortedForAssistantEvents()
+        let upcomingEvents = openEvents
+            .filter { $0.startDate >= startOfTomorrow && $0.startDate < upcomingEnd }
+            .sortedForAssistantEvents()
+
+        let focusTasks = (overdueTasks + dueTodayTasks + upcomingTasks).sortedForAssistantTasks()
+        let checklistPrepItems = activeProjectChecklists
+            .compactMap { checklist -> ProjectAssistantChecklistPrep? in
+                guard let linkedTaskCategory = checklist.linkedTaskCategory else {
+                    return nil
+                }
+                let matchingTasks = focusTasks.filter { $0.category == linkedTaskCategory }
+                guard !matchingTasks.isEmpty else {
+                    return nil
+                }
+                let openItems = checklist.items.filter { !$0.isComplete }
+                guard !openItems.isEmpty else {
+                    return nil
+                }
+                return ProjectAssistantChecklistPrep(
+                    checklist: checklist,
+                    linkedTaskCategory: linkedTaskCategory,
+                    matchingTasks: matchingTasks,
+                    openItems: openItems
+                )
+            }
+            .sortedForAssistantPrep()
+
+        let markedReturnItems = receipts
+            .filter { !$0.isReturn && $0.hasItemsMarkedForReturn }
+            .flatMap { receipt in
+                receipt.itemsMarkedForReturn.compactMap { item -> ProjectAssistantReturnItem? in
+                    let remainingQuantity = receipt.remainingRefundableQuantity(for: item, in: receipts)
+                    guard remainingQuantity > 0 else {
+                        return nil
+                    }
+                    let unitAmount = item.quantity > 0 ? item.totalPrice / item.quantity : item.totalPrice
+                    return ProjectAssistantReturnItem(
+                        receiptID: receipt.id,
+                        receiptVendor: receipt.vendor,
+                        receiptDate: receipt.date,
+                        receiptNumber: receipt.receiptNumber,
+                        itemID: item.id,
+                        itemName: item.name,
+                        sku: item.sku,
+                        quantity: item.quantity,
+                        refundableQuantity: remainingQuantity,
+                        amount: max(0, unitAmount * remainingQuantity)
+                    )
+                }
+            }
+            .sortedForAssistantReturns()
+
+        let recentCompletedTasks = tasks
+            .filter { task in
+                guard task.isCompleted, let completedDate = task.completedDate else {
+                    return false
+                }
+                return completedDate >= recentStart && completedDate <= date
+            }
+            .sortedForAssistantCompletedTasks()
+
+        return ProjectAssistantSnapshot(
+            generatedAt: date,
+            overdueTasks: overdueTasks,
+            dueTodayTasks: dueTodayTasks,
+            upcomingTasks: upcomingTasks,
+            overdueEvents: overdueEvents,
+            dueTodayEvents: dueTodayEvents,
+            upcomingEvents: upcomingEvents,
+            readyPaymentMilestones: paymentMilestonesReadyForPrompt(on: date).sortedForAssistantMilestones(),
+            checklistPrepItems: checklistPrepItems,
+            markedReturnItems: markedReturnItems,
+            recentCompletedTasks: recentCompletedTasks,
+            openChecklistItemCount: activeProjectChecklists.reduce(0) { total, checklist in
+                total + checklist.items.filter { !$0.isComplete }.count
+            }
+        )
+    }
+}
+
+private extension Array where Element == ProjectTask {
+    func sortedForAssistantTasks() -> [ProjectTask] {
+        sorted { lhs, rhs in
+            switch (lhs.dueDate, rhs.dueDate) {
+            case let (left?, right?) where left != right:
+                return left < right
+            case (.some, nil):
+                return true
+            case (nil, .some):
+                return false
+            default:
+                if lhs.priority.sortOrder != rhs.priority.sortOrder {
+                    return lhs.priority.sortOrder < rhs.priority.sortOrder
+                }
+                return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
+            }
+        }
+    }
+
+    func sortedForAssistantCompletedTasks() -> [ProjectTask] {
+        sorted { lhs, rhs in
+            switch (lhs.completedDate, rhs.completedDate) {
+            case let (left?, right?) where left != right:
+                return left > right
+            case (.some, nil):
+                return true
+            case (nil, .some):
+                return false
+            default:
+                return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
+            }
+        }
+    }
+}
+
+private extension Array where Element == ProjectPaymentMilestone {
+    func sortedForAssistantMilestones() -> [ProjectPaymentMilestone] {
+        sorted { lhs, rhs in
+            switch (lhs.dueDate, rhs.dueDate) {
+            case let (left?, right?) where left != right:
+                return left < right
+            case (.some, nil):
+                return true
+            case (nil, .some):
+                return false
+            default:
+                return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
+            }
+        }
+    }
+}
+
+private extension Array where Element == ProjectCalendarEvent {
+    func sortedForAssistantEvents() -> [ProjectCalendarEvent] {
+        sorted { lhs, rhs in
+            if lhs.startDate != rhs.startDate {
+                return lhs.startDate < rhs.startDate
+            }
+            return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
+        }
+    }
+}
+
+private extension Array where Element == ProjectChecklist {
+    func sortedForAssistantChecklists() -> [ProjectChecklist] {
+        sorted { lhs, rhs in
+            if lhs.linkedTaskCategory?.sortOrder != rhs.linkedTaskCategory?.sortOrder {
+                return (lhs.linkedTaskCategory?.sortOrder ?? Int.max) < (rhs.linkedTaskCategory?.sortOrder ?? Int.max)
+            }
+            if lhs.category.rawValue != rhs.category.rawValue {
+                return lhs.category.rawValue < rhs.category.rawValue
+            }
+            return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
+        }
+    }
+}
+
+private extension Array where Element == ProjectAssistantChecklistPrep {
+    func sortedForAssistantPrep() -> [ProjectAssistantChecklistPrep] {
+        sorted { lhs, rhs in
+            if lhs.linkedTaskCategory.sortOrder != rhs.linkedTaskCategory.sortOrder {
+                return lhs.linkedTaskCategory.sortOrder < rhs.linkedTaskCategory.sortOrder
+            }
+            return lhs.checklist.title.localizedCaseInsensitiveCompare(rhs.checklist.title) == .orderedAscending
+        }
+    }
+}
+
+private extension Array where Element == ProjectAssistantReturnItem {
+    func sortedForAssistantReturns() -> [ProjectAssistantReturnItem] {
+        sorted { lhs, rhs in
+            if lhs.receiptDate != rhs.receiptDate {
+                return lhs.receiptDate < rhs.receiptDate
+            }
+            if lhs.receiptVendor != rhs.receiptVendor {
+                return lhs.receiptVendor.localizedCaseInsensitiveCompare(rhs.receiptVendor) == .orderedAscending
+            }
+            return lhs.itemName.localizedCaseInsensitiveCompare(rhs.itemName) == .orderedAscending
+        }
+    }
+}
+
+private extension ProjectPaymentMilestone {
+    var timelineStatus: ProjectCalendarEventStatus {
+        switch status {
+        case .planned, .readyToInvoice:
+            return .planned
+        case .invoiced:
+            return .scheduled
+        case .paid:
+            return .done
+        case .waived:
+            return .cancelled
+        }
     }
 }
 

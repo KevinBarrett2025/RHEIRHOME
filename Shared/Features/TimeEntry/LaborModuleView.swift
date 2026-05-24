@@ -95,7 +95,7 @@ struct LaborModuleView: View {
         
         return hasReceipts || hasProgress || hasLoggedHours
     }
-    
+
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
@@ -215,6 +215,7 @@ struct LaborModuleView: View {
                 
                 Spacer()
             }
+            .accessibilityIdentifier("labor-team-members-section")
             
             // CRITICAL FIX: Use workingTeamMembers instead of projectVM.teamMembers
             if workingTeamMembers.isEmpty {
@@ -227,7 +228,6 @@ struct LaborModuleView: View {
                 }
             }
         }
-        .accessibilityIdentifier("labor-team-members-section")
     }
     
     @ViewBuilder
@@ -277,77 +277,29 @@ struct TeamMemberLaborRowView: View {
         guard let rate = member.defaultRate else { return "No default rate" }
         return "\(rate.rate.formatAsCurrency())/hr \(rate.taskType)"
     }
-    
-    var body: some View {
-        Button(action: onTap) {
-            HStack {
-                // Avatar
-                Circle()
-                    .fill(Color.blue.gradient)
-                    .frame(width: 40, height: 40)
-                    .overlay(
-                        Text(String(member.name.prefix(1)).uppercased())
-                            .font(.headline)
-                            .fontWeight(.bold)
-                            .foregroundColor(.white)
-                    )
-                
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(member.name)
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .foregroundColor(.primary)
-                        .accessibilityIdentifier("labor-member-name-\(member.id.uuidString)")
-                    
-                    HStack {
-                        Text(String(format: "%.1f hrs", memberHours))
-                            .font(.caption)
-                            .foregroundColor(.blue)
 
-                        Text("• \(defaultRateLabel)")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        
-                        if unpaidAmount > 0 {
-                            Text("• \(unpaidAmount.formatAsCurrency()) unpaid")
-                                .font(.caption)
-                                .foregroundColor(.orange)
-                        }
-                    }
-                }
-                
-                Spacer()
-                
-                VStack(alignment: .trailing, spacing: 2) {
-                    if unpaidAmount > 0 {
-                        Text("Pay")
-                        .font(.caption)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Color.green)
-                        .foregroundColor(.white)
-                        .cornerRadius(6)
-                    } else if paidAmount > 0 {
-                        Text("Paid")
-                            .font(.caption)
-                            .foregroundColor(.green)
-                    } else {
-                        Text("Ready")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                    
-                    Image(systemName: "chevron.right")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-            }
-            .padding()
-            .background(Color(.systemGray6))
-            .cornerRadius(10)
+    private var status: LaborWorkerCard.Status {
+        if unpaidAmount > 0 {
+            return LaborWorkerCard.Status(label: "Pay", style: .unpaid)
+        } else if paidAmount > 0 {
+            return LaborWorkerCard.Status(label: "Paid", style: .paid)
+        } else {
+            return LaborWorkerCard.Status(label: "Ready", style: .neutral)
         }
-        .buttonStyle(PlainButtonStyle())
-        .accessibilityIdentifier("labor-member-row-\(member.id.uuidString)")
+    }
+
+    var body: some View {
+        LaborWorkerCard(
+            name: member.name,
+            initials: String(member.name.prefix(1)).uppercased(),
+            hoursText: String(format: "%.1f hrs", memberHours),
+            rateText: defaultRateLabel,
+            unpaidText: unpaidAmount > 0 ? "\(unpaidAmount.formatAsCurrency()) unpaid" : nil,
+            status: status,
+            nameAccessibilityIdentifier: "labor-member-name-\(member.id.uuidString)",
+            cardAccessibilityIdentifier: "labor-member-row-\(member.id.uuidString)",
+            onTap: onTap
+        )
     }
 }
 

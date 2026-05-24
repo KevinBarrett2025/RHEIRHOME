@@ -1354,171 +1354,55 @@ struct EnhancedReceiptCard: View {
         guard !receipt.isReturn, linkedRefundTotal > 0 else { return nil }
         return linkedRefundTotal >= receipt.amount - 0.000_001 ? "REFUNDED" : "PARTIAL REFUND"
     }
+
+    private var statusBadge: ReceiptLedgerRow.StatusBadge? {
+        if receipt.isReturn {
+            return ReceiptLedgerRow.StatusBadge(label: "RETURN", style: .pastDue)
+        }
+
+        guard let refundBadgeText else { return nil }
+        let style: RheirStatusChip.Style = linkedRefundTotal >= receipt.amount - 0.000_001 ? .pastDue : .warning
+        return ReceiptLedgerRow.StatusBadge(label: refundBadgeText, style: style)
+    }
+
+    private var refundSummary: String? {
+        guard linkedRefundTotal > 0, !receipt.isReturn else { return nil }
+        return "Refunded \(linkedRefundTotal.formatAsCurrency()) in \(linkedRefunds.count) linked refund\(linkedRefunds.count == 1 ? "" : "s")"
+    }
+
+    private var paymentInfo: ReceiptLedgerRow.PaymentInfo? {
+        guard !receipt.paymentMethod.isEmpty else { return nil }
+
+        return ReceiptLedgerRow.PaymentInfo(
+            method: receipt.paymentMethod,
+            systemImage: paymentMethodIcon(for: receipt.paymentMethod),
+            cardBrand: receipt.paymentMethodDetails?.cardBrand,
+            lastFourDigits: receipt.paymentMethodDetails?.lastFourDigits
+        )
+    }
     
     var body: some View {
         Button(action: onView) {
-            VStack(spacing: 12) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack {
-                            Text(receipt.vendor)
-                                .font(.headline)
-                                .fontWeight(.semibold)
-                                .foregroundColor(.primary)
-                            
-                            Spacer()
-                            
-                            if receipt.isReturn {
-                                Text("RETURN")
-                                    .font(.caption2)
-                                    .fontWeight(.bold)
-                                    .foregroundColor(.white)
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 3)
-                                    .background(Color.red)
-                                    .cornerRadius(6)
-                            } else if let refundBadgeText {
-                                Text(refundBadgeText)
-                                    .font(.caption2)
-                                    .fontWeight(.bold)
-                                    .foregroundColor(.white)
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 3)
-                                    .background(linkedRefundTotal >= receipt.amount - 0.000_001 ? Color.red : Color.orange)
-                                    .cornerRadius(6)
-                            }
-                        }
-                        
-                        HStack {
-                            Image(systemName: categoryIcon(for: displayedCategory))
-                                .font(.caption)
-                                .foregroundColor(.blue)
-                            Text(displayedCategory.rawValue)
-                                .font(.subheadline)
-                                .foregroundColor(.secondary)
-                                .accessibilityIdentifier("receipt-card-category-\(accessibilitySlug)\(scopedAccessibilitySuffix)")
-                            
-                            Spacer()
-                            
-                            Text(receipt.date.formatted(date: .abbreviated, time: .omitted))
-                                .font(.subheadline)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                    
-                    VStack(alignment: .trailing, spacing: 4) {
-                        Text(displayedAmount.formatAsCurrency())
-                            .font(.title3)
-                            .fontWeight(.bold)
-                            .foregroundColor(displayedAmount < 0 ? .red : .primary)
-                            .accessibilityIdentifier("receipt-card-amount-\(accessibilitySlug)\(scopedAccessibilitySuffix)")
-                        
-                        if receipt.taxAmount > 0 {
-                            Text("Tax: \(receipt.taxAmount.formatAsCurrency())")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                }
-                
-                if !receipt.notes.isEmpty {
-                    HStack {
-                        Text(receipt.notes)
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                            .multilineTextAlignment(.leading)
-                            .lineLimit(2)
-                        Spacer()
-                    }
-                }
-
-                if let categoryContextSummary {
-                    HStack {
-                        Text(categoryContextSummary)
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                            .multilineTextAlignment(.leading)
-                            .lineLimit(2)
-                        Spacer()
-                    }
-                }
-
-                if linkedRefundTotal > 0, !receipt.isReturn {
-                    HStack(spacing: 6) {
-                        Image(systemName: "arrow.uturn.backward.circle.fill")
-                            .foregroundColor(.orange)
-                        Text("Refunded \(linkedRefundTotal.formatAsCurrency()) in \(linkedRefunds.count) linked refund\(linkedRefunds.count == 1 ? "" : "s")")
-                            .font(.caption)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.orange)
-                            .accessibilityIdentifier("receipt-card-refunded-total-\(accessibilitySlug)")
-                        Spacer()
-                    }
-                }
-                
-                // Enhanced payment method display with card details
-                HStack {
-                    if !receipt.paymentMethod.isEmpty {
-                        HStack(spacing: 6) {
-                            Image(systemName: paymentMethodIcon(for: receipt.paymentMethod))
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                            
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(receipt.paymentMethod)
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                                
-                                if let paymentDetails = receipt.paymentMethodDetails {
-                                    HStack(spacing: 4) {
-                                        if let cardBrand = paymentDetails.cardBrand {
-                                            Text(cardBrand)
-                                                .font(.caption2)
-                                                .foregroundColor(.blue)
-                                        }
-                                        
-                                        if let lastFour = paymentDetails.lastFourDigits, !lastFour.isEmpty {
-                                            Text("•••• \(lastFour)")
-                                                .font(.caption2)
-                                                .foregroundColor(.secondary)
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    
-                    Spacer()
-                    
-                    if receipt.hasReceiptImage {
-                        Button {
-                            showingFullImage = true
-                        } label: {
-                            HStack(spacing: 4) {
-                                Image(systemName: "photo.fill")
-                                    .font(.caption)
-                                    .foregroundColor(.blue)
-                                Text("View")
-                                    .font(.caption2)
-                                    .foregroundColor(.blue)
-                            }
-                        }
-                        .buttonStyle(PlainButtonStyle())
-                    }
-                    
-                    if !receipt.receiptNumber.isEmpty {
-                        Text("Receipt #\(receipt.receiptNumber)")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                            }
-                        }
-                        .accessibilityIdentifier("receipt-card-view-image-\(accessibilitySlug)")
-                        .buttonStyle(.borderless)
-                    }
-            .padding()
-            .background(Color(.systemBackground))
-            .cornerRadius(12)
-            .shadow(color: Color.black.opacity(0.1), radius: 2, x: 0, y: 1)
+            ReceiptLedgerRow(
+                vendor: receipt.vendor,
+                statusBadge: statusBadge,
+                categoryLabel: displayedCategory.rawValue,
+                categorySystemImage: categoryIcon(for: displayedCategory),
+                categoryAccessibilityIdentifier: "receipt-card-category-\(accessibilitySlug)\(scopedAccessibilitySuffix)",
+                dateText: receipt.date.formatted(date: .abbreviated, time: .omitted),
+                amountText: displayedAmount.formatAsCurrency(),
+                amountTint: displayedAmount < 0 ? RheirTheme.Colors.destructive : RheirTheme.Colors.primaryText,
+                amountAccessibilityIdentifier: "receipt-card-amount-\(accessibilitySlug)\(scopedAccessibilitySuffix)",
+                taxText: receipt.taxAmount > 0 ? "Tax: \(receipt.taxAmount.formatAsCurrency())" : nil,
+                notes: receipt.notes.isEmpty ? nil : receipt.notes,
+                categoryContextSummary: categoryContextSummary,
+                refundSummary: refundSummary,
+                refundSummaryAccessibilityIdentifier: "receipt-card-refunded-total-\(accessibilitySlug)",
+                paymentInfo: paymentInfo,
+                receiptNumberText: receipt.receiptNumber.isEmpty ? nil : "Receipt #\(receipt.receiptNumber)",
+                imageActionAccessibilityIdentifier: "receipt-card-view-image-\(accessibilitySlug)",
+                onImageView: receipt.hasReceiptImage ? { showingFullImage = true } : nil
+            )
         }
         .accessibilityIdentifier("receipt-card-\(receipt.vendor)")
         .buttonStyle(PlainButtonStyle())

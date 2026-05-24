@@ -54,24 +54,12 @@ struct LandingPageView: View {
         "\(visibleProjects.count) \(projectListScope.title(for: visibleProjects.count))"
     }
 
-    private func statusChipStyle(for status: ProjectStatus) -> RheirStatusChip.Style {
-        switch status {
-        case .active:
-            return .active
-        case .completed:
-            return .paid
-        case .onHold:
-            return .warning
-        case .cancelled:
-            return .pastDue
-        case .planning:
-            return .neutral
-        }
-    }
-
     var body: some View {
         NavigationStack {
             ZStack {
+                RheirTheme.Colors.appBackground
+                    .ignoresSafeArea()
+
                 VStack {
                     if releaseProfile.shouldHideCollaborationSurface {
                         fastShipHeaderSection
@@ -210,11 +198,11 @@ struct LandingPageView: View {
     }
 
     private var fastShipHeaderSection: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: RheirTheme.Spacing.large) {
             HStack(alignment: .center) {
                 Text("Projects")
                     .font(.largeTitle.weight(.bold))
-                    .foregroundColor(.primary)
+                    .foregroundStyle(RheirTheme.Colors.primaryText)
                     .accessibilityIdentifier("fast-ship-projects-title")
 
                 Spacer()
@@ -226,7 +214,7 @@ struct LandingPageView: View {
                 } label: {
                     Image(systemName: "gearshape.fill")
                         .font(.title2)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(RheirTheme.Colors.secondaryText)
                         .frame(width: 44, height: 44)
                         .contentShape(Rectangle())
                 }
@@ -234,53 +222,24 @@ struct LandingPageView: View {
             }
 
             if let selectedProject = viewModel.selectedProject {
-                RheirCard(
-                    padding: RheirTheme.Spacing.medium,
-                    borderColor: selectedProject.status.tintColor.opacity(0.35)
-                ) {
-                    HStack(alignment: .center, spacing: RheirTheme.Spacing.medium) {
-                        Image(systemName: selectedProject.status.icon)
-                            .font(.title3)
-                            .foregroundStyle(selectedProject.status.tintColor)
-                            .frame(width: 32, height: 32)
-
-                        VStack(alignment: .leading, spacing: RheirTheme.Spacing.xSmall) {
-                            Text("Current Project")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.secondary)
-
-                            Text(selectedProject.name)
-                                .font(.headline)
-                                .foregroundStyle(.primary)
-                                .lineLimit(1)
-                        }
-
-                        Spacer(minLength: RheirTheme.Spacing.medium)
-
-                        RheirStatusChip(
-                            label: selectedProject.status.displayName,
-                            systemImage: "circle.fill",
-                            style: statusChipStyle(for: selectedProject.status)
-                        )
-                    }
-                }
-                .accessibilityIdentifier("fast-ship-current-project-card")
+                ProjectHealthCard(project: selectedProject)
+                TodayCommandCard(project: selectedProject)
             } else {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Choose a project to begin")
                         .font(.title3.weight(.semibold))
-                        .foregroundColor(.primary)
+                        .foregroundStyle(RheirTheme.Colors.primaryText)
                     Text("Receipts, labor, tasks, and budget unlock after a project is selected.")
                         .font(.subheadline)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(RheirTheme.Colors.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .accessibilityIdentifier("fast-ship-project-selection-guidance")
             }
         }
-        .padding(.horizontal)
+        .padding(.horizontal, RheirTheme.Spacing.large)
         .padding(.top, 8)
-        .padding(.bottom, 8)
+        .padding(.bottom, RheirTheme.Spacing.small)
     }
 
     private var businessResourcesEntrySection: some View {
@@ -289,42 +248,17 @@ struct LandingPageView: View {
                 .environmentObject(viewModel)
                 .environmentObject(authVM)
         } label: {
-            HStack(spacing: 14) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(Color.blue.opacity(0.16))
-                    Image(systemName: "person.crop.rectangle.stack.fill")
-                        .font(.title3)
-                        .foregroundColor(.blue)
-                }
-                .frame(width: 48, height: 48)
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Business Resources")
-                        .font(.headline)
-                        .foregroundColor(.primary)
-                    Text("Workers, vendors, and payment methods used across projects.")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                        .lineLimit(2)
-                }
-
-                Spacer()
-
-                Image(systemName: "chevron.right")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundColor(.secondary)
-            }
-            .padding(14)
-            .background(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(Color(.secondarySystemBackground))
+            QuickActionTile(
+                title: "Business Resources",
+                subtitle: "Workers, vendors, and payment methods used across projects.",
+                systemImage: "person.crop.rectangle.stack.fill",
+                accent: RheirTheme.Colors.information
             )
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("business-resources-entry")
-        .padding(.horizontal)
+        .padding(.horizontal, RheirTheme.Spacing.large)
         .padding(.bottom, 8)
     }
 

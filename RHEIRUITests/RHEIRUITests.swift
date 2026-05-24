@@ -21,6 +21,7 @@ final class RHEIRUITests: XCTestCase {
         case selectingOrganization = "selecting_organization"
         case projectSelection = "project_selection"
         case selectedProject = "selected_project"
+        case budgetBreakdown = "budget_breakdown"
         case laborManagement = "labor_management"
         case taskManagement = "task_management"
         case estimatorMapping = "estimator_mapping"
@@ -650,17 +651,8 @@ final class RHEIRUITests: XCTestCase {
 
     @MainActor
     func testBudgetSurfaceShowsOnlyFastShipV1Tabs() throws {
-        let app = makeApp(mode: .selectedProject)
+        let app = makeApp(mode: .budgetBreakdown)
         app.launch()
-
-        app.tabBars.buttons["Projects"].tap()
-
-        let projectCard = app.buttons[Self.selectedProjectCardIdentifier]
-        XCTAssertTrue(
-            projectCard.waitForExistence(timeout: 5),
-            "Expected deterministic selected-project mode to expose the seeded Kitchen Remodel project card."
-        )
-        projectCard.tap()
 
         XCTAssertTrue(
             app.buttons["budget-tab-breakdown"].waitForExistence(timeout: 5),

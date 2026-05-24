@@ -1,0 +1,26 @@
+# macOS
+.DS_Store
+
+# Xcode local state
+DerivedData/
+build/
+*.xcresult
+*.xcuserstate
+xcuserdata/
+
+# Local app containers and simulator exports
+*.xcappdata/
+com.RheirHome.RHEIR *.xcappdata/
+AppData/
+AppDataInfo.plist
+
+# Logs and temporary output
+logs/
+*.log
+tmp/
+temp/
+.tmp/
+
+# Local/private generated artifacts
+RHEIRmemories.csv
+rheir_knowledge_database.json

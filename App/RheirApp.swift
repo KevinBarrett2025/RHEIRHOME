@@ -12,6 +12,7 @@ private enum UITestLaunchMode: String {
     case selectingOrganization = "selecting_organization"
     case projectSelection = "project_selection"
     case selectedProject = "selected_project"
+    case budgetBreakdown = "budget_breakdown"
     case laborManagement = "labor_management"
     case taskManagement = "task_management"
     case estimatorMapping = "estimator_mapping"
@@ -104,7 +105,7 @@ private struct AppLaunchConfiguration {
             )
             authViewModel.currentOrg = nil
 
-        case .projectSelection, .selectedProject, .laborManagement, .taskManagement, .estimatorMapping, .scannedReceiptReview, .mixedCategoryReceipt:
+        case .projectSelection, .selectedProject, .budgetBreakdown, .laborManagement, .taskManagement, .estimatorMapping, .scannedReceiptReview, .mixedCategoryReceipt:
             let user = User(id: "ui-test-project-user", email: "project-ui-test@rheirhome.com")
             let organization = Organization(
                 id: "ui-test-project-org",
@@ -181,7 +182,7 @@ private struct AppLaunchConfiguration {
                 }
                 projectViewModel.selectProject(selectedProject)
                 projectViewModel.recomputeLaborData()
-            } else if uiTestMode == .selectedProject || uiTestMode == .estimatorMapping || uiTestMode == .scannedReceiptReview || uiTestMode == .mixedCategoryReceipt {
+            } else if uiTestMode == .selectedProject || uiTestMode == .budgetBreakdown || uiTestMode == .estimatorMapping || uiTestMode == .scannedReceiptReview || uiTestMode == .mixedCategoryReceipt {
                 projectViewModel.selectProject(kitchenProject)
             } else {
                 projectViewModel.deselectProject()
@@ -576,6 +577,8 @@ struct RheirApp: App {
         case .projectSelection:
             authService = SignedOutUITestAuthService()
         case .selectedProject:
+            authService = SignedOutUITestAuthService()
+        case .budgetBreakdown:
             authService = SignedOutUITestAuthService()
         case .laborManagement:
             authService = SignedOutUITestAuthService()

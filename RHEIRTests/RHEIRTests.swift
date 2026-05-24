@@ -989,6 +989,516 @@ struct ProjectPersistencePayloadTests {
     }
 }
 
+struct ProjectOperationsFoundationTests {
+
+    @Test
+    func projectOperationsFieldsRoundTripAndDefaultForLegacyPayloads() throws {
+        let projectID = UUID(uuidString: "7E7D5745-C6F0-45CE-A3F6-4603EA7F1001")!
+        let taskID = UUID(uuidString: "7E7D5745-C6F0-45CE-A3F6-4603EA7F1002")!
+        let milestoneID = UUID(uuidString: "7E7D5745-C6F0-45CE-A3F6-4603EA7F1003")!
+        let documentID = UUID(uuidString: "7E7D5745-C6F0-45CE-A3F6-4603EA7F1004")!
+        let checklistID = UUID(uuidString: "7E7D5745-C6F0-45CE-A3F6-4603EA7F1005")!
+        let shoppingID = UUID(uuidString: "7E7D5745-C6F0-45CE-A3F6-4603EA7F1006")!
+        let dueDate = Date(timeIntervalSince1970: 1_786_320_000)
+
+        var task = ProjectTask(
+            id: taskID,
+            title: "Score rough electrical",
+            dueDate: dueDate,
+            category: .electrical,
+            projectID: projectID
+        )
+        task.markCompleted(by: [], notes: "Inspection passed")
+
+        var project = Project(
+            id: projectID,
+            name: "Operations Foundation Remodel",
+            client: "Lisa Alexander",
+            clientEmail: "lisa@example.com",
+            clientPhone: "555-0101",
+            clientAddress: "100 Main St, Lakewood, NJ 08701",
+            totalBudget: 42_000,
+            startDate: Date(timeIntervalSince1970: 1_786_060_800),
+            endDate: Date(timeIntervalSince1970: 1_788_652_800),
+            organizationID: "org-ops",
+            clientProfile: ProjectClientProfile(
+                name: "Lisa Alexander",
+                email: "lisa@example.com",
+                phone: "555-0101",
+                billingAddress: "PO Box 7",
+                jobSiteAddress: "100 Main St, Lakewood, NJ 08701",
+                notes: "Prefers text updates"
+            ),
+            paymentMilestones: [
+                ProjectPaymentMilestone(
+                    id: milestoneID,
+                    title: "Electrical rough-in payment",
+                    amount: 8_500,
+                    dueDate: dueDate,
+                    trigger: .taskCompletion,
+                    linkedTaskIDs: [taskID],
+                    linkedDocumentIDs: [documentID]
+                )
+            ],
+            projectDocuments: [
+                ProjectDocument(
+                    id: documentID,
+                    title: "Signed construction agreement",
+                    category: .contract,
+                    fileName: "contract.pdf",
+                    mimeType: "application/pdf",
+                    storageKind: .externalURL,
+                    storageIdentifier: "https://example.com/contract.pdf",
+                    linkedMilestoneID: milestoneID
+                )
+            ],
+            projectChecklists: [
+                ProjectChecklist(
+                    id: checklistID,
+                    title: "Electrical tools",
+                    category: .tools,
+                    linkedTaskCategory: .electrical,
+                    items: [
+                        ProjectChecklistItem(title: "Voltage tester", isComplete: true),
+                        ProjectChecklistItem(title: "Wire staples", quantity: 2, unit: "boxes")
+                    ]
+                )
+            ],
+            projectCalendarEvents: [
+                ProjectCalendarEvent(
+                    title: "Fixture delivery",
+                    kind: .deliveryOrder,
+                    startDate: dueDate.addingTimeInterval(86_400)
+                )
+            ],
+            shoppingListItems: [
+                ProjectShoppingListItem(
+                    id: shoppingID,
+                    title: "Wire staples",
+                    storeName: "Supply House",
+                    quantity: 2,
+                    unit: "boxes"
+                )
+            ]
+        )
+        project.tasks = [task]
+
+        let encoded = try JSONEncoder().encode(project)
+        let decoded = try JSONDecoder().decode(Project.self, from: encoded)
+
+        #expect(decoded.resolvedClientProfile.jobSiteAddress == "100 Main St, Lakewood, NJ 08701")
+        #expect(decoded.paymentMilestonesReadyForPrompt(on: dueDate).map(\.title) == ["Electrical rough-in payment"])
+        #expect(decoded.activeProjectDocuments.first?.category == .contract)
+        #expect(decoded.activeProjectChecklists.first?.completionFraction == 0.5)
+        #expect(decoded.activeProjectCalendarEvents.first?.kind == .deliveryOrder)
+        #expect(decoded.activeShoppingListItems.first?.title == "Wire staples")
+        #expect(decoded.projectTimelineEvents(on: dueDate).contains { $0.kind == .clientPaymentDue })
+
+        var legacyObject = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        legacyObject.removeValue(forKey: "clientProfile")
+        legacyObject.removeValue(forKey: "paymentMilestones")
+        legacyObject.removeValue(forKey: "projectDocuments")
+        legacyObject.removeValue(forKey: "projectChecklists")
+        legacyObject.removeValue(forKey: "projectCalendarEvents")
+        legacyObject.removeValue(forKey: "shoppingListItems")
+
+        let legacyData = try JSONSerialization.data(withJSONObject: legacyObject)
+        let legacyDecoded = try JSONDecoder().decode(Project.self, from: legacyData)
+
+        #expect(legacyDecoded.clientProfile == nil)
+        #expect(legacyDecoded.paymentMilestones == nil)
+        #expect(legacyDecoded.resolvedClientProfile.name == "Lisa Alexander")
+        #expect(legacyDecoded.activeProjectDocuments.isEmpty)
+        #expect(legacyDecoded.activeProjectChecklists.isEmpty)
+        #expect(legacyDecoded.activeProjectCalendarEvents.isEmpty)
+        #expect(legacyDecoded.activeShoppingListItems.isEmpty)
+    }
+
+    @Test
+    func projectOperationsMetadataAffectsProjectEquality() {
+        let projectID = UUID(uuidString: "7E7D5745-C6F0-45CE-A3F6-4603EA7F1101")!
+        let referenceDate = Date(timeIntervalSince1970: 1_786_060_800)
+        let baseProject = Project(
+            id: projectID,
+            name: "Equality Remodel",
+            client: "Lisa Alexander",
+            totalBudget: 42_000,
+            startDate: referenceDate,
+            endDate: referenceDate.addingTimeInterval(604_800),
+            organizationID: "org-ops",
+            lastModifiedDate: referenceDate
+        )
+
+        var candidate = baseProject
+        #expect(baseProject == candidate)
+
+        candidate.clientProfile = ProjectClientProfile(name: "Lisa Alexander", notes: "Prefers text updates")
+        #expect(baseProject != candidate)
+
+        candidate = baseProject
+        candidate.paymentMilestones = [
+            ProjectPaymentMilestone(title: "Rough-in payment", amount: 8_500)
+        ]
+        #expect(baseProject != candidate)
+
+        candidate = baseProject
+        candidate.projectDocuments = [
+            ProjectDocument(
+                title: "Signed agreement",
+                category: .contract,
+                fileName: "agreement.pdf",
+                mimeType: "application/pdf",
+                storageKind: .externalURL,
+                storageIdentifier: "https://example.com/agreement.pdf"
+            )
+        ]
+        #expect(baseProject != candidate)
+
+        candidate = baseProject
+        candidate.projectChecklists = [
+            ProjectChecklist(title: "Electrical prep", category: .tools)
+        ]
+        #expect(baseProject != candidate)
+
+        candidate = baseProject
+        candidate.projectCalendarEvents = [
+            ProjectCalendarEvent(title: "Fixture delivery", kind: .deliveryOrder, startDate: referenceDate)
+        ]
+        #expect(baseProject != candidate)
+
+        candidate = baseProject
+        candidate.shoppingListItems = [
+            ProjectShoppingListItem(title: "Wire staples")
+        ]
+        #expect(baseProject != candidate)
+    }
+
+    @Test
+    func receiptReturnMarkerDefaultsAndRoundTrips() throws {
+        let item = ReceiptItem(
+            name: "Wrong size fixture",
+            quantity: 1,
+            unitPrice: 118,
+            totalPrice: 118,
+            isMarkedForReturn: true
+        )
+
+        let encoded = try JSONEncoder().encode(item)
+        let decoded = try JSONDecoder().decode(ReceiptItem.self, from: encoded)
+        #expect(decoded.isMarkedForReturn)
+
+        var legacyObject = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        legacyObject.removeValue(forKey: "isMarkedForReturn")
+        let legacyData = try JSONSerialization.data(withJSONObject: legacyObject)
+        let legacyDecoded = try JSONDecoder().decode(ReceiptItem.self, from: legacyData)
+        #expect(!legacyDecoded.isMarkedForReturn)
+    }
+}
+
+struct ProjectAssistantSnapshotTests {
+
+    @Test
+    func assistantSnapshotSeparatesDueWorkPrepReturnsAndRecentProgress() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let now = Date(timeIntervalSince1970: 1_800_057_600)
+        let startOfToday = calendar.startOfDay(for: now)
+        let projectID = UUID(uuidString: "413E5981-28C1-4E10-B43B-ABBB72890001")!
+
+        let overdueTask = ProjectTask(
+            id: UUID(uuidString: "413E5981-28C1-4E10-B43B-ABBB72890002")!,
+            title: "Pull old vanity",
+            dueDate: startOfToday.addingTimeInterval(-86_400),
+            priority: .high,
+            category: .plumbing,
+            projectID: projectID
+        )
+        let dueTodayTask = ProjectTask(
+            id: UUID(uuidString: "413E5981-28C1-4E10-B43B-ABBB72890003")!,
+            title: "Confirm vanity delivery",
+            dueDate: startOfToday.addingTimeInterval(15 * 3_600),
+            priority: .medium,
+            category: .materials,
+            projectID: projectID
+        )
+        let upcomingTask = ProjectTask(
+            id: UUID(uuidString: "413E5981-28C1-4E10-B43B-ABBB72890004")!,
+            title: "Wire bath fan",
+            dueDate: startOfToday.addingTimeInterval(2 * 86_400),
+            priority: .medium,
+            category: .electrical,
+            projectID: projectID
+        )
+        var completedTask = ProjectTask(
+            id: UUID(uuidString: "413E5981-28C1-4E10-B43B-ABBB72890005")!,
+            title: "Measure bath footprint",
+            priority: .medium,
+            category: .general,
+            projectID: projectID
+        )
+        completedTask.isCompleted = true
+        completedTask.completedDate = startOfToday.addingTimeInterval(-12 * 3_600)
+
+        var receipt = Receipt(
+            id: "assistant-return-source",
+            vendor: "Home Depot",
+            date: startOfToday.addingTimeInterval(-2 * 86_400),
+            amount: 118,
+            category: .material,
+            paymentMethod: "Card"
+        )
+        receipt.items = [
+            ReceiptItem(
+                id: UUID(uuidString: "413E5981-28C1-4E10-B43B-ABBB72890006")!,
+                name: "Wrong size fixture",
+                quantity: 1,
+                unitPrice: 118,
+                totalPrice: 118,
+                isMarkedForReturn: true
+            )
+        ]
+
+        var project = Project(
+            id: projectID,
+            name: "Assistant Remodel",
+            client: "Client",
+            totalBudget: 10_000,
+            startDate: startOfToday,
+            endDate: startOfToday.addingTimeInterval(14 * 86_400),
+            organizationID: "org-assistant",
+            paymentMilestones: [
+                ProjectPaymentMilestone(
+                    id: UUID(uuidString: "413E5981-28C1-4E10-B43B-ABBB72890007")!,
+                    title: "Progress Draw",
+                    amount: 2_500,
+                    dueDate: startOfToday.addingTimeInterval(-3_600),
+                    trigger: .date,
+                    status: .planned
+                )
+            ],
+            projectChecklists: [
+                ProjectChecklist(
+                    id: UUID(uuidString: "413E5981-28C1-4E10-B43B-ABBB72890008")!,
+                    title: "Electrical Prep",
+                    category: .tools,
+                    linkedTaskCategory: .electrical,
+                    items: [
+                        ProjectChecklistItem(title: "Voltage tester"),
+                        ProjectChecklistItem(title: "Wire staples", isComplete: true)
+                    ]
+                )
+            ],
+            projectCalendarEvents: [
+                ProjectCalendarEvent(
+                    id: UUID(uuidString: "413E5981-28C1-4E10-B43B-ABBB72890009")!,
+                    title: "Vanity pickup window",
+                    kind: .pickupOrder,
+                    startDate: startOfToday.addingTimeInterval(10 * 3_600),
+                    status: .scheduled
+                )
+            ]
+        )
+        project.tasks = [overdueTask, dueTodayTask, upcomingTask, completedTask]
+        project.receipts = [receipt]
+
+        let snapshot = project.assistantSnapshot(on: now, calendar: calendar)
+
+        #expect(overdueTask.isOverdue(on: now, calendar: calendar))
+        #expect(!dueTodayTask.isOverdue(on: now, calendar: calendar))
+        #expect(snapshot.overdueTasks.map(\.title) == ["Pull old vanity"])
+        #expect(snapshot.dueTodayTasks.map(\.title) == ["Confirm vanity delivery"])
+        #expect(snapshot.upcomingTasks.map(\.title) == ["Wire bath fan"])
+        #expect(snapshot.dueTodayEvents.map(\.title) == ["Vanity pickup window"])
+        #expect(snapshot.readyPaymentMilestones.map(\.title) == ["Progress Draw"])
+        #expect(snapshot.checklistPrepItems.map(\.checklist.title) == ["Electrical Prep"])
+        #expect(snapshot.markedReturnItems.map(\.itemName) == ["Wrong size fixture"])
+        #expect(snapshot.recentCompletedTasks.map(\.title) == ["Measure bath footprint"])
+        #expect(snapshot.openChecklistItemCount == 1)
+        #expect(snapshot.actionCount == 6)
+    }
+}
+
+struct ProjectOperationsSummaryTests {
+
+    @Test
+    func operationsSummaryCountsCurrentWorkWithoutMutatingProject() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let now = Date(timeIntervalSince1970: 1_800_057_600)
+        let startOfToday = calendar.startOfDay(for: now)
+        let projectID = UUID(uuidString: "413E5981-28C1-4E10-B43B-ABBB72891001")!
+
+        let overdueTask = ProjectTask(
+            id: UUID(uuidString: "413E5981-28C1-4E10-B43B-ABBB72891002")!,
+            title: "Patch subfloor",
+            dueDate: startOfToday.addingTimeInterval(-86_400),
+            category: .general,
+            projectID: projectID
+        )
+        let dueTodayTask = ProjectTask(
+            id: UUID(uuidString: "413E5981-28C1-4E10-B43B-ABBB72891003")!,
+            title: "Confirm tile pickup",
+            dueDate: startOfToday.addingTimeInterval(12 * 3_600),
+            category: .materials,
+            projectID: projectID
+        )
+        var completedPastTask = ProjectTask(
+            id: UUID(uuidString: "413E5981-28C1-4E10-B43B-ABBB72891004")!,
+            title: "Measure floor",
+            dueDate: startOfToday.addingTimeInterval(-2 * 86_400),
+            category: .general,
+            projectID: projectID
+        )
+        completedPastTask.isCompleted = true
+
+        var receipt = Receipt(
+            id: "operations-summary-return-source",
+            vendor: "Supply House",
+            date: startOfToday.addingTimeInterval(-86_400),
+            amount: 95,
+            category: .material,
+            paymentMethod: "Card"
+        )
+        receipt.items = [
+            ReceiptItem(
+                id: UUID(uuidString: "413E5981-28C1-4E10-B43B-ABBB72891005")!,
+                name: "Wrong transition strip",
+                quantity: 1,
+                unitPrice: 35,
+                totalPrice: 35,
+                isMarkedForReturn: true
+            ),
+            ReceiptItem(
+                id: UUID(uuidString: "413E5981-28C1-4E10-B43B-ABBB72891006")!,
+                name: "Extra tile spacers",
+                quantity: 2,
+                unitPrice: 12,
+                totalPrice: 24,
+                isMarkedForReturn: true
+            ),
+            ReceiptItem(
+                id: UUID(uuidString: "413E5981-28C1-4E10-B43B-ABBB72891007")!,
+                name: "Keep grout",
+                quantity: 1,
+                unitPrice: 36,
+                totalPrice: 36
+            )
+        ]
+
+        var project = Project(
+            id: projectID,
+            name: "Operations Summary Remodel",
+            client: "Client",
+            totalBudget: 10_000,
+            startDate: startOfToday,
+            endDate: startOfToday.addingTimeInterval(14 * 86_400),
+            organizationID: "org-operations-summary",
+            projectChecklists: [
+                ProjectChecklist(
+                    id: UUID(uuidString: "413E5981-28C1-4E10-B43B-ABBB72891008")!,
+                    title: "Floor prep",
+                    category: .quality,
+                    items: [
+                        ProjectChecklistItem(title: "Sweep subfloor", isComplete: true),
+                        ProjectChecklistItem(title: "Prime patch")
+                    ]
+                ),
+                ProjectChecklist(
+                    id: UUID(uuidString: "413E5981-28C1-4E10-B43B-ABBB72891009")!,
+                    title: "Closeout photos",
+                    category: .closeout,
+                    items: [
+                        ProjectChecklistItem(title: "Take after photos", isComplete: true)
+                    ]
+                )
+            ],
+            projectCalendarEvents: [
+                ProjectCalendarEvent(
+                    id: UUID(uuidString: "413E5981-28C1-4E10-B43B-ABBB72891010")!,
+                    title: "Inspection walk",
+                    kind: .inspection,
+                    startDate: startOfToday.addingTimeInterval(9 * 3_600),
+                    status: .scheduled
+                ),
+                ProjectCalendarEvent(
+                    id: UUID(uuidString: "413E5981-28C1-4E10-B43B-ABBB72891011")!,
+                    title: "Tile delivery",
+                    kind: .deliveryOrder,
+                    startDate: startOfToday.addingTimeInterval(2 * 86_400),
+                    status: .planned
+                ),
+                ProjectCalendarEvent(
+                    id: UUID(uuidString: "413E5981-28C1-4E10-B43B-ABBB72891012")!,
+                    title: "Cancelled pickup",
+                    kind: .pickupOrder,
+                    startDate: startOfToday.addingTimeInterval(86_400),
+                    status: .cancelled
+                )
+            ],
+            shoppingListItems: [
+                ProjectShoppingListItem(title: "Tile spacers"),
+                ProjectShoppingListItem(title: "Dust masks", isPurchased: true),
+                ProjectShoppingListItem(title: "Contractor bags")
+            ]
+        )
+        project.tasks = [overdueTask, dueTodayTask, completedPastTask]
+        project.receipts = [receipt]
+
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let encodedBefore = try encoder.encode(project)
+        let summary = project.operationsSummary(on: now, calendar: calendar)
+        let encodedAfter = try encoder.encode(project)
+
+        #expect(encodedBefore == encodedAfter)
+        #expect(summary.openShoppingItemCount == 2)
+        #expect(summary.completedShoppingItemCount == 1)
+        #expect(summary.openChecklistCount == 1)
+        #expect(summary.completedChecklistCount == 1)
+        #expect(summary.openChecklistItemCount == 1)
+        #expect(summary.completedChecklistItemCount == 2)
+        #expect(summary.overdueTaskCount == 1)
+        #expect(summary.dueTodayTaskCount == 1)
+        #expect(!dueTodayTask.isOverdue(on: now, calendar: calendar))
+        #expect(summary.dueTodayCalendarEventCount == 1)
+        #expect(summary.upcomingCalendarEventCount == 1)
+        #expect(summary.nextCalendarEvent?.title == "Inspection walk")
+        #expect(summary.markedReturnItemCount == 2)
+        #expect(summary.actionableItemCount == 8)
+    }
+
+    @Test
+    func operationsSummaryDefaultsToSafeEmptyValues() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let now = Date(timeIntervalSince1970: 1_800_057_600)
+        let project = Project(
+            name: "Empty Operations Summary",
+            client: "Client",
+            totalBudget: 10_000,
+            startDate: now,
+            endDate: now.addingTimeInterval(86_400),
+            organizationID: "org-empty-operations-summary"
+        )
+
+        let summary = project.operationsSummary(on: now, calendar: calendar)
+
+        #expect(summary.openShoppingItemCount == 0)
+        #expect(summary.completedShoppingItemCount == 0)
+        #expect(summary.openChecklistCount == 0)
+        #expect(summary.completedChecklistCount == 0)
+        #expect(summary.openChecklistItemCount == 0)
+        #expect(summary.completedChecklistItemCount == 0)
+        #expect(summary.overdueTaskCount == 0)
+        #expect(summary.dueTodayTaskCount == 0)
+        #expect(summary.dueTodayCalendarEventCount == 0)
+        #expect(summary.upcomingCalendarEventCount == 0)
+        #expect(summary.nextCalendarEvent == nil)
+        #expect(summary.markedReturnItemCount == 0)
+        #expect(summary.actionableItemCount == 0)
+    }
+}
+
 struct CloudKitProjectRepositoryTests {
 
     @Test
@@ -1401,6 +1911,145 @@ struct ProjectMutationPropagationTests {
     }
 
     @Test
+    func operationsMetadataHelpersPersistAndReloadProjectState() async throws {
+        let suiteName = "ProjectOperationsMutationTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let orgID = UUID().uuidString
+        let repository = RecordingProjectRepository()
+        let projectStore = ProjectStore(userDefaults: defaults)
+        let viewModel = ProjectViewModel(
+            offlineDataManager: OfflineDataManager(networkMonitoringEnabled: false),
+            projectStore: projectStore,
+            projectRepository: repository
+        )
+        viewModel.setCurrentOrganization(
+            Organization(id: orgID, name: "Personal Workspace"),
+            role: .admin
+        )
+
+        let projectID = UUID()
+        let baselineDate = Date(timeIntervalSince1970: 1_714_030_000)
+        let paymentMilestone = ProjectPaymentMilestone(title: "Deposit", amount: 2_000)
+        let projectDocument = ProjectDocument(
+            title: "Signed agreement",
+            category: .contract,
+            fileName: "agreement.pdf",
+            mimeType: "application/pdf",
+            storageKind: .externalURL,
+            storageIdentifier: "https://example.com/agreement.pdf"
+        )
+        let project = Project(
+            id: projectID,
+            name: "Operations Mutation Project",
+            client: "Client H",
+            totalBudget: 34_000,
+            startDate: baselineDate,
+            endDate: baselineDate.addingTimeInterval(86_400),
+            organizationID: orgID,
+            lastModifiedDate: baselineDate,
+            clientProfile: ProjectClientProfile(name: "Client H", notes: "Keep access note"),
+            paymentMilestones: [paymentMilestone],
+            projectDocuments: [projectDocument]
+        )
+        viewModel.projects = [project]
+        viewModel.organizationProjects = [project]
+        viewModel.selectedProject = project
+        viewModel.updateAccessibleProjects()
+
+        let shoppingID = UUID()
+        let secondShoppingID = UUID()
+        await viewModel.addOrUpdateShoppingListItem(
+            ProjectShoppingListItem(id: shoppingID, title: "Contractor bags"),
+            in: projectID
+        )
+        let shoppingModifiedDate = try #require(viewModel.selectedProject?.lastModifiedDate)
+        #expect(shoppingModifiedDate > baselineDate)
+        #expect(viewModel.selectedProject?.shoppingListItems?.map(\.title) == ["Contractor bags"])
+        #expect(projectStore.loadProjects(for: orgID).first?.shoppingListItems?.map(\.title) == ["Contractor bags"])
+
+        await viewModel.addOrUpdateShoppingListItem(
+            ProjectShoppingListItem(id: shoppingID, title: "Heavy contractor bags", quantity: 2, unit: "boxes"),
+            in: projectID
+        )
+        await viewModel.addOrUpdateShoppingListItem(
+            ProjectShoppingListItem(id: secondShoppingID, title: "Dust masks"),
+            in: projectID
+        )
+
+        let checklistID = UUID()
+        await viewModel.addOrUpdateProjectChecklist(
+            ProjectChecklist(
+                id: checklistID,
+                title: "Demo prep",
+                category: .safety,
+                items: [ProjectChecklistItem(title: "Shut off water")]
+            ),
+            in: projectID
+        )
+        await viewModel.addOrUpdateProjectChecklist(
+            ProjectChecklist(
+                id: checklistID,
+                title: "Demo prep",
+                category: .safety,
+                items: [
+                    ProjectChecklistItem(title: "Shut off water", isComplete: true),
+                    ProjectChecklistItem(title: "Protect flooring")
+                ]
+            ),
+            in: projectID
+        )
+
+        let eventID = UUID()
+        await viewModel.addOrUpdateProjectCalendarEvent(
+            ProjectCalendarEvent(
+                id: eventID,
+                title: "Dumpster delivery",
+                kind: .deliveryOrder,
+                startDate: baselineDate.addingTimeInterval(86_400)
+            ),
+            in: projectID
+        )
+        await viewModel.addOrUpdateProjectCalendarEvent(
+            ProjectCalendarEvent(
+                id: eventID,
+                title: "Fixture delivery",
+                kind: .deliveryOrder,
+                startDate: baselineDate.addingTimeInterval(172_800)
+            ),
+            in: projectID
+        )
+
+        let reloadedProject = try #require(projectStore.loadProjects(for: orgID).first { $0.id == projectID })
+        #expect(reloadedProject.shoppingListItems?.map(\.title) == ["Heavy contractor bags", "Dust masks"])
+        #expect(reloadedProject.shoppingListItems?.first?.quantity == 2)
+        #expect(reloadedProject.projectChecklists?.first?.items.map(\.title) == ["Shut off water", "Protect flooring"])
+        #expect(reloadedProject.projectChecklists?.first?.completionFraction == 0.5)
+        #expect(reloadedProject.projectCalendarEvents?.first?.title == "Fixture delivery")
+        #expect(reloadedProject.lastModifiedDate > baselineDate)
+        #expect(viewModel.accessibleProjects.first?.shoppingListItems?.count == 2)
+        #expect(viewModel.selectedProject?.projectChecklists?.first?.items.count == 2)
+        #expect(repository.savedProjects.last?.project.projectCalendarEvents?.first?.title == "Fixture delivery")
+
+        await viewModel.removeShoppingListItem(shoppingID, from: projectID)
+        await viewModel.removeProjectChecklist(checklistID, from: projectID)
+        await viewModel.removeProjectCalendarEvent(eventID, from: projectID)
+
+        let afterRemovalProject = try #require(projectStore.loadProjects(for: orgID).first { $0.id == projectID })
+        #expect(afterRemovalProject.shoppingListItems?.map(\.title) == ["Dust masks"])
+        #expect(afterRemovalProject.projectChecklists?.isEmpty == true)
+        #expect(afterRemovalProject.projectCalendarEvents?.isEmpty == true)
+        #expect(afterRemovalProject.clientProfile?.notes == "Keep access note")
+        #expect(afterRemovalProject.paymentMilestones?.first == paymentMilestone)
+        #expect(afterRemovalProject.projectDocuments?.first == projectDocument)
+        #expect(afterRemovalProject.lastModifiedDate > baselineDate)
+    }
+
+    @Test
     func deleteProjectClearsVisibleCollectionsAndSelection() async {
         let suiteName = "ProjectMutationDeletionTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
@@ -1631,6 +2280,100 @@ struct ProjectMutationPropagationTests {
         #expect(viewModel.selectedProject?.tasks.first?.completionPhotoIDs == refreshedTask.completionPhotoIDs)
         #expect(viewModel.accessibleProjects.first?.loggedHours.first?.rate == 60)
         #expect(viewModel.selectedProject?.loggedHours.first?.totalPaidAmount == 30)
+    }
+
+    @Test
+    func projectRefreshTracksSameIDOperationsMetadataChanges() {
+        let orgID = UUID().uuidString
+        let viewModel = ProjectViewModel(
+            offlineDataManager: OfflineDataManager(networkMonitoringEnabled: false),
+            projectRepository: RecordingProjectRepository()
+        )
+        viewModel.setCurrentOrganization(
+            Organization(id: orgID, name: "Personal Workspace"),
+            role: .admin
+        )
+
+        let projectID = UUID()
+        let modifiedDate = Date(timeIntervalSince1970: 1_714_020_000)
+        var project = Project(
+            id: projectID,
+            name: "Operations Refresh Project",
+            client: "Client G",
+            totalBudget: 34_000,
+            startDate: modifiedDate,
+            endDate: modifiedDate.addingTimeInterval(86_400),
+            organizationID: orgID,
+            lastModifiedDate: modifiedDate
+        )
+        project.clientProfile = ProjectClientProfile(name: "Client G", notes: "Original access notes")
+        project.paymentMilestones = [
+            ProjectPaymentMilestone(title: "Deposit", amount: 2_000)
+        ]
+        project.projectDocuments = [
+            ProjectDocument(
+                title: "Original agreement",
+                category: .contract,
+                fileName: "agreement.pdf",
+                mimeType: "application/pdf",
+                storageKind: .externalURL,
+                storageIdentifier: "https://example.com/agreement.pdf"
+            )
+        ]
+        project.projectChecklists = [
+            ProjectChecklist(title: "Demo prep", category: .tools)
+        ]
+        project.projectCalendarEvents = [
+            ProjectCalendarEvent(title: "Dumpster delivery", kind: .deliveryOrder, startDate: modifiedDate)
+        ]
+        project.shoppingListItems = [
+            ProjectShoppingListItem(title: "Contractor bags")
+        ]
+
+        viewModel.projects = [project]
+        viewModel.organizationProjects = [project]
+        viewModel.selectedProject = project
+        viewModel.updateAccessibleProjects()
+
+        var refreshedProject = project
+        refreshedProject.lastModifiedDate = modifiedDate
+        refreshedProject.clientProfile = ProjectClientProfile(name: "Client G", notes: "Use side gate")
+        refreshedProject.paymentMilestones = [
+            ProjectPaymentMilestone(title: "Rough-in draw", amount: 8_500)
+        ]
+        refreshedProject.projectDocuments = [
+            ProjectDocument(
+                title: "Signed change order",
+                category: .other,
+                fileName: "change-order.pdf",
+                mimeType: "application/pdf",
+                storageKind: .externalURL,
+                storageIdentifier: "https://example.com/change-order.pdf"
+            )
+        ]
+        refreshedProject.projectChecklists = [
+            ProjectChecklist(
+                title: "Electrical prep",
+                category: .tools,
+                items: [ProjectChecklistItem(title: "Voltage tester")]
+            )
+        ]
+        refreshedProject.projectCalendarEvents = [
+            ProjectCalendarEvent(title: "Fixture delivery", kind: .deliveryOrder, startDate: modifiedDate)
+        ]
+        refreshedProject.shoppingListItems = [
+            ProjectShoppingListItem(title: "Wire staples", quantity: 2, unit: "boxes")
+        ]
+        viewModel.organizationProjects = [refreshedProject]
+
+        viewModel.updateAccessibleProjects()
+
+        #expect(viewModel.selectedProject?.clientProfile?.notes == "Use side gate")
+        #expect(viewModel.accessibleProjects.first?.paymentMilestones?.first?.title == "Rough-in draw")
+        #expect(viewModel.selectedProject?.projectDocuments?.first?.title == "Signed change order")
+        #expect(viewModel.selectedProject?.projectChecklists?.first?.items.map(\.title) == ["Voltage tester"])
+        #expect(viewModel.selectedProject?.projectCalendarEvents?.first?.title == "Fixture delivery")
+        #expect(viewModel.accessibleProjects.first?.shoppingListItems?.first?.quantity == 2)
     }
 
     @Test
