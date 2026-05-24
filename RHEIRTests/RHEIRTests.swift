@@ -6,24 +6,45 @@ import Testing
 @testable import RHEIR
 
 private final class RecordingProjectRepository: ProjectRepository {
-    var fetchedProjectsByOrganization: [String: [Project]] = [:]
-    var savedProjects: [(project: Project, organizationID: String)] = []
-    var savedAssignmentsByOrganization: [String: [String]] = [:]
+    private let lock = NSLock()
+    private var _fetchedProjectsByOrganization: [String: [Project]] = [:]
+    private var _savedProjects: [(project: Project, organizationID: String)] = []
+    private var _savedAssignmentsByOrganization: [String: [String]] = [:]
+
+    var fetchedProjectsByOrganization: [String: [Project]] {
+        get { withLock { _fetchedProjectsByOrganization } }
+        set { withLock { _fetchedProjectsByOrganization = newValue } }
+    }
+
+    var savedProjects: [(project: Project, organizationID: String)] {
+        withLock { _savedProjects }
+    }
+
+    var savedAssignmentsByOrganization: [String: [String]] {
+        get { withLock { _savedAssignmentsByOrganization } }
+        set { withLock { _savedAssignmentsByOrganization = newValue } }
+    }
 
     func fetchProjects(for organizationID: String) async throws -> [Project] {
-        fetchedProjectsByOrganization[organizationID] ?? []
+        withLock { _fetchedProjectsByOrganization[organizationID] ?? [] }
     }
 
     func saveProject(_ project: Project, organizationID: String) async throws {
-        savedProjects.append((project, organizationID))
+        withLock { _savedProjects.append((project, organizationID)) }
     }
 
     func saveProjectAssignments(_ projectIDs: [String], organizationID: String) async throws {
-        savedAssignmentsByOrganization[organizationID] = projectIDs
+        withLock { _savedAssignmentsByOrganization[organizationID] = projectIDs }
     }
 
     func loadProjectAssignments(organizationID: String) async -> [String] {
-        savedAssignmentsByOrganization[organizationID] ?? []
+        withLock { _savedAssignmentsByOrganization[organizationID] ?? [] }
+    }
+
+    private func withLock<T>(_ operation: () throws -> T) rethrows -> T {
+        lock.lock()
+        defer { lock.unlock() }
+        return try operation()
     }
 }
 
