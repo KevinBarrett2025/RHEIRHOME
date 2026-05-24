@@ -1433,6 +1433,57 @@ final class RHEIRUITests: XCTestCase {
             query: { $0.staticTexts["receipt-detail-item-exception-notes-primer"] }
         )
         XCTAssertEqual(notesText.label, "One extra, one missing at pickup.")
+
+        app.navigationBars["Receipt Details"].buttons.firstMatch.tap()
+
+        let updatedReceiptCard = app.buttons["receipt-card-\(vendorName)"]
+        XCTAssertTrue(
+            updatedReceiptCard.waitForExistence(timeout: 5),
+            "Expected returning to the receipts list to show the saved receipt with exception summary chips."
+        )
+
+        let listReturnChip = revealElement(
+            identifier: "receipt-card-exception-return-ui-test-scanned-vendor",
+            in: app,
+            query: { $0.staticTexts["receipt-card-exception-return-ui-test-scanned-vendor"] }
+        )
+        XCTAssertEqual(listReturnChip.label, "Return qty 1")
+
+        let listMissingChip = revealElement(
+            identifier: "receipt-card-exception-missing-ui-test-scanned-vendor",
+            in: app,
+            query: { $0.staticTexts["receipt-card-exception-missing-ui-test-scanned-vendor"] }
+        )
+        XCTAssertEqual(listMissingChip.label, "Missing qty 1")
+
+        let listDisputeChip = revealElement(
+            identifier: "receipt-card-exception-dispute-ui-test-scanned-vendor",
+            in: app,
+            query: { $0.staticTexts["receipt-card-exception-dispute-ui-test-scanned-vendor"] }
+        )
+        XCTAssertEqual(listDisputeChip.label, "Needs dispute 1")
+
+        let exceptionFilter = app.buttons["receipts-exception-filter"]
+        XCTAssertTrue(
+            exceptionFilter.waitForExistence(timeout: 5),
+            "Expected the receipts filter bar to expose a focused exception review filter."
+        )
+        let filterBar = app.scrollViews["receipts-filter-chips"]
+        if filterBar.waitForExistence(timeout: 2) {
+            for _ in 0..<2 {
+                filterBar.swipeLeft()
+            }
+        }
+        XCTAssertTrue(
+            exceptionFilter.isHittable,
+            "Expected the exception review filter to be reachable inside the horizontal receipt filter bar."
+        )
+        exceptionFilter.tap()
+        XCTAssertEqual(exceptionFilter.value as? String, "selected")
+        XCTAssertTrue(
+            app.buttons["receipt-card-\(vendorName)"].waitForExistence(timeout: 5),
+            "Expected the exception review filter to keep receipts with line-item exceptions visible."
+        )
     }
 
     @MainActor

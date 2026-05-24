@@ -86,6 +86,61 @@ private struct ReceiptFilterSummary {
     let netTotal: Double
 }
 
+private struct ReceiptLineItemExceptionSummary {
+    let returnQuantity: Double
+    let returnItemCount: Int
+    let missingQuantity: Double
+    let missingItemCount: Int
+    let needsDisputeCount: Int
+    let resolvedCount: Int
+    let totalItemCount: Int
+
+    var hasAnyException: Bool {
+        returnQuantity > 0
+            || missingQuantity > 0
+            || needsDisputeCount > 0
+            || resolvedCount > 0
+            || totalItemCount > 0
+    }
+}
+
+private extension ReceiptLineItemExceptionSummary {
+    static let empty = ReceiptLineItemExceptionSummary(
+        returnQuantity: 0,
+        returnItemCount: 0,
+        missingQuantity: 0,
+        missingItemCount: 0,
+        needsDisputeCount: 0,
+        resolvedCount: 0,
+        totalItemCount: 0
+    )
+}
+
+private extension Receipt {
+    var lineItemExceptionSummary: ReceiptLineItemExceptionSummary {
+        guard !items.isEmpty else { return .empty }
+
+        return items.reduce(.empty) { partial, item in
+            let returnQuantity = item.returnExceptionQuantity
+            let missingQuantity = item.missingExceptionQuantity
+            let hasReturn = returnQuantity > 0
+            let hasMissing = missingQuantity > 0
+            let needsDispute = item.exceptionMetadata?.status == .disputeNeeded
+            let resolved = item.exceptionMetadata?.status == .resolved
+
+            return ReceiptLineItemExceptionSummary(
+                returnQuantity: partial.returnQuantity + returnQuantity,
+                returnItemCount: partial.returnItemCount + (hasReturn ? 1 : 0),
+                missingQuantity: partial.missingQuantity + missingQuantity,
+                missingItemCount: partial.missingItemCount + (hasMissing ? 1 : 0),
+                needsDisputeCount: partial.needsDisputeCount + (needsDispute ? 1 : 0),
+                resolvedCount: partial.resolvedCount + (resolved ? 1 : 0),
+                totalItemCount: partial.totalItemCount + (item.hasAnyLineItemException ? 1 : 0)
+            )
+        }
+    }
+}
+
 private func receiptPaymentFilterKey(for receipt: Receipt) -> String {
     if let paymentMethodID = receipt.paymentMethodID, !paymentMethodID.isEmpty {
         return "id:\(paymentMethodID)"
@@ -160,6 +215,7 @@ struct ReceiptsView: View {
     @State private var selectedViewMode: ReceiptViewMode = .all
     @State private var selectedCategory: ReceiptCategory? = nil
     @State private var selectedRefundFilter: ReceiptRefundFilter = .all
+    @State private var showsReceiptExceptionsOnly = false
     @State private var selectedPaymentFilterKey: String?
     @State private var searchText = ""
     @State private var expandedVendorGroups: Set<String> = []
@@ -207,8 +263,13 @@ struct ReceiptsView: View {
         }
     }
 
+    private var exceptionFilteredReceipts: [Receipt] {
+        guard showsReceiptExceptionsOnly else { return refundFilteredReceipts }
+        return refundFilteredReceipts.filter { $0.lineItemExceptionSummary.hasAnyException }
+    }
+
     private var baseReceipts: [Receipt] {
-        var filteredReceipts = refundFilteredReceipts
+        var filteredReceipts = exceptionFilteredReceipts
 
         if let selectedPaymentFilterKey {
             filteredReceipts = filteredReceipts.filter {
@@ -249,7 +310,7 @@ struct ReceiptsView: View {
     }
 
     private var paymentFilterOptions: [ReceiptPaymentFilterOption] {
-        Dictionary(grouping: refundFilteredReceipts, by: receiptPaymentFilterKey(for:))
+        Dictionary(grouping: exceptionFilteredReceipts, by: receiptPaymentFilterKey(for:))
             .map { key, receipts in
                 let title = receipts
                     .map(receiptPaymentDisplayName(for:))
@@ -277,7 +338,7 @@ struct ReceiptsView: View {
     }
 
     private var activeReceiptFilterSummary: ReceiptFilterSummary? {
-        guard selectedRefundFilter != .all || selectedPaymentFilterKey != nil else { return nil }
+        guard showsReceiptExceptionsOnly || selectedRefundFilter != .all || selectedPaymentFilterKey != nil else { return nil }
 
         let grossSpent = receipts
             .filter { !$0.isReturn }
@@ -290,18 +351,22 @@ struct ReceiptsView: View {
             .reduce(0.0) { $0 + $1.refundedAmount(in: allProjectReceipts) }
         let refundedAmount = max(directRefunds, linkedRefundsForPurchases)
         let netTotal = receipts.reduce(0.0) { $0 + $1.signedAmount }
-        let title: String
+        var titleParts: [String] = []
 
-        if let paymentOption = selectedPaymentFilterOption, selectedRefundFilter != .all {
-            title = "\(selectedRefundFilter.summaryTitle) · \(paymentOption.title)"
-        } else if let paymentOption = selectedPaymentFilterOption {
-            title = paymentOption.title
-        } else {
-            title = selectedRefundFilter.summaryTitle
+        if showsReceiptExceptionsOnly {
+            titleParts.append("Receipt Exceptions")
+        }
+
+        if selectedRefundFilter != .all {
+            titleParts.append(selectedRefundFilter.summaryTitle)
+        }
+
+        if let paymentOption = selectedPaymentFilterOption {
+            titleParts.append(paymentOption.title)
         }
 
         return ReceiptFilterSummary(
-            title: title,
+            title: titleParts.isEmpty ? selectedRefundFilter.summaryTitle : titleParts.joined(separator: " · "),
             receiptCount: visibleParentReceiptRows(from: receipts).count,
             grossSpent: grossSpent,
             refundedAmount: refundedAmount,
@@ -504,13 +569,28 @@ struct ReceiptsView: View {
                     .accessibilityValue(selectedRefundFilter == filter ? "selected" : "not selected")
                 }
 
+                Divider()
+                    .frame(height: 28)
+
+                filterChip(
+                    title: "Exceptions",
+                    subtitle: "\(refundFilteredReceipts.filter { $0.lineItemExceptionSummary.hasAnyException }.count)",
+                    icon: "exclamationmark.bubble",
+                    isSelected: showsReceiptExceptionsOnly,
+                    tint: RheirTheme.Colors.warning
+                ) {
+                    showsReceiptExceptionsOnly.toggle()
+                }
+                .accessibilityIdentifier("receipts-exception-filter")
+                .accessibilityValue(showsReceiptExceptionsOnly ? "selected" : "not selected")
+
                 if !paymentFilterOptions.isEmpty {
                     Divider()
                         .frame(height: 28)
 
                     filterChip(
                         title: "All Payments",
-                        subtitle: "\(refundFilteredReceipts.count)",
+                        subtitle: "\(exceptionFilteredReceipts.count)",
                         icon: "creditcard",
                         isSelected: selectedPaymentFilterKey == nil,
                         tint: .blue
@@ -651,14 +731,17 @@ struct ReceiptsView: View {
     @ViewBuilder
     private var mainContent: some View {
         if receipts.isEmpty {
-            if selectedCategory != nil || !searchText.isEmpty {
+            if selectedCategory != nil || !searchText.isEmpty || selectedRefundFilter != .all || selectedPaymentFilterKey != nil || showsReceiptExceptionsOnly {
                 WorkflowEmptyStateCard(
                     icon: "magnifyingglass.circle",
                     title: "No Matching Receipts",
                     message: filteredEmptyStateMessage,
-                    primaryActionTitle: selectedCategory != nil ? "View All Receipts" : "Clear Search",
+                    primaryActionTitle: "Clear Filters",
                     primaryAction: {
                         selectedCategory = nil
+                        selectedRefundFilter = .all
+                        selectedPaymentFilterKey = nil
+                        showsReceiptExceptionsOnly = false
                         searchText = ""
                     }
                 )
@@ -1115,6 +1198,14 @@ struct ReceiptsView: View {
             return "No receipts found in the \(selectedCategory.rawValue) category. Clear the filters to see every saved receipt."
         }
 
+        if showsReceiptExceptionsOnly {
+            return "No receipts with return, missing, dispute, or resolved exception tracking match the current filters."
+        }
+
+        if selectedRefundFilter != .all || selectedPaymentFilterKey != nil {
+            return "No receipts match the selected receipt filters. Clear the filters to see every saved receipt."
+        }
+
         return "Try a different vendor, note, or item search."
     }
 
@@ -1370,6 +1461,75 @@ struct EnhancedReceiptCard: View {
         return "Refunded \(linkedRefundTotal.formatAsCurrency()) in \(linkedRefunds.count) linked refund\(linkedRefunds.count == 1 ? "" : "s")"
     }
 
+    private var exceptionBadges: [ReceiptLedgerRow.ExceptionBadge] {
+        let summary = receipt.lineItemExceptionSummary
+        guard summary.hasAnyException else { return [] }
+
+        var badges: [ReceiptLedgerRow.ExceptionBadge] = []
+
+        if summary.returnQuantity > 0 {
+            badges.append(
+                ReceiptLedgerRow.ExceptionBadge(
+                    id: "return",
+                    label: "Return qty \(formattedExceptionQuantity(summary.returnQuantity))",
+                    systemImage: "arrow.uturn.backward",
+                    tint: RheirTheme.Colors.warning,
+                    accessibilityIdentifier: "receipt-card-exception-return-\(accessibilitySlug)"
+                )
+            )
+        }
+
+        if summary.missingQuantity > 0 {
+            badges.append(
+                ReceiptLedgerRow.ExceptionBadge(
+                    id: "missing",
+                    label: "Missing qty \(formattedExceptionQuantity(summary.missingQuantity))",
+                    systemImage: "shippingbox",
+                    tint: RheirTheme.Colors.destructive,
+                    accessibilityIdentifier: "receipt-card-exception-missing-\(accessibilitySlug)"
+                )
+            )
+        }
+
+        if summary.needsDisputeCount > 0 {
+            badges.append(
+                ReceiptLedgerRow.ExceptionBadge(
+                    id: "dispute",
+                    label: "Needs dispute \(summary.needsDisputeCount)",
+                    systemImage: "exclamationmark.triangle",
+                    tint: RheirTheme.Colors.warning,
+                    accessibilityIdentifier: "receipt-card-exception-dispute-\(accessibilitySlug)"
+                )
+            )
+        }
+
+        if summary.resolvedCount > 0 {
+            badges.append(
+                ReceiptLedgerRow.ExceptionBadge(
+                    id: "resolved",
+                    label: "Resolved \(summary.resolvedCount)",
+                    systemImage: "checkmark.seal",
+                    tint: RheirTheme.Colors.success,
+                    accessibilityIdentifier: "receipt-card-exception-resolved-\(accessibilitySlug)"
+                )
+            )
+        }
+
+        if badges.isEmpty, summary.totalItemCount > 0 {
+            badges.append(
+                ReceiptLedgerRow.ExceptionBadge(
+                    id: "review",
+                    label: "Review \(summary.totalItemCount)",
+                    systemImage: "note.text",
+                    tint: RheirTheme.Colors.information,
+                    accessibilityIdentifier: "receipt-card-exception-review-\(accessibilitySlug)"
+                )
+            )
+        }
+
+        return badges
+    }
+
     private var paymentInfo: ReceiptLedgerRow.PaymentInfo? {
         guard !receipt.paymentMethod.isEmpty else { return nil }
 
@@ -1398,6 +1558,7 @@ struct EnhancedReceiptCard: View {
                 categoryContextSummary: categoryContextSummary,
                 refundSummary: refundSummary,
                 refundSummaryAccessibilityIdentifier: "receipt-card-refunded-total-\(accessibilitySlug)",
+                exceptionBadges: exceptionBadges,
                 paymentInfo: paymentInfo,
                 receiptNumberText: receipt.receiptNumber.isEmpty ? nil : "Receipt #\(receipt.receiptNumber)",
                 imageActionAccessibilityIdentifier: "receipt-card-view-image-\(accessibilitySlug)",
@@ -1467,6 +1628,17 @@ struct EnhancedReceiptCard: View {
         } else {
             return "creditcard"
         }
+    }
+
+    private func formattedExceptionQuantity(_ quantity: Double) -> String {
+        if quantity.rounded(.towardZero) == quantity {
+            return "\(Int(quantity))"
+        }
+
+        let formatter = NumberFormatter()
+        formatter.minimumFractionDigits = 0
+        formatter.maximumFractionDigits = 2
+        return formatter.string(from: NSNumber(value: quantity)) ?? "\(quantity)"
     }
 }
 
