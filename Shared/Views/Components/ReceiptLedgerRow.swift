@@ -6,6 +6,14 @@ struct ReceiptLedgerRow: View {
         let style: RheirStatusChip.Style
     }
 
+    struct ExceptionBadge: Identifiable {
+        let id: String
+        let label: String
+        let systemImage: String
+        let tint: Color
+        let accessibilityIdentifier: String
+    }
+
     struct PaymentInfo {
         let method: String
         let systemImage: String
@@ -27,6 +35,7 @@ struct ReceiptLedgerRow: View {
     let categoryContextSummary: String?
     let refundSummary: String?
     let refundSummaryAccessibilityIdentifier: String?
+    let exceptionBadges: [ExceptionBadge]
     let paymentInfo: PaymentInfo?
     let receiptNumberText: String?
     let imageActionAccessibilityIdentifier: String
@@ -43,6 +52,7 @@ struct ReceiptLedgerRow: View {
                 header
                 notesSection
                 categoryContextSection
+                exceptionSummarySection
                 refundSummarySection
                 footer
             }
@@ -129,6 +139,58 @@ struct ReceiptLedgerRow: View {
                     .lineLimit(2)
                 Spacer()
             }
+        }
+    }
+
+    @ViewBuilder
+    private var exceptionSummarySection: some View {
+        if !exceptionBadges.isEmpty {
+            VStack(alignment: .leading, spacing: RheirTheme.Spacing.xSmall) {
+                HStack(spacing: RheirTheme.Spacing.xSmall) {
+                    Image(systemName: "exclamationmark.bubble.fill")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(RheirTheme.Colors.warning)
+
+                    Text("Receipt Exceptions")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(RheirTheme.Colors.primaryText)
+
+                    Spacer()
+                }
+
+                LazyVGrid(
+                    columns: [
+                        GridItem(.adaptive(minimum: 120), spacing: RheirTheme.Spacing.xSmall, alignment: .leading)
+                    ],
+                    alignment: .leading,
+                    spacing: RheirTheme.Spacing.xSmall
+                ) {
+                    ForEach(exceptionBadges) { badge in
+                        HStack(spacing: RheirTheme.Spacing.xSmall) {
+                            Image(systemName: badge.systemImage)
+                                .font(.caption2.weight(.semibold))
+
+                            Text(badge.label)
+                                .font(.caption2.weight(.semibold))
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.82)
+                                .accessibilityIdentifier(badge.accessibilityIdentifier)
+                        }
+                        .foregroundStyle(badge.tint)
+                        .padding(.horizontal, RheirTheme.Spacing.small)
+                        .padding(.vertical, 5)
+                        .background(
+                            Capsule()
+                                .fill(badge.tint.opacity(0.12))
+                        )
+                    }
+                }
+            }
+            .padding(RheirTheme.Spacing.small)
+            .background(
+                RoundedRectangle(cornerRadius: RheirTheme.Radius.small, style: .continuous)
+                    .fill(RheirTheme.Colors.warning.opacity(0.08))
+            )
         }
     }
 
@@ -220,6 +282,7 @@ struct ReceiptLedgerRow: View {
             categoryContextSummary: nil,
             refundSummary: nil,
             refundSummaryAccessibilityIdentifier: nil,
+            exceptionBadges: [],
             paymentInfo: ReceiptLedgerRow.PaymentInfo(
                 method: "Chase Visa",
                 systemImage: "creditcard.fill",
@@ -246,6 +309,22 @@ struct ReceiptLedgerRow: View {
             categoryContextSummary: "2 material items: Tile, grout",
             refundSummary: "Refunded $120.00 in 1 linked refund",
             refundSummaryAccessibilityIdentifier: "preview-refund-summary",
+            exceptionBadges: [
+                .init(
+                    id: "return",
+                    label: "Return qty 2",
+                    systemImage: "arrow.uturn.backward",
+                    tint: RheirTheme.Colors.warning,
+                    accessibilityIdentifier: "preview-exception-return"
+                ),
+                .init(
+                    id: "missing",
+                    label: "Missing qty 1",
+                    systemImage: "shippingbox",
+                    tint: RheirTheme.Colors.destructive,
+                    accessibilityIdentifier: "preview-exception-missing"
+                )
+            ],
             paymentInfo: nil,
             receiptNumberText: nil,
             imageActionAccessibilityIdentifier: "preview-refund-image",
