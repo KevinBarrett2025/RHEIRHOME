@@ -229,7 +229,7 @@ struct BudgetBreakdownContentView: View {
                     }
                     .padding(.horizontal)
                     
-                    spentRemainingSection(for: project)
+                    projectOverviewHero(for: project)
                     
                     categorySection(for: project)
                     
@@ -266,45 +266,23 @@ struct BudgetBreakdownContentView: View {
     }
     
     @ViewBuilder
-    private func spentRemainingSection(for project: Project) -> some View {
+    private func projectOverviewHero(for project: Project) -> some View {
         let spent = calculateTotalSpent()
         let remaining = project.totalBudget - spent
         let percentageUsed = project.totalBudget > 0 ? (spent / project.totalBudget) * 100 : 0
-        
-        HStack(spacing: 20) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Spent")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                Text(spent.formatAsCurrency())
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .foregroundColor(spent > project.totalBudget ? .red : .primary)
-            }
-            
-            VStack(alignment: .center, spacing: 4) {
-                Text("Budget Used")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                Text("\(Int(percentageUsed))%")
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .foregroundColor(percentageUsed > 100 ? .red : percentageUsed > 80 ? .orange : .green)
-            }
-            
-            VStack(alignment: .trailing, spacing: 4) {
-                Text("Remaining")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                Text(remaining.formatAsCurrency())
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .foregroundColor(remaining < 0 ? .red : .green)
-            }
-        }
-        .padding()
-        .background(Color(.systemGray6))
-        .cornerRadius(12)
+
+        ProjectOverviewHeroCard(
+            projectName: project.name,
+            clientName: project.client,
+            statusLabel: project.status.rawValue,
+            statusTint: project.status.tintColor,
+            spentValue: spent.formatAsCurrency(),
+            spentTint: spent > project.totalBudget ? .red : .primary,
+            budgetUsedValue: "\(Int(percentageUsed))%",
+            budgetUsedTint: percentageUsed > 100 ? .red : percentageUsed > 80 ? .orange : .green,
+            remainingValue: remaining.formatAsCurrency(),
+            remainingTint: remaining < 0 ? .red : .green
+        )
         .padding(.horizontal)
     }
     
