@@ -13,41 +13,14 @@ struct CategoryRowView: View {
     @State private var showingCategoryReceipts = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(title)
-                    .font(.callout)
-                    .fontWeight(.semibold)
-                    .underline()
-                    .foregroundColor(.primary)
-                Spacer()
-                HStack(spacing: 2) {
-                    Text(formatCurrency(spent))
-                    Text("/")
-                    Text(formatCurrency(total))
-                }
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-            }
-
-            let fraction = total > 0 ? min(max(spent/total, 0), 1) : 0
-
-            let barColor: Color = {
-                switch fraction {
-                case ..<0.5:    return .green
-                case 0.5..<0.8: return .yellow
-                default:        return .red
-                }
-            }()
-
-            FadingProgressBar(value: fraction, color: barColor)
-                .frame(height: 8)
-
-            Text("Remaining: \(formatCurrency(total - spent))")
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .padding(.leading, 4)
-        }
+        BudgetCategoryRow(
+            title: title,
+            spentValue: formatCurrency(spent),
+            totalValue: formatCurrency(total),
+            remainingValue: formatCurrency(total - spent),
+            progressFraction: progressFraction,
+            statusTint: barColor
+        )
         .onTapGesture {
             if let _ = linkCategory {
                 showingCategoryReceipts = true
@@ -70,6 +43,18 @@ struct CategoryRowView: View {
         formatter.numberStyle = .currency
         formatter.locale = Locale.current
         return formatter.string(from: NSNumber(value: amount)) ?? "$0.00"
+    }
+
+    private var progressFraction: Double {
+        total > 0 ? min(max(spent/total, 0), 1) : 0
+    }
+
+    private var barColor: Color {
+        switch progressFraction {
+        case ..<0.5:    return .green
+        case 0.5..<0.8: return .yellow
+        default:        return .red
+        }
     }
 }
 
