@@ -15,7 +15,8 @@ struct ProjectOverviewHeroCard: View {
     var body: some View {
         RheirCard(
             padding: RheirTheme.Spacing.large,
-            background: RheirTheme.Colors.cardBackground
+            background: RheirTheme.Colors.cardBackground,
+            borderColor: statusTint.opacity(0.28)
         ) {
             VStack(alignment: .leading, spacing: RheirTheme.Spacing.large) {
                 header
@@ -68,16 +69,16 @@ struct ProjectOverviewHeroCard: View {
         .foregroundStyle(RheirTheme.Colors.secondaryText)
         .padding(.horizontal, RheirTheme.Spacing.small)
         .frame(minHeight: 28)
-        .background(RheirTheme.Colors.insetBackground, in: Capsule())
+        .background(statusTint.opacity(0.12), in: Capsule())
         .overlay(
             Capsule()
-                .stroke(RheirTheme.Colors.subtleBorder, lineWidth: 1)
+                .stroke(statusTint.opacity(0.24), lineWidth: 1)
         )
         .accessibilityElement(children: .combine)
     }
 
     private var budgetSummary: some View {
-        HStack(alignment: .top, spacing: RheirTheme.Spacing.medium) {
+        HStack(alignment: .top, spacing: RheirTheme.Spacing.small) {
             overviewMetric(
                 title: "Spent",
                 value: spentValue,
@@ -106,6 +107,15 @@ struct ProjectOverviewHeroCard: View {
             )
         }
         .frame(minHeight: 56)
+        .padding(RheirTheme.Spacing.small)
+        .background(
+            RoundedRectangle(cornerRadius: RheirTheme.Radius.medium, style: .continuous)
+                .fill(RheirTheme.Colors.insetBackground)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: RheirTheme.Radius.medium, style: .continuous)
+                .stroke(RheirTheme.Colors.subtleBorder, lineWidth: 1)
+        )
     }
 
     private func overviewMetric(title: String, value: String, tint: Color, alignment: MetricAlignment) -> some View {
@@ -116,10 +126,10 @@ struct ProjectOverviewHeroCard: View {
                 .lineLimit(1)
 
             Text(value)
-                .font(.title3.weight(.bold))
+                .font(.subheadline.weight(.bold))
                 .foregroundStyle(tint)
                 .lineLimit(1)
-                .minimumScaleFactor(0.76)
+                .minimumScaleFactor(0.68)
         }
         .frame(maxWidth: .infinity, alignment: alignment.frameAlignment)
     }
