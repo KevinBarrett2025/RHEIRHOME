@@ -1478,6 +1478,50 @@ struct ProjectOperationsFoundationTests {
     }
 
     @Test
+    func projectReceiptExceptionReconciliationLookupsFilterBySourceAndRefundLinks() {
+        let firstItemID = UUID(uuidString: "413E5981-28C1-4E10-B43B-ABBB72891008")!
+        let secondItemID = UUID(uuidString: "413E5981-28C1-4E10-B43B-ABBB72891009")!
+        var project = Project(
+            name: "Reconciliation Lookup Project",
+            client: "Client A",
+            totalBudget: 50_000,
+            startDate: Date(timeIntervalSince1970: 1_747_260_000),
+            endDate: Date(timeIntervalSince1970: 1_747_346_400),
+            organizationID: "org-receipt-reconciliation"
+        )
+        let firstRecord = ReceiptExceptionReconciliation(
+            sourceReceiptID: "source-a",
+            sourceItemID: firstItemID,
+            kind: .returnQuantity,
+            quantity: 2,
+            outcome: .refundReceipt,
+            refundReceiptID: "refund-a",
+            refundItemID: firstItemID
+        )
+        let secondRecord = ReceiptExceptionReconciliation(
+            sourceReceiptID: "source-a",
+            sourceItemID: secondItemID,
+            kind: .missingQuantity,
+            quantity: 1,
+            outcome: .replacement
+        )
+        let thirdRecord = ReceiptExceptionReconciliation(
+            sourceReceiptID: "source-b",
+            sourceItemID: firstItemID,
+            kind: .returnQuantity,
+            quantity: 1,
+            outcome: .storeCredit,
+            refundReceiptID: "refund-b"
+        )
+        project.receiptExceptionReconciliations = [firstRecord, secondRecord, thirdRecord]
+
+        #expect(project.activeReceiptExceptionReconciliations.count == 3)
+        #expect(project.receiptExceptionReconciliations(forSourceReceiptID: "source-a") == [firstRecord, secondRecord])
+        #expect(project.receiptExceptionReconciliations(forSourceReceiptID: "source-a", sourceItemID: firstItemID) == [firstRecord])
+        #expect(project.receiptExceptionReconciliations(linkedToRefundReceiptID: "refund-a") == [firstRecord])
+    }
+
+    @Test
     func receiptExceptionReconciliationQuantitiesNormalizeSafely() {
         let itemID = UUID(uuidString: "413E5981-28C1-4E10-B43B-ABBB72891006")!
         let negative = ReceiptExceptionReconciliation(
@@ -2465,6 +2509,170 @@ struct ProjectMutationPropagationTests {
     }
 
     @Test
+    func receiptExceptionReconciliationHelpersPersistLookupAndRemoveWithoutChangingMoney() async throws {
+        let suiteName = "ReceiptExceptionReconciliationMutationTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let orgID = UUID().uuidString
+        let repository = RecordingProjectRepository()
+        let projectStore = ProjectStore(userDefaults: defaults)
+        let viewModel = ProjectViewModel(
+            offlineDataManager: OfflineDataManager(networkMonitoringEnabled: false),
+            projectStore: projectStore,
+            projectRepository: repository
+        )
+        viewModel.setCurrentOrganization(
+            Organization(id: orgID, name: "Personal Workspace"),
+            role: .admin
+        )
+
+        let projectID = UUID()
+        let baselineDate = Date(timeIntervalSince1970: 1_714_030_000)
+        var source = Receipt(
+            id: "reconciliation-mutation-source",
+            vendor: "Home Depot",
+            date: baselineDate,
+            amount: 107,
+            category: .material,
+            paymentMethod: "Card",
+            taxAmount: 7
+        )
+        let sourceItem = ReceiptItem(
+            id: UUID(uuidString: "413E5981-28C1-4E10-B43B-ABBB72892001")!,
+            name: "Water supply line",
+            quantity: 4,
+            unitPrice: 25,
+            totalPrice: 100,
+            category: .plumbing,
+            exceptionMetadata: ReceiptItemExceptionMetadata(
+                returnQuantity: 2,
+                missingQuantity: 1,
+                status: .disputeNeeded,
+                notes: "Pickup order count did not match paid receipt."
+            )
+        )
+        source.items = [sourceItem]
+        let refund = try #require(
+            source.makePartialRefund(
+                selections: [ReceiptRefundSelection(itemID: sourceItem.id, quantity: 2)],
+                existingReceipts: [],
+                refundDate: baselineDate.addingTimeInterval(86_400),
+                receiptNumber: "RET-400"
+            )
+        )
+        let project = Project(
+            id: projectID,
+            name: "Reconciliation Mutation Project",
+            client: "Client R",
+            totalBudget: 40_000,
+            startDate: baselineDate,
+            endDate: baselineDate.addingTimeInterval(86_400),
+            organizationID: orgID,
+            lastModifiedDate: baselineDate
+        )
+        var seededProject = project
+        seededProject.receipts = [source, refund]
+        viewModel.projects = [seededProject]
+        viewModel.organizationProjects = [seededProject]
+        viewModel.selectedProject = seededProject
+        viewModel.updateAccessibleProjects()
+
+        let reconciliationID = UUID(uuidString: "413E5981-28C1-4E10-B43B-ABBB72892002")!
+        await viewModel.addOrUpdateReceiptExceptionReconciliation(
+            ReceiptExceptionReconciliation(
+                id: reconciliationID,
+                sourceReceiptID: source.id,
+                sourceItemID: sourceItem.id,
+                kind: .returnQuantity,
+                quantity: 8,
+                outcome: .refundReceipt,
+                refundReceiptID: refund.id,
+                refundItemID: refund.items.first?.id,
+                resolvedDate: refund.date,
+                notes: "Refund received for extra supply lines.",
+                createdAt: baselineDate,
+                updatedAt: baselineDate
+            ),
+            in: projectID
+        )
+
+        var persistedProject = try #require(projectStore.loadProjects(for: orgID).first { $0.id == projectID })
+        let storedReconciliation = try #require(persistedProject.receiptExceptionReconciliations?.first)
+        #expect(storedReconciliation.quantity == 4)
+        #expect(storedReconciliation.refundReceiptID == refund.id)
+        #expect(viewModel.selectedProject?.receiptExceptionReconciliations(forSourceReceiptID: source.id).count == 1)
+        #expect(viewModel.selectedProject?.receiptExceptionReconciliations(forSourceReceiptID: source.id, sourceItemID: sourceItem.id).first?.id == reconciliationID)
+        #expect(viewModel.selectedProject?.receiptExceptionReconciliations(linkedToRefundReceiptID: refund.id).first?.id == reconciliationID)
+        #expect(persistedProject.lastModifiedDate > baselineDate)
+
+        let unrelatedID = UUID(uuidString: "413E5981-28C1-4E10-B43B-ABBB72892003")!
+        await viewModel.addOrUpdateReceiptExceptionReconciliation(
+            ReceiptExceptionReconciliation(
+                id: unrelatedID,
+                sourceReceiptID: "other-source",
+                sourceItemID: UUID(uuidString: "413E5981-28C1-4E10-B43B-ABBB72892004")!,
+                kind: .missingQuantity,
+                quantity: 1,
+                outcome: .replacement,
+                notes: "Replacement picked up later.",
+                createdAt: baselineDate,
+                updatedAt: baselineDate
+            ),
+            in: projectID
+        )
+
+        await viewModel.addOrUpdateReceiptExceptionReconciliation(
+            ReceiptExceptionReconciliation(
+                id: reconciliationID,
+                sourceReceiptID: source.id,
+                sourceItemID: sourceItem.id,
+                kind: .returnQuantity,
+                quantity: 2,
+                outcome: .storeCredit,
+                refundReceiptID: "store-credit-400",
+                notes: "Changed to store credit after service desk correction.",
+                createdAt: baselineDate,
+                updatedAt: baselineDate
+            ),
+            in: projectID
+        )
+
+        persistedProject = try #require(projectStore.loadProjects(for: orgID).first { $0.id == projectID })
+        let updatedRecords = try #require(persistedProject.receiptExceptionReconciliations)
+        #expect(updatedRecords.count == 2)
+        #expect(updatedRecords.first { $0.id == reconciliationID }?.quantity == 2)
+        #expect(updatedRecords.first { $0.id == reconciliationID }?.outcome == .storeCredit)
+        #expect(updatedRecords.first { $0.id == reconciliationID }?.refundReceiptID == "store-credit-400")
+        #expect(updatedRecords.first { $0.id == unrelatedID }?.outcome == .replacement)
+
+        let storedSource = try #require(persistedProject.receipts.first { $0.id == source.id })
+        let storedRefund = try #require(persistedProject.receipts.first { $0.id == refund.id })
+        #expect(storedSource.items.first?.exceptionMetadata?.returnQuantity == 2)
+        #expect(storedSource.items.first?.exceptionMetadata?.missingQuantity == 1)
+        #expect(storedSource.items.first?.exceptionMetadata?.status == .disputeNeeded)
+        #expect(storedSource.amount == 107)
+        #expect(storedSource.signedAmount == 107)
+        #expect(storedSource.scopedAmount(for: .plumbing) == 100)
+        #expect(storedSource.budgetScopedAmount(for: .material) == 100)
+        #expect(storedRefund.amount == 53.5)
+        #expect(storedRefund.signedAmount == -53.5)
+        #expect(storedRefund.scopedAmount(for: .plumbing) == -50)
+        #expect(storedSource.refundedAmount(in: persistedProject.receipts) == 53.5)
+        #expect(storedSource.remainingRefundableAmount(in: persistedProject.receipts) == 53.5)
+
+        await viewModel.removeReceiptExceptionReconciliation(reconciliationID, from: projectID)
+
+        let afterRemovalProject = try #require(projectStore.loadProjects(for: orgID).first { $0.id == projectID })
+        #expect(afterRemovalProject.receiptExceptionReconciliations?.map(\.id) == [unrelatedID])
+        #expect(afterRemovalProject.receipts.first { $0.id == source.id }?.items.first?.exceptionMetadata?.status == .disputeNeeded)
+        #expect(repository.savedProjects.last?.project.receiptExceptionReconciliations?.map(\.id) == [unrelatedID])
+    }
+
+    @Test
     func deleteProjectClearsVisibleCollectionsAndSelection() async {
         let suiteName = "ProjectMutationDeletionTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
@@ -2747,6 +2955,16 @@ struct ProjectMutationPropagationTests {
         project.hiddenConditions = [
             HiddenCondition(title: "Soft subfloor", status: .needsReview)
         ]
+        project.receiptExceptionReconciliations = [
+            ReceiptExceptionReconciliation(
+                sourceReceiptID: "refresh-source",
+                sourceItemID: UUID(uuidString: "413E5981-28C1-4E10-B43B-ABBB72893001")!,
+                kind: .returnQuantity,
+                quantity: 1,
+                outcome: .refundReceipt,
+                refundReceiptID: "refresh-refund"
+            )
+        ]
 
         viewModel.projects = [project]
         viewModel.organizationProjects = [project]
@@ -2789,6 +3007,16 @@ struct ProjectMutationPropagationTests {
                 estimatedCostImpact: 900
             )
         ]
+        refreshedProject.receiptExceptionReconciliations = [
+            ReceiptExceptionReconciliation(
+                sourceReceiptID: "refresh-source",
+                sourceItemID: UUID(uuidString: "413E5981-28C1-4E10-B43B-ABBB72893001")!,
+                kind: .returnQuantity,
+                quantity: 1,
+                outcome: .storeCredit,
+                refundReceiptID: "refresh-store-credit"
+            )
+        ]
         viewModel.organizationProjects = [refreshedProject]
 
         viewModel.updateAccessibleProjects()
@@ -2801,6 +3029,8 @@ struct ProjectMutationPropagationTests {
         #expect(viewModel.accessibleProjects.first?.shoppingListItems?.first?.quantity == 2)
         #expect(viewModel.selectedProject?.hiddenConditions?.first?.title == "Soft subfloor near tub")
         #expect(viewModel.accessibleProjects.first?.hiddenConditions?.first?.estimatedCostImpact == 900)
+        #expect(viewModel.selectedProject?.receiptExceptionReconciliations?.first?.outcome == .storeCredit)
+        #expect(viewModel.accessibleProjects.first?.receiptExceptionReconciliations?.first?.refundReceiptID == "refresh-store-credit")
     }
 
     @Test
