@@ -1522,6 +1522,32 @@ struct ProjectOperationsFoundationTests {
     }
 
     @Test
+    func receiptExceptionReconciliationQuantityLimitUsesRelevantExceptionQuantity() {
+        let item = ReceiptItem(
+            name: "Water supply line",
+            quantity: 4,
+            unitPrice: 25,
+            totalPrice: 100,
+            exceptionMetadata: ReceiptItemExceptionMetadata(
+                returnQuantity: 2,
+                missingQuantity: 1,
+                status: .disputeNeeded
+            )
+        )
+        let itemWithoutExceptions = ReceiptItem(
+            name: "Supply elbow",
+            quantity: 4,
+            unitPrice: 6,
+            totalPrice: 24
+        )
+
+        #expect(item.receiptExceptionReconciliationQuantityLimit(for: .returnQuantity) == 2)
+        #expect(item.receiptExceptionReconciliationQuantityLimit(for: .missingQuantity) == 1)
+        #expect(itemWithoutExceptions.receiptExceptionReconciliationQuantityLimit(for: .returnQuantity) == 0)
+        #expect(itemWithoutExceptions.receiptExceptionReconciliationQuantityLimit(for: .missingQuantity) == 0)
+    }
+
+    @Test
     func receiptExceptionReconciliationQuantitiesNormalizeSafely() {
         let itemID = UUID(uuidString: "413E5981-28C1-4E10-B43B-ABBB72891006")!
         let negative = ReceiptExceptionReconciliation(
@@ -2602,7 +2628,7 @@ struct ProjectMutationPropagationTests {
 
         var persistedProject = try #require(projectStore.loadProjects(for: orgID).first { $0.id == projectID })
         let storedReconciliation = try #require(persistedProject.receiptExceptionReconciliations?.first)
-        #expect(storedReconciliation.quantity == 4)
+        #expect(storedReconciliation.quantity == 2)
         #expect(storedReconciliation.refundReceiptID == refund.id)
         #expect(viewModel.selectedProject?.receiptExceptionReconciliations(forSourceReceiptID: source.id).count == 1)
         #expect(viewModel.selectedProject?.receiptExceptionReconciliations(forSourceReceiptID: source.id, sourceItemID: sourceItem.id).first?.id == reconciliationID)

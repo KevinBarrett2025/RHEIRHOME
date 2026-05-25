@@ -857,6 +857,19 @@ public struct ReceiptExceptionReconciliation: Identifiable, Codable, Hashable, S
     }
 }
 
+public extension ReceiptItem {
+    func receiptExceptionReconciliationQuantityLimit(
+        for kind: ReceiptExceptionReconciliationKind
+    ) -> Double {
+        switch kind {
+        case .returnQuantity:
+            return returnExceptionQuantity
+        case .missingQuantity:
+            return missingExceptionQuantity
+        }
+    }
+}
+
 public struct ProjectAssistantSnapshot: Sendable {
     public let generatedAt: Date
     public let overdueTasks: [ProjectTask]

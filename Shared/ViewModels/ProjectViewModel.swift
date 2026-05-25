@@ -1832,7 +1832,9 @@ class ProjectViewModel: ObservableObject {
     ) -> ReceiptExceptionReconciliation {
         if let sourceReceipt = project.receipts.first(where: { $0.id == reconciliation.sourceReceiptID }),
            let sourceItem = sourceReceipt.items.first(where: { $0.id == reconciliation.sourceItemID }) {
-            return reconciliation.normalized(for: sourceItem.quantity)
+            return reconciliation.normalized(
+                for: sourceItem.receiptExceptionReconciliationQuantityLimit(for: reconciliation.kind)
+            )
         }
 
         return ReceiptExceptionReconciliation(
