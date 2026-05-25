@@ -16,9 +16,11 @@ struct ReceiptDetailView: View {
     @State private var refundingReceipt: Receipt?
     @State private var linkedReceiptToView: Receipt?
     @State private var reconciliationEditorContext: ReceiptExceptionReconciliationEditorContext?
+    @State private var pendingReconciliationRemoval: ReceiptExceptionReconciliationRemoval?
     @State private var showingDeleteAlert = false
     @State private var showingReverseRefundAlert = false
     @State private var showingImageViewer = false
+    @State private var showingRemoveReconciliationAlert = false
 
     private var currentReceipt: Receipt {
         projectVM.selectedProject?.receipts.first(where: { $0.id == receipt.id }) ?? receipt
@@ -121,6 +123,19 @@ struct ReceiptDetailView: View {
             ReceiptExceptionReconciliationEditorView(context: context) { reconciliation in
                 saveReconciliation(reconciliation)
             }
+        }
+        .alert("Remove Outcome?", isPresented: $showingRemoveReconciliationAlert) {
+            Button("Cancel", role: .cancel) {
+                pendingReconciliationRemoval = nil
+            }
+            Button("Remove Outcome", role: .destructive) {
+                if let pendingReconciliationRemoval {
+                    removeReconciliation(pendingReconciliationRemoval.reconciliation)
+                }
+                pendingReconciliationRemoval = nil
+            }
+        } message: {
+            Text(pendingReconciliationRemoval?.message ?? "This removes the manual outcome record. It does not change receipt totals or budget totals.")
         }
         .navigationDestination(item: $linkedReceiptToView) { linkedReceipt in
             ReceiptDetailView(receipt: linkedReceipt)
@@ -283,6 +298,17 @@ struct ReceiptDetailView: View {
         Task {
             await projectVM.removeReceiptExceptionReconciliation(reconciliation.id, from: projectID)
         }
+    }
+
+    private func confirmRemovingReconciliation(
+        _ reconciliation: ReceiptExceptionReconciliation,
+        for item: ReceiptItem
+    ) {
+        pendingReconciliationRemoval = ReceiptExceptionReconciliationRemoval(
+            reconciliation: reconciliation,
+            itemName: item.name
+        )
+        showingRemoveReconciliationAlert = true
     }
     
     @ViewBuilder
@@ -570,7 +596,7 @@ struct ReceiptDetailView: View {
                         startEditingReconciliation(reconciliation, for: item)
                     },
                     onRemoveReconciliation: { reconciliation in
-                        removeReconciliation(reconciliation)
+                        confirmRemovingReconciliation(reconciliation, for: item)
                     }
                 )
                 
@@ -727,6 +753,10 @@ private struct ReceiptDetailItemRow: View {
         hasRefund || item.hasAnyLineItemException || !reconciliations.isEmpty
     }
 
+    private var reconciliationSummary: ReconciliationSummary {
+        ReconciliationSummary(item: item, reconciliations: reconciliations)
+    }
+
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             if isHighlighted {
@@ -775,6 +805,10 @@ private struct ReceiptDetailItemRow: View {
 
                 if item.hasAnyLineItemException {
                     lineItemExceptionChips
+                }
+
+                if item.hasAnyLineItemException && reconciliationSummary.hasReconciledQuantity {
+                    reconciliationProgressSection
                 }
 
                 if item.hasAnyLineItemException || !reconciliations.isEmpty {
@@ -877,6 +911,32 @@ private struct ReceiptDetailItemRow: View {
             .padding(.vertical, 3)
             .background(color)
             .clipShape(RoundedRectangle(cornerRadius: 6))
+            .accessibilityIdentifier(identifier)
+    }
+
+    @ViewBuilder
+    private var reconciliationProgressSection: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if reconciliationSummary.reconciledReturnQuantity > 0 {
+                reconciliationProgressText(
+                    "Outcome recorded: \(quantityLabel(reconciliationSummary.reconciledReturnQuantity)) of \(quantityLabel(item.returnExceptionQuantity)) return qty",
+                    identifier: "receipt-detail-item-reconciliation-return-progress-\(accessibilitySlug)"
+                )
+            }
+
+            if reconciliationSummary.reconciledMissingQuantity > 0 {
+                reconciliationProgressText(
+                    "Outcome recorded: \(quantityLabel(reconciliationSummary.reconciledMissingQuantity)) of \(quantityLabel(item.missingExceptionQuantity)) missing qty",
+                    identifier: "receipt-detail-item-reconciliation-missing-progress-\(accessibilitySlug)"
+                )
+            }
+        }
+    }
+
+    private func reconciliationProgressText(_ text: String, identifier: String) -> some View {
+        Label(text, systemImage: "checkmark.seal.fill")
+            .font(.caption2.weight(.semibold))
+            .foregroundColor(.green)
             .accessibilityIdentifier(identifier)
     }
 
@@ -1013,6 +1073,63 @@ private struct ReceiptExceptionReconciliationEditorContext: Identifiable {
     }
 }
 
+private struct ReceiptExceptionReconciliationRemoval: Identifiable {
+    let id: UUID
+    let reconciliation: ReceiptExceptionReconciliation
+    let itemName: String
+
+    init(reconciliation: ReceiptExceptionReconciliation, itemName: String) {
+        self.id = reconciliation.id
+        self.reconciliation = reconciliation
+        self.itemName = itemName
+    }
+
+    var outcomeLabel: String {
+        switch reconciliation.outcome {
+        case .refundReceipt:
+            return "refund receipt"
+        case .storeCredit:
+            return "store credit"
+        case .replacement:
+            return "replacement"
+        case .disputeResolved:
+            return "dispute resolved"
+        case .noCredit:
+            return "no credit"
+        case .other:
+            return "other"
+        }
+    }
+
+    var message: String {
+        "This removes the manual \(outcomeLabel) record for \(itemName). It does not change receipt totals or budget totals."
+    }
+}
+
+private struct ReconciliationSummary {
+    let reconciledReturnQuantity: Double
+    let reconciledMissingQuantity: Double
+
+    init(item: ReceiptItem, reconciliations: [ReceiptExceptionReconciliation]) {
+        reconciledReturnQuantity = min(
+            item.returnExceptionQuantity,
+            reconciliations
+                .filter { $0.kind == .returnQuantity }
+                .reduce(0.0) { $0 + max(0, $1.quantity) }
+        )
+        reconciledMissingQuantity = min(
+            item.missingExceptionQuantity,
+            reconciliations
+                .filter { $0.kind == .missingQuantity }
+                .reduce(0.0) { $0 + max(0, $1.quantity) }
+        )
+    }
+
+    var hasReconciledQuantity: Bool {
+        reconciledReturnQuantity > 0 || reconciledMissingQuantity > 0
+    }
+}
+
 private struct ReceiptExceptionReconciliationEditorView: View {
     let context: ReceiptExceptionReconciliationEditorContext
     let onSave: (ReceiptExceptionReconciliation) -> Void
@@ -1054,7 +1171,11 @@ private struct ReceiptExceptionReconciliationEditorView: View {
     }
 
     private var parsedQuantity: Double {
-        min(max(Double(quantity) ?? 0, 0), max(context.item.quantity, 0))
+        min(max(Double(quantity) ?? 0, 0), maxAllowedQuantity)
+    }
+
+    private var maxAllowedQuantity: Double {
+        context.item.receiptExceptionReconciliationQuantityLimit(for: kind)
     }
 
     private var canSave: Bool {
@@ -1070,6 +1191,10 @@ private struct ReceiptExceptionReconciliationEditorView: View {
                     Text("Receipt quantity: \(quantityLabel(context.item.quantity))")
                         .font(.caption)
                         .foregroundColor(.secondary)
+                    Text("Available \(kindLabel(kind).lowercased()) exception qty: \(quantityLabel(maxAllowedQuantity))")
+                        .font(.caption)
+                        .foregroundColor(maxAllowedQuantity > 0 ? .secondary : .red)
+                        .accessibilityIdentifier("receipt-reconciliation-available-quantity")
                 }
 
                 Section {
@@ -1109,7 +1234,7 @@ private struct ReceiptExceptionReconciliationEditorView: View {
                 } header: {
                     Text("Manual Outcome")
                 } footer: {
-                    Text("This records what happened after the exception. It does not create refunds or change receipt and budget totals.")
+                    Text("This records what happened after the exception. Quantity is capped to the selected exception quantity and does not create refunds or change receipt and budget totals.")
                 }
             }
             .navigationTitle(context.existingReconciliation == nil ? "Record Outcome" : "Update Outcome")
@@ -1161,6 +1286,15 @@ private struct ReceiptExceptionReconciliationEditorView: View {
 
     private static func quantityText(_ quantity: Double) -> String {
         quantity.formatted(.number.precision(.fractionLength(0...2)))
+    }
+
+    private func kindLabel(_ kind: ReceiptExceptionReconciliationKind) -> String {
+        switch kind {
+        case .returnQuantity:
+            return "Return"
+        case .missingQuantity:
+            return "Missing"
+        }
     }
 
     private func outcomeLabel(_ outcome: ReceiptExceptionReconciliationOutcome) -> String {
