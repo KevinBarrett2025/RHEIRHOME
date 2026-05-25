@@ -31,6 +31,7 @@ private struct ProjectRefreshSignature: Equatable {
     let projectCalendarEvents: [ProjectCalendarEvent]?
     let shoppingListItems: [ProjectShoppingListItem]?
     let hiddenConditions: [HiddenCondition]?
+    let receiptExceptionReconciliations: [ReceiptExceptionReconciliation]?
 
     init(_ project: Project) {
         let normalizedProject = project.normalizedReceiptCopy
@@ -48,6 +49,7 @@ private struct ProjectRefreshSignature: Equatable {
         projectCalendarEvents = normalizedProject.projectCalendarEvents
         shoppingListItems = normalizedProject.shoppingListItems
         hiddenConditions = normalizedProject.hiddenConditions
+        receiptExceptionReconciliations = normalizedProject.receiptExceptionReconciliations
     }
 }
 
@@ -1775,6 +1777,77 @@ class ProjectViewModel: ObservableObject {
             updatedProject,
             reason: reason,
             selectProject: selectedProject?.id == projectID
+        )
+    }
+
+    func addOrUpdateReceiptExceptionReconciliation(
+        _ reconciliation: ReceiptExceptionReconciliation,
+        in projectID: UUID
+    ) async {
+        guard var updatedProject = projectForMutation(projectID: projectID) else { return }
+
+        var reconciliationToStore = normalizedReceiptExceptionReconciliation(
+            reconciliation,
+            in: updatedProject
+        )
+        reconciliationToStore.updatedAt = Date()
+
+        var reconciliations = updatedProject.receiptExceptionReconciliations ?? []
+        let reason: String
+        if let reconciliationIndex = reconciliations.firstIndex(where: { $0.id == reconciliation.id }) {
+            reconciliations[reconciliationIndex] = reconciliationToStore
+            reason = "update receipt exception reconciliation"
+        } else {
+            reconciliations.append(reconciliationToStore)
+            reason = "add receipt exception reconciliation"
+        }
+        updatedProject.receiptExceptionReconciliations = reconciliations
+
+        await commitProjectMutation(
+            updatedProject,
+            reason: reason,
+            selectProject: selectedProject?.id == projectID
+        )
+    }
+
+    func removeReceiptExceptionReconciliation(_ reconciliationID: UUID, from projectID: UUID) async {
+        guard var updatedProject = projectForMutation(projectID: projectID),
+              var reconciliations = updatedProject.receiptExceptionReconciliations,
+              reconciliations.contains(where: { $0.id == reconciliationID })
+        else { return }
+
+        reconciliations.removeAll { $0.id == reconciliationID }
+        updatedProject.receiptExceptionReconciliations = reconciliations
+
+        await commitProjectMutation(
+            updatedProject,
+            reason: "remove receipt exception reconciliation",
+            selectProject: selectedProject?.id == projectID
+        )
+    }
+
+    private func normalizedReceiptExceptionReconciliation(
+        _ reconciliation: ReceiptExceptionReconciliation,
+        in project: Project
+    ) -> ReceiptExceptionReconciliation {
+        if let sourceReceipt = project.receipts.first(where: { $0.id == reconciliation.sourceReceiptID }),
+           let sourceItem = sourceReceipt.items.first(where: { $0.id == reconciliation.sourceItemID }) {
+            return reconciliation.normalized(for: sourceItem.quantity)
+        }
+
+        return ReceiptExceptionReconciliation(
+            id: reconciliation.id,
+            sourceReceiptID: reconciliation.sourceReceiptID,
+            sourceItemID: reconciliation.sourceItemID,
+            kind: reconciliation.kind,
+            quantity: max(0, reconciliation.quantity),
+            outcome: reconciliation.outcome,
+            refundReceiptID: reconciliation.refundReceiptID,
+            refundItemID: reconciliation.refundItemID,
+            resolvedDate: reconciliation.resolvedDate,
+            notes: reconciliation.notes,
+            createdAt: reconciliation.createdAt,
+            updatedAt: reconciliation.updatedAt
         )
     }
     

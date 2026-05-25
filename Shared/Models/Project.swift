@@ -1001,6 +1001,26 @@ public extension Project {
         (hiddenConditions ?? []).sortedForHiddenConditions()
     }
 
+    var activeReceiptExceptionReconciliations: [ReceiptExceptionReconciliation] {
+        receiptExceptionReconciliations ?? []
+    }
+
+    func receiptExceptionReconciliations(forSourceReceiptID sourceReceiptID: String) -> [ReceiptExceptionReconciliation] {
+        activeReceiptExceptionReconciliations.filter { $0.sourceReceiptID == sourceReceiptID }
+    }
+
+    func receiptExceptionReconciliations(
+        forSourceReceiptID sourceReceiptID: String,
+        sourceItemID: UUID
+    ) -> [ReceiptExceptionReconciliation] {
+        receiptExceptionReconciliations(forSourceReceiptID: sourceReceiptID)
+            .filter { $0.sourceItemID == sourceItemID }
+    }
+
+    func receiptExceptionReconciliations(linkedToRefundReceiptID refundReceiptID: String) -> [ReceiptExceptionReconciliation] {
+        activeReceiptExceptionReconciliations.filter { $0.refundReceiptID == refundReceiptID }
+    }
+
     func operationsSummary(
         on date: Date = Date(),
         calendar: Calendar = .current,
