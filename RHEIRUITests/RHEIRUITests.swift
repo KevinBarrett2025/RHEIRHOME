@@ -1434,6 +1434,75 @@ final class RHEIRUITests: XCTestCase {
         )
         XCTAssertEqual(notesText.label, "One extra, one missing at pickup.")
 
+        let recordOutcomeButton = revealElement(
+            identifier: "receipt-detail-item-reconciliation-add-primer",
+            in: app,
+            query: { $0.buttons["receipt-detail-item-reconciliation-add-primer"] }
+        )
+        XCTAssertTrue(
+            recordOutcomeButton.waitForExistence(timeout: 5),
+            "Expected receipt detail to expose a manual reconciliation outcome action for exception line items."
+        )
+        recordOutcomeButton.tap()
+
+        let reconciliationNavBar = app.navigationBars["Record Outcome"]
+        XCTAssertTrue(
+            reconciliationNavBar.waitForExistence(timeout: 5),
+            "Expected tapping Record outcome to present the manual reconciliation editor."
+        )
+
+        let reconciliationQuantityField = app.textFields["receipt-reconciliation-quantity"]
+        XCTAssertTrue(
+            reconciliationQuantityField.waitForExistence(timeout: 5),
+            "Expected the reconciliation editor to expose quantity tracking."
+        )
+        replaceText(in: reconciliationQuantityField, with: "1", app: app)
+
+        let reconciliationNotesField = revealElement(
+            identifier: "receipt-reconciliation-notes",
+            in: app,
+            query: { $0.textFields["receipt-reconciliation-notes"] }
+        )
+        XCTAssertTrue(
+            reconciliationNotesField.waitForExistence(timeout: 5),
+            "Expected the reconciliation editor to expose optional outcome notes."
+        )
+        replaceText(in: reconciliationNotesField, with: "Service desk confirmed dispute outcome.", app: app)
+        dismissEditingFocusIfNeeded(in: app, navigationBar: reconciliationNavBar)
+
+        let saveReconciliationButton = app.buttons["receipt-reconciliation-save"]
+        XCTAssertTrue(
+            waitForEnabled(saveReconciliationButton, timeout: 5),
+            "Expected reconciliation save to become enabled for a positive quantity."
+        )
+        saveReconciliationButton.tap()
+
+        XCTAssertTrue(
+            app.navigationBars["Receipt Details"].waitForExistence(timeout: 5),
+            "Expected saving the manual reconciliation outcome to return to receipt detail."
+        )
+
+        let reconciliationOutcomeChip = revealElement(
+            identifier: "receipt-detail-item-reconciliation-outcome-primer",
+            in: app,
+            query: { $0.staticTexts["receipt-detail-item-reconciliation-outcome-primer"] }
+        )
+        XCTAssertEqual(reconciliationOutcomeChip.label, "Dispute resolved")
+
+        let reconciliationQuantityText = revealElement(
+            identifier: "receipt-detail-item-reconciliation-quantity-primer",
+            in: app,
+            query: { $0.staticTexts["receipt-detail-item-reconciliation-quantity-primer"] }
+        )
+        XCTAssertEqual(reconciliationQuantityText.label, "Return qty 1")
+
+        let reconciliationNotesText = revealElement(
+            identifier: "receipt-detail-item-reconciliation-notes-primer",
+            in: app,
+            query: { $0.staticTexts["receipt-detail-item-reconciliation-notes-primer"] }
+        )
+        XCTAssertEqual(reconciliationNotesText.label, "Service desk confirmed dispute outcome.")
+
         app.navigationBars["Receipt Details"].buttons.firstMatch.tap()
 
         let updatedReceiptCard = app.buttons["receipt-card-\(vendorName)"]
