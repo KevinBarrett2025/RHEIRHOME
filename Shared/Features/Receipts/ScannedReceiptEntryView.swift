@@ -1,6 +1,28 @@
 import SwiftUI
 import OSLog
 
+struct ReceiptScannerSaveState: Equatable {
+    private(set) var isSaving = false
+    private(set) var pendingReceiptID: String?
+
+    mutating func beginSave(canSave: Bool) -> String? {
+        guard canSave, !isSaving else { return nil }
+
+        isSaving = true
+        let receiptID = pendingReceiptID ?? UUID().uuidString
+        pendingReceiptID = receiptID
+        return receiptID
+    }
+
+    mutating func finishSave(succeeded: Bool) {
+        isSaving = false
+
+        if succeeded {
+            pendingReceiptID = nil
+        }
+    }
+}
+
 struct ScannedReceiptEntryView: View {
     @Binding var isPresented: Bool
     let project: Project
@@ -34,9 +56,12 @@ struct ScannedReceiptEntryView: View {
     
     // UI states
     @State private var showingSuccessAlert = false
+    @State private var showingSaveFailureAlert = false
     @State private var successMessage = ""
+    @State private var saveFailureMessage = ""
     @State private var showingImagePreview = false
     @State private var showingItemDetails = false
+    @State private var saveState = ReceiptScannerSaveState()
     
     private var canSave: Bool {
         let hasVendor = !vendor.isEmpty
@@ -53,6 +78,10 @@ struct ScannedReceiptEntryView: View {
 
     private var currentVendorCategory: VendorCategory {
         selectedVendor?.category ?? VendorCategory.inferred(from: vendor)
+    }
+
+    private var requiresManualReview: Bool {
+        analysisResult.confidence < 0.6
     }
     
     var body: some View {
@@ -74,13 +103,14 @@ struct ScannedReceiptEntryView: View {
                     Button("Cancel") { 
                         isPresented = false
                     }
+                    .disabled(saveState.isSaving)
                     .accessibilityIdentifier("receipt-scan-cancel")
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
+                    Button(saveState.isSaving ? "Saving..." : "Save") {
                         saveReceipt()
                     }
-                    .disabled(!canSave)
+                    .disabled(!canSave || saveState.isSaving)
                     .accessibilityIdentifier("receipt-scan-save")
                 }
             }
@@ -94,6 +124,11 @@ struct ScannedReceiptEntryView: View {
                 }
             } message: {
                 Text(successMessage)
+            }
+            .alert("Receipt Save Failed", isPresented: $showingSaveFailureAlert) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(saveFailureMessage)
             }
             .sheet(isPresented: $showingVendorPicker) {
                 SimpleVendorPickerView(
@@ -132,9 +167,9 @@ struct ScannedReceiptEntryView: View {
                     .foregroundColor(.purple)
                 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("AI Analysis Complete")
+                    Text(requiresManualReview ? "Receipt Review Required" : "Receipt Analysis Complete")
                         .font(.headline)
-                        .foregroundColor(.purple)
+                        .foregroundColor(requiresManualReview ? .orange : .purple)
                     
                     HStack {
                         Text("Confidence:")
@@ -161,7 +196,7 @@ struct ScannedReceiptEntryView: View {
                 .buttonStyle(.bordered)
             }
         } header: {
-            Text("🤖 AI Processing Results")
+            Text(requiresManualReview ? "OCR Review Results" : "Receipt Processing Results")
         }
     }
     
@@ -558,7 +593,8 @@ struct ScannedReceiptEntryView: View {
     }
     
     private func saveReceipt() {
-        guard let amountValue = Double(amountText) else { return }
+        guard let amountValue = Double(amountText),
+              let receiptID = saveState.beginSave(canSave: canSave) else { return }
 
         let persistedItems = analysisResult.items.map { item in
             ReceiptItem(
@@ -571,6 +607,7 @@ struct ScannedReceiptEntryView: View {
         }
 
         var receipt = Receipt(
+            id: receiptID,
             vendor: vendor,
             vendorID: selectedVendor?.id.uuidString,
             date: date,
@@ -600,18 +637,21 @@ struct ScannedReceiptEntryView: View {
 
         receipt.items = persistedItems
         
-        // CRITICAL FIX: Use the correct async method with project ID
         Task {
-            await projectVM.addReceipt(receipt, to: project.id)
+            let saveSucceeded = await projectVM.addReceipt(receipt, to: project.id)
             
-            // CRITICAL FIX: Sync vendor and payment method to organization settings
-            await syncReceiptDataToCompanySettings(receipt: receipt)
-            
-            // Save organization-specific backup to ensure persistence
-            projectVM.saveOrganizationSpecificBackup()
+            if saveSucceeded {
+                await syncReceiptDataToCompanySettings(receipt: receipt)
+            }
             
             await MainActor.run {
-                showSuccessMessage(receipt: receipt)
+                saveState.finishSave(succeeded: saveSucceeded)
+
+                if saveSucceeded {
+                    showSuccessMessage(receipt: receipt)
+                } else {
+                    showSaveFailureMessage()
+                }
             }
         }
     }
@@ -700,8 +740,13 @@ struct ScannedReceiptEntryView: View {
     private func showSuccessMessage(receipt: Receipt) {
         let amountText = String(format: "%.2f", receipt.amount)
         let confidenceText = "\(Int(analysisResult.confidence * 100))%"
-        successMessage = "🤖 AI-processed receipt saved!\n\n💰 \(receipt.vendor): $\(amountText)\n📊 Category: \(receipt.category.rawValue)\n🎯 Confidence: \(confidenceText)"
+        successMessage = "Receipt saved.\n\n💰 \(receipt.vendor): $\(amountText)\n📊 Category: \(receipt.category.rawValue)\n🎯 Confidence: \(confidenceText)"
         showingSuccessAlert = true
+    }
+
+    private func showSaveFailureMessage() {
+        saveFailureMessage = "The receipt was not saved. Please verify the selected project is loaded and try again."
+        showingSaveFailureAlert = true
     }
     
     // Add initializer for backward compatibility

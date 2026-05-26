@@ -3,6 +3,11 @@ import VisionKit
 import Vision
 import OSLog
 
+enum ReceiptScannerAIConfiguration {
+    static let directClientAnalysisEnabled = false
+    static let ocrReviewRequiredConfidence = 0.35
+}
+
 enum ReceiptScannerStep: Equatable {
     case info
     case launcher
@@ -706,28 +711,17 @@ struct ReceiptScannerView: View {
                 
                 var analysisResult: ReceiptAnalysisResult
                 
-                // Check if organization can use AI features
                 if currentOrg.subscriptionTier != .free {
-                    // Try production AI analysis
                     do {
                         analysisResult = try await performAIAnalysis(ocrText: ocrText, projectName: session.project.name)
                         Logger.receiptWorkflow.notice("Receipt scanner AI analysis completed successfully.")
                     } catch {
                         Logger.receiptWorkflow.warning(
-                            "Receipt scanner AI analysis failed; falling back to basic OCR [error=\(error.localizedDescription, privacy: .public)]"
+                            "Receipt scanner AI analysis unavailable; OCR result requires review before save [error=\(error.localizedDescription, privacy: .public)]"
                         )
-                        analysisResult = createBasicAnalysisFromOCR(ocrText)
-                        analysisResult = ReceiptAnalysisResult(
-                            vendor: analysisResult.vendor,
-                            category: analysisResult.category,
-                            amount: analysisResult.amount,
-                            taxAmount: analysisResult.taxAmount,
-                            discountAmount: analysisResult.discountAmount,
-                            paymentMethod: analysisResult.paymentMethod,
-                            receiptNumber: analysisResult.receiptNumber,
-                            items: analysisResult.items,
-                            isReturn: analysisResult.isReturn,
-                            confidence: 0.5 // Lower confidence for OCR-only
+                        analysisResult = createBasicAnalysisFromOCR(
+                            ocrText,
+                            confidence: ReceiptScannerAIConfiguration.ocrReviewRequiredConfidence
                         )
                     }
                 } else {
@@ -810,7 +804,7 @@ struct ReceiptScannerView: View {
         }
     }
     
-    private func createBasicAnalysisFromOCR(_ ocrText: String) -> ReceiptAnalysisResult {
+    private func createBasicAnalysisFromOCR(_ ocrText: String, confidence: Double = 0.6) -> ReceiptAnalysisResult {
         let lines = ocrText.split(separator: "\n").map(String.init)
         
         // Basic vendor extraction (first non-empty line)
@@ -857,7 +851,7 @@ struct ReceiptScannerView: View {
             receiptDate: receiptDate,
             items: items,
             isReturn: false,
-            confidence: 0.6 // Lower confidence for basic OCR
+            confidence: confidence
         )
     }
     
@@ -1129,13 +1123,11 @@ struct ReceiptScannerView: View {
     // MARK: - AI Analysis
     
     private func performAIAnalysis(ocrText: String, projectName: String) async throws -> ReceiptAnalysisResult {
-        // Direct AI integration without service dependencies
-        let prompt = createReceiptAnalysisPrompt(ocrText: ocrText, projectName: projectName)
-        
-        // Use the hard-coded production API key for enterprise functionality
-        let response = try await makeOpenAIRequest(prompt: prompt)
-        
-        return try parseAIResponse(response)
+        guard ReceiptScannerAIConfiguration.directClientAnalysisEnabled else {
+            throw ReceiptAnalysisError.aiAnalysisFailed
+        }
+
+        throw ReceiptAnalysisError.aiAnalysisFailed
     }
     
     private func createReceiptAnalysisPrompt(ocrText: String, projectName: String) -> String {
@@ -1202,53 +1194,7 @@ struct ReceiptScannerView: View {
     }
     
     private func makeOpenAIRequest(prompt: String) async throws -> String {
-        let apiKey = "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"
-        let baseURL = "https://api.openai.com/v1/chat/completions"
-        
-        let requestBody = [
-            "model": "gpt-3.5-turbo",
-            "messages": [
-                [
-                    "role": "user",
-                    "content": prompt
-                ]
-            ],
-            "max_tokens": 1500,
-            "temperature": 0.1
-        ] as [String: Any]
-        
-        guard let url = URL(string: baseURL) else {
-            throw NSError(domain: "AI", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid API URL"])
-        }
-        
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.addValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        request.addValue("RHEIR-iOS/1.0", forHTTPHeaderField: "User-Agent")
-        
-        request.httpBody = try JSONSerialization.data(withJSONObject: requestBody, options: [])
-        
-        let (data, response) = try await URLSession.shared.data(for: request)
-        
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw NSError(domain: "AI", code: -2, userInfo: [NSLocalizedDescriptionKey: "Invalid response"])
-        }
-        
-        guard httpResponse.statusCode == 200 else {
-            let errorMessage = String(data: data, encoding: .utf8) ?? "Unknown error"
-            throw NSError(domain: "AI", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "API error (\(httpResponse.statusCode)): \(errorMessage)"])
-        }
-        
-        guard let jsonResponse = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let choices = jsonResponse["choices"] as? [[String: Any]],
-              let firstChoice = choices.first,
-              let message = firstChoice["message"] as? [String: Any],
-              let content = message["content"] as? String else {
-            throw NSError(domain: "AI", code: -3, userInfo: [NSLocalizedDescriptionKey: "Invalid response format"])
-        }
-        
-        return content
+        throw ReceiptAnalysisError.aiAnalysisFailed
     }
     
     private func parseAIResponse(_ content: String) throws -> ReceiptAnalysisResult {

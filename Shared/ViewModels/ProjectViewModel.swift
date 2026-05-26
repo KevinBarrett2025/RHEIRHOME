@@ -1529,7 +1529,8 @@ class ProjectViewModel: ObservableObject {
     
     // MARK: - Receipt Management
     
-    func addReceipt(_ receipt: Receipt, to projectID: UUID) async {
+    @discardableResult
+    func addReceipt(_ receipt: Receipt, to projectID: UUID) async -> Bool {
         Logger.receiptWorkflow.info(
             "Adding receipt to project [project=\(projectID.uuidString, privacy: .private(mask: .hash))]"
         )
@@ -1543,7 +1544,7 @@ class ProjectViewModel: ObservableObject {
             Logger.receiptWorkflow.error(
                 "Failed to resolve project for receipt add [project=\(projectID.uuidString, privacy: .private(mask: .hash)) orgProjects=\(self.organizationProjects.count, privacy: .public) allProjects=\(self.projects.count, privacy: .public)]"
             )
-            return 
+            return false
         }
 
         if resolution.resynchronizedFromAllProjects {
@@ -1570,12 +1571,13 @@ class ProjectViewModel: ObservableObject {
             Logger.receiptWorkflow.error(
                 "Failed to apply receipt add mutation [project=\(projectID.uuidString, privacy: .private(mask: .hash))]"
             )
-            return
+            return false
         }
 
         Logger.receiptWorkflow.notice(
             "Completed receipt add [vendor=\(receipt.vendor, privacy: .private(mask: .hash)) amount=\(receipt.amount, privacy: .public) storage=\(resolution.storage.logLabel, privacy: .public) receiptCount=\(committedProject.receipts.count, privacy: .public)]"
         )
+        return true
     }
     
     func updateReceipt(_ receipt: Receipt, in projectID: UUID) async {

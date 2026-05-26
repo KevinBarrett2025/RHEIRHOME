@@ -2529,6 +2529,97 @@ struct ProjectMutationPropagationTests {
     }
 
     @Test
+    func addReceiptReportsFailureWhenProjectCannotBeResolved() async {
+        let suiteName = "ProjectReceiptSaveFailureTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let orgID = UUID().uuidString
+        let repository = RecordingProjectRepository()
+        let projectStore = ProjectStore(userDefaults: defaults)
+        let viewModel = ProjectViewModel(
+            offlineDataManager: OfflineDataManager(networkMonitoringEnabled: false),
+            projectStore: projectStore,
+            projectRepository: repository
+        )
+        viewModel.setCurrentOrganization(
+            Organization(id: orgID, name: "Personal Workspace"),
+            role: .admin
+        )
+
+        let receipt = Receipt(
+            id: "missing-project-receipt",
+            vendor: "Home Depot",
+            date: .now,
+            amount: 42,
+            category: .material,
+            paymentMethod: "Card"
+        )
+
+        let didSave = await viewModel.addReceipt(receipt, to: UUID())
+
+        #expect(didSave == false)
+        #expect(repository.savedProjects.isEmpty)
+        #expect(projectStore.loadProjects(for: orgID).isEmpty)
+    }
+
+    @Test
+    func addReceiptReportsSuccessAfterPersistenceCommits() async {
+        let suiteName = "ProjectReceiptSaveSuccessTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let orgID = UUID().uuidString
+        let repository = RecordingProjectRepository()
+        let projectStore = ProjectStore(userDefaults: defaults)
+        let viewModel = ProjectViewModel(
+            offlineDataManager: OfflineDataManager(networkMonitoringEnabled: false),
+            projectStore: projectStore,
+            projectRepository: repository
+        )
+        viewModel.setCurrentOrganization(
+            Organization(id: orgID, name: "Personal Workspace"),
+            role: .admin
+        )
+
+        let project = Project(
+            name: "Receipt Save Project",
+            client: "Client A",
+            totalBudget: 32000,
+            startDate: .now,
+            endDate: .now.addingTimeInterval(86400),
+            organizationID: orgID
+        )
+        viewModel.projects = [project]
+        viewModel.organizationProjects = [project]
+        viewModel.selectedProject = project
+        viewModel.updateAccessibleProjects()
+
+        let receipt = Receipt(
+            id: "confirmed-save-receipt",
+            vendor: "Home Depot",
+            date: .now,
+            amount: 84,
+            category: .material,
+            paymentMethod: "Card"
+        )
+
+        let didSave = await viewModel.addReceipt(receipt, to: project.id)
+
+        #expect(didSave == true)
+        #expect(viewModel.selectedProject?.receipts.map(\.id) == [receipt.id])
+        #expect(viewModel.organizationProjects.first(where: { $0.id == project.id })?.receipts.map(\.id) == [receipt.id])
+        #expect(projectStore.loadProjects(for: orgID).first(where: { $0.id == project.id })?.receipts.map(\.id) == [receipt.id])
+        #expect(repository.savedProjects.first?.project.receipts.map(\.id) == [receipt.id])
+    }
+
+    @Test
     func operationsMetadataHelpersPersistAndReloadProjectState() async throws {
         let suiteName = "ProjectOperationsMutationTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
@@ -4979,6 +5070,36 @@ struct ReceiptScannerLifecycleTests {
         #expect(presentationState.performInitialSetup(hideIntro: true, hasAIAccess: true) == false)
         #expect(presentationState.currentStep == .launcher)
         #expect(presentationState.showingDocumentScanner == false)
+    }
+
+    @Test
+    func saveStateAllowsOnlyOneInFlightReceiptIDAndReusesFailedAttempt() {
+        var saveState = ReceiptScannerSaveState()
+
+        guard let receiptID = saveState.beginSave(canSave: true) else {
+            Issue.record("Expected first save attempt to begin.")
+            return
+        }
+        #expect(saveState.isSaving == true)
+        #expect(saveState.pendingReceiptID == receiptID)
+        #expect(saveState.beginSave(canSave: true) == nil)
+
+        saveState.finishSave(succeeded: false)
+
+        #expect(saveState.isSaving == false)
+        #expect(saveState.pendingReceiptID == receiptID)
+        #expect(saveState.beginSave(canSave: true) == receiptID)
+
+        saveState.finishSave(succeeded: true)
+
+        #expect(saveState.isSaving == false)
+        #expect(saveState.pendingReceiptID == nil)
+    }
+
+    @Test
+    func scannerDisablesDirectClientSideAIWithoutSecureServiceBoundary() {
+        #expect(ReceiptScannerAIConfiguration.directClientAnalysisEnabled == false)
+        #expect(ReceiptScannerAIConfiguration.ocrReviewRequiredConfidence < 0.6)
     }
 
     @MainActor

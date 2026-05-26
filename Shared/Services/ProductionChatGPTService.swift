@@ -5,16 +5,10 @@ extension Logger {
     static let productionChatGPT = Logger(subsystem: "com.RheirHome.RHEIR", category: "productionChatGPT")
 }
 
-/// Production ChatGPT service with hard-coded API key and subscription analytics
+/// Production ChatGPT service with subscription analytics.
 actor ProductionChatGPTService {
     static let shared = ProductionChatGPTService()
-    
-    private let baseURL = "https://api.openai.com/v1/chat/completions"
-    private let model = "gpt-3.5-turbo"
-    
-    // Production API key - work this cost into subscription pricing
-    private let apiKey = "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"
-    
+
     private init() {}
     
     /// Analyzes receipt text with project context - Production version with analytics
@@ -44,32 +38,7 @@ actor ProductionChatGPTService {
             throw ProductionChatGPTError.emptyText
         }
         
-        let prompt = createReceiptAnalysisPrompt(ocrText: ocrText, projectName: projectName)
-        let response = try await makeAPIRequest(prompt: prompt)
-        
-        guard let content = response.choices.first?.message.content else {
-            throw ProductionChatGPTError.noContent
-        }
-        
-        // Calculate usage and cost
-        let tokensUsed = estimateTokenUsage(prompt: prompt, response: content)
-        let cost = calculateCost(tokens: tokensUsed)
-        
-        // Record usage for analytics
-        await AIUsageAnalyticsService.shared.recordUsage(
-            organizationID: organizationID,
-            subscriptionTier: subscriptionTier,
-            feature: .receiptAnalysis,
-            tokensUsed: tokensUsed,
-            cost: cost
-        )
-        
-        // Log for monitoring
-        Logger.productionChatGPT.info(
-            "Recorded receipt AI usage [organization=\(organizationID, privacy: .private(mask: .hash)) tokens=\(tokensUsed, privacy: .public) cost=\(cost, privacy: .public)]"
-        )
-        
-        return try parseReceiptAnalysis(content)
+        throw ProductionChatGPTError.secureBackendUnavailable
     }
     
     /// Check if organization can use AI features
@@ -90,42 +59,7 @@ actor ProductionChatGPTService {
     // MARK: - Private Methods
     
     private func makeAPIRequest(prompt: String) async throws -> GlobalChatGPTResponse {
-        let requestBody = [
-            "model": model,
-            "messages": [
-                [
-                    "role": "user",
-                    "content": prompt
-                ]
-            ],
-            "max_tokens": 1500,
-            "temperature": 0.1
-        ] as [String: Any]
-        
-        guard let url = URL(string: baseURL) else {
-            throw ProductionChatGPTError.invalidURL
-        }
-        
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.addValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        request.addValue("RHEIR-iOS/1.0", forHTTPHeaderField: "User-Agent")
-        
-        request.httpBody = try JSONSerialization.data(withJSONObject: requestBody, options: [])
-        
-        let (data, response) = try await URLSession.shared.data(for: request)
-        
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw ProductionChatGPTError.invalidResponse
-        }
-        
-        guard httpResponse.statusCode == 200 else {
-            let errorMessage = String(data: data, encoding: .utf8) ?? "Unknown error"
-            throw ProductionChatGPTError.httpError(statusCode: httpResponse.statusCode, message: errorMessage)
-        }
-        
-        return try JSONDecoder().decode(GlobalChatGPTResponse.self, from: data)
+        throw ProductionChatGPTError.secureBackendUnavailable
     }
     
     private func createReceiptAnalysisPrompt(ocrText: String, projectName: String?) -> String {
@@ -362,6 +296,7 @@ enum ProductionChatGPTError: LocalizedError {
     case invalidJSON
     case usageLimitExceeded
     case featureNotAllowed
+    case secureBackendUnavailable
     
     var errorDescription: String? {
         switch self {
@@ -381,6 +316,8 @@ enum ProductionChatGPTError: LocalizedError {
             return "Monthly AI usage limit exceeded. Please upgrade your subscription or wait until next month."
         case .featureNotAllowed:
             return "This AI feature is not available with your current subscription plan. Please upgrade to access advanced features."
+        case .secureBackendUnavailable:
+            return "Secure receipt analysis is not currently available. Please review the OCR result manually."
         }
     }
 }
