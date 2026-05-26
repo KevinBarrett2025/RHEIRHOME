@@ -2005,6 +2005,31 @@ struct CloudKitProjectRepositoryTests {
         #expect(await database.savedNames() == [recordID.recordName])
         #expect(savedRecord?["assignedProjectIDs"] as? [String] == ["existing-project", "new-project"])
     }
+
+    @Test
+    func fallbackProjectFromUndecodableFullPayloadKeepsCloudKitRecordID() async throws {
+        let organizationID = "org-cloudkit-summary"
+        let projectID = UUID()
+        let recordID = CKRecord.ID(recordName: "project_\(projectID.uuidString)")
+        let existingRecord = CKRecord(recordType: "Project", recordID: recordID)
+        existingRecord["organizationID"] = organizationID as CKRecordValue
+        existingRecord["name"] = "CloudKit Summary" as CKRecordValue
+        existingRecord["client"] = "Client A" as CKRecordValue
+        existingRecord["totalBudget"] = 120000 as CKRecordValue
+        existingRecord["startDate"] = Date() as CKRecordValue
+        existingRecord["endDate"] = Date().addingTimeInterval(86400) as CKRecordValue
+        existingRecord["fullProjectData"] = Data([0x00, 0x01, 0x02]) as CKRecordValue
+
+        let database = RecordingCloudKitProjectDatabase(existingRecords: [existingRecord])
+        let repository = CloudKitProjectRepository(database: database)
+
+        let projects = try await repository.fetchProjects(for: organizationID)
+
+        #expect(projects.map(\.id) == [projectID])
+        #expect(projects.first?.name == "CloudKit Summary")
+        #expect(projects.first?.receipts.isEmpty == true)
+        #expect(projects.first?.tasks.isEmpty == true)
+    }
 }
 
 struct OrganizationProjectSyncStoreTests {
@@ -2098,6 +2123,118 @@ struct OrganizationProjectSyncStoreTests {
     }
 
     @Test
+    func cloudKitSummaryMergePreservesRicherLocalProjectData() {
+        let orgID = "org-cloudkit-rich-local"
+        let projectID = UUID()
+        let shellProject = Project(
+            id: projectID,
+            name: "CloudKit Metadata Name",
+            client: "Updated Client",
+            totalBudget: 120000,
+            startDate: .now,
+            endDate: .now.addingTimeInterval(86400),
+            organizationID: orgID
+        )
+        let localProject = richLocalProject(
+            id: projectID,
+            organizationID: orgID
+        )
+
+        let syncStore = OrganizationProjectSyncStore(
+            projectStore: ProjectStore(),
+            projectRepository: RecordingProjectRepository()
+        )
+
+        let result = syncStore.mergeCloudKitProjects([shellProject], with: [localProject])
+        let mergedProject = result.projects.first
+
+        #expect(result.projects.count == 1)
+        #expect(mergedProject?.name == "CloudKit Metadata Name")
+        #expect(mergedProject?.client == "Updated Client")
+        #expect(mergedProject?.receipts.map(\.id) == ["rich-receipt"])
+        #expect(mergedProject?.tasks.map(\.title) == ["Confirm supply pickup"])
+        #expect(mergedProject?.projectChecklists?.map(\.title) == ["Pickup verification"])
+    }
+
+    @Test
+    func refreshedProjectsHydrateSelectedShellFromRicherCachedProject() {
+        let orgID = "org-refresh-rich-local"
+        let projectID = UUID()
+        let shellProject = Project(
+            id: projectID,
+            name: "Selected Shell",
+            client: "Client A",
+            totalBudget: 80000,
+            startDate: .now,
+            endDate: .now.addingTimeInterval(86400),
+            organizationID: orgID
+        )
+        let localProject = richLocalProject(id: projectID, organizationID: orgID)
+
+        let syncStore = OrganizationProjectSyncStore(
+            projectStore: ProjectStore(),
+            projectRepository: RecordingProjectRepository()
+        )
+        let refreshResult = syncStore.refreshedProjects(
+            allProjects: [shellProject],
+            cachedOrganizationProjects: [localProject],
+            organizationID: orgID
+        )
+        let accessState = ProjectAccessStore().unrestrictedState(
+            organizationProjects: refreshResult.organizationProjects,
+            selectedProject: shellProject
+        )
+
+        #expect(refreshResult.organizationProjects.count == 1)
+        #expect(accessState.selectedProject?.id == projectID)
+        #expect(accessState.selectedProject?.receipts.map(\.id) == ["rich-receipt"])
+        #expect(accessState.selectedProject?.tasks.map(\.title) == ["Confirm supply pickup"])
+        #expect(accessState.selectedProject?.projectChecklists?.map(\.title) == ["Pickup verification"])
+    }
+
+    @Test
+    func persistedSnapshotAfterSummaryMergeKeepsRicherLocalProjectData() {
+        let suiteName = "OrganizationProjectSyncStoreTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let orgID = "org-rich-local-persist"
+        let projectID = UUID()
+        let shellProject = Project(
+            id: projectID,
+            name: "CloudKit Shell",
+            client: "Client A",
+            totalBudget: 91000,
+            startDate: .now,
+            endDate: .now.addingTimeInterval(86400),
+            organizationID: orgID
+        )
+        let localProject = richLocalProject(id: projectID, organizationID: orgID)
+        let projectStore = ProjectStore(userDefaults: defaults)
+        let syncStore = OrganizationProjectSyncStore(
+            projectStore: projectStore,
+            projectRepository: RecordingProjectRepository()
+        )
+
+        let mergeResult = syncStore.mergeCloudKitProjects([shellProject], with: [localProject])
+        syncStore.saveSnapshot(
+            projects: mergeResult.projects,
+            organization: Organization(id: orgID, name: "Personal Workspace"),
+            teamMembers: [],
+            for: orgID
+        )
+
+        let persistedProject = projectStore.loadProjects(for: orgID).first
+        #expect(persistedProject?.id == projectID)
+        #expect(persistedProject?.receipts.map(\.id) == ["rich-receipt"])
+        #expect(persistedProject?.tasks.map(\.title) == ["Confirm supply pickup"])
+        #expect(persistedProject?.projectChecklists?.map(\.title) == ["Pickup verification"])
+    }
+
+    @Test
     func savesSnapshotAndDelegatesRepositoryPersistence() async throws {
         let suiteName = "OrganizationProjectSyncStoreTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
@@ -2146,6 +2283,39 @@ struct OrganizationProjectSyncStoreTests {
         #expect(repository.savedProjects.first?.organizationID == orgID)
         #expect(repository.savedAssignmentsByOrganization[orgID] == [project.id.uuidString])
         #expect(await syncStore.loadProjectAssignmentsFromCloudKit(organizationID: orgID) == [project.id.uuidString])
+    }
+
+    private func richLocalProject(id: UUID, organizationID: String) -> Project {
+        var project = Project(
+            id: id,
+            name: "Local Rich Project",
+            client: "Client A",
+            totalBudget: 90000,
+            startDate: .now,
+            endDate: .now.addingTimeInterval(86400),
+            organizationID: organizationID
+        )
+        project.receipts = [
+            Receipt(
+                id: "rich-receipt",
+                vendor: "Home Depot",
+                date: .now,
+                amount: 141.27,
+                category: .material,
+                paymentMethod: "Credit Card"
+            )
+        ]
+        project.tasks = [
+            ProjectTask(
+                title: "Confirm supply pickup",
+                projectID: id
+            )
+        ]
+        project.projectChecklists = [
+            ProjectChecklist(title: "Pickup verification", category: .materials)
+        ]
+
+        return project
     }
 }
 
