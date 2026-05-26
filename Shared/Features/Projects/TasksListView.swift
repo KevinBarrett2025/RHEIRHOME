@@ -12,13 +12,44 @@ private struct TaskPhotoGallerySelection: Identifiable {
     let id = UUID()
     let title: String
     let taskID: UUID
-    let photoIDs: [UUID]
+    let pages: [TaskPhotoStoryPage]
     let initialIndex: Int
 }
 
-private enum TaskPhotoGroup {
+enum TaskPhotoGroup {
     case before
     case after
+
+    var title: String {
+        switch self {
+        case .before:
+            return "Before Photos"
+        case .after:
+            return "After Photos"
+        }
+    }
+
+    func storyTitle(for taskTitle: String) -> String {
+        "\(title) — \(taskTitle)"
+    }
+
+    var storySubtitle: String {
+        switch self {
+        case .before:
+            return "Scope reference before work starts"
+        case .after:
+            return "Completion proof after work is finished"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .before:
+            return "camera.viewfinder"
+        case .after:
+            return "checkmark.seal"
+        }
+    }
 
     var deleteAccessibilityPrefix: String {
         switch self {
@@ -27,6 +58,59 @@ private enum TaskPhotoGroup {
         case .after:
             return "task-after-photo-delete"
         }
+    }
+}
+
+enum TaskPhotoStoryPage: Identifiable, Equatable {
+    case title(id: String, title: String, subtitle: String, systemImage: String)
+    case photo(UUID)
+
+    var id: String {
+        switch self {
+        case .title(let id, _, _, _):
+            return id
+        case .photo(let photoID):
+            return "photo-\(photoID.uuidString)"
+        }
+    }
+}
+
+enum TaskPhotoStoryPageBuilder {
+    static func pages(for task: ProjectTask) -> [TaskPhotoStoryPage] {
+        var pages: [TaskPhotoStoryPage] = []
+
+        if !task.photoIDs.isEmpty {
+            pages.append(titlePage(for: .before, taskTitle: task.title))
+            pages.append(contentsOf: task.photoIDs.map(TaskPhotoStoryPage.photo))
+        }
+
+        if !task.completionPhotoIDs.isEmpty {
+            pages.append(titlePage(for: .after, taskTitle: task.title))
+            pages.append(contentsOf: task.completionPhotoIDs.map(TaskPhotoStoryPage.photo))
+        }
+
+        return pages
+    }
+
+    static func initialIndex(for group: TaskPhotoGroup, photoIndex: Int, in task: ProjectTask) -> Int {
+        switch group {
+        case .before:
+            guard !task.photoIDs.isEmpty else { return 0 }
+            return min(max(photoIndex, 0), task.photoIDs.count - 1) + 1
+        case .after:
+            let beforeOffset = task.photoIDs.isEmpty ? 0 : task.photoIDs.count + 1
+            guard !task.completionPhotoIDs.isEmpty else { return beforeOffset }
+            return beforeOffset + 1 + min(max(photoIndex, 0), task.completionPhotoIDs.count - 1)
+        }
+    }
+
+    private static func titlePage(for group: TaskPhotoGroup, taskTitle: String) -> TaskPhotoStoryPage {
+        .title(
+            id: "\(group)-title",
+            title: group.storyTitle(for: taskTitle),
+            subtitle: group.storySubtitle,
+            systemImage: group.systemImage
+        )
     }
 }
 
@@ -702,6 +786,16 @@ struct TaskCreateEditView: View {
             }
             .accessibilityIdentifier("task-before-library-button")
 
+            if isUploadingPhotos {
+                Label("Saving photos locally...", systemImage: "externaldrive.fill")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            } else if !selectedBeforeImages.isEmpty {
+                Label("Photos save locally first. Cloud sync continues in the background.", systemImage: "icloud.and.arrow.up")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
             if let uploadErrorMessage {
                 Text(uploadErrorMessage)
                     .font(.caption)
@@ -723,16 +817,16 @@ struct TaskCreateEditView: View {
             defer { isUploadingPhotos = false }
 
             do {
-                let uploadedPhotos = try await uploadImages(
+                let savedPhotos = try saveImagesLocallyAndStartCloudSync(
                     selectedBeforeImages,
                     taskID: taskID,
                     projectID: project.id,
                     organizationID: organizationID,
                     caption: "Before task photo"
                 )
-                photoIDs.append(contentsOf: uploadedPhotos.map(\.id))
+                photoIDs.append(contentsOf: savedPhotos.map(\.id))
             } catch {
-                uploadErrorMessage = "Before photo upload failed. Try again before saving."
+                uploadErrorMessage = "Before photos could not be saved locally. Try again."
                 return
             }
         }
@@ -784,20 +878,20 @@ struct TaskCreateEditView: View {
         }
     }
 
-    private func uploadImages(
+    private func saveImagesLocallyAndStartCloudSync(
         _ images: [UIImage],
         taskID: UUID,
         projectID: UUID,
         organizationID: UUID,
         caption: String
-    ) async throws -> [TaskPhoto] {
-        var uploadedPhotos: [TaskPhoto] = []
+    ) throws -> [TaskPhoto] {
+        var savedPhotos: [TaskPhoto] = []
         for (index, image) in images.enumerated() {
             guard let imageData = image.jpegData(compressionQuality: 0.82) else {
                 throw CocoaError(.fileWriteUnknown)
             }
 
-            let uploadedPhoto = try await photoService.uploadTaskPhoto(
+            let savedPhoto = try photoService.storeTaskPhotoLocally(
                 imageData: imageData,
                 taskID: taskID,
                 projectID: projectID,
@@ -805,9 +899,22 @@ struct TaskCreateEditView: View {
                 fileName: "task_\(taskID.uuidString)_before_\(index)_\(Date().timeIntervalSince1970).jpg",
                 caption: caption
             )
-            uploadedPhotos.append(uploadedPhoto)
+            savedPhotos.append(savedPhoto)
+            syncTaskPhotoInBackground(savedPhoto)
         }
-        return uploadedPhotos
+        return savedPhotos
+    }
+
+    private func syncTaskPhotoInBackground(_ taskPhoto: TaskPhoto) {
+        Task {
+            do {
+                _ = try await photoService.uploadStoredTaskPhoto(taskPhoto)
+            } catch {
+                Logger.cloudKitPhoto.error(
+                    "Task photo CloudKit sync failed [photo=\(taskPhoto.id.uuidString, privacy: .private(mask: .hash)) error=\(error.localizedDescription, privacy: .public)]"
+                )
+            }
+        }
     }
 }
 
@@ -891,10 +998,10 @@ struct TaskDetailView: View {
                             deleteAccessibilityPrefix: TaskPhotoGroup.before.deleteAccessibilityPrefix,
                             onOpenPhoto: { index in
                                 selectedPhotoGallery = TaskPhotoGallerySelection(
-                                    title: "Before Photos",
+                                    title: "Task Photos",
                                     taskID: liveTask.id,
-                                    photoIDs: liveTask.photoIDs,
-                                    initialIndex: index
+                                    pages: TaskPhotoStoryPageBuilder.pages(for: liveTask),
+                                    initialIndex: TaskPhotoStoryPageBuilder.initialIndex(for: .before, photoIndex: index, in: liveTask)
                                 )
                             },
                             onDeletePhoto: { photoID in
@@ -912,10 +1019,10 @@ struct TaskDetailView: View {
                             deleteAccessibilityPrefix: TaskPhotoGroup.after.deleteAccessibilityPrefix,
                             onOpenPhoto: { index in
                                 selectedPhotoGallery = TaskPhotoGallerySelection(
-                                    title: "After Photos",
+                                    title: "Task Photos",
                                     taskID: liveTask.id,
-                                    photoIDs: liveTask.completionPhotoIDs,
-                                    initialIndex: index
+                                    pages: TaskPhotoStoryPageBuilder.pages(for: liveTask),
+                                    initialIndex: TaskPhotoStoryPageBuilder.initialIndex(for: .after, photoIndex: index, in: liveTask)
                                 )
                             },
                             onDeletePhoto: { photoID in
@@ -996,7 +1103,7 @@ struct TaskDetailView: View {
         .fullScreenCover(item: $selectedPhotoGallery) { selection in
             TaskRemotePhotoGalleryView(
                 title: selection.title,
-                photoIDs: selection.photoIDs,
+                pages: selection.pages,
                 initialIndex: selection.initialIndex
             ) {
                 selectedPhotoGallery = nil
@@ -1205,6 +1312,16 @@ private struct TaskCompletionEditor: View {
                     }
                     .accessibilityIdentifier("task-proof-library-button")
 
+                    if isUploadingPhoto {
+                        Label("Saving photos locally...", systemImage: "externaldrive.fill")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    } else if !selectedProofImages.isEmpty {
+                        Label("Photos save locally first. Cloud sync continues in the background.", systemImage: "icloud.and.arrow.up")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+
                     if let uploadErrorMessage {
                         Text(uploadErrorMessage)
                             .font(.caption)
@@ -1279,18 +1396,18 @@ private struct TaskCompletionEditor: View {
             defer { isUploadingPhoto = false }
 
             do {
-                let uploadedPhotos = try await uploadImages(
+                let savedPhotos = try saveImagesLocallyAndStartCloudSync(
                     selectedProofImages,
                     taskID: task.id,
                     projectID: project.id,
                     organizationID: organizationID,
                     caption: trimmedCompletionNotes
                 )
-                for uploadedPhoto in uploadedPhotos {
-                    completedTask.addCompletionPhoto(uploadedPhoto.id)
+                for savedPhoto in savedPhotos {
+                    completedTask.addCompletionPhoto(savedPhoto.id)
                 }
             } catch {
-                uploadErrorMessage = "Photo proof upload failed. Try again before completing."
+                uploadErrorMessage = "Photo proof could not be saved locally. Try again."
                 return
             }
         }
@@ -1319,20 +1436,20 @@ private struct TaskCompletionEditor: View {
         }
     }
 
-    private func uploadImages(
+    private func saveImagesLocallyAndStartCloudSync(
         _ images: [UIImage],
         taskID: UUID,
         projectID: UUID,
         organizationID: UUID,
         caption: String
-    ) async throws -> [TaskPhoto] {
-        var uploadedPhotos: [TaskPhoto] = []
+    ) throws -> [TaskPhoto] {
+        var savedPhotos: [TaskPhoto] = []
         for (index, image) in images.enumerated() {
             guard let imageData = image.jpegData(compressionQuality: 0.82) else {
                 throw CocoaError(.fileWriteUnknown)
             }
 
-            let uploadedPhoto = try await photoService.uploadTaskPhoto(
+            let savedPhoto = try photoService.storeTaskPhotoLocally(
                 imageData: imageData,
                 taskID: taskID,
                 projectID: projectID,
@@ -1340,9 +1457,22 @@ private struct TaskCompletionEditor: View {
                 fileName: "task_\(taskID.uuidString)_after_\(index)_\(Date().timeIntervalSince1970).jpg",
                 caption: caption
             )
-            uploadedPhotos.append(uploadedPhoto)
+            savedPhotos.append(savedPhoto)
+            syncTaskPhotoInBackground(savedPhoto)
         }
-        return uploadedPhotos
+        return savedPhotos
+    }
+
+    private func syncTaskPhotoInBackground(_ taskPhoto: TaskPhoto) {
+        Task {
+            do {
+                _ = try await photoService.uploadStoredTaskPhoto(taskPhoto)
+            } catch {
+                Logger.cloudKitPhoto.error(
+                    "Task photo CloudKit sync failed [photo=\(taskPhoto.id.uuidString, privacy: .private(mask: .hash)) error=\(error.localizedDescription, privacy: .public)]"
+                )
+            }
+        }
     }
 }
 
@@ -1404,6 +1534,10 @@ private struct TaskPhotoGridSection: View {
                         }
                         .buttonStyle(.plain)
                         .accessibilityIdentifier("task-photo-\(photoID.uuidString)")
+                        .overlay(alignment: .bottomLeading) {
+                            TaskPhotoSyncBadge(photoID: photoID)
+                                .padding(5)
+                        }
 
                         TaskPhotoDeleteButton(accessibilityIdentifier: "\(deleteAccessibilityPrefix)-\(index)") {
                             onDeletePhoto(photoID)
@@ -1415,6 +1549,40 @@ private struct TaskPhotoGridSection: View {
         .padding()
         .background(Color(.systemGray6))
         .cornerRadius(12)
+    }
+}
+
+private struct TaskPhotoSyncBadge: View {
+    let photoID: UUID
+
+    @State private var statusText: String?
+    @StateObject private var photoService = CloudKitPhotoService()
+
+    var body: some View {
+        Group {
+            if let statusText {
+                Text(statusText)
+                    .font(.caption2)
+                    .fontWeight(.semibold)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .foregroundColor(.white)
+                    .background(Capsule().fill(statusText == "Sync failed" ? Color.red.opacity(0.88) : Color.black.opacity(0.68)))
+            }
+        }
+        .task {
+            refreshStatus()
+        }
+    }
+
+    private func refreshStatus() {
+        guard let localPhoto = try? photoService.localTaskPhoto(photoID: photoID),
+              !localPhoto.isUploaded else {
+            statusText = nil
+            return
+        }
+
+        statusText = localPhoto.uploadProgress < 0 ? "Sync failed" : "Sync pending"
     }
 }
 
@@ -1526,7 +1694,7 @@ private struct TaskLocalPhotoGalleryView: View {
             } else {
                 TabView(selection: $selectedIndex) {
                     ForEach(Array(images.enumerated()), id: \.offset) { index, image in
-                        ZoomableImageView(image: image, showsDismissButton: false)
+                        ZoomableImageView(image: image, showsDismissButton: false, allowsPageSwipeAtMinimumZoom: true)
                             .tag(index)
                             .ignoresSafeArea()
                     }
@@ -1551,7 +1719,7 @@ private struct TaskLocalPhotoGalleryView: View {
 
 private struct TaskRemotePhotoGalleryView: View {
     let title: String
-    let photoIDs: [UUID]
+    let pages: [TaskPhotoStoryPage]
     let initialIndex: Int
     let onDismiss: () -> Void
 
@@ -1560,41 +1728,51 @@ private struct TaskRemotePhotoGalleryView: View {
     @State private var failedPhotoIDs: Set<UUID> = []
     @StateObject private var photoService = CloudKitPhotoService()
 
-    init(title: String, photoIDs: [UUID], initialIndex: Int, onDismiss: @escaping () -> Void) {
+    init(title: String, pages: [TaskPhotoStoryPage], initialIndex: Int, onDismiss: @escaping () -> Void) {
         self.title = title
-        self.photoIDs = photoIDs
+        self.pages = pages
         self.initialIndex = initialIndex
         self.onDismiss = onDismiss
-        _selectedIndex = State(initialValue: TaskRemotePhotoGalleryView.clampedIndex(initialIndex, count: photoIDs.count))
+        _selectedIndex = State(initialValue: TaskRemotePhotoGalleryView.clampedIndex(initialIndex, count: pages.count))
     }
 
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
 
-            if photoIDs.isEmpty {
+            if pages.isEmpty {
                 TaskPhotoGalleryUnavailableView(onDismiss: onDismiss)
             } else {
                 TabView(selection: $selectedIndex) {
-                    ForEach(Array(photoIDs.enumerated()), id: \.element) { index, photoID in
-                        TaskPhotoGalleryPage(
-                            image: loadedImages[photoID],
-                            didFail: failedPhotoIDs.contains(photoID),
-                            onDismiss: onDismiss
-                        )
-                        .tag(index)
-                        .task {
-                            await loadPhoto(photoID)
+                    ForEach(Array(pages.enumerated()), id: \.element.id) { index, page in
+                        switch page {
+                        case .title(_, let title, let subtitle, let systemImage):
+                            TaskPhotoStoryTitleCard(
+                                title: title,
+                                subtitle: subtitle,
+                                systemImage: systemImage
+                            )
+                            .tag(index)
+                        case .photo(let photoID):
+                            TaskPhotoGalleryPage(
+                                image: loadedImages[photoID],
+                                didFail: failedPhotoIDs.contains(photoID),
+                                onDismiss: onDismiss
+                            )
+                            .tag(index)
+                            .task {
+                                await loadPhoto(photoID)
+                            }
                         }
                     }
                 }
-                .tabViewStyle(.page(indexDisplayMode: photoIDs.count > 1 ? .automatic : .never))
+                .tabViewStyle(.page(indexDisplayMode: pages.count > 1 ? .automatic : .never))
             }
 
             TaskPhotoGalleryChrome(
                 title: title,
                 selectedIndex: selectedIndex,
-                count: photoIDs.count,
+                count: pages.count,
                 onDismiss: onDismiss
             )
         }
@@ -1638,7 +1816,7 @@ private struct TaskPhotoGalleryPage: View {
     var body: some View {
         Group {
             if let image {
-                ZoomableImageView(image: image, showsDismissButton: false)
+                ZoomableImageView(image: image, showsDismissButton: false, allowsPageSwipeAtMinimumZoom: true)
                     .ignoresSafeArea()
             } else if didFail {
                 TaskPhotoGalleryUnavailableView(onDismiss: onDismiss)
@@ -1648,6 +1826,36 @@ private struct TaskPhotoGalleryPage: View {
                     .foregroundColor(.white)
             }
         }
+    }
+}
+
+private struct TaskPhotoStoryTitleCard: View {
+    let title: String
+    let subtitle: String
+    let systemImage: String
+
+    var body: some View {
+        VStack(spacing: 18) {
+            Image(systemName: systemImage)
+                .font(.system(size: 54, weight: .semibold))
+                .foregroundColor(.white.opacity(0.9))
+
+            VStack(spacing: 8) {
+                Text(title)
+                    .font(.title2)
+                    .fontWeight(.bold)
+                    .multilineTextAlignment(.center)
+                    .foregroundColor(.white)
+
+                Text(subtitle)
+                    .font(.subheadline)
+                    .multilineTextAlignment(.center)
+                    .foregroundColor(.white.opacity(0.72))
+            }
+        }
+        .padding(28)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.black.ignoresSafeArea())
     }
 }
 

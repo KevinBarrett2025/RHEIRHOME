@@ -6,11 +6,18 @@ import UIKit
 struct ZoomableImageView: UIViewRepresentable {
     let image: UIImage
     let showsDismissButton: Bool
+    let allowsPageSwipeAtMinimumZoom: Bool
     let onDismiss: () -> Void
     
-    init(image: UIImage, showsDismissButton: Bool = true, onDismiss: @escaping () -> Void = {}) {
+    init(
+        image: UIImage,
+        showsDismissButton: Bool = true,
+        allowsPageSwipeAtMinimumZoom: Bool = false,
+        onDismiss: @escaping () -> Void = {}
+    ) {
         self.image = image
         self.showsDismissButton = showsDismissButton
+        self.allowsPageSwipeAtMinimumZoom = allowsPageSwipeAtMinimumZoom
         self.onDismiss = onDismiss
     }
     
@@ -27,6 +34,7 @@ struct ZoomableImageView: UIViewRepresentable {
         scrollView.showsVerticalScrollIndicator = false
         scrollView.backgroundColor = .black
         scrollView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.panGestureRecognizer.isEnabled = !allowsPageSwipeAtMinimumZoom
 
         // 2. UIImageView inside
         let imageView = UIImageView(image: image)
@@ -35,6 +43,7 @@ struct ZoomableImageView: UIViewRepresentable {
 
         scrollView.addSubview(imageView)
         context.coordinator.imageView = imageView
+        context.coordinator.allowsPageSwipeAtMinimumZoom = allowsPageSwipeAtMinimumZoom
         
         containerView.addSubview(scrollView)
         
@@ -82,7 +91,7 @@ struct ZoomableImageView: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: UIView, context: Context) {
-        // nothing dynamic to update
+        context.coordinator.allowsPageSwipeAtMinimumZoom = allowsPageSwipeAtMinimumZoom
     }
 
     func makeCoordinator() -> Coordinator {
@@ -92,9 +101,15 @@ struct ZoomableImageView: UIViewRepresentable {
     class Coordinator: NSObject, UIScrollViewDelegate {
         var imageView: UIImageView?
         var onDismiss: (() -> Void)?
+        var allowsPageSwipeAtMinimumZoom = false
 
         func viewForZooming(in scrollView: UIScrollView) -> UIView? {
             imageView
+        }
+
+        func scrollViewDidZoom(_ scrollView: UIScrollView) {
+            guard allowsPageSwipeAtMinimumZoom else { return }
+            scrollView.panGestureRecognizer.isEnabled = scrollView.zoomScale > scrollView.minimumZoomScale + 0.01
         }
         
         @objc func dismissTapped() {
