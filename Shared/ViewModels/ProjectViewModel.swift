@@ -2530,9 +2530,20 @@ final class OrganizationProjectSyncStore {
     func mergeCloudKitProjects(_ cloudKitProjects: [Project], with localProjects: [Project]) -> OrganizationProjectMergeResult {
         var mergedProjects: [Project] = []
         var processedIDs: Set<UUID> = []
+        let localProjectsByID = Dictionary(grouping: localProjects, by: \.id).compactMapValues { projects in
+            projects.max { $0.projectContentScore < $1.projectContentScore }
+        }
 
         for cloudProject in cloudKitProjects where processedIDs.insert(cloudProject.id).inserted {
-            mergedProjects.append(cloudProject)
+            let mergedProject = cloudProject.preservingLocalProjectData(
+                from: localProjectsByID[cloudProject.id]
+            )
+            if mergedProject.projectContentScore > cloudProject.projectContentScore {
+                Logger.projectSync.warning(
+                    "Preserved richer local project data while merging CloudKit payload [project=\(cloudProject.id.uuidString, privacy: .private(mask: .hash))]"
+                )
+            }
+            mergedProjects.append(mergedProject)
         }
 
         for localProject in localProjects where processedIDs.insert(localProject.id).inserted {
@@ -2597,21 +2608,108 @@ final class OrganizationProjectSyncStore {
         secondary: [Project]
     ) -> [Project] {
         var uniqueProjects: [Project] = []
-        var projectIDs: Set<UUID> = []
+        var projectIndexesByID: [UUID: Int] = [:]
 
         for project in primary where project.organizationID == organizationID {
-            if projectIDs.insert(project.id).inserted {
+            if let existingIndex = projectIndexesByID[project.id] {
+                uniqueProjects[existingIndex] = uniqueProjects[existingIndex]
+                    .preservingLocalProjectData(from: project)
+            } else {
+                projectIndexesByID[project.id] = uniqueProjects.count
                 uniqueProjects.append(project)
             }
         }
 
         for project in secondary where project.organizationID == organizationID {
-            if projectIDs.insert(project.id).inserted {
+            if let existingIndex = projectIndexesByID[project.id] {
+                uniqueProjects[existingIndex] = uniqueProjects[existingIndex]
+                    .preservingLocalProjectData(from: project)
+            } else {
+                projectIndexesByID[project.id] = uniqueProjects.count
                 uniqueProjects.append(project)
             }
         }
 
         return uniqueProjects
+    }
+}
+
+private extension Project {
+    var projectContentScore: Int {
+        let normalizedProject = normalizedReceiptCopy
+        var score = 0
+        score += normalizedProject.receipts.count
+        score += normalizedProject.tasks.count
+        score += normalizedProject.progressLogs.count
+        score += normalizedProject.workHours.count
+        score += normalizedProject.communications.count
+        score += normalizedProject.changeOrders.count
+        score += normalizedProject.photoIDs.count
+        score += normalizedProject.clientProfile == nil ? 0 : 1
+        score += normalizedProject.paymentMilestones?.count ?? 0
+        score += normalizedProject.projectDocuments?.count ?? 0
+        score += normalizedProject.projectChecklists?.count ?? 0
+        score += normalizedProject.projectCalendarEvents?.count ?? 0
+        score += normalizedProject.shoppingListItems?.count ?? 0
+        score += normalizedProject.hiddenConditions?.count ?? 0
+        score += normalizedProject.receiptExceptionReconciliations?.count ?? 0
+
+        return score
+    }
+
+    func preservingLocalProjectData(from localProject: Project?) -> Project {
+        guard let localProject else { return normalizedReceiptCopy }
+
+        let normalizedLocalProject = localProject.normalizedReceiptCopy
+        var mergedProject = normalizedReceiptCopy
+
+        if mergedProject.receipts.isEmpty, !normalizedLocalProject.receipts.isEmpty {
+            mergedProject.receipts = normalizedLocalProject.receipts
+        }
+        if mergedProject.tasks.isEmpty, !normalizedLocalProject.tasks.isEmpty {
+            mergedProject.tasks = normalizedLocalProject.tasks
+        }
+        if mergedProject.progressLogs.isEmpty, !normalizedLocalProject.progressLogs.isEmpty {
+            mergedProject.progressLogs = normalizedLocalProject.progressLogs
+        }
+        if mergedProject.workHours.isEmpty, !normalizedLocalProject.workHours.isEmpty {
+            mergedProject.workHours = normalizedLocalProject.workHours
+        }
+        if mergedProject.communications.isEmpty, !normalizedLocalProject.communications.isEmpty {
+            mergedProject.communications = normalizedLocalProject.communications
+        }
+        if mergedProject.changeOrders.isEmpty, !normalizedLocalProject.changeOrders.isEmpty {
+            mergedProject.changeOrders = normalizedLocalProject.changeOrders
+        }
+        if mergedProject.photoIDs.isEmpty, !normalizedLocalProject.photoIDs.isEmpty {
+            mergedProject.photoIDs = normalizedLocalProject.photoIDs
+        }
+        if mergedProject.clientProfile == nil {
+            mergedProject.clientProfile = normalizedLocalProject.clientProfile
+        }
+        if mergedProject.paymentMilestones?.isEmpty != false {
+            mergedProject.paymentMilestones = normalizedLocalProject.paymentMilestones
+        }
+        if mergedProject.projectDocuments?.isEmpty != false {
+            mergedProject.projectDocuments = normalizedLocalProject.projectDocuments
+        }
+        if mergedProject.projectChecklists?.isEmpty != false {
+            mergedProject.projectChecklists = normalizedLocalProject.projectChecklists
+        }
+        if mergedProject.projectCalendarEvents?.isEmpty != false {
+            mergedProject.projectCalendarEvents = normalizedLocalProject.projectCalendarEvents
+        }
+        if mergedProject.shoppingListItems?.isEmpty != false {
+            mergedProject.shoppingListItems = normalizedLocalProject.shoppingListItems
+        }
+        if mergedProject.hiddenConditions?.isEmpty != false {
+            mergedProject.hiddenConditions = normalizedLocalProject.hiddenConditions
+        }
+        if mergedProject.receiptExceptionReconciliations?.isEmpty != false {
+            mergedProject.receiptExceptionReconciliations = normalizedLocalProject.receiptExceptionReconciliations
+        }
+
+        return mergedProject
     }
 }
 
@@ -2820,6 +2918,7 @@ final class CloudKitProjectRepository: ProjectRepository {
             }
 
             return Project(
+                id: Self.projectID(from: record.recordID),
                 name: name,
                 client: client,
                 totalBudget: totalBudget,
@@ -2838,6 +2937,16 @@ final class CloudKitProjectRepository: ProjectRepository {
         )
 
         return projects
+    }
+
+    private static func projectID(from recordID: CKRecord.ID) -> UUID {
+        let recordName = recordID.recordName
+        let projectPrefix = "project_"
+        let rawID = recordName.hasPrefix(projectPrefix)
+            ? String(recordName.dropFirst(projectPrefix.count))
+            : recordName
+
+        return UUID(uuidString: rawID) ?? UUID()
     }
 
     func saveProject(_ project: Project, organizationID: String) async throws {
