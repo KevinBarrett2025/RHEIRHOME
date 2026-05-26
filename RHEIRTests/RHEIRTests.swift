@@ -2,6 +2,7 @@ import Foundation
 import CloudKit
 import Combine
 import PDFKit
+import UIKit
 import Testing
 @testable import RHEIR
 
@@ -3431,6 +3432,135 @@ struct ProjectMutationPropagationTests {
         #expect(persistedProject?.tasks.first?.completionNotes == "Verified no leak")
         #expect(persistedProject?.loggedHours.first?.totalPaidAmount == 25)
         #expect(repository.savedProjects.count >= 2)
+    }
+}
+
+struct TaskPhotoReliabilityTests {
+    @Test
+    func taskPhotosSaveToDurableLocalStoreBeforeCloudKitSync() async throws {
+        let directoryURL = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directoryURL) }
+
+        let service = CloudKitPhotoService(taskPhotoDirectoryURL: directoryURL)
+        let imageData = try testJPEGData()
+        let taskID = UUID()
+        let projectID = UUID()
+        let organizationID = UUID()
+
+        let photo = try service.storeTaskPhotoLocally(
+            imageData: imageData,
+            taskID: taskID,
+            projectID: projectID,
+            organizationID: organizationID,
+            fileName: "before-test.jpg",
+            caption: "Before task photo"
+        )
+
+        #expect(photo.taskID == taskID)
+        #expect(photo.projectID == projectID)
+        #expect(photo.organizationID == organizationID)
+        #expect(photo.isUploaded == false)
+        #expect(photo.uploadProgress == 0)
+        let storedPhoto = try #require(try service.localTaskPhoto(photoID: photo.id))
+        let storedImageData = try #require(try service.localTaskPhotoImageData(photoID: photo.id))
+        #expect(storedPhoto.id == photo.id)
+        #expect(storedImageData == imageData)
+        #expect(try await service.downloadTaskPhoto(photoID: photo.id) != nil)
+    }
+
+    @Test
+    func taskPhotoIDIsNotIssuedWhenDurableLocalWriteFails() throws {
+        let directoryURL = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directoryURL) }
+
+        let blockedDirectoryURL = directoryURL.appendingPathComponent("TaskPhotos")
+        try Data("not a directory".utf8).write(to: blockedDirectoryURL)
+        let service = CloudKitPhotoService(taskPhotoDirectoryURL: blockedDirectoryURL)
+
+        #expect(throws: Error.self) {
+            _ = try service.storeTaskPhotoLocally(
+                imageData: try testJPEGData(),
+                taskID: UUID(),
+                projectID: UUID(),
+                organizationID: UUID(),
+                fileName: "blocked.jpg",
+                caption: "Before task photo"
+            )
+        }
+    }
+
+    @Test
+    func missingLocalTaskPhotoUploadFailsWithoutCreatingRemoteOnlyState() async throws {
+        let directoryURL = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directoryURL) }
+
+        let service = CloudKitPhotoService(taskPhotoDirectoryURL: directoryURL)
+        let photo = TaskPhoto(
+            id: UUID(),
+            taskID: UUID(),
+            projectID: UUID(),
+            organizationID: UUID(),
+            originalFileName: "missing.jpg"
+        )
+
+        await #expect(throws: Error.self) {
+            try await service.uploadStoredTaskPhoto(photo)
+        }
+        #expect(try service.localTaskPhoto(photoID: photo.id) == nil)
+    }
+
+    @Test
+    func beforeAfterStoryPagesPreserveSectionOrderAndInitialIndexes() {
+        let beforeA = UUID()
+        let beforeB = UUID()
+        let afterA = UUID()
+        let afterB = UUID()
+        let task = ProjectTask(
+            title: "Install vanity",
+            projectID: UUID(),
+            photoIDs: [beforeA, beforeB],
+            completionPhotoIDs: [afterA, afterB]
+        )
+
+        let pages = TaskPhotoStoryPageBuilder.pages(for: task)
+
+        #expect(pages == [
+            .title(
+                id: "before-title",
+                title: "Before Photos — Install vanity",
+                subtitle: "Scope reference before work starts",
+                systemImage: "camera.viewfinder"
+            ),
+            .photo(beforeA),
+            .photo(beforeB),
+            .title(
+                id: "after-title",
+                title: "After Photos — Install vanity",
+                subtitle: "Completion proof after work is finished",
+                systemImage: "checkmark.seal"
+            ),
+            .photo(afterA),
+            .photo(afterB)
+        ])
+        #expect(TaskPhotoStoryPageBuilder.initialIndex(for: .before, photoIndex: 1, in: task) == 2)
+        #expect(TaskPhotoStoryPageBuilder.initialIndex(for: .after, photoIndex: 0, in: task) == 4)
+    }
+
+    private func temporaryDirectory() throws -> URL {
+        let directoryURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("RHEIRTaskPhotoTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        return directoryURL
+    }
+
+    private func testJPEGData() throws -> Data {
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: 8, height: 8))
+        let image = renderer.image { context in
+            UIColor.systemOrange.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 8, height: 8))
+        }
+
+        return try #require(image.jpegData(compressionQuality: 0.8))
     }
 }
 

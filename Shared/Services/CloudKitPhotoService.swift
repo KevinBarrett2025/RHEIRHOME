@@ -13,13 +13,18 @@ public class CloudKitPhotoService: ObservableObject {
     
     private let container: CKContainer
     private let privateDatabase: CKDatabase
+    private let taskPhotoDirectoryOverride: URL?
     
     @Published public var uploadProgress: [UUID: Double] = [:]
     @Published public var downloadProgress: [UUID: Double] = [:]
     
-    public init(containerIdentifier: String = "iCloud.com.rheirhome.rheirhomeappV3") {
+    public init(
+        containerIdentifier: String = "iCloud.com.rheirhome.rheirhomeappV3",
+        taskPhotoDirectoryURL: URL? = nil
+    ) {
         self.container = CKContainer(identifier: containerIdentifier)
         self.privateDatabase = container.privateCloudDatabase
+        self.taskPhotoDirectoryOverride = taskPhotoDirectoryURL
     }
     
     // MARK: - Receipt Photos
@@ -167,6 +172,74 @@ public class CloudKitPhotoService: ObservableObject {
         
         return updatedPhoto
     }
+
+    /// Store a task photo durably in the app container before CloudKit sync.
+    public func storeTaskPhotoLocally(
+        imageData: Data,
+        taskID: UUID,
+        projectID: UUID,
+        organizationID: UUID,
+        fileName: String? = nil,
+        caption: String = ""
+    ) throws -> TaskPhoto {
+        try ensureTaskPhotosDirectoryExists()
+
+        let taskPhoto = makeTaskPhotoRecord(
+            imageData: imageData,
+            taskID: taskID,
+            projectID: projectID,
+            organizationID: organizationID,
+            fileName: fileName,
+            caption: caption
+        )
+
+        try imageData.write(to: localTaskPhotoImageURL(photoID: taskPhoto.id), options: .atomic)
+        try storeTaskPhotoMetadata(taskPhoto)
+
+        if let image = UIImage(data: imageData) {
+            cacheImage(image, photoID: taskPhoto.id)
+        }
+
+        return taskPhoto
+    }
+
+    /// Upload a locally stored task photo to CloudKit without blocking local task persistence.
+    @discardableResult
+    public func uploadStoredTaskPhoto(_ taskPhoto: TaskPhoto) async throws -> TaskPhoto {
+        guard let imageData = try localTaskPhotoImageData(photoID: taskPhoto.id) else {
+            throw CocoaError(.fileReadNoSuchFile)
+        }
+
+        do {
+            let record = try await uploadPhotoRecord(taskPhoto.toCKRecord(), imageData: imageData, photoID: taskPhoto.id)
+            var updatedPhoto = taskPhoto
+            updatedPhoto.isUploaded = true
+            updatedPhoto.uploadProgress = 1.0
+
+            if let asset = record["imageAsset"] as? CKAsset {
+                updatedPhoto.ckAssetURL = asset.fileURL
+            }
+
+            try storeTaskPhotoMetadata(updatedPhoto)
+            return updatedPhoto
+        } catch {
+            try? markTaskPhotoUploadFailed(photoID: taskPhoto.id)
+            throw error
+        }
+    }
+
+    public func localTaskPhoto(photoID: UUID) throws -> TaskPhoto? {
+        let metadataURL = localTaskPhotoMetadataURL(photoID: photoID)
+        guard FileManager.default.fileExists(atPath: metadataURL.path) else { return nil }
+        let data = try Data(contentsOf: metadataURL)
+        return try JSONDecoder().decode(TaskPhoto.self, from: data)
+    }
+
+    public func localTaskPhotoImageData(photoID: UUID) throws -> Data? {
+        let imageURL = localTaskPhotoImageURL(photoID: photoID)
+        guard FileManager.default.fileExists(atPath: imageURL.path) else { return nil }
+        return try Data(contentsOf: imageURL)
+    }
     
     /// Fetch task photos for a specific task
     public func fetchTaskPhotos(taskID: UUID) async throws -> [TaskPhoto] {
@@ -276,6 +349,12 @@ public class CloudKitPhotoService: ObservableObject {
         if let cachedImage = getCachedImage(photoID: photoID) {
             return cachedImage
         }
+
+        if let localImageData = (try? localTaskPhotoImageData(photoID: photoID)) ?? nil,
+           let localImage = UIImage(data: localImageData) {
+            cacheImage(localImage, photoID: photoID)
+            return localImage
+        }
         
         // Fetch TaskPhoto record to get asset URL
         let taskPhotos = try await fetchTaskPhotoByID(photoID: photoID)
@@ -352,10 +431,27 @@ public class CloudKitPhotoService: ObservableObject {
         fileName: String?,
         caption: String
     ) async throws -> TaskPhoto {
-        
+        makeTaskPhotoRecord(
+            imageData: imageData,
+            taskID: taskID,
+            projectID: projectID,
+            organizationID: organizationID,
+            fileName: fileName,
+            caption: caption
+        )
+    }
+
+    private func makeTaskPhotoRecord(
+        imageData: Data,
+        taskID: UUID,
+        projectID: UUID,
+        organizationID: UUID,
+        fileName: String?,
+        caption: String
+    ) -> TaskPhoto {
         let finalFileName = fileName ?? "task_\(Date().timeIntervalSince1970).jpg"
         let thumbnail = generateThumbnail(from: imageData)
-        
+
         return TaskPhoto(
             taskID: taskID,
             projectID: projectID,
@@ -446,6 +542,52 @@ public class CloudKitPhotoService: ObservableObject {
     private func cacheImage(_ image: UIImage, photoID: UUID) {
         imageCache.setObject(image, forKey: photoID.uuidString as NSString)
     }
+
+    // MARK: - Local Task Photo Store
+
+    private var taskPhotosDirectoryURL: URL {
+        if let taskPhotoDirectoryOverride {
+            return taskPhotoDirectoryOverride
+        }
+
+        let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
+            ?? FileManager.default.temporaryDirectory
+        return documentsURL.appendingPathComponent("TaskPhotos", isDirectory: true)
+    }
+
+    private func ensureTaskPhotosDirectoryExists() throws {
+        try FileManager.default.createDirectory(
+            at: taskPhotosDirectoryURL,
+            withIntermediateDirectories: true
+        )
+    }
+
+    private func localTaskPhotoImageURL(photoID: UUID) -> URL {
+        taskPhotosDirectoryURL.appendingPathComponent("\(photoID.uuidString).jpg", isDirectory: false)
+    }
+
+    private func localTaskPhotoMetadataURL(photoID: UUID) -> URL {
+        taskPhotosDirectoryURL.appendingPathComponent("\(photoID.uuidString).json", isDirectory: false)
+    }
+
+    private func storeTaskPhotoMetadata(_ taskPhoto: TaskPhoto) throws {
+        try ensureTaskPhotosDirectoryExists()
+        let data = try JSONEncoder().encode(taskPhoto)
+        try data.write(to: localTaskPhotoMetadataURL(photoID: taskPhoto.id), options: .atomic)
+    }
+
+    private func markTaskPhotoUploadFailed(photoID: UUID) throws {
+        guard var taskPhoto = try localTaskPhoto(photoID: photoID) else { return }
+        taskPhoto.isUploaded = false
+        taskPhoto.uploadProgress = -1
+        try storeTaskPhotoMetadata(taskPhoto)
+    }
+
+    private func deleteLocalTaskPhoto(photoID: UUID) {
+        let fileManager = FileManager.default
+        try? fileManager.removeItem(at: localTaskPhotoImageURL(photoID: photoID))
+        try? fileManager.removeItem(at: localTaskPhotoMetadataURL(photoID: photoID))
+    }
     
     // MARK: - Cleanup
     
@@ -487,6 +629,7 @@ public class CloudKitPhotoService: ObservableObject {
     /// Delete specific task photos by their IDs
     public func deleteTaskPhotos(photoIDs: [UUID]) async throws {
         for photoID in photoIDs {
+            deleteLocalTaskPhoto(photoID: photoID)
             let recordID = CKRecord.ID(recordName: photoID.uuidString)
             try await deletePhoto(recordID: recordID)
         }
