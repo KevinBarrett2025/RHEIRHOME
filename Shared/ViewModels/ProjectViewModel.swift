@@ -2456,10 +2456,16 @@ final class ProjectAccessStore {
 
     private func normalizedProjects(from projects: [Project]) -> [Project] {
         var normalizedProjects: [Project] = []
-        var seenIDs: Set<UUID> = []
+        var indexesByID: [UUID: Int] = [:]
 
-        for project in projects where seenIDs.insert(project.id).inserted {
-            normalizedProjects.append(project)
+        for project in projects {
+            if let existingIndex = indexesByID[project.id] {
+                normalizedProjects[existingIndex] = normalizedProjects[existingIndex]
+                    .mergingDuplicateProject(project)
+            } else {
+                indexesByID[project.id] = normalizedProjects.count
+                normalizedProjects.append(project)
+            }
         }
 
         return normalizedProjects
@@ -2615,7 +2621,7 @@ final class OrganizationProjectSyncStore {
         for project in primary where project.organizationID == organizationID {
             if let existingIndex = projectIndexesByID[project.id] {
                 uniqueProjects[existingIndex] = uniqueProjects[existingIndex]
-                    .preservingLocalProjectData(from: project)
+                    .mergingDuplicateProject(project)
             } else {
                 projectIndexesByID[project.id] = uniqueProjects.count
                 uniqueProjects.append(project)
@@ -2625,7 +2631,7 @@ final class OrganizationProjectSyncStore {
         for project in secondary where project.organizationID == organizationID {
             if let existingIndex = projectIndexesByID[project.id] {
                 uniqueProjects[existingIndex] = uniqueProjects[existingIndex]
-                    .preservingLocalProjectData(from: project)
+                    .mergingDuplicateProject(project)
             } else {
                 projectIndexesByID[project.id] = uniqueProjects.count
                 uniqueProjects.append(project)
@@ -2647,6 +2653,9 @@ private extension Project {
         score += normalizedProject.communications.count
         score += normalizedProject.changeOrders.count
         score += normalizedProject.photoIDs.count
+        score += normalizedProject.tasks.reduce(0) { count, task in
+            count + task.photoIDs.count + task.completionPhotoIDs.count
+        }
         score += normalizedProject.clientProfile == nil ? 0 : 1
         score += normalizedProject.paymentMilestones?.count ?? 0
         score += normalizedProject.projectDocuments?.count ?? 0
@@ -2659,59 +2668,125 @@ private extension Project {
         return score
     }
 
+    func mergingDuplicateProject(_ duplicateProject: Project) -> Project {
+        if duplicateProject.projectContentScore > projectContentScore {
+            return duplicateProject.preservingLocalProjectData(from: self)
+        }
+
+        return preservingLocalProjectData(from: duplicateProject)
+    }
+
     func preservingLocalProjectData(from localProject: Project?) -> Project {
         guard let localProject else { return normalizedReceiptCopy }
 
         let normalizedLocalProject = localProject.normalizedReceiptCopy
         var mergedProject = normalizedReceiptCopy
 
-        if mergedProject.receipts.isEmpty, !normalizedLocalProject.receipts.isEmpty {
-            mergedProject.receipts = normalizedLocalProject.receipts
-        }
-        if mergedProject.tasks.isEmpty, !normalizedLocalProject.tasks.isEmpty {
-            mergedProject.tasks = normalizedLocalProject.tasks
-        }
-        if mergedProject.progressLogs.isEmpty, !normalizedLocalProject.progressLogs.isEmpty {
-            mergedProject.progressLogs = normalizedLocalProject.progressLogs
-        }
-        if mergedProject.workHours.isEmpty, !normalizedLocalProject.workHours.isEmpty {
-            mergedProject.workHours = normalizedLocalProject.workHours
-        }
-        if mergedProject.communications.isEmpty, !normalizedLocalProject.communications.isEmpty {
-            mergedProject.communications = normalizedLocalProject.communications
-        }
-        if mergedProject.changeOrders.isEmpty, !normalizedLocalProject.changeOrders.isEmpty {
-            mergedProject.changeOrders = normalizedLocalProject.changeOrders
-        }
-        if mergedProject.photoIDs.isEmpty, !normalizedLocalProject.photoIDs.isEmpty {
-            mergedProject.photoIDs = normalizedLocalProject.photoIDs
-        }
+        mergedProject.receipts = mergedProject.receipts.mergingIdentified(localItems: normalizedLocalProject.receipts)
+        mergedProject.tasks = mergedProject.tasks.mergingProjectTasks(localItems: normalizedLocalProject.tasks)
+        mergedProject.progressLogs = mergedProject.progressLogs.mergingIdentified(localItems: normalizedLocalProject.progressLogs)
+        mergedProject.workHours = mergedProject.workHours.mergingIdentified(localItems: normalizedLocalProject.workHours)
+        mergedProject.communications = mergedProject.communications.mergingIdentified(localItems: normalizedLocalProject.communications)
+        mergedProject.changeOrders = mergedProject.changeOrders.mergingIdentified(localItems: normalizedLocalProject.changeOrders)
+        mergedProject.photoIDs = mergedProject.photoIDs.mergingUnique(localItems: normalizedLocalProject.photoIDs)
         if mergedProject.clientProfile == nil {
             mergedProject.clientProfile = normalizedLocalProject.clientProfile
         }
-        if mergedProject.paymentMilestones?.isEmpty != false {
-            mergedProject.paymentMilestones = normalizedLocalProject.paymentMilestones
-        }
-        if mergedProject.projectDocuments?.isEmpty != false {
-            mergedProject.projectDocuments = normalizedLocalProject.projectDocuments
-        }
-        if mergedProject.projectChecklists?.isEmpty != false {
-            mergedProject.projectChecklists = normalizedLocalProject.projectChecklists
-        }
-        if mergedProject.projectCalendarEvents?.isEmpty != false {
-            mergedProject.projectCalendarEvents = normalizedLocalProject.projectCalendarEvents
-        }
-        if mergedProject.shoppingListItems?.isEmpty != false {
-            mergedProject.shoppingListItems = normalizedLocalProject.shoppingListItems
-        }
-        if mergedProject.hiddenConditions?.isEmpty != false {
-            mergedProject.hiddenConditions = normalizedLocalProject.hiddenConditions
-        }
-        if mergedProject.receiptExceptionReconciliations?.isEmpty != false {
-            mergedProject.receiptExceptionReconciliations = normalizedLocalProject.receiptExceptionReconciliations
-        }
+        mergedProject.paymentMilestones = mergedProject.paymentMilestones.mergingIdentified(localItems: normalizedLocalProject.paymentMilestones)
+        mergedProject.projectDocuments = mergedProject.projectDocuments.mergingIdentified(localItems: normalizedLocalProject.projectDocuments)
+        mergedProject.projectChecklists = mergedProject.projectChecklists.mergingIdentified(localItems: normalizedLocalProject.projectChecklists)
+        mergedProject.projectCalendarEvents = mergedProject.projectCalendarEvents.mergingIdentified(localItems: normalizedLocalProject.projectCalendarEvents)
+        mergedProject.shoppingListItems = mergedProject.shoppingListItems.mergingIdentified(localItems: normalizedLocalProject.shoppingListItems)
+        mergedProject.hiddenConditions = mergedProject.hiddenConditions.mergingIdentified(localItems: normalizedLocalProject.hiddenConditions)
+        mergedProject.receiptExceptionReconciliations = mergedProject.receiptExceptionReconciliations.mergingIdentified(localItems: normalizedLocalProject.receiptExceptionReconciliations)
 
         return mergedProject
+    }
+}
+
+private extension Array where Element: Identifiable, Element.ID: Hashable {
+    func mergingIdentified(localItems: [Element]) -> [Element] {
+        var mergedItems = self
+        var seenIDs = Set(mergedItems.map(\.id))
+
+        for item in localItems where seenIDs.insert(item.id).inserted {
+            mergedItems.append(item)
+        }
+
+        return mergedItems
+    }
+}
+
+private extension Optional where Wrapped: Collection {
+    var isNilOrEmpty: Bool {
+        switch self {
+        case .none:
+            return true
+        case .some(let collection):
+            return collection.isEmpty
+        }
+    }
+}
+
+private extension Optional where Wrapped: RangeReplaceableCollection, Wrapped.Element: Identifiable, Wrapped.Element.ID: Hashable {
+    func mergingIdentified(localItems: Wrapped?) -> Wrapped? {
+        guard !isNilOrEmpty || localItems?.isEmpty == false else {
+            return self
+        }
+
+        var mergedItems = self ?? Wrapped()
+        var seenIDs = Set(mergedItems.map(\.id))
+
+        for item in localItems ?? Wrapped() where seenIDs.insert(item.id).inserted {
+            mergedItems.append(item)
+        }
+
+        return mergedItems
+    }
+}
+
+private extension Array where Element: Hashable {
+    func mergingUnique(localItems: [Element]) -> [Element] {
+        var mergedItems = self
+        var seenItems = Set(mergedItems)
+
+        for item in localItems where seenItems.insert(item).inserted {
+            mergedItems.append(item)
+        }
+
+        return mergedItems
+    }
+}
+
+private extension Array where Element == ProjectTask {
+    func mergingProjectTasks(localItems: [ProjectTask]) -> [ProjectTask] {
+        var mergedTasks = self
+        var indexesByID: [UUID: Int] = [:]
+
+        for (index, task) in mergedTasks.enumerated() where indexesByID[task.id] == nil {
+            indexesByID[task.id] = index
+        }
+
+        for localTask in localItems {
+            if let existingIndex = indexesByID[localTask.id] {
+                mergedTasks[existingIndex] = mergedTasks[existingIndex]
+                    .preservingDurablePhotoReferences(from: localTask)
+            } else {
+                indexesByID[localTask.id] = mergedTasks.count
+                mergedTasks.append(localTask)
+            }
+        }
+
+        return mergedTasks
+    }
+}
+
+private extension ProjectTask {
+    func preservingDurablePhotoReferences(from localTask: ProjectTask) -> ProjectTask {
+        var mergedTask = self
+        mergedTask.photoIDs = mergedTask.photoIDs.mergingUnique(localItems: localTask.photoIDs)
+        mergedTask.completionPhotoIDs = mergedTask.completionPhotoIDs.mergingUnique(localItems: localTask.completionPhotoIDs)
+        return mergedTask
     }
 }
 
