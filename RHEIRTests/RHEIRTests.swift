@@ -2398,6 +2398,215 @@ struct ProjectAccessStoreTests {
     }
 
     @Test
+    func shellFirstDuplicateKeepsRicherDeviceShapedProjectData() {
+        let orgID = "org-device-hydration"
+        let selectedID = UUID(uuidString: "11111111-2222-3333-4444-555555555555")!
+        let shellProject = Project(
+            id: selectedID,
+            name: "Bathroom Remodel",
+            client: "Client A",
+            totalBudget: 100000,
+            startDate: .now,
+            endDate: .now.addingTimeInterval(86400),
+            organizationID: orgID
+        )
+        let richProject = deviceShapedRichProject(
+            id: selectedID,
+            organizationID: orgID,
+            receiptCount: 11,
+            taskCount: 30,
+            checklistCount: 9
+        )
+        let otherProjects = [
+            Project(
+                name: "Other Active Project",
+                client: "Client B",
+                totalBudget: 50000,
+                startDate: .now,
+                endDate: .now.addingTimeInterval(86400),
+                organizationID: orgID
+            ),
+            Project(
+                name: "Third Active Project",
+                client: "Client C",
+                totalBudget: 25000,
+                startDate: .now,
+                endDate: .now.addingTimeInterval(86400),
+                organizationID: orgID
+            )
+        ]
+
+        let result = ProjectAccessStore().unrestrictedState(
+            organizationProjects: [shellProject, richProject] + otherProjects,
+            selectedProject: shellProject
+        )
+
+        let selectedProject = result.selectedProject
+        #expect(result.accessibleProjects.count == 3)
+        #expect(result.duplicateCount == 1)
+        #expect(selectedProject?.id == selectedID)
+        #expect(selectedProject?.receipts.count == 11)
+        #expect(selectedProject?.tasks.count == 30)
+        #expect(selectedProject?.projectChecklists?.count == 9)
+    }
+
+    @Test
+    func selectedProjectRestorationResolvesRicherDuplicatePayload() {
+        let orgID = "org-selected-rich-duplicate"
+        let selectedID = UUID()
+        let selectedShell = Project(
+            id: selectedID,
+            name: "Selected Shell",
+            client: "Client A",
+            totalBudget: 100000,
+            startDate: .now,
+            endDate: .now.addingTimeInterval(86400),
+            organizationID: orgID
+        )
+        let richProject = deviceShapedRichProject(
+            id: selectedID,
+            organizationID: orgID,
+            receiptCount: 11,
+            taskCount: 30,
+            checklistCount: 9
+        )
+
+        let result = ProjectAccessStore().unrestrictedState(
+            organizationProjects: [selectedShell, richProject],
+            selectedProject: selectedShell
+        )
+
+        #expect(result.selectedProject?.id == selectedID)
+        #expect(result.selectedProject?.receipts.count == 11)
+        #expect(result.selectedProject?.tasks.count == 30)
+        #expect(result.selectedProject?.projectChecklists?.count == 9)
+    }
+
+    @Test
+    func selectedShellDuplicateCannotMakeReceiptSourceAppearEmpty() {
+        let orgID = "org-receipt-source-rich-duplicate"
+        let selectedID = UUID()
+        let selectedShell = Project(
+            id: selectedID,
+            name: "Receipt Source Shell",
+            client: "Client A",
+            totalBudget: 100000,
+            startDate: .now,
+            endDate: .now.addingTimeInterval(86400),
+            organizationID: orgID
+        )
+        let richProject = deviceShapedRichProject(
+            id: selectedID,
+            organizationID: orgID,
+            receiptCount: 11,
+            taskCount: 3,
+            checklistCount: 2
+        )
+
+        let result = ProjectAccessStore().unrestrictedState(
+            organizationProjects: [selectedShell, richProject],
+            selectedProject: selectedShell
+        )
+        let receiptListSource = result.selectedProject?.normalizedReceiptCopy.receipts ?? []
+
+        #expect(receiptListSource.count == 11)
+        #expect(receiptListSource.isEmpty == false)
+    }
+
+    @Test
+    func duplicateProjectNormalizationMergesComplementaryDurableContent() {
+        let orgID = "org-complementary-duplicate"
+        let projectID = UUID()
+        let taskID = UUID()
+        let beforePhotoID = UUID()
+        let afterPhotoID = UUID()
+        var firstProject = Project(
+            id: projectID,
+            name: "First Payload",
+            client: "Client A",
+            totalBudget: 100000,
+            startDate: .now,
+            endDate: .now.addingTimeInterval(86400),
+            organizationID: orgID
+        )
+        firstProject.receipts = [
+            Receipt(
+                id: "receipt-a",
+                vendor: "Home Depot",
+                date: .now,
+                amount: 42,
+                category: .material,
+                paymentMethod: "Card"
+            )
+        ]
+        firstProject.tasks = [
+            ProjectTask(
+                id: taskID,
+                title: "Photo Task",
+                projectID: projectID,
+                photoIDs: [beforePhotoID]
+            )
+        ]
+        firstProject.projectChecklists = [
+            ProjectChecklist(title: "First Checklist", category: .materials)
+        ]
+
+        var secondProject = Project(
+            id: projectID,
+            name: "Second Payload",
+            client: "Client A",
+            totalBudget: 100000,
+            startDate: .now,
+            endDate: .now.addingTimeInterval(86400),
+            organizationID: orgID
+        )
+        secondProject.receipts = [
+            Receipt(
+                id: "receipt-b",
+                vendor: "Supply House",
+                date: .now,
+                amount: 84,
+                category: .material,
+                paymentMethod: "Card"
+            )
+        ]
+        secondProject.tasks = [
+            ProjectTask(
+                id: taskID,
+                title: "Photo Task",
+                projectID: projectID,
+                completionPhotoIDs: [afterPhotoID]
+            )
+        ]
+        secondProject.projectDocuments = [
+            ProjectDocument(
+                title: "Pickup Confirmation",
+                category: .pickupConfirmation,
+                fileName: "pickup.pdf",
+                mimeType: "application/pdf",
+                storageKind: .localFile,
+                storageIdentifier: "pickup.pdf"
+            )
+        ]
+        secondProject.hiddenConditions = [
+            HiddenCondition(title: "Found rot")
+        ]
+
+        let result = ProjectAccessStore().unrestrictedState(
+            organizationProjects: [firstProject, secondProject],
+            selectedProject: firstProject
+        )
+        let mergedProject = result.selectedProject
+
+        #expect(mergedProject?.receipts.map(\.id).sorted() == ["receipt-a", "receipt-b"])
+        #expect(mergedProject?.tasks.first?.photoIDs == [beforePhotoID])
+        #expect(mergedProject?.tasks.first?.completionPhotoIDs == [afterPhotoID])
+        #expect(mergedProject?.projectChecklists?.count == 1)
+        #expect(mergedProject?.projectDocuments?.count == 1)
+        #expect(mergedProject?.hiddenConditions?.count == 1)
+    }
+
+    @Test
     func hydratesSelectedProjectFromAccessibleProjectPayload() {
         let orgID = "org-project-restore"
         let selectedID = UUID()
@@ -2431,6 +2640,53 @@ struct ProjectAccessStoreTests {
         #expect(result.selectedProject?.id == selectedID)
         #expect(result.selectedProject?.receipts.map(\.id) == ["persisted-receipt-1"])
         #expect(result.selectedProject?.receipts.first?.amount == 59.71)
+    }
+
+    private func deviceShapedRichProject(
+        id: UUID,
+        organizationID: String,
+        receiptCount: Int,
+        taskCount: Int,
+        checklistCount: Int
+    ) -> Project {
+        var project = Project(
+            id: id,
+            name: "Bathroom Remodel",
+            client: "Client A",
+            totalBudget: 100000,
+            startDate: .now,
+            endDate: .now.addingTimeInterval(86400),
+            organizationID: organizationID
+        )
+        project.receipts = (0..<receiptCount).map { index in
+            Receipt(
+                id: "receipt-\(index)",
+                vendor: "Vendor \(index)",
+                date: .now,
+                amount: Double(index + 1),
+                category: .material,
+                paymentMethod: "Card"
+            )
+        }
+        project.tasks = (0..<taskCount).map { index in
+            ProjectTask(
+                title: "Task \(index)",
+                projectID: id,
+                photoIDs: index == 0 ? [UUID()] : [],
+                completionPhotoIDs: index == 1 ? [UUID()] : []
+            )
+        }
+        project.projectChecklists = (0..<checklistCount).map { index in
+            ProjectChecklist(
+                title: "Checklist \(index)",
+                category: .materials,
+                items: [
+                    ProjectChecklistItem(title: "Item \(index)")
+                ]
+            )
+        }
+
+        return project
     }
 }
 
